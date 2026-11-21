@@ -14,6 +14,7 @@ use smith::target::Target;
 use smith::{check, lower};
 
 use crate::Test;
+use crate::exact;
 use crate::generate::{self, Gen};
 use crate::numbers::with_header;
 use crate::targets::{runnable, runs_as};
@@ -42,6 +43,30 @@ pub const ONCE: &[Test] = &[
     (
         "the_square_root_of_an_f64_is_the_float_nearest_the_exact_root",
         || roots_are_what_rust_says::<f64>(5),
+    ),
+    (
+        "the_exponential_of_an_f32_is_the_float_nearest_the_exact_one_part_1_of_3",
+        || exponentials_are_what_the_reference_says::<f32>(11),
+    ),
+    (
+        "the_exponential_of_an_f32_is_the_float_nearest_the_exact_one_part_2_of_3",
+        || exponentials_are_what_the_reference_says::<f32>(12),
+    ),
+    (
+        "the_exponential_of_an_f32_is_the_float_nearest_the_exact_one_part_3_of_3",
+        || exponentials_are_what_the_reference_says::<f32>(13),
+    ),
+    (
+        "the_exponential_of_an_f64_is_the_float_nearest_the_exact_one_part_1_of_3",
+        || exponentials_are_what_the_reference_says::<f64>(21),
+    ),
+    (
+        "the_exponential_of_an_f64_is_the_float_nearest_the_exact_one_part_2_of_3",
+        || exponentials_are_what_the_reference_says::<f64>(22),
+    ),
+    (
+        "the_exponential_of_an_f64_is_the_float_nearest_the_exact_one_part_3_of_3",
+        || exponentials_are_what_the_reference_says::<f64>(23),
     ),
     (
         "a_float_written_only_inside_a_string_is_still_a_float_of_the_file",
@@ -85,6 +110,30 @@ pub const MACHINE: &[Test] = &[
     (
         "every_executable_gives_the_square_root_of_an_f64_that_the_evaluator_gives",
         || roots_on_every_executable::<f64>(5),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f32_that_the_evaluator_gives_part_1_of_3",
+        || exponentials_on_every_executable::<f32>(11),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f32_that_the_evaluator_gives_part_2_of_3",
+        || exponentials_on_every_executable::<f32>(12),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f32_that_the_evaluator_gives_part_3_of_3",
+        || exponentials_on_every_executable::<f32>(13),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f64_that_the_evaluator_gives_part_1_of_3",
+        || exponentials_on_every_executable::<f64>(21),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f64_that_the_evaluator_gives_part_2_of_3",
+        || exponentials_on_every_executable::<f64>(22),
+    ),
+    (
+        "every_executable_gives_the_exponential_of_an_f64_that_the_evaluator_gives_part_3_of_3",
+        || exponentials_on_every_executable::<f64>(23),
     ),
     (
         "every_executable_writes_the_shortest_text_of_an_f32",
@@ -604,6 +653,8 @@ pub fn sources() -> Vec<String> {
         generate::sample(3, 0, text_program::<f64>).0,
         generate::sample(4, 0, root_program::<f32>).0,
         generate::sample(5, 0, root_program::<f64>).0,
+        generate::sample(11, 0, exponential_program::<f32>).0,
+        generate::sample(21, 0, exponential_program::<f64>).0,
     ]
 }
 
@@ -667,4 +718,112 @@ fn a_float_written_only_inside_a_string_is_still_a_float_of_the_file() {
     let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&scalar::passes(&lowered));
     assert_eq!(String::from_utf8_lossy(&outcome.stdout), "true true 1.5\n");
+}
+
+/// The exponential of a finite float that the reference gives, as a float.
+fn exact_exp<T: Float>(x: T) -> T {
+    // Past a thousand the result is infinity or 0 in either type, and the
+    // reference would reduce a number of 1000 bits.
+    let magnitude = if T::NAME == "f32" { f64::from(f32::from_bits(x.bits() as u32)) } else { f64::from_bits(x.bits()) };
+    if magnitude.abs() > 1000.0 {
+        let infinity = if T::NAME == "f32" { 0x7f80_0000 } else { 0x7ff0_0000_0000_0000 };
+        let bits = if magnitude > 0.0 { infinity } else { 0 };
+        return T::from_bits(bits);
+    }
+    if T::NAME == "f32" {
+        T::from_bits(u64::from(exact::exp_f32(f32::from_bits(x.bits() as u32))))
+    } else {
+        T::from_bits(exact::exp_f64(f64::from_bits(x.bits())))
+    }
+}
+
+/// The numbers the exponential is tried at: the edges, numbers about 2^-54,
+/// where the result is 1 and where it is not, numbers of every size up to
+/// where the result is infinity or 0, and the numbers at those places.
+fn exponent_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
+    let (high, low, tiny) = if T::NAME == "f32" {
+        (88.8f64, -103.97f64, -25)
+    } else {
+        (709.79f64, -745.14f64, -54)
+    };
+    let mut values: Vec<T> = Vec::new();
+    let parse = |v: f64| T::parsed(&format!("{v:e}"));
+    // The edges, but for the ones that are not numbers or are infinite, which
+    // `exp` is given as they are.
+    for x in T::edges() {
+        if !x.is_nan() && !x.is_infinite() {
+            values.push(x);
+        }
+    }
+    for v in [
+        high,
+        high + 0.01,
+        low,
+        low - 0.01,
+        1.0,
+        -1.0,
+        0.5,
+        2f64.powi(tiny),
+        -(2f64.powi(tiny)),
+        1.5 * 2f64.powi(tiny),
+        -1.5 * 2f64.powi(tiny),
+        2f64.powi(tiny - 1),
+        std::f64::consts::LN_2,
+        -std::f64::consts::LN_2,
+        10.0,
+        -10.0,
+    ] {
+        if let Some(x) = parse(v) {
+            values.push(x);
+        }
+    }
+    for k in 0..18 {
+        let unit = g.below(1 << 30) as f64 / f64::from(1u32 << 30);
+        let v = match k % 6 {
+            0 => (unit * 2.0 - 1.0) * 2.0,
+            1 => (unit * 2.0 - 1.0) * 30.0,
+            2 => low + (high - low) * unit,
+            3 => unit * high,
+            4 => unit * low,
+            _ => (unit * 2.0 - 1.0) * 2f64.powi(tiny + 3),
+        };
+        if let Some(x) = parse(v) {
+            values.push(x);
+        }
+    }
+    values
+}
+
+/// The program that compares the exponential of each float with the one the
+/// reference gives, as a float written out, and what it prints.
+fn exponential_program<T: Float>(g: &mut Gen) -> (String, String) {
+    let values = exponent_inputs::<T>(g);
+    let t = T::NAME;
+    let mut source = format!(
+        "use std.float (exp)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n",
+        values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
+    );
+    let mut said = String::new();
+    for (i, x) in values.iter().enumerate() {
+        source += &format!("  print(\"{{exp(xs[{i}]) == {}}}\")\n", written(exact_exp(*x)));
+        said += "true\n";
+    }
+    source += "}\n";
+    (with_header(source), said)
+}
+
+fn exponentials_are_what_the_reference_says<T: Float>(seed: u64) {
+    let (source, said) = generate::sample(seed, 0, exponential_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), said, "for {source}");
+}
+
+fn exponentials_on_every_executable<T: Float>(seed: u64) {
+    let (source, _) = generate::sample(seed, 0, exponential_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    for target in runnable().into_iter().filter(|t: &Target| t.builds_floats()) {
+        runs_as(source.as_bytes(), target, &outcome);
+    }
 }

@@ -16,6 +16,7 @@ mod circle;
 mod common;
 mod escape;
 mod eval;
+mod exp;
 mod fold;
 mod fuse;
 mod graph;

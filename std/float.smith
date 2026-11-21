@@ -1,3 +1,7 @@
 pub fn sqrt[T](a: T) -> T {
   __sqrt(a)
 }
+
+pub fn exp[T](a: T) -> T {
+  __exp(a)
+}

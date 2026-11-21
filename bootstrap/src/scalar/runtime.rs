@@ -44,6 +44,13 @@ pub enum Runtime {
     /// Takes an integer of the size, and gives a new text that is its digits
     /// in decimal, read as a signed number or as an unsigned one.
     Decimal { bits: Bits, signed: bool },
+    /// Takes two numbers of eight words of 32 bits, each in a number of 64, which
+    /// are fixed point with 240 bits after the point, and gives their product.
+    ExpMultiply,
+    /// Takes the eight words of `r / 64`, and gives `exp(r)` as eight words.
+    ExpSeries,
+    /// Takes a float, and gives its exponential, the float nearest the exact one.
+    Exp { double: bool },
     /// Takes the bits of a float that is finite and not 0, as 64 bits, and the
     /// two tables of Ryu, and gives the shortest digits that read back as the
     /// float as a number, and the power of 10 they are to be multiplied by.
@@ -132,6 +139,9 @@ impl Runtime {
             Runtime::Equal => "<equal>",
             Runtime::Digits => "<digits>",
             Runtime::Decimal { .. } => "<decimal>",
+            Runtime::ExpMultiply => "<exp_multiply>",
+            Runtime::ExpSeries => "<exp_series>",
+            Runtime::Exp { .. } => "<exp>",
             Runtime::Shortest { .. } => "<shortest>",
             Runtime::FloatText { .. } => "<float_text>",
             Runtime::Push(_) => "<push>",
@@ -167,6 +177,9 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Equal => equal(),
         Runtime::Digits => digits(),
         Runtime::Decimal { bits, signed } => decimal(bits, signed, place(Runtime::Digits)),
+        Runtime::ExpMultiply => super::exp::multiply(),
+        Runtime::ExpSeries => super::exp::series(place(Runtime::ExpMultiply)),
+        Runtime::Exp { double } => super::exp::exp(double, place(Runtime::ExpSeries)),
         Runtime::Shortest { double } => super::ryu::shortest(double),
         Runtime::FloatText { double } => {
             super::ryu::float_text(double, place(Runtime::Shortest { double }))
