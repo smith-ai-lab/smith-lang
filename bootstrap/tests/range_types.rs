@@ -30,8 +30,12 @@ pub const ONCE: &[Test] = &[
         a_range_with_no_number_is_a_type_and_a_range_that_ends_before_it_begins_is_refused,
     ),
     (
-        "a_range_of_more_than_64_bits_is_refused",
-        a_range_of_more_than_64_bits_is_refused,
+        "a_range_of_more_than_64_bits_is_a_type_and_is_held_in_two_words",
+        a_range_of_more_than_64_bits_is_a_type_and_is_held_in_two_words,
+    ),
+    (
+        "a_result_of_more_than_128_bits_is_refused",
+        a_result_of_more_than_128_bits_is_refused,
     ),
     (
         "a_range_is_taken_where_a_range_that_holds_every_number_of_it_is_needed",
@@ -278,30 +282,37 @@ fn a_range_with_no_number_is_a_type_and_a_range_that_ends_before_it_begins_is_re
     });
 }
 
-/// A range that holds a number needing more than 64 bits is no type.
-fn a_range_of_more_than_64_bits_is_refused() {
+/// A range that holds a number needing more than 64 bits and at most 128 is a
+/// type, in two words, and a function takes and gives it as any other.
+fn a_range_of_more_than_64_bits_is_a_type_and_is_held_in_two_words() {
     for r in [
         "0..18446744073709551617",
         "-9223372036854775809..1",
         "0..36893488147419103232",
         "-18446744073709551616..0",
     ] {
+        let low = r.split("..").next().unwrap();
         let source = with_header(format!(
-            "fn big(x: {r}) -> Nat {{ 0 }}\n\nfn main() ! console, alloc {{\n  print(\"{{big(1)}}\")\n}}\n"
+            "fn same(x: {r}) -> {r} {{ x }}\n\nfn main() ! console, alloc {{\n  print(\"{{same({low})}}\")\n}}\n"
         ));
-        let errors = check(source.as_bytes()).expect_err("a range of more than 64 bits");
-        assert!(errors.iter().any(|e| e.message.contains("64 bits")), "{errors:?} for\n{source}");
+        assert_eq!(stdout(&source), format!("{low}\n"), "for\n{source}");
     }
+}
+
+/// A result that needs more than 128 bits is refused until it is narrowed.
+fn a_result_of_more_than_128_bits_is_refused() {
+    let source = with_header(
+        "fn cube(a: Nat) -> Nat {\n  p = a * a\n  p * a\n}\n\nfn main() ! console, alloc {\n  print(\"{cube(2)}\")\n}\n".to_string(),
+    );
+    assert!(!compiles(&source), "for\n{source}");
 }
 
 /// `i + 1` of a range `0..n` compiles into the same range exactly when `i` is
 /// known to be below the greatest number, as for the sizes.
 fn arith_proves_a_sum_of_a_range_exactly_when_it_fits_the_range() {
-    // `0..n` that is 2^64 fills the size of 64 bits, where the exact range of a sum
-    // is not one a type holds, so the sum is proven as an operation and the fix
-    // names the functions that wrap, saturate, and check. Of any other range the sum
-    // is the exact range, which enters the result with a proof, and the fix says to
-    // check the value first.
+    // The sum is the exact range, in two words where no type of 64 bits holds it,
+    // which enters the result with a proof, and the fix says to check the value
+    // first, whatever the range, the one that fills the size of 64 bits too.
     const SIZES: [i128; 4] = [1 << 8, 1 << 16, 1 << 32, 1 << 64];
     let case = |n: i128| {
         let proven = with_header(format!(
@@ -317,8 +328,7 @@ fn arith_proves_a_sum_of_a_range_exactly_when_it_fits_the_range() {
         assert!(errors.iter().all(|e| e.message.contains("i + 1")), "{errors:?}");
         let fixes: Vec<String> = errors.iter().filter_map(|e| e.fix.clone()).collect();
         assert!(!fixes.is_empty(), "{errors:?} for\n{unproven}");
-        let names = n == 1 << 64;
-        assert!(fixes.iter().all(|f| f.contains("wrapping_add") == names), "{fixes:?} for\n{unproven}");
+        assert!(fixes.iter().all(|f| !f.contains("wrapping_add")), "{fixes:?} for\n{unproven}");
     };
     // Both kinds are tried on every run: a range that fills a size and one that does
     // not, whatever the seed draws.

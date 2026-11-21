@@ -4,11 +4,82 @@
 
 use super::*;
 
-/// A whole number type: the range from `min` to `max`, both held.
+/// Whether a range of more than 64 bits is a type, which it is when the lowering
+/// keeps it in two words.
+const WIDE_BUILT: bool = true;
+
+/// A whole number type: the range from `min` to `max`, both held. A range
+/// of more than 127 bits has a greatest number above what an `i128` holds, and
+/// then `max` is `i128::MAX` and `above` is how much greater the number is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) struct Int {
     min: i128,
     max: i128,
+    above: u128,
+}
+
+/// A bound of a range, which is a sign and a size: the least of a range is not
+/// below -2 to the 127, and the greatest is below 2 to the 128.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Edge {
+    negative: bool,
+    size: u128,
+}
+
+impl Edge {
+    fn of(n: i128) -> Edge {
+        Edge {
+            negative: n < 0,
+            size: n.unsigned_abs(),
+        }
+    }
+
+    fn add(self, other: Edge) -> Option<Edge> {
+        if self.negative == other.negative {
+            return Some(Edge {
+                negative: self.negative,
+                size: self.size.checked_add(other.size)?,
+            });
+        }
+        let (more, less) = if self.size >= other.size {
+            (self, other)
+        } else {
+            (other, self)
+        };
+        let size = more.size - less.size;
+        Some(Edge {
+            negative: more.negative && size != 0,
+            size,
+        })
+    }
+
+    fn negated(self) -> Edge {
+        Edge {
+            negative: !self.negative && self.size != 0,
+            size: self.size,
+        }
+    }
+
+    fn sub(self, other: Edge) -> Option<Edge> {
+        self.add(other.negated())
+    }
+
+    fn mul(self, other: Edge) -> Option<Edge> {
+        let size = self.size.checked_mul(other.size)?;
+        Some(Edge {
+            negative: size != 0 && self.negative != other.negative,
+            size,
+        })
+    }
+
+    fn less(self, other: Edge) -> bool {
+        match (self.negative, other.negative) {
+            (true, false) => true,
+            (false, true) => false,
+            (false, false) => self.size < other.size,
+            (true, true) => self.size > other.size,
+        }
+    }
 }
 
 impl Int {
@@ -34,26 +105,92 @@ impl Int {
     ];
 
     /// The range that fills `bits` bits, signed or not.
-    const fn sized(signed: bool, bits: u32) -> Int {
-        if signed {
+    pub(super) const fn sized(signed: bool, bits: u32) -> Int {
+        if signed && bits == 128 {
+            Int {
+                min: i128::MIN,
+                max: i128::MAX,
+                above: 0,
+            }
+        } else if signed {
             Int {
                 min: -(1i128 << (bits - 1)),
                 max: (1i128 << (bits - 1)) - 1,
+                above: 0,
+            }
+        } else if bits == 128 {
+            Int {
+                min: 0,
+                max: i128::MAX,
+                above: 1 << 127,
             }
         } else {
             Int {
                 min: 0,
                 max: (1i128 << bits) - 1,
+                above: 0,
             }
         }
     }
 
     /// The range from `min` up to and including `max`, or none if a
-    /// number of it needs more than 64 bits.
+    /// number of it needs more than 128 bits.
     pub(super) fn between(min: i128, max: i128) -> Option<Int> {
-        let int = Int { min, max };
+        let int = Int { min, max, above: 0 };
         let holder = int.holder();
-        (int.min >= holder.min && max <= holder.max && max >= min - 1).then_some(int)
+        (WIDE_BUILT || !int.wide())
+            .then_some(())
+            .filter(|()| int.min >= holder.min && max <= holder.max && max >= min - 1)
+            .map(|()| int)
+    }
+
+    /// The range from the bound `low` up to and including the bound `high`,
+    /// or none if a number of it needs more than 128 bits.
+    fn between_bounds(low: Edge, high: Edge) -> Option<Int> {
+        let min = if low.negative {
+            -i128::try_from(low.size.checked_sub(1)?).ok()? - 1
+        } else {
+            i128::try_from(low.size).ok()?
+        };
+        let (max, above) = if high.negative {
+            (-i128::try_from(high.size.checked_sub(1)?).ok()? - 1, 0)
+        } else if let Ok(max) = i128::try_from(high.size) {
+            (max, 0)
+        } else {
+            (i128::MAX, high.size - i128::MAX as u128)
+        };
+        let int = Int { min, max, above };
+        // A range may be empty, which has its greatest number just below its
+        // least.
+        let ordered = !int.top().less(int.bottom().sub(Edge::of(1))?);
+        (ordered && (WIDE_BUILT || !int.wide()) && int.holds_in(int.holder())).then_some(int)
+    }
+
+    /// The greatest number of the range as a bound.
+    fn top(self) -> Edge {
+        if self.above == 0 {
+            Edge::of(self.max)
+        } else {
+            Edge {
+                negative: false,
+                size: self.max as u128 + self.above,
+            }
+        }
+    }
+
+    /// The least number of the range as a bound.
+    fn bottom(self) -> Edge {
+        Edge::of(self.min)
+    }
+
+    /// Whether every number of the range is a number of `holder`.
+    fn holds_in(self, holder: Int) -> bool {
+        holder.min <= self.min && !holder.top().less(self.top())
+    }
+
+    /// Whether a number of the range needs more than 64 bits.
+    pub(super) fn wide(self) -> bool {
+        self.bits() > 64
     }
 
     /// The name a size is written with, which is `u8` for `0..256`.
@@ -66,7 +203,11 @@ impl Int {
     pub(super) fn name(self) -> String {
         match self.size_name() {
             Some(name) => name.to_string(),
-            None => format!("{}..{}", self.min, self.max + 1),
+            None if self.above == 0 => format!("{}..{}", self.min, self.max + 1),
+            None => match self.top().size.checked_add(1) {
+                Some(end) => format!("{}..{end}", self.min),
+                None => format!("{}..340282366920938463463374607431768211456", self.min),
+            },
         }
     }
 
@@ -89,23 +230,32 @@ impl Int {
 
     /// How many bits the smallest size that holds the type as itself has.
     pub(super) fn bits(self) -> u32 {
-        [8, 16, 32, 64]
+        [8, 16, 32, 64, 128]
             .into_iter()
-            .find(|&bits| {
-                let size = Int::sized(self.signed(), bits);
-                size.min <= self.min && self.max <= size.max
-            })
-            .unwrap_or(64)
+            .find(|&bits| self.holds_in(Int::sized(self.signed(), bits)))
+            .unwrap_or(128)
     }
 
     /// Whether every value of `other` is a value of the type.
     pub(super) fn holds(self, other: Int) -> bool {
-        self.min <= other.min && other.max <= self.max
+        other.holds_in(self)
     }
 
     /// The smallest range that holds every number of both, if a type holds it.
     pub(super) fn hull(self, other: Int) -> Option<Int> {
-        Int::between(self.min.min(other.min), self.max.max(other.max))
+        let (low, high) = (
+            if self.bottom().less(other.bottom()) {
+                self.bottom()
+            } else {
+                other.bottom()
+            },
+            if self.top().less(other.top()) {
+                other.top()
+            } else {
+                self.top()
+            },
+        );
+        Int::between_bounds(low, high)
     }
 
     /// The size the type is kept at: the smallest one that holds it as itself.
@@ -118,7 +268,8 @@ impl Int {
         self.min
     }
 
-    /// The greatest value of the type.
+    /// The greatest value of the type, which a range of more than 127 bits has
+    /// no `i128` for: where `wide` says it is not held, this is `i128::MAX`.
     pub(super) fn max(self) -> i128 {
         self.max
     }
@@ -132,25 +283,43 @@ pub(super) fn expr_is_wide_character(expr: &Expr, magnitude: u128) -> bool {
 /// The exact range of `left op right`, when a type holds it: from the least
 /// to the greatest value the operation gives over the numbers of both.
 fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
+    // A range of more than 127 bits has no `i128` for its greatest number, and
+    // a quotient of one is worked out where it is built.
+    if matches!(op, ArithOp::Div | ArithOp::Rem) && (left.above > 0 || right.above > 0) {
+        return None;
+    }
     let (low, high) = match op {
         ArithOp::Add => (
-            left.min().checked_add(right.min())?,
-            left.max().checked_add(right.max())?,
+            left.bottom().add(right.bottom())?,
+            left.top().add(right.top())?,
         ),
         ArithOp::Sub => (
-            left.min().checked_sub(right.max())?,
-            left.max().checked_sub(right.min())?,
+            left.bottom().sub(right.top())?,
+            left.top().sub(right.bottom())?,
         ),
         ArithOp::Mul => {
             let products = [
-                left.min().checked_mul(right.min())?,
-                left.min().checked_mul(right.max())?,
-                left.max().checked_mul(right.min())?,
-                left.max().checked_mul(right.max())?,
+                left.bottom().mul(right.bottom())?,
+                left.bottom().mul(right.top())?,
+                left.top().mul(right.bottom())?,
+                left.top().mul(right.top())?,
             ];
-            (*products.iter().min()?, *products.iter().max()?)
+            let mut low = products[0];
+            let mut high = products[0];
+            for p in products {
+                if p.less(low) {
+                    low = p;
+                }
+                if high.less(p) {
+                    high = p;
+                }
+            }
+            (low, high)
         }
-        ArithOp::Div => quotients(left, right)?,
+        ArithOp::Div => {
+            let (low, high) = quotients(left, right)?;
+            (Edge::of(low), Edge::of(high))
+        }
         ArithOp::Rem => {
             // What is left of the least number of the largest size, taken by
             // `-1`, is asked of a processor that cannot give it: a smaller
@@ -163,10 +332,18 @@ fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
             {
                 return None;
             }
-            remainders(left, right)
+            let (low, high) = remainders(left, right);
+            (Edge::of(low), Edge::of(high))
         }
     };
-    Int::between(low, high)
+    let result = Int::between_bounds(low, high)?;
+    // A quotient and a remainder of numbers of 64 bits or fewer are of the type
+    // of the numbers, where `arith` shows the least number is not divided by
+    // `-1`, as they always were.
+    if matches!(op, ArithOp::Div | ArithOp::Rem) && result.wide() {
+        return None;
+    }
+    Some(result)
 }
 
 /// The numbers a divisor of the range `of` can be, which is its negative
@@ -632,6 +809,16 @@ impl<'a> Checker<'a> {
         }
         let gives = match (&l, &r) {
             (Ty::Unknown, _) | (_, Ty::Unknown) => return Ty::Unknown,
+            // An operation of one type whose exact range is more than 64 bits is
+            // of that type where `arith` shows it fits, as it always was, and
+            // is the exact range, in two words, where it does not.
+            (Ty::Int(a), Ty::Int(b))
+                if a == b
+                    && exact(op, *a, *b).is_some_and(|e| e.wide() && !a.wide())
+                    && self.would_fit(body, expr, *a) =>
+            {
+                return l.clone();
+            }
             (Ty::Int(a), Ty::Int(b)) if let Some(exact) = exact(op, *a, *b) => {
                 // The result is the exact range, which no proof is asked of,
                 // and each side is the number at the size that range is kept
@@ -911,7 +1098,7 @@ impl<'a> Checker<'a> {
                 } else {
                     exact(op, alone, *own)
                 };
-                if fits.is_some() {
+                if fits.is_some_and(|e| !e.wide()) {
                     return Want::Ty(Ty::Int(alone));
                 }
             }
@@ -1297,7 +1484,13 @@ impl<'a> Checker<'a> {
                     a.min().checked_mul(1i128 << b.min().clamp(0, 63)),
                     a.max().checked_mul(1i128 << most),
                 );
-                match lo.zip(hi).and_then(|(lo, hi)| Int::between(lo, hi)) {
+                // A shift that no type of 64 bits holds is of the type of the number,
+                // where it is shown to fit.
+                match lo
+                    .zip(hi)
+                    .and_then(|(lo, hi)| Int::between(lo, hi))
+                    .filter(|r| !r.wide())
+                {
                     Some(r) => Some(r),
                     // No type holds the exact range, so the result is the type
                     // of the number, as a product's is, where `arith` proves

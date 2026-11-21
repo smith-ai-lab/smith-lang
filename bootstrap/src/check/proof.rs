@@ -1303,6 +1303,44 @@ impl<'a> Checker<'a> {
 
     /// Whether `arith` proves that the result of the operation `e` fits `t`,
     /// and if it does not, the goal it could not prove.
+    pub(super) fn would_fit(&mut self, body: &mut Body<'a>, e: &Expr, t: Int) -> bool {
+        if !Self::decided(body) || body.contract {
+            return true;
+        }
+        let Expr::Arith { op, .. } = e else {
+            return true;
+        };
+        if matches!(op, ArithOp::Div | ArithOp::Rem) {
+            return true;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let value = builder.lin(e).filter(|_| !builder.overflow);
+        let (above, below) = match (op, t.signed()) {
+            (ArithOp::Sub, false) => (false, true),
+            (_, false) => (true, false),
+            (_, true) => (true, true),
+        };
+        let mut goals = Vec::new();
+        match &value {
+            Some(value) => {
+                if above && let Some(mut up) = value.negated() {
+                    up.constant = up.constant.saturating_add(t.max());
+                    goals.push(Formula::Ge(up));
+                }
+                if below {
+                    let mut down = value.clone();
+                    down.constant = down.constant.saturating_sub(t.min());
+                    goals.push(Formula::Ge(down));
+                }
+            }
+            None => goals.push(Formula::Or(Vec::new())),
+        }
+        let used = background(&facts, goals.iter());
+        body.facts = facts;
+        goals.iter().all(|g| proves(&used, g))
+    }
+
     pub(super) fn fits(&mut self, body: &mut Body<'a>, e: &Expr, t: Int) {
         if !Self::decided(body) || body.contract {
             return;
