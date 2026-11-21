@@ -9,3 +9,11 @@ pub fn exp[T](a: T) -> T {
 pub fn ln[T](a: T) -> T {
   __ln(a)
 }
+
+pub fn sin[T](a: T) -> T {
+  __sin(a)
+}
+
+pub fn cos[T](a: T) -> T {
+  __cos(a)
+}

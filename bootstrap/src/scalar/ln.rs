@@ -323,83 +323,105 @@ pub(super) fn ln(double: bool, multiply: usize, reciprocal: usize, series: usize
     }
     f.at(rest);
 
+    let out = round_fixed(&mut f, value, result_negative, double);
+    f.ret(vec![out]);
+    f.finish(&[float])
+}
+
+/// The float of the size that is nearest the number held as 256 bits of fixed
+/// point with 240 after the point, which is not 0, and negative when the flag
+/// says so: the top bit is moved to the top of the 256, the bits that a float
+/// keeps are cut, and they are rounded once, to the even one at a tie. The
+/// number must not be below the least normal float or above the greatest, as
+/// no `ln`, `sin`, or `cos` of a float is.
+pub(super) fn round_fixed(
+    f: &mut Builder,
+    value: Wide,
+    result_negative: Value,
+    double: bool,
+) -> Value {
+    let (mantissa_bits, exponent_bits, bias) = if double {
+        (52u64, 11u64, 1023u64)
+    } else {
+        (23, 8, 127)
+    };
+    let zero = c(f, 0);
+    let one = c(f, 1);
     // The top bit moved to the top of the 256: by a whole number of words
     // while the top words are 0, then by bits.
     let mut value = value;
-    let mut moved_by = c(&mut f, 0);
+    let mut moved_by = c(f, 0);
     for words in [4usize, 2, 1] {
         let top_zero = {
-            let mut acc = c(&mut f, 0);
+            let mut acc = c(f, 0);
             for word in &value[WORDS - words..] {
-                acc = or(&mut f, acc, *word);
+                acc = or(f, acc, *word);
             }
-            eq(&mut f, acc, zero)
+            eq(f, acc, zero)
         };
-        let shifted = words_up(&mut f, &value, words);
-        value = choose_wide(&mut f, top_zero, &shifted, &value);
-        let by = c(&mut f, 32 * words as u64);
+        let shifted = words_up(f, &value, words);
+        value = choose_wide(f, top_zero, &shifted, &value);
+        let by = c(f, 32 * words as u64);
         let more = f.binary(Binary::Add, moved_by, by);
         moved_by = f.choose(top_zero, more, moved_by);
     }
     for by in [16u64, 8, 4, 2, 1] {
-        let limit = c(&mut f, 1 << (32 - by));
-        let top_zero = below(&mut f, value[WORDS - 1], limit);
-        let shifted = bits_up(&mut f, &value, by);
-        value = choose_wide(&mut f, top_zero, &shifted, &value);
-        let amount = c(&mut f, by);
+        let limit = c(f, 1 << (32 - by));
+        let top_zero = below(f, value[WORDS - 1], limit);
+        let shifted = bits_up(f, &value, by);
+        value = choose_wide(f, top_zero, &shifted, &value);
+        let amount = c(f, by);
         let more = f.binary(Binary::Add, moved_by, amount);
         moved_by = f.choose(top_zero, more, moved_by);
     }
     // The 64 top bits, of which the top `mantissa_bits + 1` are kept.
-    let thirty_two = c(&mut f, 32);
+    let thirty_two = c(f, 32);
     let high = f.binary(Binary::ShiftLeft, value[7], thirty_two);
-    let top = or(&mut f, high, value[6]);
+    let top = or(f, high, value[6]);
     let cut = 64 - (mantissa_bits + 1);
-    let cut_c = c(&mut f, cut);
+    let cut_c = c(f, cut);
     let kept = f.binary(Binary::ShiftRightU, top, cut_c);
-    let before = c(&mut f, cut - 1);
+    let before = c(f, cut - 1);
     let half = f.binary(Binary::ShiftRightU, top, before);
-    let half = and(&mut f, half, one);
+    let half = and(f, half, one);
     let half_flag = {
-        let z = eq(&mut f, half, zero);
-        not(&mut f, z)
+        let z = eq(f, half, zero);
+        not(f, z)
     };
-    let low_mask = c(&mut f, (1 << (cut - 1)) - 1);
-    let low = and(&mut f, top, low_mask);
+    let low_mask = c(f, (1 << (cut - 1)) - 1);
+    let low = and(f, top, low_mask);
     let mut rest_bits = low;
     for word in &value[..6] {
-        rest_bits = or(&mut f, rest_bits, *word);
+        rest_bits = or(f, rest_bits, *word);
     }
     let sticky = {
-        let z = eq(&mut f, rest_bits, zero);
-        not(&mut f, z)
+        let z = eq(f, rest_bits, zero);
+        not(f, z)
     };
     let odd = {
-        let bit = and(&mut f, kept, one);
-        let z = eq(&mut f, bit, zero);
-        not(&mut f, z)
+        let bit = and(f, kept, one);
+        let z = eq(f, bit, zero);
+        not(f, z)
     };
     let more = f.binary(Binary::Or, sticky, odd);
     let up = f.binary(Binary::And, half_flag, more);
-    let up = number(&mut f, up);
+    let up = number(f, up);
     let kept = f.binary(Binary::Add, kept, up);
     // The leading bit is at `15 - moved_by` of the power of 2, and `kept`
     // holds it, which adds the 1 that `biased - 1` leaves out.
-    let top_exponent = c(&mut f, 14 + bias);
-    let before_hidden = sub(&mut f, top_exponent, moved_by);
-    let by = c(&mut f, mantissa_bits);
+    let top_exponent = c(f, 14 + bias);
+    let before_hidden = sub(f, top_exponent, moved_by);
+    let by = c(f, mantissa_bits);
     let field_part = f.binary(Binary::ShiftLeft, before_hidden, by);
     let result = f.binary(Binary::Add, field_part, kept);
-    let sign_number = number(&mut f, result_negative);
-    let by = c(&mut f, mantissa_bits + exponent_bits);
+    let sign_number = number(f, result_negative);
+    let by = c(f, mantissa_bits + exponent_bits);
     let sign_part = f.binary(Binary::ShiftLeft, sign_number, by);
-    let result = or(&mut f, result, sign_part);
+    let result = or(f, result, sign_part);
     let out = if double {
         result
     } else {
         f.narrow(result, Bits::B32)
     };
-    let out = f.float_from_bits(out);
-    f.ret(vec![out]);
-    f.finish(&[float])
+    f.float_from_bits(out)
 }

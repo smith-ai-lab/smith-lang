@@ -69,6 +69,34 @@ pub const ONCE: &[Test] = &[
         || logarithms_are_what_the_reference_says::<f64>(43),
     ),
     (
+        "the_sine_and_the_cosine_of_an_f32_are_the_floats_nearest_the_exact_ones_part_1_of_3",
+        || trigs_are_what_the_reference_says::<f32>(51),
+    ),
+    (
+        "the_sine_and_the_cosine_of_an_f32_are_the_floats_nearest_the_exact_ones_part_2_of_3",
+        || trigs_are_what_the_reference_says::<f32>(52),
+    ),
+    (
+        "the_sine_and_the_cosine_of_an_f32_are_the_floats_nearest_the_exact_ones_part_3_of_3",
+        || trigs_are_what_the_reference_says::<f32>(53),
+    ),
+    (
+        "the_sine_and_the_cosine_of_an_f64_are_the_floats_nearest_the_exact_ones_part_1_of_3",
+        || trigs_are_what_the_reference_says::<f64>(61),
+    ),
+    (
+        "the_sine_and_the_cosine_of_an_f64_are_the_floats_nearest_the_exact_ones_part_2_of_3",
+        || trigs_are_what_the_reference_says::<f64>(62),
+    ),
+    (
+        "the_sine_and_the_cosine_of_an_f64_are_the_floats_nearest_the_exact_ones_part_3_of_3",
+        || trigs_are_what_the_reference_says::<f64>(63),
+    ),
+    (
+        "the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_reference",
+        the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_reference,
+    ),
+    (
         "the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference",
         the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference,
     ),
@@ -142,6 +170,30 @@ pub const MACHINE: &[Test] = &[
     (
         "every_executable_gives_the_square_root_of_an_f64_that_the_evaluator_gives",
         || roots_on_every_executable::<f64>(5),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f32_that_the_evaluator_gives_part_1_of_3",
+        || trigs_on_every_executable::<f32>(51),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f32_that_the_evaluator_gives_part_2_of_3",
+        || trigs_on_every_executable::<f32>(52),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f32_that_the_evaluator_gives_part_3_of_3",
+        || trigs_on_every_executable::<f32>(53),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f64_that_the_evaluator_gives_part_1_of_3",
+        || trigs_on_every_executable::<f64>(61),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f64_that_the_evaluator_gives_part_2_of_3",
+        || trigs_on_every_executable::<f64>(62),
+    ),
+    (
+        "every_executable_gives_the_sine_and_the_cosine_of_an_f64_that_the_evaluator_gives_part_3_of_3",
+        || trigs_on_every_executable::<f64>(63),
     ),
     (
         "every_executable_gives_the_logarithm_of_an_f32_that_the_evaluator_gives_part_1_of_3",
@@ -713,6 +765,8 @@ pub fn sources() -> Vec<String> {
         generate::sample(21, 0, exponential_program::<f64>).0,
         generate::sample(31, 0, logarithm_program::<f32>).0,
         generate::sample(41, 0, logarithm_program::<f64>).0,
+        generate::sample(51, 0, trig_program::<f32>).0,
+        generate::sample(61, 0, trig_program::<f64>).0,
     ]
 }
 
@@ -1166,4 +1220,192 @@ fn the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_refe
         assert!(distance < -228, "the series of {words:x?} is wrong by about 2^{distance}");
     }
     eprintln!("the reciprocal and the series are wrong by under 2^{worst}");
+}
+
+/// The sine and the cosine of a float that the reference gives, as floats.
+fn exact_trig<T: Float>(x: T) -> (T, T) {
+    if T::NAME == "f32" {
+        let x = f32::from_bits(x.bits() as u32);
+        (
+            T::from_bits(u64::from(exact::sin_f32(x))),
+            T::from_bits(u64::from(exact::cos_f32(x))),
+        )
+    } else {
+        let x = f64::from_bits(x.bits());
+        (
+            T::from_bits(exact::sin_f64(x)),
+            T::from_bits(exact::cos_f64(x)),
+        )
+    }
+}
+
+/// The numbers the sine and the cosine are tried at: the edges, the floats
+/// nearest the multiples of a half of pi, where the result is least and the
+/// reduction is hardest, powers of 2 from the least that is not given as it is
+/// to the greatest, and floats of any size, of either sign.
+fn trig_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
+    let bits = if T::NAME == "f32" { 32 } else { 64 };
+    let parse = |v: f64| T::parsed(&format!("{v:e}"));
+    let mut values: Vec<T> = Vec::new();
+    for x in T::edges() {
+        if !x.is_nan() && !x.is_infinite() && x.key() != T::from_bits(0).key() && x.key() != T::from_bits(1 << (bits - 1)).key() {
+            values.push(x);
+        }
+    }
+    let powers: &[i32] = if T::NAME == "f32" {
+        &[-13, -12, -1, 0, 24, 100, 127]
+    } else {
+        &[-27, -26, -1, 0, 52, 500, 1023]
+    };
+    for k in powers {
+        let v = 2f64.powi(*k);
+        for sign in [1.0, -1.0] {
+            if let Some(x) = parse(sign * v) {
+                values.push(x);
+            }
+        }
+    }
+    for k in [1u64, 2, 3, 4, 7, 355, 22000, 12_345_678] {
+        let v = k as f64 * std::f64::consts::FRAC_PI_2;
+        if let Some(x) = parse(v) {
+            values.push(x);
+        }
+    }
+    for v in [1e22, 1e300, 0.1, 1.5, 6.0, 1e5] {
+        if let Some(x) = parse(v) {
+            values.push(x);
+        }
+    }
+    for _ in 0..8 {
+        let word = (g.below(1 << 30) as u64) << 34 | (g.below(1 << 30) as u64) << 4 | g.below(16) as u64;
+        let x = T::from_bits(if bits == 64 { word } else { word & ((1u64 << bits) - 1) });
+        if !x.is_nan() && !x.is_infinite() && x.key() != T::from_bits(0).key() && x.key() != T::from_bits(1 << (bits - 1)).key() {
+            values.push(x);
+        }
+    }
+    values
+}
+
+/// The program that compares the sine and the cosine of each float with the
+/// ones the reference gives, as floats written out, and what it prints. It
+/// also tries 0, and an infinity.
+fn trig_program<T: Float>(g: &mut Gen) -> (String, String) {
+    let values = trig_inputs::<T>(g);
+    let t = T::NAME;
+    let mut source = format!(
+        "use std.float (sin, cos)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  infinity: {t} = 1.0 / zero\n",
+        values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
+    );
+    let mut said = String::new();
+    for (i, x) in values.iter().enumerate() {
+        let (sine, cosine) = exact_trig(*x);
+        source += &format!("  print(\"{{sin(xs[{i}]) == {}}}\")\n", written(sine));
+        source += &format!("  print(\"{{cos(xs[{i}]) == {}}}\")\n", written(cosine));
+        said += "true\ntrue\n";
+    }
+    // `sin 0` is 0 and `cos 0` is 1, and an infinity has no sine and no
+    // cosine, which are after every float.
+    source += "  print(\"{sin(zero) == zero and cos(zero) == 1.0}\")\n";
+    source += "  print(\"{sin(infinity) > infinity and cos(infinity) > infinity}\")\n";
+    said += "true\ntrue\n";
+    source += "}\n";
+    (with_header(source), said)
+}
+
+fn trigs_are_what_the_reference_says<T: Float>(seed: u64) {
+    let (source, said) = generate::sample(seed, 0, trig_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), said, "for {source}");
+}
+
+fn trigs_on_every_executable<T: Float>(seed: u64) {
+    let (source, _) = generate::sample(seed, 0, trig_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    for target in runnable().into_iter().filter(|t: &Target| t.builds_floats()) {
+        runs_as(source.as_bytes(), target, &outcome);
+    }
+}
+
+/// The two functions of the runtime that `sin` and `cos` are made of, which
+/// are the reduction of a float by `pi / 2` with as many bits of it as the
+/// float's exponent needs, and the series of `sin r` and `cos r` of the eight
+/// words of fixed point `r` that it gives, are as near the reference as the
+/// comment of `sin` says, 2^-228. A float that is near a multiple of `pi / 2`
+/// shows the first only when the bits that are taken are too few, and none of
+/// them is within 2^-100 of one, so the floats cannot show this.
+fn the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_reference() {
+    let source = "use std.console (console, print)\nuse std.float (sin)\n\nfn main() ! console, alloc {\n  print(\"{sin(1.0)}\")\n}\n";
+    let program = lower(source.as_bytes()).expect("builds");
+    let reduce = program
+        .functions
+        .iter()
+        .position(|f| f.blocks[0].params.len() == 2 && f.results.len() == 10)
+        .expect("the reduction is in the program");
+    let series = program
+        .functions
+        .iter()
+        .position(|f| f.blocks[0].params.len() == 8 && f.results.len() == 16)
+        .expect("the series is in the program");
+    let cases: Vec<(u64, i64)> = generate::sample(96, 0, |g| {
+        let mut cases = Vec::new();
+        let exponents = [-79i64, -60, -27, -10, 0, 1, 5, 40, 100, 500, 900, 971];
+        for (k, e) in exponents.iter().enumerate() {
+            for j in 0..3 {
+                let m = (1u64 << 52) | (g.below(1 << 30) as u64) << 22 | g.below(1 << 22) as u64;
+                let e = if k == 0 && j == 0 { 971 } else { *e };
+                cases.push((m, e));
+            }
+        }
+        // The greatest and the least mantissas, and a float at 2^k.
+        cases.push(((1 << 53) - 1, 971));
+        cases.push((1 << 52, 971));
+        cases.push(((1 << 53) - 1, -79));
+        cases
+    });
+    let mut worst = i64::MIN;
+    for (m, e) in cases {
+        let x = Big::from_u64(m).ldexp(e);
+        let (quarter, r) = exact::reduce(&x);
+        let got = scalar::call(&program, reduce, &[m, e as u64]);
+        assert_eq!(got[0], u64::from(quarter), "the quarter of {m} * 2^{e}");
+        let magnitude = exact::from_words(&got[2..], 240);
+        let signed = if got[1] == 1 { magnitude.negated() } else { magnitude };
+        let distance = exact::distance_bits(&signed, &r);
+        worst = worst.max(distance);
+        assert!(distance < -228, "{m} * 2^{e} is reduced wrongly by about 2^{distance}");
+    }
+    let inputs: Vec<[u64; 8]> = generate::sample(95, 0, |g| {
+        (0..30)
+            .map(|k| {
+                let mut words = [0u64; 8];
+                for w in words.iter_mut().take(7) {
+                    *w = g.below(1 << 32) as u64;
+                }
+                // Below `pi / 4`, which is 51472 of the 65536 of the top word.
+                words[7] = g.below(51472) as u64;
+                match k {
+                    0 => [0; 8],
+                    // The greatest, where the series is slowest.
+                    1..=6 => {
+                        words[7] = 51460 + g.below(10) as u64;
+                        words
+                    }
+                    _ => words,
+                }
+            })
+            .collect()
+    });
+    for words in inputs {
+        let r = exact::from_words(&words, 240);
+        let got = scalar::call(&program, series, &words);
+        let (sine, cosine) = exact::sin_cos(&r);
+        for (part, want) in [(&got[..8], sine), (&got[8..], cosine)] {
+            let distance = exact::distance_bits(&exact::from_words(part, 240), &want);
+            worst = worst.max(distance);
+            assert!(distance < -228, "the series of {words:x?} is wrong by about 2^{distance}");
+        }
+    }
+    eprintln!("the reduction and the series are wrong by under 2^{worst}");
 }
