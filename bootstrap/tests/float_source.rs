@@ -750,14 +750,9 @@ fn every_executable_prints_2_5_for_half_of_5() {
     }
 }
 
-/// The sources of the programs of floats that the other tests of this file
+/// How many programs of floats there are that the other tests of this file
 /// run: every operator and comparison, and the text, of each size, so that a
 /// target that is run by a host is held to the evaluator on them.
-pub fn sources() -> Vec<String> {
-    (0..SOURCES).map(source).collect()
-}
-
-/// How many programs there are.
 pub const SOURCES: usize = 12;
 
 /// The program of a place in the list, made alone so that a test can run a
