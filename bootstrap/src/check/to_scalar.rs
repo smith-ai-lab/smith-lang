@@ -1081,12 +1081,21 @@ impl<'a> Lowering<'a> {
                 Stmt::Assign {
                     name,
                     fields,
+                    at: element,
                     value,
                     ..
                 } => {
                     let (_, value) = self.expr(out, value, env);
                     let at = out.find(name).expect("checked");
-                    let (start, size) = self.offset(&out.names()[at].ty, fields);
+                    let (mut start, mut size) = self.offset(&out.names()[at].ty, fields);
+                    if let Some(element) = element {
+                        let place = self.constant_index(&element.1, &element.1, env);
+                        size /= match self.typed.type_of(&element.0, env) {
+                            Ty::Array(_, n) => n as usize,
+                            _ => unreachable!("checked"),
+                        };
+                        start += place * size;
+                    }
                     out.names_mut()[at]
                         .values
                         .splice(start..start + size, value);
@@ -1344,7 +1353,7 @@ impl<'a> Lowering<'a> {
                     let values = self.case(out, &ty, k, None, env);
                     return (ty, values);
                 }
-                if indexed(of) {
+                if indexed(of) && !self.over_array(of, env) {
                     let (ty, address, scalars) = self.element_at(out, expr, env);
                     return (ty, self.load(out, address, &scalars));
                 }
@@ -1404,6 +1413,9 @@ impl<'a> Lowering<'a> {
             Expr::List { items, .. } => self.list_literal(out, expr, items, env),
             Expr::Slice { of, from, to, .. } => {
                 self.piece(out, expr, (of, from.as_deref(), to.as_deref()), env)
+            }
+            Expr::Index { of, index, .. } if self.over_array(expr, env) => {
+                self.array_element(out, expr, (of, index), env)
             }
             Expr::Index { .. } => {
                 let (ty, address, scalars) = self.element_at(out, expr, env);
