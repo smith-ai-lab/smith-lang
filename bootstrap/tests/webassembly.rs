@@ -69,8 +69,28 @@ pub const ONCE: &[Test] = &[
         every_module_of_a_function_of_floats_and_whole_numbers_does_what_the_evaluator_says,
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does",
-        every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does,
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_1_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(0),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_2_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(1),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_3_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(2),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_4_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(3),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_5_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(4),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_6_of_6",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(5),
     ),
     (
         "every_module_of_a_fused_product_gives_what_the_evaluator_gives",
@@ -759,11 +779,13 @@ fn every_module_of_a_fused_product_gives_what_the_evaluator_gives() {
 
 /// Every operator and comparison of floats, and the text of one, written in
 /// Smith, for a module: what it prints is what the evaluator prints.
-fn every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does() {
+fn every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(part: usize) {
     if !node() {
         return;
     }
-    for source in crate::float_source::sources() {
+    let each = crate::float_source::SOURCES / 6;
+    for at in part * each..(part + 1) * each {
+        let source = crate::float_source::source(at);
         agree(&after_the_pass(source.as_bytes()));
     }
 }
