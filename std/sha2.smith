@@ -1,0 +1,143 @@
+use std.bits (bit_and, bit_not, bit_or, bit_xor, shift_left, shift_right, u32)
+use std.int (wrapping_add, wrapping_shift_left)
+
+fn rotate_right(x: u32, by: Byte) -> u32
+  requires 0 < by and by < 32
+{
+  bit_or(shift_right(x, by), wrapping_shift_left(x, 32 - by))
+}
+
+fn word(bytes: Slice[Byte], at: Nat) -> u32
+  requires at + 3 < bytes.size
+{
+  bit_or(
+    bit_or(shift_left(bytes[at], 24), shift_left(bytes[at + 1], 16)),
+    bit_or(shift_left(bytes[at + 2], 8), bytes[at + 3]),
+  )
+}
+
+fn tail_word(tail: [128]Byte, at: Nat) -> u32
+  requires at + 3 < 128
+{
+  bit_or(
+    bit_or(shift_left(tail[at], 24), shift_left(tail[at + 1], 16)),
+    bit_or(shift_left(tail[at + 2], 8), tail[at + 3]),
+  )
+}
+
+fn compress(h: [8]u32, m: [16]u32) -> [8]u32 {
+  k: Slice[u32] = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]
+  var w: [64]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  loop i in 0..16 {
+    w[i] = m[i]
+  }
+  loop i in 16..64 {
+    x = w[i - 15]
+    y = w[i - 2]
+    s0 = bit_xor(bit_xor(rotate_right(x, 7), rotate_right(x, 18)), shift_right(x, 3))
+    s1 = bit_xor(bit_xor(rotate_right(y, 17), rotate_right(y, 19)), shift_right(y, 10))
+    w[i] = wrapping_add(wrapping_add(w[i - 16], s0), wrapping_add(w[i - 7], s1))
+  }
+  var a = h[0]
+  var b = h[1]
+  var c = h[2]
+  var d = h[3]
+  var e = h[4]
+  var f = h[5]
+  var g = h[6]
+  var j = h[7]
+  loop i in 0..64 {
+    s1 = bit_xor(bit_xor(rotate_right(e, 6), rotate_right(e, 11)), rotate_right(e, 25))
+    ch = bit_xor(bit_and(e, f), bit_and(bit_not(e), g))
+    t1 = wrapping_add(wrapping_add(wrapping_add(j, s1), wrapping_add(ch, k[i])), w[i])
+    s0 = bit_xor(bit_xor(rotate_right(a, 2), rotate_right(a, 13)), rotate_right(a, 22))
+    maj = bit_xor(bit_xor(bit_and(a, b), bit_and(a, c)), bit_and(b, c))
+    t2 = wrapping_add(s0, maj)
+    j = g
+    g = f
+    f = e
+    e = wrapping_add(d, t1)
+    d = c
+    c = b
+    b = a
+    a = wrapping_add(t1, t2)
+  }
+  [
+    wrapping_add(h[0], a), wrapping_add(h[1], b), wrapping_add(h[2], c), wrapping_add(h[3], d),
+    wrapping_add(h[4], e), wrapping_add(h[5], f), wrapping_add(h[6], g), wrapping_add(h[7], j),
+  ]
+}
+
+fn block_of(bytes: Slice[Byte], at: Nat) -> [16]u32
+  requires at + 64 <= bytes.size
+{
+  var m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  loop i in 0..16 {
+    m[i] = word(bytes, at + 4 * i)
+  }
+  m
+}
+
+fn tail_block(tail: [128]Byte, which: Nat) -> [16]u32
+  requires which < 2
+{
+  var m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  loop i in 0..16 {
+    m[i] = tail_word(tail, which * 64 + 4 * i)
+  }
+  m
+}
+
+pub fn sha256(bytes: Slice[Byte]) -> [32]Byte {
+  var h: [8]u32 = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
+  whole = bytes.size / 64
+  loop n in 0..whole {
+    h = compress(h, block_of(bytes, n * 64))
+  }
+  rest: Nat = bytes.size % 64
+  from = bytes.size - rest
+  var tail: [128]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  loop i in 0..rest {
+    tail[i] = bytes[from + i]
+  }
+  tail[rest] = 128
+  bits = wrapping_shift_left(bytes.size, 3)
+  if rest < 56 {
+    loop i in 0..8 {
+      tail[56 + i] = bit_and(shift_right(bits, 8 * (7 - i)), 255)
+    }
+    h = compress(h, tail_block(tail, 0))
+  } else {
+    loop i in 0..8 {
+      tail[120 + i] = bit_and(shift_right(bits, 8 * (7 - i)), 255)
+    }
+    h = compress(h, tail_block(tail, 0))
+    h = compress(h, tail_block(tail, 1))
+  }
+  var digest: [32]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  loop i in 0..8 {
+    x = h[i]
+    digest[4 * i] = shift_right(x, 24)
+    digest[4 * i + 1] = bit_and(shift_right(x, 16), 255)
+    digest[4 * i + 2] = bit_and(shift_right(x, 8), 255)
+    digest[4 * i + 3] = bit_and(x, 255)
+  }
+  digest
+}

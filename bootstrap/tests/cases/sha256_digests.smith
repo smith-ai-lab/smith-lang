@@ -1,0 +1,11 @@
+use std.console (console, print)
+use std.sha2 (sha256)
+
+fn main() ! console, alloc {
+  d0 = sha256("abc".bytes)
+  loop x in d0 { print("{x}") }
+  d1 = sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".bytes)
+  loop x in d1 { print("{x}") }
+  d2 = sha256("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".bytes)
+  loop x in d2 { print("{x}") }
+}
