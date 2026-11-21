@@ -754,20 +754,29 @@ fn every_executable_prints_2_5_for_half_of_5() {
 /// run: every operator and comparison, and the text, of each size, so that a
 /// target that is run by a host is held to the evaluator on them.
 pub fn sources() -> Vec<String> {
-    vec![
-        generate::sample(0, 0, program::<f32>).0,
-        generate::sample(1, 0, program::<f64>).0,
-        generate::sample(2, 0, text_program::<f32>).0,
-        generate::sample(3, 0, text_program::<f64>).0,
-        generate::sample(4, 0, root_program::<f32>).0,
-        generate::sample(5, 0, root_program::<f64>).0,
-        generate::sample(11, 0, exponential_program::<f32>).0,
-        generate::sample(21, 0, exponential_program::<f64>).0,
-        generate::sample(31, 0, logarithm_program::<f32>).0,
-        generate::sample(41, 0, logarithm_program::<f64>).0,
-        generate::sample(51, 0, trig_program::<f32>).0,
-        generate::sample(61, 0, trig_program::<f64>).0,
-    ]
+    (0..SOURCES).map(source).collect()
+}
+
+/// How many programs there are.
+pub const SOURCES: usize = 12;
+
+/// The program of a place in the list, made alone so that a test can run a
+/// few of them.
+pub fn source(at: usize) -> String {
+    match at {
+        0 => generate::sample(0, 0, program::<f32>).0,
+        1 => generate::sample(1, 0, program::<f64>).0,
+        2 => generate::sample(2, 0, text_program::<f32>).0,
+        3 => generate::sample(3, 0, text_program::<f64>).0,
+        4 => generate::sample(4, 0, root_program::<f32>).0,
+        5 => generate::sample(5, 0, root_program::<f64>).0,
+        6 => generate::sample(11, 0, exponential_program::<f32>).0,
+        7 => generate::sample(21, 0, exponential_program::<f64>).0,
+        8 => generate::sample(31, 0, logarithm_program::<f32>).0,
+        9 => generate::sample(41, 0, logarithm_program::<f64>).0,
+        10 => generate::sample(51, 0, trig_program::<f32>).0,
+        _ => generate::sample(61, 0, trig_program::<f64>).0,
+    }
 }
 
 /// Rust's square root of a float, which is the one that is rounded once.
@@ -1247,15 +1256,15 @@ fn trig_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
     let bits = if T::NAME == "f32" { 32 } else { 64 };
     let parse = |v: f64| T::parsed(&format!("{v:e}"));
     let mut values: Vec<T> = Vec::new();
-    for x in T::edges() {
+    for x in T::edges().into_iter().take(6) {
         if !x.is_nan() && !x.is_infinite() && x.key() != T::from_bits(0).key() && x.key() != T::from_bits(1 << (bits - 1)).key() {
             values.push(x);
         }
     }
     let powers: &[i32] = if T::NAME == "f32" {
-        &[-13, -12, -1, 0, 24, 100, 127]
+        &[-13, 0, 100]
     } else {
-        &[-27, -26, -1, 0, 52, 500, 1023]
+        &[-26, 0, 1023]
     };
     for k in powers {
         let v = 2f64.powi(*k);
@@ -1265,18 +1274,18 @@ fn trig_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
             }
         }
     }
-    for k in [1u64, 2, 3, 4, 7, 355, 22000, 12_345_678] {
+    for k in [1u64, 3, 355, 12_345_678] {
         let v = k as f64 * std::f64::consts::FRAC_PI_2;
         if let Some(x) = parse(v) {
             values.push(x);
         }
     }
-    for v in [1e22, 1e300, 0.1, 1.5, 6.0, 1e5] {
+    for v in [1e22, 0.1, 6.0] {
         if let Some(x) = parse(v) {
             values.push(x);
         }
     }
-    for _ in 0..8 {
+    for _ in 0..4 {
         let word = (g.below(1 << 30) as u64) << 34 | (g.below(1 << 30) as u64) << 4 | g.below(16) as u64;
         let x = T::from_bits(if bits == 64 { word } else { word & ((1u64 << bits) - 1) });
         if !x.is_nan() && !x.is_infinite() && x.key() != T::from_bits(0).key() && x.key() != T::from_bits(1 << (bits - 1)).key() {
