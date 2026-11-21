@@ -571,6 +571,13 @@ pub enum Op {
         then: Value,
         otherwise: Value,
     },
+    /// The address of `bytes` bytes of the function's frame, which are its own
+    /// for as long as the function runs and are the same bytes each time the
+    /// instruction runs in one run of the function. The bytes hold nothing
+    /// until they are stored to, and no two of these instructions share any.
+    Frame {
+        bytes: u64,
+    },
     /// Gives the integer or address of the type that is held at the address,
     /// in as many bytes as its size, least significant first.
     Load {
@@ -630,7 +637,7 @@ impl Op {
             args: [].iter(),
         };
         match self {
-            Op::Constant(_) => some([Value(0); 3], 0),
+            Op::Constant(_) | Op::Frame { .. } => some([Value(0); 3], 0),
             Op::Binary { a, b, .. }
             | Op::Compare { a, b, .. }
             | Op::Overflows { a, b, .. }
@@ -690,7 +697,7 @@ impl Op {
     pub fn rename(&mut self, by: &impl Fn(Value) -> Value) {
         let one = |v: &mut Value| *v = by(*v);
         match self {
-            Op::Constant(_) => {}
+            Op::Constant(_) | Op::Frame { .. } => {}
             Op::Binary { a, b, .. }
             | Op::Compare { a, b, .. }
             | Op::Overflows { a, b, .. }

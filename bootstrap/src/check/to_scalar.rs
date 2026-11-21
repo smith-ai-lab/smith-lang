@@ -1088,13 +1088,52 @@ impl<'a> Lowering<'a> {
                     let (_, value) = self.expr(out, value, env);
                     let at = out.find(name).expect("checked");
                     let (mut start, mut size) = self.offset(&out.names()[at].ty, fields);
+                    let mut value = value;
                     if let Some(element) = element {
-                        let place = self.constant_index(&element.1, &element.1, env);
-                        size /= match self.typed.type_of(&element.0, env) {
-                            Ty::Array(_, n) => n as usize,
-                            _ => unreachable!("checked"),
+                        let Ty::Array(of, n) = self.typed.type_of(&element.0, env) else {
+                            unreachable!("checked")
                         };
-                        start += place * size;
+                        let one = size / n as usize;
+                        match self.constant_index(&element.1, env) {
+                            Some(place) => {
+                                start += place * one;
+                                size = one;
+                            }
+                            None => {
+                                // The array is written to the frame, the element
+                                // is stored in it, and the array is read back.
+                                let held = out.names()[at].values[start..start + size].to_vec();
+                                let (frame, scalars, stride) =
+                                    self.written_to_frame(out, &of[0], n, &held);
+                                let address =
+                                    self.element_address(out, frame, stride, &element.1, env);
+                                for ((ty, place), value) in scalars.iter().zip(&value) {
+                                    let to = match place {
+                                        0 => address,
+                                        _ => {
+                                            let by = out.int(form::Bits::B64, i128::from(*place));
+                                            out.binary(form::Binary::Add, address, by)
+                                        }
+                                    };
+                                    out.emit(
+                                        form::Op::Store {
+                                            ty: *ty,
+                                            address: to,
+                                            value: *value,
+                                        },
+                                        Vec::new(),
+                                    );
+                                }
+                                let mut back = Vec::new();
+                                for k in 0..n {
+                                    let base = out.int(form::Bits::B64, (k * stride) as i128);
+                                    let at = out.binary(form::Binary::Add, frame, base);
+                                    back.extend(self.load(out, at, &scalars));
+                                }
+                                // What is assigned is the array, as it was read back.
+                                value = back;
+                            }
+                        }
                     }
                     out.names_mut()[at]
                         .values

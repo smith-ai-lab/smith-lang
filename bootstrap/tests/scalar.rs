@@ -232,7 +232,7 @@ pub const ONCE: &[Test] = &[
 /// The values an instruction reads.
 fn operands(op: &mut Op) -> Vec<&mut Value> {
     match op {
-        Op::Constant(_) => Vec::new(),
+        Op::Constant(_) | Op::Frame { .. } => Vec::new(),
         Op::Binary { a, b, .. }
         | Op::Compare { a, b, .. }
         | Op::Overflows { a, b, .. }

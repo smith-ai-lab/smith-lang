@@ -125,7 +125,9 @@ fn localize(f: &mut Function, reached: &[bool]) {
         for i in &block.instructions {
             match (&i.op, &i.results[..]) {
                 (Op::Constant(c), [r]) => constant[r.0] = Some(*c),
-                (Op::Store { .. } | Op::Call { .. } | Op::System { .. }, _) => effects[b] = true,
+                (Op::Store { .. } | Op::Call { .. } | Op::System { .. } | Op::Frame { .. }, _) => {
+                    effects[b] = true
+                }
                 _ => {}
             }
         }
@@ -356,7 +358,7 @@ impl Env {
 /// Calls `f` with each value the op reads, in order.
 fn each_read(op: &Op, mut f: impl FnMut(Value)) {
     match op {
-        Op::Constant(_) => {}
+        Op::Constant(_) | Op::Frame { .. } => {}
         Op::Binary { a, b, .. }
         | Op::Compare { a, b, .. }
         | Op::Overflows { a, b, .. }
@@ -464,7 +466,11 @@ fn facts(f: &Function, reached: &[bool]) -> Facts {
                     [r],
                 ) => chosen[r.0] = Some((*on, *then, *otherwise)),
                 (
-                    Op::Store { .. } | Op::Call { .. } | Op::System { .. } | Op::Overflows { .. },
+                    Op::Store { .. }
+                    | Op::Call { .. }
+                    | Op::System { .. }
+                    | Op::Overflows { .. }
+                    | Op::Frame { .. },
                     _,
                 ) => {
                     through[b] = false;

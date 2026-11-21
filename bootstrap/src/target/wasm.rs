@@ -26,6 +26,12 @@ const DATA_START: u32 = 16;
 /// holds the status the program ended with, which is below 0 until it has.
 const HEAP: u32 = 0;
 const STATUS: u32 = 1;
+/// The global that holds where the free bytes of the stack of frames begin, which
+/// a module has only when a function of the program has a `Frame`.
+const STACK: u32 = 2;
+
+/// How many bytes the stack of frames has.
+const STACK_BYTES: u32 = 1 << 20;
 
 /// How many bytes a page of the memory has.
 const PAGE: i64 = 1 << 16;
@@ -112,7 +118,13 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
             },
         ));
     }
-    let image = image(program);
+    let frames = program
+        .functions
+        .iter()
+        .flat_map(|f| &f.blocks)
+        .flat_map(|b| &b.instructions)
+        .any(|i| matches!(i.op, Op::Frame { .. }));
+    let image = image(program, frames);
 
     let needs_high = (program.functions.iter()).any(|f| {
         f.blocks
@@ -139,6 +151,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         high_signed: first + program.functions.len() as u32 + 1,
         allocate: ends,
         exit: ends + 1,
+        stack_end: image.stack.map(|from| from + STACK_BYTES),
         first,
     };
     for f in &functions {
@@ -180,6 +193,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         },
         Global { initial: -1 },
     ];
+    if let Some(from) = image.stack {
+        module.globals.push(Global {
+            initial: from as i32,
+        });
+    }
     module.export("memory", Export::Memory);
     module.export("main", Export::Function(start));
     module.export("status", Export::Function(status));
@@ -225,9 +243,12 @@ struct Image {
     arguments: Option<u32>,
     /// Where the memory the program asks for begins.
     heap: u32,
+    /// Where the stack of frames begins, when a function of the program has a
+    /// `Frame`. It is `STACK_BYTES` long and ends where the heap begins.
+    stack: Option<u32>,
 }
 
-fn image(program: &Program) -> Image {
+fn image(program: &Program, frames: bool) -> Image {
     let mut bytes = Vec::new();
     let mut starts = Vec::new();
     for text in &program.data {
@@ -244,12 +265,17 @@ fn image(program: &Program) -> Image {
             bytes.extend_from_slice(&word.to_le_bytes());
         }
     }
-    let heap = (DATA_START + bytes.len() as u32).next_multiple_of(16);
+    let stack = frames.then(|| (DATA_START + bytes.len() as u32).next_multiple_of(16));
+    let heap = match stack {
+        Some(from) => from + STACK_BYTES,
+        None => (DATA_START + bytes.len() as u32).next_multiple_of(16),
+    };
     Image {
         starts,
         bytes,
         arguments,
         heap,
+        stack,
     }
 }
 
@@ -261,6 +287,8 @@ struct Context<'a> {
     high_signed: u32,
     allocate: u32,
     exit: u32,
+    /// Where the stack of frames ends, when the module has one.
+    stack_end: Option<u32>,
     /// The number of the first function the program defines.
     first: u32,
 }
@@ -504,6 +532,23 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
     for v in 0..local.len() {
         local[v] = local[same[v]];
     }
+    // The bytes of each `Frame` are taken from the stack of frames when the
+    // function begins, and given back when it returns, and a local holds where
+    // they begin.
+    let mut offsets: Vec<Option<u32>> = vec![None; f.types.len()];
+    let mut total = 0;
+    for i in f.blocks.iter().flat_map(|b| &b.instructions) {
+        if let Op::Frame { bytes } = i.op {
+            offsets[i.results[0].0] = Some(total);
+            total += (bytes as u32).next_multiple_of(16);
+        }
+    }
+    let frame = (total > 0).then(|| {
+        let sp = next;
+        next += 1;
+        locals.push((1, Kind::I32));
+        Taken { sp, total, offsets }
+    });
     let mut lowering = Lowering {
         f,
         context,
@@ -514,6 +559,7 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
         block: 0,
         shape,
         frames: Vec::new(),
+        taken: frame,
     };
     lowering.function();
     let signature = Signature {
@@ -552,7 +598,17 @@ enum Frame {
     Other,
 }
 
+/// The bytes a function takes from the stack of frames.
+struct Taken {
+    /// The local that holds where they begin.
+    sp: u32,
+    total: u32,
+    /// Where each `Frame` is, from where they begin, by its value.
+    offsets: Vec<Option<u32>>,
+}
+
 struct Lowering<'a> {
+    taken: Option<Taken>,
     f: &'a Function,
     context: &'a Context<'a>,
     code: Code,
@@ -574,12 +630,38 @@ struct Lowering<'a> {
 
 impl Lowering<'_> {
     fn function(&mut self) {
+        if let Some(taken) = &self.taken {
+            let (sp, total) = (taken.sp, taken.total);
+            let end = self.context.stack_end.expect("a module with a stack");
+            self.code.global_get(STACK);
+            self.code.local_set(sp);
+            self.code.local_get(sp);
+            self.code.i32_const(total as i32);
+            self.code.op(I32_ADD);
+            self.code.global_set(STACK);
+            // A function that needs more than the stack has ends the program.
+            self.code.global_get(STACK);
+            self.code.i32_const(end as i32);
+            self.code.op(I32_GT_U);
+            self.code.open(IF);
+            self.code.i32_const(1);
+            self.code.call(self.context.exit);
+            self.code.op(END);
+        }
         if self.shape.is_some() {
             self.tree(0);
             self.code.op(UNREACHABLE);
             self.code.op(END);
         } else {
             self.numbered();
+        }
+    }
+
+    /// Gives the bytes the function took from the stack of frames back.
+    fn give_back(&mut self) {
+        if let Some(taken) = &self.taken {
+            self.code.local_get(taken.sp);
+            self.code.global_set(STACK);
         }
     }
 
@@ -639,6 +721,7 @@ impl Lowering<'_> {
                 for v in values {
                     self.get(*v);
                 }
+                self.give_back();
                 self.code.op(RETURN);
             }
             End::Jump(jump) => self.branch(x, jump),
@@ -776,6 +859,7 @@ impl Lowering<'_> {
                 for v in values {
                     self.get(*v);
                 }
+                self.give_back();
                 self.code.op(RETURN);
             }
             End::Jump(jump) => self.jump(jump, 0),
@@ -910,6 +994,14 @@ impl Lowering<'_> {
         let f = self.f;
         let results = &instruction.results;
         match &instruction.op {
+            Op::Frame { .. } => {
+                let taken = self.taken.as_ref().expect("a function that took bytes");
+                self.code.local_get(taken.sp);
+                self.code
+                    .i32_const(taken.offsets[results[0].0].expect("a frame laid out") as i32);
+                self.code.op(I32_ADD);
+                self.set(results[0]);
+            }
             Op::FloatFused { .. } => {
                 unreachable!("Target::emit gives a fused product as a call")
             }

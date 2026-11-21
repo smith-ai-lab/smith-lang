@@ -501,6 +501,14 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                         }
                     }
                 }
+                Op::Frame { .. } => {
+                    let [result] = instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if f.types[result.0] != Type::Address {
+                        return Err(Why::WrongType(result));
+                    }
+                }
                 Op::Load { ty, address } => {
                     let [result] = instruction.results[..] else {
                         return Err(Why::WrongCount);

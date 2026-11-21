@@ -172,27 +172,33 @@ impl<'a> Lowering<'a> {
 
     /// Lowers `of[index]` of an array, whose elements are its scalars one
     /// after another, so that an index known when the program is built picks
-    /// them out and nothing is asked of memory.
+    /// them out and nothing is asked of memory. Any other index reads the
+    /// element from the bytes of the function's frame that the array is written
+    /// to.
     pub(super) fn array_element(
         &mut self,
         out: &mut Out<'a>,
-        expr: &'a Expr,
+        _expr: &'a Expr,
         (of, index): (&'a Expr, &'a Expr),
         env: &[Ty],
     ) -> (Ty, Vec<form::Value>) {
         let (array, values) = self.expr(out, of, env);
-        let Ty::Array(element, _) = array else {
+        let Ty::Array(element, n) = array else {
             unreachable!("checked")
         };
         let size = self.size(&element[0]);
-        let at = self.constant_index(expr, index, env);
-        let from = at * size;
-        (element[0].clone(), values[from..from + size].to_vec())
+        if let Some(at) = self.constant_index(index, env) {
+            let from = at * size;
+            return (element[0].clone(), values[from..from + size].to_vec());
+        }
+        let (frame, scalars, stride) = self.written_to_frame(out, &element[0], n, &values);
+        let address = self.element_address(out, frame, stride, index, env);
+        (element[0].clone(), self.load(out, address, &scalars))
     }
 
     /// The number an index of an array is, when it is known where the program
-    /// is built, and otherwise 0 with the error that says it is not built yet.
-    pub(super) fn constant_index(&mut self, expr: &'a Expr, index: &'a Expr, env: &[Ty]) -> usize {
+    /// is built.
+    pub(super) fn constant_index(&self, index: &Expr, env: &[Ty]) -> Option<usize> {
         match (index, self.typed.type_of(index, env)) {
             (
                 Expr::Number {
@@ -201,16 +207,69 @@ impl<'a> Lowering<'a> {
                     ..
                 },
                 _,
-            ) => *magnitude as usize,
-            (_, Ty::Int(t)) if t.min() == t.max() => t.min() as usize,
+            ) => Some(*magnitude as usize),
+            (_, Ty::Int(t)) if t.min() == t.max() => Some(t.min() as usize),
+            _ => None,
+        }
+    }
+
+    /// Writes the `n` elements of an array, given as their scalars, to bytes of
+    /// the function's frame laid out as the elements of a list are, and gives
+    /// where they are, the places of the scalars of an element, and how many
+    /// bytes an element takes.
+    pub(super) fn written_to_frame(
+        &mut self,
+        out: &mut Out<'a>,
+        element: &Ty,
+        n: u64,
+        values: &[form::Value],
+    ) -> (form::Value, Vec<(form::Type, u64)>, u64) {
+        let scalars = self.scalars(element);
+        let (places, stride) = form::element(&scalars);
+        let frame = out.emit(
+            form::Op::Frame { bytes: n * stride },
+            vec![form::Type::Address],
+        )[0];
+        let at = |out: &mut Out<'a>, offset: u64| match offset {
+            0 => frame,
             _ => {
-                self.errors.push(Error::unsupported(
-                    expr.pos(),
-                    "an array read or assigned at an index that is not a number known when the program is built",
-                ));
-                0
+                let by = out.int(form::Bits::B64, i128::from(offset));
+                out.binary(form::Binary::Add, frame, by)
+            }
+        };
+        for (k, element) in values.chunks(scalars.len().max(1)).enumerate() {
+            for (value, place) in element.iter().zip(&places) {
+                let address = at(out, k as u64 * stride + place);
+                out.emit(
+                    form::Op::Store {
+                        ty: out.types[value.0],
+                        address,
+                        value: *value,
+                    },
+                    Vec::new(),
+                );
             }
         }
+        (frame, scalars.into_iter().zip(places).collect(), stride)
+    }
+
+    /// The address of the element at `index`, in bytes laid out as a list's.
+    pub(super) fn element_address(
+        &mut self,
+        out: &mut Out<'a>,
+        frame: form::Value,
+        stride: u64,
+        index: &'a Expr,
+        env: &[Ty],
+    ) -> form::Value {
+        let (at, number) = self.expr(out, index, env);
+        let place = match at {
+            Ty::Int(t) if bits_of(t) == form::Bits::B64 => number[0],
+            _ => out.widen(false, number[0]),
+        };
+        let width = out.int(form::Bits::B64, i128::from(stride));
+        let offset = out.binary(form::Binary::Mul, place, width);
+        out.binary(form::Binary::Add, frame, offset)
     }
 
     /// Works out where the element or the part of one that `expr` reads is,

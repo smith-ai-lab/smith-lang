@@ -57,7 +57,7 @@ pub fn recur(program: Program) -> Program {
         functions: (program.functions.into_iter().enumerate())
             .map(|(i, f)| {
                 if i != main && calls_itself(i, &f) {
-                    explicit(i, f)
+                    explicit(i, memory_for_frames(f))
                 } else {
                     f
                 }
@@ -65,6 +65,41 @@ pub fn recur(program: Program) -> Program {
             .collect(),
         main,
     }
+}
+
+/// The function with each `Frame` asked of the system instead. A frame is the
+/// function's own for as long as it runs, and a function that calls itself and
+/// is made a loop has one frame for all its calls, so what each call needs of
+/// it, and keeps while the call it makes runs, is memory, which is released when
+/// the function returns, as the stack of the calls is.
+fn memory_for_frames(mut f: Function) -> Function {
+    for b in 0..f.blocks.len() {
+        let instructions = std::mem::take(&mut f.blocks[b].instructions);
+        let mut made = Vec::with_capacity(instructions.len());
+        for i in instructions {
+            let Op::Frame { bytes } = i.op else {
+                made.push(i);
+                continue;
+            };
+            f.types.push(Type::Int(Bits::B64));
+            let count = Value(f.types.len() - 1);
+            made.push(Instruction {
+                results: vec![count],
+                op: Op::Constant(Constant::Int(bytes)),
+                at: i.at,
+            });
+            made.push(Instruction {
+                results: i.results,
+                op: Op::System {
+                    call: System::Allocate,
+                    args: vec![count],
+                },
+                at: i.at,
+            });
+        }
+        f.blocks[b].instructions = made;
+    }
+    f
 }
 
 fn calls_itself(index: usize, f: &Function) -> bool {
