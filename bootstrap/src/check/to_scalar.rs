@@ -170,6 +170,9 @@ struct Out<'a> {
     written: u32,
     /// The handlers in force at the code being lowered, the innermost last.
     handlers: Vec<Handler<'a>>,
+    /// The names of each function lowered in place whose array is read or
+    /// assigned at an index, by the number of the function's name.
+    homed: HashMap<u32, HashSet<String>>,
 }
 
 /// A handler's number: one for each place a call of an effect's name is
@@ -295,6 +298,22 @@ struct Bound<'a> {
     ty: Ty,
     values: Vec<form::Value>,
     func: Option<Func<'a>>,
+    /// Where an array that is read or assigned at an index that is not known
+    /// when the program is built is kept, in bytes of the function's frame. The
+    /// name then stands for no values.
+    home: Option<Home>,
+}
+
+/// The bytes of the frame an array is kept in, laid out as the elements of a
+/// list are.
+#[derive(Clone)]
+struct Home {
+    frame: form::Value,
+    /// The scalars of an element, with their places, and how many bytes an
+    /// element takes.
+    scalars: Vec<(form::Type, u64)>,
+    stride: u64,
+    size: u64,
 }
 
 /// The function a name holds.
@@ -311,6 +330,89 @@ enum Func<'a> {
     Each(&'a Loop, usize, Vec<Ty>),
 }
 
+/// The names of the statements, and of what they hold, that an array is read or
+/// assigned through at an index that is not a number written out, which are
+/// the ones whose array is kept in the frame.
+fn indexed_names(body: &[Stmt], into: &mut HashSet<String>) {
+    for stmt in body {
+        match stmt {
+            Stmt::Define { value, .. } | Stmt::Destructure { value, .. } => indexed_in(value, into),
+            Stmt::Assign {
+                name,
+                fields,
+                at,
+                value,
+                ..
+            } => {
+                if let Some(at) = at {
+                    if fields.is_empty() && !matches!(at.1, Expr::Number { .. }) {
+                        into.insert(name.clone());
+                    }
+                    indexed_in(&at.1, into);
+                }
+                indexed_in(value, into);
+            }
+            Stmt::Expr(value) => indexed_in(value, into),
+        }
+    }
+}
+
+fn indexed_in(e: &Expr, into: &mut HashSet<String>) {
+    match e {
+        Expr::Index { of, index, .. } => {
+            if let (Expr::Name { name, .. }, false) =
+                (&**of, matches!(**index, Expr::Number { .. }))
+            {
+                into.insert(name.clone());
+            }
+            indexed_in(of, into);
+            indexed_in(index, into);
+        }
+        Expr::Call(call) => call.args.iter().for_each(|a| indexed_in(&a.value, into)),
+        Expr::Field { of, .. } => indexed_in(of, into),
+        Expr::Arith { left, right, .. } => {
+            indexed_in(left, into);
+            indexed_in(right, into);
+        }
+        Expr::Case {
+            payload: Some(p), ..
+        } => indexed_in(p, into),
+        Expr::Match(m) => {
+            indexed_in(&m.of, into);
+            m.arms.iter().for_each(|a| indexed_names(&a.body, into));
+        }
+        Expr::Tuple { items, .. } | Expr::List { items, .. } => {
+            items.iter().for_each(|i| indexed_in(i, into))
+        }
+        Expr::Slice { of, from, to, .. } => {
+            indexed_in(of, into);
+            for end in [from, to].into_iter().flatten() {
+                indexed_in(end, into);
+            }
+        }
+        Expr::Lambda(l) => indexed_names(&l.body, into),
+        Expr::Loop(l) => {
+            if let Some(r) = &l.range {
+                indexed_in(&r.from, into);
+                indexed_in(&r.to, into);
+            }
+            if let Some(o) = &l.over {
+                indexed_in(&o.value, into);
+            }
+            indexed_names(&l.body, into);
+        }
+        Expr::Interp { parts, .. } => {
+            for part in parts {
+                if let Part::Expr(e) = part {
+                    indexed_in(e, into);
+                }
+            }
+        }
+        Expr::Return { value: Some(v), .. } => indexed_in(v, into),
+        _ => {}
+    }
+}
+
 impl<'a> Out<'a> {
     fn new() -> Self {
         let mut out = Out {
@@ -325,6 +427,7 @@ impl<'a> Out<'a> {
             place: form::Place::NONE,
             written: 0,
             handlers: Vec::new(),
+            homed: HashMap::new(),
         };
         out.new_block();
         out
@@ -345,12 +448,95 @@ impl<'a> Out<'a> {
 
     /// Defines a name that stands for values.
     fn define(&mut self, name: &str, ty: Ty, values: Vec<form::Value>) {
+        let kept = matches!(ty, Ty::Array(_, n) if n > 0)
+            && self
+                .homed
+                .get(&self.written)
+                .is_some_and(|s| s.contains(name));
+        let (values, home) = if kept {
+            let Ty::Array(_, n) = ty else { unreachable!() };
+            let k = values.len() / n as usize;
+            let kinds: Vec<form::Type> = values[..k].iter().map(|v| self.types[v.0]).collect();
+            let (places, stride) = form::element(&kinds);
+            let frame = self.emit(
+                form::Op::Frame { bytes: n * stride },
+                vec![form::Type::Address],
+            )[0];
+            let home = Home {
+                frame,
+                scalars: kinds.into_iter().zip(places).collect(),
+                stride,
+                size: n,
+            };
+            self.store_array(&home, &values);
+            (Vec::new(), Some(home))
+        } else {
+            (values, None)
+        };
         self.names_mut().push(Bound {
             name: name.to_string(),
             ty,
             values,
             func: None,
+            home,
         });
+    }
+
+    /// The address `by` bytes on from `at`.
+    fn moved(&mut self, at: form::Value, by: u64) -> form::Value {
+        match by {
+            0 => at,
+            _ => {
+                let by = self.int(form::Bits::B64, i128::from(by));
+                self.binary(form::Binary::Add, at, by)
+            }
+        }
+    }
+
+    /// Writes the scalars of an array to its home.
+    fn store_array(&mut self, home: &Home, values: &[form::Value]) {
+        for (k, element) in values.chunks(home.scalars.len()).enumerate() {
+            for (value, (ty, place)) in element.iter().zip(&home.scalars) {
+                let address = self.moved(home.frame, k as u64 * home.stride + place);
+                self.emit(
+                    form::Op::Store {
+                        ty: *ty,
+                        address,
+                        value: *value,
+                    },
+                    Vec::new(),
+                );
+            }
+        }
+    }
+
+    /// Reads the scalars of an array from its home.
+    fn load_array(&mut self, home: &Home) -> Vec<form::Value> {
+        let mut all = Vec::new();
+        for k in 0..home.size {
+            for (ty, place) in &home.scalars {
+                let address = self.moved(home.frame, k * home.stride + place);
+                all.push(self.emit(form::Op::Load { ty: *ty, address }, vec![*ty])[0]);
+            }
+        }
+        all
+    }
+
+    /// The values the name at `at` stands for.
+    fn read(&mut self, at: usize) -> Vec<form::Value> {
+        match self.names()[at].home.clone() {
+            Some(home) => self.load_array(&home),
+            None => self.names()[at].values.clone(),
+        }
+    }
+
+    /// Makes the name at `at` stand for the values, which are written to its
+    /// home when it has one.
+    fn assign(&mut self, at: usize, values: Vec<form::Value>) {
+        match self.names()[at].home.clone() {
+            Some(home) => self.store_array(&home, &values),
+            None => self.names_mut()[at].values = values,
+        }
     }
 
     fn new_block(&mut self) -> usize {
@@ -897,7 +1083,7 @@ impl<'a> Lowering<'a> {
     fn bind(&self, out: &mut Out<'a>, pattern: &Pattern, ty: &Ty, values: Vec<form::Value>) {
         match pattern {
             Pattern::Bind { name, .. } => match out.find(name) {
-                Some(at) => out.names_mut()[at].values = values,
+                Some(at) => out.assign(at, values),
                 None => out.define(name, ty.clone(), values),
             },
             Pattern::Tuple { items, .. } => {
@@ -1073,7 +1259,7 @@ impl<'a> Lowering<'a> {
                     // on, and a name bound to the old ones keeps them.
                     let (ty, value) = self.expr(out, value, env);
                     match out.find(name) {
-                        Some(at) => out.names_mut()[at].values = value,
+                        Some(at) => out.assign(at, value),
                         None => out.define(name, ty, value),
                     }
                     Vec::new()
@@ -1087,6 +1273,38 @@ impl<'a> Lowering<'a> {
                 } => {
                     let (_, value) = self.expr(out, value, env);
                     let at = out.find(name).expect("checked");
+                    // An array that is kept in the frame is written there.
+                    if let Some(home) = out.names()[at].home.clone() {
+                        match element {
+                            None => out.store_array(&home, &value),
+                            Some(element) => {
+                                let address = match self.constant_index(&element.1, env) {
+                                    Some(at) => out.moved(home.frame, at as u64 * home.stride),
+                                    None => self.element_address(
+                                        out,
+                                        home.frame,
+                                        home.stride,
+                                        &element.1,
+                                        env,
+                                    ),
+                                };
+                                for ((ty, place), value) in home.scalars.iter().zip(&value) {
+                                    let to = out.moved(address, *place);
+                                    out.emit(
+                                        form::Op::Store {
+                                            ty: *ty,
+                                            address: to,
+                                            value: *value,
+                                        },
+                                        Vec::new(),
+                                    );
+                                }
+                            }
+                        }
+                        out.place = outer;
+                        result = Vec::new();
+                        continue;
+                    }
                     let (mut start, mut size) = self.offset(&out.names()[at].ty, fields);
                     let mut value = value;
                     if let Some(element) = element {
@@ -1223,7 +1441,7 @@ impl<'a> Lowering<'a> {
             }
             Expr::Interp { parts, .. } => self.interpolation(out, parts, env),
             Expr::Name { name, .. } => match out.find(name) {
-                Some(at) => (out.names()[at].ty.clone(), out.names()[at].values.clone()),
+                Some(at) => (out.names()[at].ty.clone(), out.read(at)),
                 // A function passed as a value is lowered to no values.
                 None if typed.fn_values.contains_key(&addr(expr)) => {
                     (typed.type_of(expr, env), Vec::new())
@@ -1717,12 +1935,14 @@ impl<'a> Lowering<'a> {
             ty: params[0].1.clone(),
             values: self.passed(out, &o.value, &params[0].1, env),
             func: None,
+            home: None,
         };
         let body = Bound {
             name: params[1].0.clone(),
             ty: params[1].1.clone(),
             values: Vec::new(),
             func: Some(Func::Each(l, out.at, env.to_vec())),
+            home: None,
         };
         let limits: Vec<usize> = out.frames.iter().map(Vec::len).collect();
         out.frames.push(vec![walked, body]);

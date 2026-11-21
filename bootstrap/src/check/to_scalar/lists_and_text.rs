@@ -34,6 +34,14 @@ impl<'a> Lowering<'a> {
         env: &[Ty],
     ) -> Vec<form::Value> {
         let (ty, mut values) = self.expr(out, value, env);
+        if let Ty::Array(of, n) = &ty
+            && as_list(&ty, param)
+        {
+            // An array is a list of its size once its elements are in the frame.
+            let (frame, ..) = self.written_to_frame(out, &of[0], *n, &values);
+            let size = out.int(form::Bits::B64, i128::from(*n));
+            return vec![frame, size, size];
+        }
         if as_list(&ty, param) {
             values.push(values[1]);
         }
@@ -182,6 +190,20 @@ impl<'a> Lowering<'a> {
         (of, index): (&'a Expr, &'a Expr),
         env: &[Ty],
     ) -> (Ty, Vec<form::Value>) {
+        // An array that is kept in the frame is read at the element alone.
+        if let Expr::Name { name, .. } = of
+            && let Some(at) = out.find(name)
+            && let Some(home) = out.names()[at].home.clone()
+        {
+            let Ty::Array(element, _) = out.names()[at].ty.clone() else {
+                unreachable!("checked")
+            };
+            let address = match self.constant_index(index, env) {
+                Some(at) => out.moved(home.frame, at as u64 * home.stride),
+                None => self.element_address(out, home.frame, home.stride, index, env),
+            };
+            return (element[0].clone(), self.load(out, address, &home.scalars));
+        }
         let (array, values) = self.expr(out, of, env);
         let Ty::Array(element, n) = array else {
             unreachable!("checked")

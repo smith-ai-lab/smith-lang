@@ -60,12 +60,12 @@ pub(super) fn is_utf8(defs: &Defs, call: &Call) -> bool {
         && defs.struct_named("utf8").is_none()
 }
 
-/// Whether a text or a slice is given where a list is needed, which it is
-/// used as, with no call and no copy.
+/// Whether a text, a slice, or an array is given where a list is needed, which
+/// it is used as, with no call and no copy of its elements.
 pub(super) fn as_list(given: &Ty, needed: &Ty) -> bool {
     match (given, needed) {
         (Ty::Text, _) => *needed == Ty::list(Ty::Int(Int::U8)),
-        (Ty::Slice(of), Ty::List(wanted)) => of == wanted,
+        (Ty::Slice(of) | Ty::Array(of, _), Ty::List(wanted)) => of == wanted,
         _ => false,
     }
 }
@@ -76,7 +76,7 @@ pub(super) fn as_list(given: &Ty, needed: &Ty) -> bool {
 pub(super) fn as_read(given: &Ty, pattern: &Ty) -> Ty {
     match (given, pattern) {
         (Ty::Text, Ty::List(_)) => Ty::list(Ty::Int(Int::U8)),
-        (Ty::Slice(of), Ty::List(_)) => Ty::list(of[0].clone()),
+        (Ty::Slice(of) | Ty::Array(of, _), Ty::List(_)) => Ty::list(of[0].clone()),
         _ => given.clone(),
     }
 }
