@@ -50,11 +50,11 @@ pub fn invalid_request() -> Failure {
   Failure(code: -32600, message: "Invalid Request", data: .none)
 }
 
-pub fn method_not_found(method: str) -> Failure ! alloc {
+pub fn method_not_found(method: str) -> Failure {
   Failure(code: -32601, message: "Method not found", data: .none)
 }
 
-pub fn invalid_params(why: str) -> Failure ! alloc {
+pub fn invalid_params(why: str) -> Failure {
   Failure(code: -32602, message: why, data: .none)
 }
 

@@ -203,6 +203,7 @@ impl<'a> Checker<'a> {
             extra,
             unknown_effect: false,
             missing: Vec::new(),
+            used: Vec::new(),
             names: Vec::new(),
             params: 0,
             vars: Vec::new(),

@@ -308,12 +308,16 @@ impl<'a> Checker<'a> {
     pub(super) fn needs(&mut self, body: &mut Body, effect: &str, pos: Pos, what: &str) {
         // A module of the library that lists an effect of another writes it
         // with that module after it, which is the effect the table names.
-        if body.listed.contains(&effect)
-            || body.listed.iter().any(|l| written_name(l) == effect)
-            || body
-                .extra
-                .iter()
-                .any(|e| e == effect || written_name(e) == effect)
+        if body.listed.contains(&effect) || body.listed.iter().any(|l| written_name(l) == effect) {
+            if !body.used.iter().any(|u| u == effect) {
+                body.used.push(effect.to_string());
+            }
+            return;
+        }
+        if body
+            .extra
+            .iter()
+            .any(|e| e == effect || written_name(e) == effect)
             || body.unknown_effect
         {
             return;

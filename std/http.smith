@@ -192,7 +192,7 @@ fn opened(d: take Params) -> Params ! alloc {
   w
 }
 
-fn closed(d: take Params) -> Params ! alloc {
+fn closed(d: take Params) -> Params {
   var w = d
   w.depth = saturating_sub(w.depth, 1)
   w

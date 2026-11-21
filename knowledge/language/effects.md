@@ -8,6 +8,7 @@ built:
   - "not an effect on a function type"
   - "a function with effects passed by its name, whose effects are required of the function its name is written in"
   - "an effect the program declares, in a signature, and required of every caller of its operations, as `console` is"
+  - "a warning at an effect a function lists and nothing in it needs, with the signature without it as the fix, not given for a function of an `impl` or one passed by its name as a value"
 ---
 
 # Effects
