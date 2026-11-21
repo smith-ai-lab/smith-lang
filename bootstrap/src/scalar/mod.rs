@@ -31,6 +31,7 @@ mod ryu;
 mod sink;
 mod tail;
 mod thread;
+mod trig;
 mod trim;
 mod unfuse;
 mod vector;

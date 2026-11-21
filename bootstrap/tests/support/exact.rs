@@ -535,19 +535,26 @@ pub fn ln(x: &Big) -> Big {
         .add_at(&series, p)
 }
 
+/// `x = k * pi / 2 + r` for the whole `k` that makes `r` least, which is
+/// between -pi/4 and pi/4: the remainder of `k` by 4, and `r`, with the
+/// precision that the size of `x` needs.
+pub fn reduce(x: &Big) -> (u32, Big) {
+    let p = PREC + 32;
+    let size = x.magnitude_bits().max(0) as usize;
+    let wide = size + p + 64;
+    let half_pi = pi(wide).ldexp(-1);
+    let k = x.div_at(&half_pi, size + 80).nearest_integer_wide();
+    let r = x.sub_at(&k.0.mul_at(&half_pi, wide), p);
+    (k.1, r)
+}
+
 /// The sine and cosine of `x`, a finite number of any size.
 pub fn sin_cos(x: &Big) -> (Big, Big) {
     let p = PREC + 32;
     if x.is_zero() {
         return (Big::zero(), Big::from_u64(1));
     }
-    // `x = k * pi/2 + r`, with the precision that the size of `x` needs.
-    let size = x.magnitude_bits().max(0) as usize;
-    let wide = size + p + 64;
-    let half_pi = pi(wide).ldexp(-1);
-    let k = x.div_at(&half_pi, size + 80).nearest_integer_wide();
-    let r = x.sub_at(&k.0.mul_at(&half_pi, wide), p);
-    let quadrant = k.1;
+    let (quadrant, r) = reduce(x);
     let r2 = r.mul_at(&r, p);
     let (mut s, mut c) = (r.clone(), Big::from_u64(1));
     let (mut ts, mut tc) = (r.clone(), Big::from_u64(1));

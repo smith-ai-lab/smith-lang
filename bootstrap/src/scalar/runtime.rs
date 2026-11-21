@@ -59,6 +59,16 @@ pub enum Runtime {
     /// Takes a float, and gives its natural logarithm, the float nearest the
     /// exact one.
     Ln { double: bool },
+    /// Takes the eight words of an `r` between 0 and 0.8, and gives `sin r` and
+    /// then `cos r` as sixteen words.
+    TrigSeries,
+    /// Takes the whole number `m` and the `e` of a float `m * 2^e` that is not
+    /// below 2^-27, and gives the quarter of the circle it is in, whether the
+    /// rest is below 0, and the eight words of its magnitude.
+    TrigReduce,
+    /// Takes a float, and gives its sine, or its cosine, the float nearest the
+    /// exact one.
+    Trig { double: bool, cosine: bool },
     /// Takes the bits of a float that is finite and not 0, as 64 bits, and the
     /// two tables of Ryu, and gives the shortest digits that read back as the
     /// float as a number, and the power of 10 they are to be multiplied by.
@@ -153,6 +163,10 @@ impl Runtime {
             Runtime::LnReciprocal => "<ln_reciprocal>",
             Runtime::LnSeries => "<ln_series>",
             Runtime::Ln { .. } => "<ln>",
+            Runtime::TrigSeries => "<trig_series>",
+            Runtime::TrigReduce => "<trig_reduce>",
+            Runtime::Trig { cosine: false, .. } => "<sin>",
+            Runtime::Trig { cosine: true, .. } => "<cos>",
             Runtime::Shortest { .. } => "<shortest>",
             Runtime::FloatText { .. } => "<float_text>",
             Runtime::Push(_) => "<push>",
@@ -193,6 +207,14 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Exp { double } => super::exp::exp(double, place(Runtime::ExpSeries)),
         Runtime::LnReciprocal => super::ln::reciprocal(place(Runtime::ExpMultiply)),
         Runtime::LnSeries => super::ln::series(place(Runtime::ExpMultiply)),
+        Runtime::TrigSeries => super::trig::series(place(Runtime::ExpMultiply)),
+        Runtime::TrigReduce => super::trig::reduce(place(Runtime::ExpMultiply)),
+        Runtime::Trig { double, cosine } => super::trig::trig(
+            double,
+            cosine,
+            place(Runtime::TrigReduce),
+            place(Runtime::TrigSeries),
+        ),
         Runtime::Ln { double } => super::ln::ln(
             double,
             place(Runtime::ExpMultiply),
