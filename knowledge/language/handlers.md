@@ -11,6 +11,7 @@ built:
   - "a handler keeps its state in a `var` that its function assigns, as `fake_clock` does: the code under `with`, a function that carries the effect and runs under the handler, the functions that one calls, and a `loop` that asks, all count on the one state, and `two_readings` is `(1, 2)`"
   - "`fake_clock`, `two_readings`, `doubled_clock`, and `doubled` of this page run today with `wrapping_add` and `wrapping_mul` written where the page writes `clamp`, which is not built, and `doubled()` is `84`; `loud_clock` runs as written, prints `asked`, and without `! console` is refused with the error the page gives, whose fix keeps the effects of the parameters"
   - "a `return` in a function that carries the effect and runs under a handler whose functions assign a name is refused as not built yet"
+  - "an effect that the target answers, as `console` is, is handled by the same mechanism: a handler of it answers the operations where it is in force, and the target answers them where none is"
 ---
 
 # Handlers

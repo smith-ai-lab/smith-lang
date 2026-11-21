@@ -2,6 +2,12 @@
 type: specification
 title: Console
 description: The console effect, for a program's standard input, output, and error, and how to handle it.
+status: partial
+built:
+  - "`std.console` declares `Stream`, with `stdout` and `stderr`, and the effect `console` with `print(text, end, to)`, which a program calls with `end` and `to` as written or left out, `end` being `\"\\n\"` and `to` being `.stdout`; the compiler builds `print` from this declaration"
+  - "with no handler in force the target writes the text and then `end` to the stream `to`, which is chosen when the program runs where it is not written as `.stdout` or left out"
+  - "a handler of `console` gives a lambda for `print` that takes `text`, `end`, and `to`, as written and as defaulted, and it answers a call of `print` in the code under `with`, in a function that carries `console`, and in a function that one calls, under the handlers outside it; a handler that does not forward a call to the console outside it prints nothing"
+  - "not `input`, which is not declared yet, and so not the handler of this page whose lambda for it is written"
 ---
 
 # Console

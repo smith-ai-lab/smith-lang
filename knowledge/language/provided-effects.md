@@ -6,6 +6,7 @@ status: partial
 built:
   - "`entropy` in a signature, required by `fill`, which the system answers on every target, and a handler answers on any"
   - "`console`, `alloc`, and `diverge` in a signature, `console` required by `print`, `alloc` by a string that holds an expression, and `diverge` by an open-ended `loop` with no `decreases`"
+  - "an operation that the target answers, `print` of `console` and `fill` of `entropy`, is called as any operation of an effect is, and is answered by a handler where one is in force and by the target where none is"
 ---
 
 # The effects Smith provides
