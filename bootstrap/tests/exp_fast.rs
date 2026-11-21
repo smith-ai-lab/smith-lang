@@ -262,7 +262,7 @@ fn the_fast_exponential_is_the_exact_one_wherever_it_is_sure_in_every_executable
     let (total, sure, wrong) = counts(&ran.stdout);
     assert_eq!(total, count);
     assert_eq!(wrong, 0, "of {total} floats, {wrong} were wrong in the {sure} it was sure of");
-    // The fast function is sure of nearly all: about 1 in 130000 it is not.
+    // The fast function is sure of nearly all: about 1 in 300000 it is not.
     assert!(sure * 1000 >= total * 999, "it was sure of {sure} of {total}");
     if count > 200_000 {
         eprintln!("{total} floats, {sure} sure, {wrong} wrong");

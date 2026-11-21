@@ -65,7 +65,7 @@
 //! less where `rhi` is a power of 2, and `rlo` is where `rhi + rlo` is, so it
 //! is when `rlo + E * rhi` is below the half above and `rlo - E * rhi` is above
 //! minus the half below, both strictly. When it is not, which is about 1 in
-//! 130,000 floats, the exact function gives the answer. A result that is not a
+//! 300,000 floats, the exact function gives the answer. A result that is not a
 //! float of the size's normal numbers, and a float that is not a number or is
 //! out of range, are left to it as well.
 
