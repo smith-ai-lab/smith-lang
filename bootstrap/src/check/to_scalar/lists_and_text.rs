@@ -38,7 +38,21 @@ impl<'a> Lowering<'a> {
             && as_list(&ty, param)
         {
             // An array is a list of its size once its elements are in the frame.
-            let (frame, ..) = self.written_to_frame(out, &of[0], *n, &values);
+            let Ty::List(wanted) = param else {
+                unreachable!("checked")
+            };
+            // The elements are given in the size the list's are, a range that is
+            // wider than the array's holding the same numbers.
+            if let (Ty::Int(from), Ty::Int(to)) = (&of[0], &wanted[0])
+                && from != to
+            {
+                let bits = bits_of(*to);
+                values = values
+                    .into_iter()
+                    .map(|v| out.resize(from.signed(), v, bits))
+                    .collect();
+            }
+            let (frame, ..) = self.written_to_frame(out, &wanted[0], *n, &values);
             let size = out.int(form::Bits::B64, i128::from(*n));
             return vec![frame, size, size];
         }
