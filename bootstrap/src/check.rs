@@ -917,6 +917,9 @@ struct Defs<'a> {
     /// The standard library's `FromText`, which `std.fromtext` defines, by its
     /// place in the file's traits, when the program has that module.
     from_text: Option<usize>,
+    /// The standard library's `FromRequest`, which `std.http` defines, by its
+    /// place in the file's traits, when the program has that module.
+    from_request: Option<usize>,
     /// The `ReadError` and the `Problem` of `std.deserialize`, by their places
     /// in the file's structs and enums, when the program has that module.
     read_error: Option<usize>,
@@ -2345,6 +2348,7 @@ fn check_file(
         describe: library_item(&file, &items, "std.describe", Kind::Trait, "Describe"),
         describer: library_item(&file, &items, "std.describe", Kind::Trait, "Describer"),
         from_text: library_item(&file, &items, "std.fromtext", Kind::Trait, "FromText"),
+        from_request: library_item(&file, &items, "std.http", Kind::Trait, "FromRequest"),
         read_error: library_item(&file, &items, "std.deserialize", Kind::Struct, "ReadError"),
         problem: library_item(&file, &items, "std.deserialize", Kind::Enum, "Problem"),
         boolean: prelude_item(&file, Kind::Enum, "bool"),
