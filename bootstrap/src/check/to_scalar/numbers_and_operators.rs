@@ -270,7 +270,18 @@ impl<'a> Lowering<'a> {
                 [Some(false), Some(true), Some(true)] => (&a_all, &b_all, true),
                 _ => return None,
             };
-            let below = self.wide_less(out, t.signed(), x, y);
+            // Each side is as signed as the range it was written with: the range
+            // both are taken at may hold a number above what a signed word of
+            // 128 bits does and a negative one.
+            let signed =
+                |side: &Expr| matches!(self.typed.type_of(side, env), Ty::Int(t) if t.signed());
+            let (first, second) = (signed(&call.args[0].value), signed(&call.args[1].value));
+            let sides = if std::ptr::eq(x, &a_all) {
+                (first, second)
+            } else {
+                (second, first)
+            };
+            let below = self.wide_less(out, sides, x, y);
             if !flip {
                 return Some(vec![below]);
             }
@@ -421,10 +432,14 @@ impl<'a> Lowering<'a> {
         let (Ty::Int(x), Ty::Int(y)) = (ta, tb) else {
             unreachable!("checked")
         };
-        let hull = x.hull(y).expect("a range");
         let (a, b) = (self.wide_from(out, x, &a), self.wide_from(out, y, &b));
         let equal = self.wide_equal(out, &a, &b);
-        let below = self.wide_less(out, hull.signed(), &a, &b);
+        // Each side is as signed as the range it was written with, not as the
+        // range both are taken at.
+        let signed =
+            |side: &Expr| matches!(self.typed.type_of(side, env), Ty::Int(t) if t.signed());
+        let sides = (signed(&call.args[0].value), signed(&call.args[1].value));
+        let below = self.wide_less(out, sides, &a, &b);
         let case = |out: &mut Out<'a>, name: &str| {
             let k = defs.case_of(defs.order, name).expect("a case");
             out.int(form::Bits::B8, k as i128)
@@ -1314,25 +1329,33 @@ impl<'a> Lowering<'a> {
         vec![low, high]
     }
 
-    /// Whether `a` is below `b`, both two words, for numbers that are signed or
-    /// not.
+    /// Whether `a` is below `b`, both two words, where each is a signed number
+    /// when its flag says so and is not negative otherwise. A negative number
+    /// is below one that is not, and two that are both negative or both not are
+    /// ordered as the words are, since a negative number has its top bit set.
     pub(super) fn wide_less(
         &mut self,
         out: &mut Out<'a>,
-        signed: bool,
+        (a_signed, b_signed): (bool, bool),
         a: &[form::Value],
         b: &[form::Value],
     ) -> form::Value {
-        let high = if signed {
-            form::Compare::LessS
-        } else {
-            form::Compare::LessU
+        let zero = out.int(form::Bits::B64, 0);
+        let negative = |out: &mut Out<'a>, signed: bool, v: &[form::Value]| {
+            if signed {
+                out.compare(form::Compare::LessS, v[1], zero)
+            } else {
+                out.int(form::Bits::B8, 0)
+            }
         };
-        let high_below = out.compare(high, a[1], b[1]);
+        let (a_negative, b_negative) = (negative(out, a_signed, a), negative(out, b_signed, b));
+        let differ = out.binary(form::Binary::Xor, a_negative, b_negative);
+        let high_below = out.compare(form::Compare::LessU, a[1], b[1]);
         let high_same = out.compare(form::Compare::Equal, a[1], b[1]);
         let low_below = out.compare(form::Compare::LessU, a[0], b[0]);
         let low_decides = out.binary(form::Binary::And, high_same, low_below);
-        out.binary(form::Binary::Or, high_below, low_decides)
+        let ordered = out.binary(form::Binary::Or, high_below, low_decides);
+        out.choose(differ, a_negative, ordered)
     }
 
     /// Whether `a` and `b`, both two words, are the same number.
