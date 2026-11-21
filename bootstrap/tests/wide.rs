@@ -222,16 +222,18 @@ fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list() {
 }
 
 /// The product of two `Nat`s has numbers above the greatest `i128`, which no bound
-/// of a proof can be, so `arith` gives a name that holds one no fact: it does
-/// not take it into a range that stops at the greatest `i128`, as it would if it
-/// held that as the greatest number the name has.
+/// of a proof can be, so `arith` gives a name that holds one no fact. Were its
+/// greatest number read as the greatest `i128`, a branch that holds only numbers
+/// above that would hold none, and anything would be proven in it: a value that
+/// can be as great as 2 to the 128 would enter `0..2` with no mistake reported.
+/// With no fact it is refused, and the error says what could not be proven.
 fn a_proof_is_refused_for_a_range_whose_greatest_number_is_above_what_an_i128_holds() {
     let source = with_header(
-        "fn into(a: Nat, b: Nat) -> 0..170141183460469231731687303715884105727 {\n  p = a * b\n  p\n}\n\nfn main() ! console, alloc {\n  print(\"{into(3, 4)}\")\n}\n".to_string(),
+        "fn into(a: Nat, b: Nat) -> Nat {\n  p = a * b\n  if p > 170141183460469231731687303715884105727 {\n    x: 0..2 = p\n    x\n  } else {\n    1\n  }\n}\n\nfn main() ! console, alloc {\n  print(\"{into(3, 4)}\")\n}\n".to_string(),
     );
     let errors = check(source.as_bytes()).expect_err("the product may not fit");
     assert!(
-        errors.iter().any(|e| e.message.contains("cannot prove")),
+        errors.iter().any(|e| e.message.contains("cannot prove that `p <= 1`")),
         "{errors:?} for\n{source}"
     );
 }
