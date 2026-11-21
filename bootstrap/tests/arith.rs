@@ -140,17 +140,28 @@ fn pair(g: &mut Gen) -> Pair {
 }
 
 /// For every integer type and every pair of numbers of it, `a + b`, `a - b`,
-/// and `a * b` each compile when the exact range of the result is one that a
-/// type of 64 bits holds, and otherwise exactly when the true result is a
-/// value of the type, and the program prints the true result.
+/// and `a * b` are the exact range of the result, in two words when no type of
+/// 64 bits holds it, and enter the type exactly when the true result is a value
+/// of the type, and the program prints the true result.
 fn an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it() {
     generate::check(90, 150, pair, |p| {
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = {2}\n  print(\"{{a {3} b}}\")\n}}\n",
+            "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = {2}\n  {3}print(\"{{{4}}}\")\n}}\n",
             p.ty.name,
             lit(p.a),
             lit(p.b),
-            p.op
+            // A type of 64 bits has no wider one that is printed, so the result
+            // is given the type, where it must fit.
+            if p.ty.bits == 64 {
+                format!("r: {} = a {} b\n  ", p.ty.name, p.op)
+            } else {
+                String::new()
+            },
+            if p.ty.bits == 64 {
+                "r".to_string()
+            } else {
+                format!("a {} b", p.op)
+            }
         ));
         let result = exact(p.op, p.a, p.b);
         match check(source.as_bytes()) {
@@ -433,7 +444,7 @@ fn condition(g: &mut Gen, depth: usize, big: bool) -> Condition {
 
 struct Facts {
     source: String,
-    /// Whether every operation fits whenever the facts hold.
+    /// Whether the result fits whenever the facts hold.
     fits: bool,
 }
 
@@ -489,19 +500,10 @@ fn facts_and_goal(g: &mut Gen) -> Facts {
     for x in -8..=8 {
         for y in -8..=8 {
             if holds(x, y) {
-                // The operations of `a * x + b * y + k` that are written. Each
-                // must fit where its exact range is not one a type holds, as
-                // for 64 bits. Where it is, only the whole, which is given as
-                // the result, must fit.
-                let parts = [a * x, b * y, a * x + b * y, a * x + b * y + k];
-                let written = [a != 0, b != 0, a != 0 && b != 0, k != 0];
-                if ty.bits == 64 {
-                    for (part, written) in parts.iter().zip(written) {
-                        if written && !(ty.min()..=ty.max()).contains(part) {
-                            fits_all = false;
-                        }
-                    }
-                } else if !(ty.min()..=ty.max()).contains(&(a * x + b * y + k)) {
+                // Each operation of `a * x + b * y + k` is the exact range of its
+                // result, so only the whole, which is given as the result, must
+                // fit.
+                if !(ty.min()..=ty.max()).contains(&(a * x + b * y + k)) {
                     fits_all = false;
                 }
             }
@@ -525,28 +527,28 @@ fn arith_says_yes_exactly_when_no_values_make_the_facts_true_and_the_goal_false(
     });
 }
 
-/// In `a + b - c` of numbers of a type of 64 bits, `a + b` must fit even when
-/// the whole would, and so for `a - b + c`, as the exact range of the result of
-/// an operation on two of them is not one a type holds. Of a smaller type, it
-/// is, so the operations give the exact range and nothing is proven, and the
-/// whole is what must fit where it is given.
+/// In `a + b - c` of numbers of a type of 64 bits, `a + b` is the exact range of
+/// the sum, in two words, so the whole is what must fit where it is given: a
+/// whole that fits is accepted though `a + b` alone would not, and one that does
+/// not is refused, with the goal about the whole.
 fn each_operation_of_an_expression_is_proven_by_itself() {
     for ty in INTS.iter().filter(|t| t.bits == 64) {
         for (first, second, a) in [("+", "-", ty.max()), ("-", "+", ty.min())] {
+            // `a + b - c` is `a` when `b` and `c` are 1, which fits.
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = 1\n  c: {0} = 1\n  print(\"{{a {first} b {second} c}}\")\n}}\n",
+                "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = 1\n  c: {0} = 1\n  r: {0} = a {first} b {second} c\n  print(\"{{r}}\")\n}}\n",
                 ty.name, a
             ));
-            let errors = check(source.as_bytes()).expect_err("the first operation does not fit");
-            let goal = format!("a {first} b");
+            assert!(check(source.as_bytes()).is_ok(), "{source}");
+            // The same going on in one direction does not fit, and the goal
+            // is about the whole.
+            let source = source.replace(&format!("{second} c"), &format!("{first} c"));
+            let errors = check(source.as_bytes()).expect_err("the whole does not fit");
+            let goal = format!("a {first} b {first} c");
             assert!(
                 errors.iter().any(|e| e.message.contains(&goal)),
                 "{errors:?} does not state the goal about `{goal}`"
             );
-            // The same with the first operation done on its own fits, and so
-            // does the whole, so only the order of the proofs refuses it.
-            let source = source.replace(&format!("= {a}"), "= 5");
-            assert!(check(source.as_bytes()).is_ok(), "{source}");
         }
     }
 }

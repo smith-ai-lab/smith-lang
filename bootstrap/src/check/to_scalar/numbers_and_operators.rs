@@ -39,6 +39,15 @@ impl<'a> Lowering<'a> {
         };
         let magnitude = magnitude as i128;
         let value = if negative { -magnitude } else { magnitude };
+        if t.wide() {
+            return (
+                ty,
+                vec![
+                    out.int(form::Bits::B64, value),
+                    out.int(form::Bits::B64, value >> 64),
+                ],
+            );
+        }
         (ty, vec![out.int(bits_of(t), value)])
     }
 
@@ -57,7 +66,13 @@ impl<'a> Lowering<'a> {
             return self.float_operation(out, (op, left, right, op_pos), ty, env);
         }
         let (taken, a) = self.expr(out, left, env);
-        let b = self.expr(out, right, env).1[0];
+        let b = self.expr(out, right, env).1;
+        if let Ty::Int(t) = &ty
+            && t.wide()
+        {
+            return self.wide_operation(out, (op, expr.pos()), (ty.clone(), taken, a, b));
+        }
+        let b = b[0];
         let word = match op {
             crate::parser::ArithOp::Add => form::Binary::Add,
             crate::parser::ArithOp::Sub => form::Binary::Sub,
@@ -170,6 +185,12 @@ impl<'a> Lowering<'a> {
                 vec![mixed.stand(out, a[0], b[0]).0],
             );
         }
+        if matches!(&ta, Ty::Int(t) if t.wide()) {
+            return (
+                self.typed.defs.bool_ty(),
+                vec![self.wide_equal(out, &a, &b)],
+            );
+        }
         (
             self.typed.defs.bool_ty(),
             vec![out.compare(form::Compare::Equal, a[0], b[0])],
@@ -224,15 +245,33 @@ impl<'a> Lowering<'a> {
         }
         // Both sides are the same range, the first as it is given here, or
         // two that no type of 64 bits holds.
-        let (ty, a) = self.expr(out, &call.args[0].value, env);
-        let a = a[0];
-        let (other, b) = self.expr(out, &call.args[1].value, env);
-        let b = b[0];
+        let (ty, a_all) = self.expr(out, &call.args[0].value, env);
+        let a = a_all[0];
+        let (other, b_all) = self.expr(out, &call.args[1].value, env);
+        let b = b_all[0];
         if let (Ty::Float(_), Ty::Float(_)) = (&ty, &other) {
             return self.float_comparison(out, answers, (a, b));
         }
         if let Some(mixed) = Mixed::of(&ty, &other) {
             return self.mixed_comparison(out, mixed, answers, (a, b));
+        }
+        if let Ty::Int(t) = &ty
+            && t.wide()
+        {
+            // `a <= b` is not `b < a`, and `a >= b` is not `a < b`.
+            let (x, y, flip) = match answers {
+                [Some(true), Some(false), Some(false)] => (&a_all, &b_all, false),
+                [Some(false), Some(false), Some(true)] => (&b_all, &a_all, false),
+                [Some(true), Some(true), Some(false)] => (&b_all, &a_all, true),
+                [Some(false), Some(true), Some(true)] => (&a_all, &b_all, true),
+                _ => return None,
+            };
+            let below = self.wide_less(out, t.signed(), x, y);
+            if !flip {
+                return Some(vec![below]);
+            }
+            let one = out.int(form::Bits::B8, 1);
+            return Some(vec![out.binary(form::Binary::Xor, below, one)]);
         }
         let less = match ty {
             Ty::Int(t) if t.signed() => form::Compare::LessS,
@@ -315,6 +354,83 @@ impl<'a> Lowering<'a> {
                 &self.typed.type_of(&call.args[1].value, env),
             )
             .is_some()
+    }
+
+    /// Whether the call is `Ord::compare` of two numbers of which a range of more
+    /// than 64 bits holds both, which the checker made both two words.
+    pub(super) fn compares_wide(&self, call: &Call, env: &[Ty]) -> bool {
+        matches!(&call.qualifier, Some((q, _)) if q == "Ord")
+            && call.callee == "compare"
+            && call.args.len() == 2
+            && matches!(
+                (
+                    self.typed.type_of(&call.args[0].value, env),
+                    self.typed.type_of(&call.args[1].value, env),
+                ),
+                (Ty::Int(a), Ty::Int(b)) if a.wide() || b.wide() || a.hull(b).is_some_and(|h| h.wide())
+            )
+    }
+
+    /// Whether the call is `Fmt::fmt` of a number of a range of more than 64 bits.
+    pub(super) fn formats_wide(&self, call: &Call, env: &[Ty]) -> bool {
+        matches!(&call.qualifier, Some((q, _)) if q == "Fmt")
+            && call.callee == "fmt"
+            && call.args.len() == 1
+            && matches!(
+                self.typed.type_of(&call.args[0].value, env),
+                Ty::Int(t) if t.wide()
+            )
+    }
+
+    /// Lowers `Fmt::fmt` of a number that is two words: its digits in decimal.
+    pub(super) fn format_wide(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let (ty, values) = self.expr(out, &call.args[0].value, env);
+        let Ty::Int(t) = ty else {
+            unreachable!("checked")
+        };
+        let signed = out.int(form::Bits::B8, i128::from(t.signed()));
+        let text = self.call_runtime(
+            out,
+            Runtime::DecimalWide,
+            vec![values[0], values[1], signed],
+            TEXT.to_vec(),
+        );
+        (Ty::Text, text)
+    }
+
+    /// Lowers `Ord::compare` of numbers that are two words, as the `Order` of
+    /// the numbers.
+    pub(super) fn compare_wide(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let defs = self.typed.defs;
+        let (ta, a) = self.expr(out, &call.args[0].value, env);
+        let (tb, b) = self.expr(out, &call.args[1].value, env);
+        let (Ty::Int(x), Ty::Int(y)) = (ta, tb) else {
+            unreachable!("checked")
+        };
+        let hull = x.hull(y).expect("a range");
+        let (a, b) = (self.wide_from(out, x, &a), self.wide_from(out, y, &b));
+        let equal = self.wide_equal(out, &a, &b);
+        let below = self.wide_less(out, hull.signed(), &a, &b);
+        let case = |out: &mut Out<'a>, name: &str| {
+            let k = defs.case_of(defs.order, name).expect("a case");
+            out.int(form::Bits::B8, k as i128)
+        };
+        let (less, same, greater) = (case(out, "less"), case(out, "equal"), case(out, "greater"));
+        let inner = out.choose(equal, same, greater);
+        (
+            Ty::Enum(defs.order, Vec::new()),
+            vec![out.choose(below, less, inner)],
+        )
     }
 
     /// Lowers `Ord::compare` of two ranges that no type of 64 bits holds, as the
@@ -988,5 +1104,110 @@ impl Mixed {
                 out.binary(form::Binary::And, not_negative, below_bits),
             )
         }
+    }
+}
+
+impl<'a> Lowering<'a> {
+    /// The two words of a number of the range `from`, which is of 64 bits or
+    /// fewer or is already two words, as a number of a range of more than 64
+    /// bits: the low word is the number at 64 bits, and the high word is its
+    /// sign, which is all ones for a negative number and none otherwise.
+    pub(super) fn wide_from(
+        &mut self,
+        out: &mut Out<'a>,
+        from: Int,
+        values: &[form::Value],
+    ) -> Vec<form::Value> {
+        if from.wide() {
+            return values.to_vec();
+        }
+        let low = out.resize(from.signed(), values[0], form::Bits::B64);
+        let high = if from.signed() {
+            let by = out.int(form::Bits::B64, 63);
+            out.binary(form::Binary::ShiftRightS, low, by)
+        } else {
+            out.int(form::Bits::B64, 0)
+        };
+        vec![low, high]
+    }
+
+    /// Lowers `left + right`, `left - right`, or `left * right` of numbers that
+    /// are two words each, which the checker made the sides of the result's size.
+    fn wide_operation(
+        &mut self,
+        out: &mut Out<'a>,
+        (op, pos): (ArithOp, Pos),
+        (ty, _taken, a, b): (Ty, Ty, Vec<form::Value>, Vec<form::Value>),
+    ) -> (Ty, Vec<form::Value>) {
+        let values = match op {
+            ArithOp::Add => {
+                let low = out.binary(form::Binary::Add, a[0], b[0]);
+                // The sum is below an operand exactly when it carried.
+                let carried = out.compare(form::Compare::LessU, low, a[0]);
+                let carry = out.resize(false, carried, form::Bits::B64);
+                let sum = out.binary(form::Binary::Add, a[1], b[1]);
+                vec![low, out.binary(form::Binary::Add, sum, carry)]
+            }
+            ArithOp::Sub => {
+                let low = out.binary(form::Binary::Sub, a[0], b[0]);
+                // The low word of the first is below that of the second exactly
+                // when the difference borrowed.
+                let borrowed = out.compare(form::Compare::LessU, a[0], b[0]);
+                let borrow = out.resize(false, borrowed, form::Bits::B64);
+                let difference = out.binary(form::Binary::Sub, a[1], b[1]);
+                vec![low, out.binary(form::Binary::Sub, difference, borrow)]
+            }
+            ArithOp::Mul => {
+                // The low words give both halves of their product, and each
+                // high word times the other low word is above them.
+                let low = out.binary(form::Binary::Mul, a[0], b[0]);
+                let carried = out.binary(form::Binary::MulHighU, a[0], b[0]);
+                let first = out.binary(form::Binary::Mul, a[0], b[1]);
+                let second = out.binary(form::Binary::Mul, a[1], b[0]);
+                let sum = out.binary(form::Binary::Add, carried, first);
+                vec![low, out.binary(form::Binary::Add, sum, second)]
+            }
+            ArithOp::Div | ArithOp::Rem => {
+                self.errors.push(Error::unsupported(
+                    pos,
+                    "`/` and `%` of a range of more than 64 bits",
+                ));
+                vec![a[0], a[1]]
+            }
+        };
+        (ty, values)
+    }
+
+    /// Whether `a` is below `b`, both two words, for numbers that are signed or
+    /// not.
+    pub(super) fn wide_less(
+        &mut self,
+        out: &mut Out<'a>,
+        signed: bool,
+        a: &[form::Value],
+        b: &[form::Value],
+    ) -> form::Value {
+        let high = if signed {
+            form::Compare::LessS
+        } else {
+            form::Compare::LessU
+        };
+        let high_below = out.compare(high, a[1], b[1]);
+        let high_same = out.compare(form::Compare::Equal, a[1], b[1]);
+        let low_below = out.compare(form::Compare::LessU, a[0], b[0]);
+        let low_decides = out.binary(form::Binary::And, high_same, low_below);
+        out.binary(form::Binary::Or, high_below, low_decides)
+    }
+
+    /// Whether `a` and `b`, both two words, are the same number.
+    pub(super) fn wide_equal(
+        &mut self,
+        out: &mut Out<'a>,
+        a: &[form::Value],
+        b: &[form::Value],
+    ) -> form::Value {
+        let low = out.compare(form::Compare::Equal, a[0], b[0]);
+        let high = out.compare(form::Compare::Equal, a[1], b[1]);
+        out.binary(form::Binary::And, low, high)
     }
 }

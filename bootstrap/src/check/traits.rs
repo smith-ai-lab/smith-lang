@@ -692,9 +692,18 @@ impl<'a> Defs<'a> {
     fn kept_at_size(&self, k: usize, types: &[Ty]) -> Vec<Ty> {
         let by_size =
             k == self.eq || k == self.ord() || k == self.fmt || k == self.repr || k == self.hash();
+        // `Eq`, `Ord`, and `Fmt` of a range of more than 64 bits are the
+        // comparison of two numbers and the digits of one, which are lowered where
+        // they are written and never call the implementation, so the
+        // implementation of the size of its sign stands for it; the others have
+        // none for such a range.
+        let compared = k == self.eq || k == self.ord() || k == self.fmt;
         types
             .iter()
             .map(|t| match t {
+                Ty::Int(r) if r.wide() && compared => {
+                    Ty::Int(if r.signed() { Int::I64 } else { Int::U64 })
+                }
                 Ty::Int(r) if by_size => Ty::Int(r.holder()),
                 other => other.clone(),
             })

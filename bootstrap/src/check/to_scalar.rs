@@ -982,6 +982,11 @@ impl<'a> Lowering<'a> {
                 put(form::Type::Int(form::Bits::B64));
                 put(form::Type::Int(form::Bits::B64));
             }
+            // A range of more than 64 bits is two words, the low one first.
+            Ty::Int(t) if t.wide() => {
+                put(form::Type::Int(form::Bits::B64));
+                put(form::Type::Int(form::Bits::B64));
+            }
             Ty::Int(t) => put(form::Type::Int(bits_of(*t))),
             Ty::Float(f) => put(form::Type::Float(float_bits(*f))),
             Ty::Struct(s, args) => {
@@ -1382,6 +1387,9 @@ impl<'a> Lowering<'a> {
         out.place = self.place_of(out, expr.pos());
         let (ty, values) = self.as_written(out, expr, env);
         let given = match (&ty, self.typed.widened.get(&addr(expr))) {
+            (Ty::Int(from), Some(&to)) if to.wide() => {
+                (Ty::Int(to), self.wide_from(out, *from, &values))
+            }
             (Ty::Int(from), Some(&to)) => {
                 // A range taken where a wider one is needed is the same number
                 // at the size the wider one is kept at.
@@ -1467,6 +1475,8 @@ impl<'a> Lowering<'a> {
             Expr::Call(call) if self.compares_scalars(call, "eq", env) => {
                 self.equal_scalars(out, call, env)
             }
+            Expr::Call(call) if self.compares_wide(call, env) => self.compare_wide(out, call, env),
+            Expr::Call(call) if self.formats_wide(call, env) => self.format_wide(out, call, env),
             Expr::Call(call) if self.compares_mixed(call, env) => {
                 self.compare_mixed(out, call, env)
             }

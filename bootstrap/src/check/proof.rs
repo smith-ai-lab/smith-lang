@@ -373,6 +373,17 @@ impl Builder<'_, '_> {
     /// The sum an expression stands for, or none when it is left out as a
     /// fact because nothing is known of a part of it.
     fn lin(&mut self, e: &Expr) -> Option<Lin> {
+        // A range whose greatest number is above `i128::MAX` has no fact, as no
+        // bound of it is a number the proof holds, so nothing is proven of a
+        // value of one.
+        if matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none())
+            || matches!(e, Expr::Name { name, .. } if matches!(
+                self.body.names.iter().rev().find(|(n, _)| n == name),
+                Some((_, Ty::Int(t))) if t.ends().is_none()))
+        {
+            self.overflow = true;
+            return None;
+        }
         match e {
             Expr::Number {
                 magnitude,
@@ -959,9 +970,11 @@ impl<'a> Checker<'a> {
             if given.terms.is_empty() {
                 facts.constants.push((at, given.constant));
             }
-            let id = facts.id(Key::Name(at, t.min(), t.max()));
-            if let Some(same) = self.equal(body, &mut facts, id, &given) {
-                facts.known.push(same);
+            if t.ends().is_some() {
+                let id = facts.id(Key::Name(at, t.min(), t.max()));
+                if let Some(same) = self.equal(body, &mut facts, id, &given) {
+                    facts.known.push(same);
+                }
             }
         }
         body.facts = facts;
@@ -1303,6 +1316,44 @@ impl<'a> Checker<'a> {
 
     /// Whether `arith` proves that the result of the operation `e` fits `t`,
     /// and if it does not, the goal it could not prove.
+    pub(super) fn would_fit(&mut self, body: &mut Body<'a>, e: &Expr, t: Int) -> bool {
+        if !Self::decided(body) || body.contract {
+            return true;
+        }
+        let Expr::Arith { op, .. } = e else {
+            return true;
+        };
+        if matches!(op, ArithOp::Div | ArithOp::Rem) {
+            return true;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let value = builder.lin(e).filter(|_| !builder.overflow);
+        let (above, below) = match (op, t.signed()) {
+            (ArithOp::Sub, false) => (false, true),
+            (_, false) => (true, false),
+            (_, true) => (true, true),
+        };
+        let mut goals = Vec::new();
+        match &value {
+            Some(value) => {
+                if above && let Some(mut up) = value.negated() {
+                    up.constant = up.constant.saturating_add(t.max());
+                    goals.push(Formula::Ge(up));
+                }
+                if below {
+                    let mut down = value.clone();
+                    down.constant = down.constant.saturating_sub(t.min());
+                    goals.push(Formula::Ge(down));
+                }
+            }
+            None => goals.push(Formula::Or(Vec::new())),
+        }
+        let used = background(&facts, goals.iter());
+        body.facts = facts;
+        goals.iter().all(|g| proves(&used, g))
+    }
+
     pub(super) fn fits(&mut self, body: &mut Body<'a>, e: &Expr, t: Int) {
         if !Self::decided(body) || body.contract {
             return;
