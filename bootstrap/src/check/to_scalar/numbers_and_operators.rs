@@ -420,6 +420,20 @@ impl<'a> Lowering<'a> {
             );
             return (ty, values);
         }
+        if float && call.callee == "__ln" {
+            let ty = typed.type_of(expr, env);
+            let Ty::Float(size) = ty else {
+                unreachable!("checked")
+            };
+            let double = float_bits(size) == form::FloatBits::F64;
+            let values = self.call_runtime(
+                out,
+                Runtime::Ln { double },
+                vec![args[0]],
+                vec![form::Type::Float(float_bits(size))],
+            );
+            return (ty, values);
+        }
         if float && call.callee == "__sqrt" {
             return (typed.type_of(expr, env), vec![out.float_sqrt(args[0])]);
         }

@@ -6,7 +6,8 @@ status: partial
 built:
   - "`sqrt` of an `f32` and an `f64`, on every target, as one instruction of the form that each chip has"
   - "`exp` of an `f32` and an `f64`, correctly rounded, on every target and in the evaluator, by one exact path in 256-bit fixed point that is built in the scalar form, with a float instruction only for a first guess that its fixed-point steps correct, and asks no library of the host; it is the only path, so it is slow: measured at about 3.0 microseconds a call on x86-64 Linux, about 370 times the 8 nanoseconds of the host's `exp`, and a fast path that gives the same bits is still to be built"
-  - "not `ln`, `sin`, `cos`, `floor`, `ceil`, `trunc`, or `round`"
+  - "`ln` of an `f32` and an `f64`, correctly rounded, on every target and in the evaluator, by one exact path in the same 256-bit fixed point, the only path; measured at about 6.1 microseconds a call on x86-64 Linux, about 870 times the 7 nanoseconds of the host's `ln`, and a fast path that gives the same bits is still to be built"
+  - "not `sin`, `cos`, `floor`, `ceil`, `trunc`, or `round`"
 ---
 
 # Float functions

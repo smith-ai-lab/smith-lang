@@ -51,6 +51,14 @@ pub enum Runtime {
     ExpSeries,
     /// Takes a float, and gives its exponential, the float nearest the exact one.
     Exp { double: bool },
+    /// Takes a number of eight words that is between 0.85 and 1.21, and gives
+    /// its reciprocal.
+    LnReciprocal,
+    /// Takes the eight words of `z` below 0.18, and gives `z + z^3 / 3 + ...`.
+    LnSeries,
+    /// Takes a float, and gives its natural logarithm, the float nearest the
+    /// exact one.
+    Ln { double: bool },
     /// Takes the bits of a float that is finite and not 0, as 64 bits, and the
     /// two tables of Ryu, and gives the shortest digits that read back as the
     /// float as a number, and the power of 10 they are to be multiplied by.
@@ -142,6 +150,9 @@ impl Runtime {
             Runtime::ExpMultiply => "<exp_multiply>",
             Runtime::ExpSeries => "<exp_series>",
             Runtime::Exp { .. } => "<exp>",
+            Runtime::LnReciprocal => "<ln_reciprocal>",
+            Runtime::LnSeries => "<ln_series>",
+            Runtime::Ln { .. } => "<ln>",
             Runtime::Shortest { .. } => "<shortest>",
             Runtime::FloatText { .. } => "<float_text>",
             Runtime::Push(_) => "<push>",
@@ -180,6 +191,14 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::ExpMultiply => super::exp::multiply(),
         Runtime::ExpSeries => super::exp::series(place(Runtime::ExpMultiply)),
         Runtime::Exp { double } => super::exp::exp(double, place(Runtime::ExpSeries)),
+        Runtime::LnReciprocal => super::ln::reciprocal(place(Runtime::ExpMultiply)),
+        Runtime::LnSeries => super::ln::series(place(Runtime::ExpMultiply)),
+        Runtime::Ln { double } => super::ln::ln(
+            double,
+            place(Runtime::ExpMultiply),
+            place(Runtime::LnReciprocal),
+            place(Runtime::LnSeries),
+        ),
         Runtime::Shortest { double } => super::ryu::shortest(double),
         Runtime::FloatText { double } => {
             super::ryu::float_text(double, place(Runtime::Shortest { double }))
