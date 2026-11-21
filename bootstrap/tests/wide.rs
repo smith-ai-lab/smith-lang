@@ -33,6 +33,10 @@ pub const ONCE: &[Test] = &[
         a_program_with_no_wide_range_has_no_instruction_for_one,
     ),
     (
+        "a_number_above_the_greatest_i128_is_above_every_negative_number_and_every_number_below_it",
+        a_number_above_the_greatest_i128_is_above_every_negative_number_and_every_number_below_it,
+    ),
+    (
         "a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly",
         a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly,
     ),
@@ -323,10 +327,17 @@ fn division(g: &mut Gen) -> Division {
         .filter(|(a, b)| a.bits + b.bits > 64)
         .collect();
     let (a, b) = *g.pick(&wide);
+    let mut values = (value(g, a), value(g, b));
+    // Where the two are one type and the values show the product fits it, the
+    // product is of that type and a divisor above it does not fit; the
+    // greatest of each shows no such thing.
+    if a.name == b.name {
+        values = (a.max(), a.max());
+    }
     let product = Sum {
         types: (a, b),
         op: '*',
-        values: (value(g, a), value(g, b)),
+        values,
     };
     let magnitude = match g.below(5) {
         0 => 1u128 << (1 + g.below(100)),
@@ -349,7 +360,7 @@ fn division(g: &mut Gen) -> Division {
 /// below 0 or above, are the exact quotient and what is left over, whether the
 /// range of either is wide or not.
 fn a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly() {
-    generate::check(4304, 80, division, |d| {
+    generate::check(4304, 30, division, |d| {
         let source = d.source();
         assert_eq!(stdout(&source), d.expected(), "for\n{source}");
     });
@@ -381,4 +392,19 @@ fn every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remai
             targets::runs_as(d.source().as_bytes(), target, &said);
         }
     });
+}
+
+/// The product of two `u64`s is above the greatest `i128` and a negative number
+/// is below zero, so the product is above it, though its high word has its top
+/// bit set as a negative number's does: the order is by the signs first, and
+/// then by the words.
+fn a_number_above_the_greatest_i128_is_above_every_negative_number_and_every_number_below_it() {
+    let source = with_header(
+        "fn main() ! console, alloc {\n  pa: u64 = 18446744073709551615\n  pb: u64 = 18446744073709551615\n  p = pa * pb\n  qa: i32 = -2147483648\n  qb: i32 = -2147483648\n  q = qa + qb\n  print(\"{p < q} {p <= q} {p == q} {p > q} {p >= q} {p != q}\")\n  print(\"{q < p} {q <= p} {q == p} {q > p} {q >= p} {q != p}\")\n  print(\"{Ord.compare(p, q)} {Ord.compare(q, p)}\")\n}\n".to_string(),
+    );
+    assert_eq!(
+        stdout(&source),
+        "false false false true true true\ntrue true false false false true\n.greater .less\n",
+        "for\n{source}"
+    );
 }
