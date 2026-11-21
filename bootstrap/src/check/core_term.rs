@@ -926,6 +926,46 @@ impl<'a> Typed<'a> {
                     ..
                 },
                 rest @ ..,
+            ] if c.callee == "replace" && c.qualifier.is_none() => {
+                let [eq, p] = c.args.as_slice() else {
+                    return None;
+                };
+                let named = |a: &Expr| match a {
+                    Expr::Name { name, pos } => Some(Term::new(
+                        Kind::Name(name.clone()),
+                        core::Type::Nothing,
+                        *pos,
+                    )),
+                    _ => None,
+                };
+                let value = Term::new(
+                    Kind::Call {
+                        callee: Callee::Step(core::Step::Replace),
+                        args: vec![named(&eq.value)?, named(&p.value)?],
+                    },
+                    core::Type::Nothing,
+                    c.pos,
+                );
+                let rest = self.core_proof(rest)?;
+                Some(Term::new(
+                    Kind::Bind {
+                        name: name.clone(),
+                        value: Box::new(value),
+                        rest: Box::new(rest),
+                    },
+                    core::Type::Nothing,
+                    *pos,
+                ))
+            }
+            [
+                Stmt::Define {
+                    name,
+                    pos,
+                    value: Expr::Call(c),
+                    var: false,
+                    ..
+                },
+                rest @ ..,
             ] if self.proof_function_called(c).is_some() => {
                 let place = self.proof_function_called(c)?;
                 let args: Option<Vec<Term>> =

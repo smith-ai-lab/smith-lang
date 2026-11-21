@@ -88,6 +88,9 @@ pub enum Step {
     /// `arith(p, q)`, which gives a fact about numbers that follows from the
     /// proofs it is handed.
     Arith,
+    /// `replace(eq, p)`, which gives the statement `p` proves with the right
+    /// side of `eq` put where its left side is written.
+    Replace,
 }
 
 impl Step {
@@ -97,6 +100,7 @@ impl Step {
             Step::Same => "same",
             Step::Unfold => "unfold",
             Step::Arith => "arith",
+            Step::Replace => "replace",
         }
     }
 }

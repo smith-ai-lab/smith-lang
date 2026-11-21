@@ -4,7 +4,7 @@ title: Statements
 description: A statement is a type built from what data is built from, a proof is a value of it, and a boolean expression is the statement that it is true, so there is no second language for proofs.
 status: partial
 built:
-  - "a proof function, a function whose result is a statement, whose body is steps the kernel checks: `same`; `arith(p, q)`, which gives an equality of whole numbers that is the sum of the equalities `p` and `q` say, each times a number, with a product of unknowns taken as one unknown of its own; a name given by `unfold(f(x))`, which says that `f(x)` equals the body of `f` with `x` put in, where each condition the body tests is decided by the cases the proof is in; and an `if` that splits the proof into cases, each of which knows which it is in; a name given by a call of a proof function, which is a proof of its statement for the arguments, so that a proof that calls itself on a smaller value, with its `decreases` proven as for any function, is an induction: `gauss` and the sum of a double; `arith` takes the size of `push(xs, x)` as one more than that of `xs`, and the size of `xs[a..b]` of a slice as `b - a` where the proof knows `a <= b <= xs.size`, from its `requires` or the case it is in; `replace` and a statement as a parameter or a field are not built"
+  - "a proof function, a function whose result is a statement, whose body is steps the kernel checks: `same`; `arith(p, q)`, which gives an equality of whole numbers that is the sum of the equalities `p` and `q` say, each times a number, with a product of unknowns taken as one unknown of its own; a name given by `unfold(f(x))`, which says that `f(x)` equals the body of `f` with `x` put in, where each condition the body tests is decided by the cases the proof is in; a name given by `replace(eq, p)`, which is the statement `p` proves with the right side of `eq`, a proof of `x == y`, put where `x` is written in it, in every place, and is refused when `x` is not written in it; and an `if` that splits the proof into cases, each of which knows which it is in; a name given by a call of a proof function, which is a proof of its statement for the arguments, so that a proof that calls itself on a smaller value, with its `decreases` proven as for any function, is an induction: `gauss` and the sum of a double; `arith` takes the size of `push(xs, x)` as one more than that of `xs`, and the size of `xs[a..b]` of a slice as `b - a` where the proof knows `a <= b <= xs.size`, from its `requires` or the case it is in; a statement as a parameter or a field is not built"
 ---
 
 # Statements
@@ -65,10 +65,20 @@ The body of a proof is made of a few steps, each a function whose result is a st
 | --- | --- |
 | `same` | `a == a`, and any statement with nothing unknown in it, which the kernel runs |
 | `unfold(f(x))` | `f(x)` equals the body of `f` with `x` put in |
-| `replace(eq)` | A statement holds still when one side of `eq` is put where the other stood |
+| `replace(eq, p)` | The statement `p` proves, with the right side of `eq` put where its left side stood |
 | `arith(p, q)` | A fact about numbers that follows from the proofs it is handed |
 
 Nothing else is new. An `if` or a `match` splits a proof into cases, and each branch may use the case it is in. A call of the function by itself, on a smaller value, is the step of an induction.
+
+`replace(eq, p)` takes two proofs named before it, and gives a proof of the statement `p` proves, with the right side of the equality `eq` proves put in every place its left side is written. With `a(n)` defined as `b(n)` and `b(n)` as `n + 1`:
+
+```
+opened = unfold(b(n))          // b(n) == n + 1
+chain = unfold(a(n))           // a(n) == b(n)
+now = replace(opened, chain)   // a(n) == n + 1
+```
+
+It is refused, naming both, when the left side is not written in the statement of `p`. It is a step like the others: it gives a proof and never changes the statement the proof owes.
 
 ```
 fn sum_to(n: Nat) -> Nat {
@@ -112,6 +122,6 @@ A proof is written once. The compiler checks proofs and never searches for one, 
 | `fn(p: P) -> Q` | A proof that P gives Q |
 | `fn(i: Nat, p: i < n) -> xs[i] < m` | A proof for every `i` below `n` |
 | A struct with a value and a proof | A proof that there is such a value |
-| `same`, `unfold(f(x))`, `replace(eq)`, `arith(p, q)` | The steps a proof is made of |
+| `same`, `unfold(f(x))`, `replace(eq, p)`, `arith(p, q)` | The steps a proof is made of |
 
 Next: [hole](hole.md)
