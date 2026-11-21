@@ -1329,9 +1329,8 @@ fn file_with_check_errors(g: &mut Gen) -> (String, Vec<(Pos, String)>) {
                 source.push_str(", ");
             }
             let arg = pos_after(&source);
-            match (callee, i) {
-                ("main", 0) => expected.push((arg, "takes 0 arguments".to_string())),
-                _ => {}
+            if (callee, i) == ("main", 0) {
+                expected.push((arg, "takes 0 arguments".to_string()));
             }
             source.push_str("\"a\"");
         }
