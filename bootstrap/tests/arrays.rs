@@ -103,7 +103,15 @@ fn two_arrays_are_one_type_exactly_when_their_sizes_and_elements_are() {
             "fn hold(a: [{m}]{u}) -> [{m}]{u} {{ a }}\n\nfn main() ! console {{\n  a: [{n}]{t} = [{}]\n  b = hold(a)\n}}\n",
             items.join(", ")
         ));
-        assert_eq!(compiles(&source), t == u && n == m, "for\n{source}");
+        // `Byte` is `u8` written another way.
+        fn one(t: &str) -> &str {
+            if t == "Byte" { "u8" } else { t }
+        }
+        assert_eq!(
+            compiles(&source),
+            one(t) == one(u) && n == m,
+            "for\n{source}"
+        );
     });
 }
 
