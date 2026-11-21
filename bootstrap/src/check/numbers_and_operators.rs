@@ -292,9 +292,6 @@ pub(super) fn expr_is_wide_character(expr: &Expr, magnitude: u128) -> bool {
 fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
     // A range of more than 127 bits has no `i128` for its greatest number, and
     // a quotient of one is worked out where it is built.
-    if matches!(op, ArithOp::Div | ArithOp::Rem) && (left.above > 0 || right.above > 0) {
-        return None;
-    }
     let (low, high) = match op {
         ArithOp::Add => (
             left.bottom().add(right.bottom())?,
@@ -323,10 +320,7 @@ fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
             }
             (low, high)
         }
-        ArithOp::Div => {
-            let (low, high) = quotients(left, right)?;
-            (Edge::of(low), Edge::of(high))
-        }
+        ArithOp::Div => quotients(left, right)?,
         ArithOp::Rem => {
             // What is left of the least number of the largest size, taken by
             // `-1`, is asked of a processor that cannot give it: a smaller
@@ -339,15 +333,14 @@ fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
             {
                 return None;
             }
-            let (low, high) = remainders(left, right);
-            (Edge::of(low), Edge::of(high))
+            remainders(left, right)
         }
     };
     let result = Int::between_bounds(low, high)?;
     // A quotient and a remainder of numbers of 64 bits or fewer are of the type
     // of the numbers, where `arith` shows the least number is not divided by
     // `-1`, as they always were.
-    if matches!(op, ArithOp::Div | ArithOp::Rem) && result.wide() {
+    if matches!(op, ArithOp::Div | ArithOp::Rem) && result.wide() && !left.wide() && !right.wide() {
         return None;
     }
     Some(result)
@@ -355,59 +348,76 @@ fn exact(op: ArithOp, left: Int, right: Int) -> Option<Int> {
 
 /// The numbers a divisor of the range `of` can be, which is its negative
 /// part and its positive part: a divisor is never zero.
-fn divisors(of: Int) -> impl Iterator<Item = (i128, i128)> {
-    let negative = (of.min() < 0).then(|| (of.min(), of.max().min(-1)));
-    let positive = (of.max() > 0).then(|| (of.min().max(1), of.max()));
+fn divisors(of: Int) -> impl Iterator<Item = (Edge, Edge)> {
+    let negative = (of.min() < 0).then(|| (of.bottom(), Edge::of(of.max().min(-1))));
+    let positive =
+        (of.top().size > 0 && !of.top().negative).then(|| (Edge::of(of.min().max(1)), of.top()));
     negative.into_iter().chain(positive)
+}
+
+/// `a / b` rounded toward zero, of bounds, where `b` is not zero.
+fn quotient(a: Edge, b: Edge) -> Edge {
+    let size = a.size / b.size;
+    Edge {
+        negative: size != 0 && a.negative != b.negative,
+        size,
+    }
 }
 
 /// The least and the greatest quotient, rounded toward zero, of a number of
 /// the range `left` by a number of the range `right` that is not zero. A
 /// quotient is monotone in each side where the divisor keeps its sign, so
 /// they are at the ends of the ranges.
-fn quotients(left: Int, right: Int) -> Option<(i128, i128)> {
-    let mut found: Option<(i128, i128)> = None;
+fn quotients(left: Int, right: Int) -> Option<(Edge, Edge)> {
+    let mut found: Option<(Edge, Edge)> = None;
     for (low, high) in divisors(right) {
-        for a in [left.min(), left.max()] {
+        for a in [left.bottom(), left.top()] {
             for b in [low, high] {
-                let q = a.checked_div(b)?;
-                found = Some(found.map_or((q, q), |(l, h)| (l.min(q), h.max(q))));
+                let q = quotient(a, b);
+                found = Some(found.map_or((q, q), |(l, h)| {
+                    (if q.less(l) { q } else { l }, if h.less(q) { q } else { h })
+                }));
             }
         }
     }
     // A divisor that can only be zero is refused where it is checked.
-    Some(found.unwrap_or((0, 0)))
+    Some(found.unwrap_or((Edge::of(0), Edge::of(0))))
 }
 
 /// The range that holds what is left over, which has the sign of the number
 /// divided and is below the divisor and below that number, where the divisor
 /// is not zero.
-fn remainders(left: Int, right: Int) -> (i128, i128) {
-    let most = divisors(right)
-        .flat_map(|(low, high)| [low.abs(), high.abs()])
-        .max()
-        .unwrap_or(1);
+fn remainders(left: Int, right: Int) -> (Edge, Edge) {
+    let sizes = |(low, high): (Edge, Edge)| [low.size, high.size];
+    let most = divisors(right).flat_map(sizes).max().unwrap_or(1);
     let least = divisors(right)
-        .map(|(low, high)| low.abs().min(high.abs()))
+        .map(|d| sizes(d).into_iter().min().unwrap_or(1))
         .min()
         .unwrap_or(1);
-    if left.min() >= 0 && least > left.max() {
+    let (bottom, top) = (left.bottom(), left.top());
+    if !bottom.negative && least > top.size {
         // Every divisor is above every number divided, which is left whole.
-        return (left.min(), left.max());
+        return (bottom, top);
     }
-    if left.max() <= 0 && least > -left.min() {
-        return (left.min(), left.max());
+    if (top.size == 0 || top.negative) && bottom.size < least {
+        return (bottom, top);
     }
-    let below = (most - 1).max(0);
-    let up = if left.max() > 0 {
-        left.max().min(below)
+    let below = most.saturating_sub(1);
+    let up = if !top.negative && top.size > 0 {
+        Edge {
+            negative: false,
+            size: top.size.min(below),
+        }
     } else {
-        0
+        Edge::of(0)
     };
-    let down = if left.min() < 0 {
-        -((-left.min()).min(below))
+    let down = if bottom.negative {
+        Edge {
+            negative: bottom.size.min(below) > 0,
+            size: bottom.size.min(below),
+        }
     } else {
-        0
+        Edge::of(0)
     };
     (down, up)
 }
@@ -1092,7 +1102,7 @@ impl<'a> Checker<'a> {
             },
             Ty::Int(own),
         ) = (literal, other)
-            && *magnitude <= i64::MAX as u128
+            && (*magnitude <= i64::MAX as u128 || own.wide() && *magnitude <= i128::MAX as u128)
         {
             let value = if *negative {
                 -(*magnitude as i128)
@@ -1105,7 +1115,9 @@ impl<'a> Checker<'a> {
                 } else {
                     exact(op, alone, *own)
                 };
-                if fits.is_some_and(|e| !e.wide()) {
+                if fits.is_some_and(|e| {
+                    !e.wide() || own.wide() && matches!(op, ArithOp::Div | ArithOp::Rem)
+                }) {
                     return Want::Ty(Ty::Int(alone));
                 }
             }

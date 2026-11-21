@@ -32,12 +32,26 @@ pub const ONCE: &[Test] = &[
         "a_program_with_no_wide_range_has_no_instruction_for_one",
         a_program_with_no_wide_range_has_no_instruction_for_one,
     ),
+    (
+        "a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly",
+        a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly,
+    ),
+    (
+        "a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division",
+        a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division,
+    ),
 ];
 
-pub const MACHINE: &[Test] = &[(
-    "every_executable_gives_what_the_evaluator_gives_for_wide_numbers",
-    every_executable_gives_what_the_evaluator_gives_for_wide_numbers,
-)];
+pub const MACHINE: &[Test] = &[
+    (
+        "every_executable_gives_what_the_evaluator_gives_for_wide_numbers",
+        every_executable_gives_what_the_evaluator_gives_for_wide_numbers,
+    ),
+    (
+        "every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder",
+        every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder,
+    ),
+];
 
 /// A whole number as a sign and a magnitude of 128 bits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -262,6 +276,109 @@ fn every_executable_gives_what_the_evaluator_gives_for_wide_numbers() {
         };
         for target in targets::runnable() {
             targets::runs_as(source.as_bytes(), target, &said);
+        }
+    });
+}
+
+/// A product of two numbers of 64 bits or fewer, a divisor written as a number,
+/// and what `/` and `%` give, as the sign and the magnitude each has: a quotient
+/// rounds toward zero, and what is left over has the sign of the number divided.
+#[derive(Clone, Copy, Debug)]
+struct Division {
+    product: Sum,
+    divisor: Sm,
+}
+
+impl Division {
+    fn expected(self) -> String {
+        let p = self.product.result();
+        let q = p.magnitude / self.divisor.magnitude;
+        let r = p.magnitude % self.divisor.magnitude;
+        let quotient = Sm {
+            negative: q != 0 && p.negative != self.divisor.negative,
+            magnitude: q,
+        };
+        let rest = Sm {
+            negative: r != 0 && p.negative,
+            magnitude: r,
+        };
+        format!("{} {}\n", quotient.written(), rest.written())
+    }
+
+    fn source(self) -> String {
+        with_header(format!(
+            "fn main() ! console, alloc {{\n{}  print(\"{{p / {d}}} {{p % {d}}}\")\n}}\n",
+            self.product.source("p"),
+            d = self.divisor.written()
+        ))
+    }
+}
+
+fn division(g: &mut Gen) -> Division {
+    // The range of the product is wide, as the types hold more than 64 bits
+    // between them, so no divisor is a number that does not fit it.
+    let wide: Vec<(Int, Int)> = INTS
+        .iter()
+        .flat_map(|a| INTS.iter().map(move |b| (*a, *b)))
+        .filter(|(a, b)| a.bits + b.bits > 64)
+        .collect();
+    let (a, b) = *g.pick(&wide);
+    let product = Sum {
+        types: (a, b),
+        op: '*',
+        values: (value(g, a), value(g, b)),
+    };
+    let magnitude = match g.below(5) {
+        0 => 1u128 << (1 + g.below(100)),
+        1 => (1u128 << (1 + g.below(100))) + 1,
+        2 => 3 + g.below(8) as u128,
+        3 => u128::from(u64::MAX) - g.below(3) as u128,
+        _ => (1u128 << 63) + g.below(3) as u128,
+    };
+    // A divisor below 0 is taken only where both numbers can be, so that the
+    // range of the product has no side that cannot be divided by it.
+    let negative = a.signed && b.signed && g.below(2) == 1;
+    Division {
+        product,
+        divisor: Sm { negative, magnitude },
+    }
+}
+
+/// `p / d` and `p % d` of a product of two numbers of 64 bits or fewer, by a
+/// number that is a power of two or not, below 2 to the 64 or above it, and
+/// below 0 or above, are the exact quotient and what is left over, whether the
+/// range of either is wide or not.
+fn a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactly() {
+    generate::check(4304, 80, division, |d| {
+        let source = d.source();
+        assert_eq!(stdout(&source), d.expected(), "for\n{source}");
+    });
+}
+
+/// The halves of a product are what `/` and `%` by 2 to the 64 give, and a
+/// program that takes them holds no function of the runtime that divides.
+fn a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division() {
+    let source = with_header(
+        "fn times(a: Nat, b: Nat) -> (Nat, Nat) {\n  p = a * b\n  (p / 18446744073709551616, p % 18446744073709551616)\n}\n\nfn main() ! console, alloc {\n  (high, low) = times(18446744073709551615, 2)\n  print(\"{high} {low}\")\n}\n".to_string(),
+    );
+    assert_eq!(stdout(&source), "1 18446744073709551614\n", "for\n{source}");
+    let program = lowered(&source);
+    assert!(
+        program.functions.iter().all(|f| !f.name.contains("divide")),
+        "a division was called for\n{source}"
+    );
+}
+
+/// Every executable that this machine runs gives what the evaluator gives for
+/// a quotient and a remainder of a wide number.
+fn every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder() {
+    generate::check(4305, 8, division, |d| {
+        let said = Outcome {
+            status: 0,
+            stdout: d.expected().into_bytes(),
+        };
+        for target in targets::runnable() {
+            targets::runs_as(d.source().as_bytes(), target, &said);
         }
     });
 }

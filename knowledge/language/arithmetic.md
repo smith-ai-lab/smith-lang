@@ -11,7 +11,8 @@ built:
   - "a value that enters a narrower range, at a binding, a `var`, an argument, and a result, which compiles when a condition or a `requires` shows that it fits, and an error that says what could not be proven"
   - "a unary `-`, which gives the negated range and groups tighter than `*`"
   - "not `saturating_` of `div` and `rem`"
-  - "not `/` and `%` of a number of more than 64 bits, `narrow(x)` and `clamp(x)` of a number of more than 64 bits, `wrapping_`, `saturating_`, and `checked_` of one, or `narrow` and `clamp` of a float"
+  - "`/` and `%` of a number of 65 to 128 bits, which give the exact range of the quotient and of what is left over, as a number of 64 bits does, by 2 to some power as the halves of the number moved or kept, and by any other number through one function of the runtime that divides two numbers of 128 bits, which is slow beside every other operator, so `times` below gives a `Nat` and a `Nat` from a product with no division"
+  - "not `narrow(x)` and `clamp(x)` of a number of more than 64 bits, `wrapping_`, `saturating_`, and `checked_` of one, or `narrow` and `clamp` of a float"
 ---
 
 # Integer arithmetic
