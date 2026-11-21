@@ -36,6 +36,14 @@ pub const ONCE: &[Test] = &[
         an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing,
     ),
     (
+        "an_array_written_with_no_type_is_as_long_as_written_and_is_taken_as_a_list_of_a_wider_element",
+        an_array_written_with_no_type_is_as_long_as_written_and_is_taken_as_a_list_of_a_wider_element,
+    ),
+    (
+        "an_array_written_with_no_type_whose_elements_no_one_type_holds_or_that_has_none_is_refused",
+        an_array_written_with_no_type_whose_elements_no_one_type_holds_or_that_has_none_is_refused,
+    ),
+    (
         "a_function_that_makes_reads_and_returns_arrays_has_no_alloc_and_calls_no_allocator",
         a_function_that_makes_reads_and_returns_arrays_has_no_alloc_and_calls_no_allocator,
     ),
@@ -298,4 +306,37 @@ fn an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing(
             program(1 + reads)
         );
     });
+}
+
+/// An array written in brackets where nothing says its type is as long as it is
+/// written, of the smallest range that holds its elements, and it is taken
+/// where a `List` of a wider element is needed, which has every element.
+fn an_array_written_with_no_type_is_as_long_as_written_and_is_taken_as_a_list_of_a_wider_element() {
+    generate::check(
+        4108,
+        10,
+        |g: &mut Gen| (0..1 + g.below(8)).map(|_| g.below(300) as u64).collect::<Vec<u64>>(),
+        |items| {
+            let written: Vec<String> = items.iter().map(u64::to_string).collect();
+            let source = header(format!(
+                "use std.int (wrapping_add)\n\nfn total(xs: List[Nat]) -> Nat {{\n  var sum: Nat = 0\n  loop x in xs {{ sum = wrapping_add(sum, x) }}\n  sum\n}}\n\nfn main() ! console, alloc {{\n  xs = [{}]\n  print(\"{{total(xs)}} {{xs[0]}}\")\n}}\n",
+                written.join(", ")
+            ));
+            let sum: u64 = items.iter().sum();
+            assert_eq!(stdout(&source), format!("{sum} {}\n", items[0]), "for\n{source}");
+        },
+    );
+}
+
+/// Elements that no one type holds, as `[1, "a"]`, are refused, and so is an
+/// array of nothing, whose error says `List[Nat]` in its fix.
+fn an_array_written_with_no_type_whose_elements_no_one_type_holds_or_that_has_none_is_refused() {
+    let mixed = header("fn main() ! console {\n  xs = [1, \"a\"]\n}\n".to_string());
+    assert!(!compiles(&mixed), "for\n{mixed}");
+    let empty = header("fn main() ! console {\n  xs = []\n}\n".to_string());
+    let errors = check(empty.as_bytes()).unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.fix.as_deref().is_some_and(|f| f.contains("List[Nat]"))),
+        "for\n{empty}: {errors:?}"
+    );
 }

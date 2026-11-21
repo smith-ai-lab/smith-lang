@@ -65,7 +65,13 @@ pub(super) fn is_utf8(defs: &Defs, call: &Call) -> bool {
 pub(super) fn as_list(given: &Ty, needed: &Ty) -> bool {
     match (given, needed) {
         (Ty::Text, _) => *needed == Ty::list(Ty::Int(Int::U8)),
-        (Ty::Slice(of) | Ty::Array(of, _), Ty::List(wanted)) => of == wanted,
+        (Ty::Slice(of), Ty::List(wanted)) => of == wanted,
+        // An array's elements are given to the list in the size they are wanted
+        // in, so a range is taken where a wider one is, as it is anywhere.
+        (Ty::Array(of, _), Ty::List(wanted)) => match (&of[0], &wanted[0]) {
+            (Ty::Int(given), Ty::Int(needed)) => needed.holds(*given),
+            (given, needed) => given == needed,
+        },
         _ => false,
     }
 }
@@ -76,7 +82,12 @@ pub(super) fn as_list(given: &Ty, needed: &Ty) -> bool {
 pub(super) fn as_read(given: &Ty, pattern: &Ty) -> Ty {
     match (given, pattern) {
         (Ty::Text, Ty::List(_)) => Ty::list(Ty::Int(Int::U8)),
-        (Ty::Slice(of) | Ty::Array(of, _), Ty::List(_)) => Ty::list(of[0].clone()),
+        // An array of a range is the list of a wider one that the call needs.
+        (Ty::Array(of, _), Ty::List(wanted)) => match (&of[0], &wanted[0]) {
+            (Ty::Int(given), Ty::Int(needed)) if needed.holds(*given) => pattern.clone(),
+            _ => Ty::list(of[0].clone()),
+        },
+        (Ty::Slice(of), Ty::List(_)) => Ty::list(of[0].clone()),
         _ => given.clone(),
     }
 }
@@ -370,17 +381,73 @@ impl<'a> Checker<'a> {
                 Ty::Unknown
             }
             Want::Any | Want::Unused => {
-                for item in items {
-                    self.expr(body, item, &Want::Ty(Ty::Unknown));
+                // Nothing says what it is, so it is as long as it is written, of
+                // the smallest type that holds every element.
+                let given: Vec<Ty> = items
+                    .iter()
+                    .map(|item| {
+                        let given = self.expr(body, item, &Want::Any);
+                        match item {
+                            // A whole number is the range that holds it alone.
+                            Expr::Number {
+                                magnitude,
+                                negative,
+                                ..
+                            } if matches!(given, Ty::Int(_) | Ty::Flex(_)) => {
+                                let n = *magnitude as i128;
+                                Int::between(
+                                    if *negative { -n } else { n },
+                                    if *negative { -n } else { n },
+                                )
+                                .map_or(given, Ty::Int)
+                            }
+                            _ => given,
+                        }
+                    })
+                    .collect();
+                let Some(first) = given.first() else {
+                    self.errors.push(
+                        Error::new(
+                            pos,
+                            "an array of nothing has no element to say its type, so it is written where a type is expected",
+                        )
+                        .with_fix("write its type, as in `xs: List[Nat] = []`"),
+                    );
+                    return Ty::Unknown;
+                };
+                if given.iter().any(Ty::unknown) {
+                    return Ty::Unknown;
                 }
-                self.errors.push(
-                    Error::new(
-                        pos,
-                        "a list is written where a list of a known type is needed",
-                    )
-                    .with_fix("write its type, as in `xs: List[u8] = [1, 2, 3]`"),
-                );
-                Ty::Unknown
+                let mut element = first.clone();
+                for (item, ty) in items.iter().zip(&given).skip(1) {
+                    element = match (&element, ty) {
+                        (Ty::Int(a), Ty::Int(b)) => match a.hull(*b) {
+                            Some(hull) => Ty::Int(hull),
+                            None => {
+                                self.errors.push(Error::new(
+                                    item.pos(),
+                                    "no type of 64 bits holds every element of this array",
+                                ));
+                                return Ty::Unknown;
+                            }
+                        },
+                        (a, b) if a == b => a.clone(),
+                        (a, b) => {
+                            let (a, b) = (defs.text(a, body.scope), defs.text(b, body.scope));
+                            self.errors.push(
+                                Error::new(
+                                    item.pos(),
+                                    format!(
+                                        "an array holds one type, and this holds `{a}` and `{b}`"
+                                    ),
+                                )
+                                .with_fix("write the type the array is to have where it is made"),
+                            );
+                            return Ty::Unknown;
+                        }
+                    };
+                }
+                Ty::Array(vec![element], items.len() as u64)
             }
         }
     }

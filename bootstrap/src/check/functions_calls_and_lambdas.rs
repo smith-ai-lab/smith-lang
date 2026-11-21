@@ -1095,6 +1095,21 @@ impl<'a> Checker<'a> {
         for (i, value) in calls.into_iter().chain(numbers) {
             let pattern = &signature.params[i].1;
             let wanted = match pattern.partial(&sol) {
+                // A list written out for a parameter that nothing else settles
+                // has no type to be taken as.
+                t if t.unknown() && matches!(value, Expr::List { .. }) => {
+                    if !reported {
+                        reported = true;
+                        self.errors.push(
+                            Error::new(
+                                value.pos(),
+                                "a list is written where a list of a known type is needed",
+                            )
+                            .with_fix("write its type, as in `xs: List[Nat] = [1, 2, 3]`"),
+                        );
+                    }
+                    Want::Ty(Ty::Unknown)
+                }
                 // A whole number that fits an `i64` is one when nothing
                 // decides, with no mistake to report, so it is given its type.
                 t if t.unknown() && !pattern.partial(&from_place).unknown() => {
