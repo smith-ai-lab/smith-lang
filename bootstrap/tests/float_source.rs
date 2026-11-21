@@ -45,6 +45,10 @@ pub const ONCE: &[Test] = &[
         || roots_are_what_rust_says::<f64>(5),
     ),
     (
+        "the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference",
+        the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference,
+    ),
+    (
         "the_exponential_of_an_f32_is_the_float_nearest_the_exact_one_part_1_of_3",
         || exponentials_are_what_the_reference_says::<f32>(11),
     ),
@@ -777,6 +781,28 @@ fn exponent_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
             values.push(x);
         }
     }
+    // Numbers whose exponential is as near a tie between two floats as a
+    // number can be built to be, and which no random number is. `1 + x` is
+    // exactly half way between two floats when `x` is an odd multiple of half
+    // the spacing after 1, and `exp x` is above it by about `x^2 / 2`, which is
+    // 2^-107 of the result for `f64` at the first of them and grows as the
+    // square of the multiple. Below 0 the same holds from `1 - x` at the odd
+    // multiples of a quarter of the spacing. The float before each is as near
+    // the tie from the other side. A series cut short, or a fixed point of too
+    // few bits, rounds one of these wrongly.
+    let places = if T::NAME == "f32" { 23 } else { 52 };
+    for j in [0u32, 1, 2, 3, 7, 100, 1000, 1 << 10, 1 << 16] {
+        let odd = f64::from(2 * j + 1);
+        for v in [
+            odd * 2f64.powi(-(places + 1)),
+            -odd * 2f64.powi(-(places + 2)),
+        ] {
+            if let Some(x) = parse(v) {
+                values.push(x);
+                values.push(T::from_bits(x.bits() - 1));
+            }
+        }
+    }
     for k in 0..18 {
         let unit = g.below(1 << 30) as f64 / f64::from(1u32 << 30);
         let v = match k % 6 {
@@ -826,4 +852,50 @@ fn exponentials_on_every_executable<T: Float>(seed: u64) {
     for target in runnable().into_iter().filter(|t: &Target| t.builds_floats()) {
         runs_as(source.as_bytes(), target, &outcome);
     }
+}
+
+/// The function of the runtime that sums the series of `exp`, which takes the
+/// eight words of `r / 64` as fixed point with 240 bits after the point and
+/// gives `exp(r)` in the same form, is as near the reference as its comment
+/// says, 2^-228, so that no float whose exponential is as near a tie as the
+/// worst cases that are known (about 2^-120) is rounded wrongly. The floats
+/// cannot show this: a series cut to 12 terms is wrong by about 2^-101, and
+/// there is no list of floats within 2^-100 of a tie to try it on.
+fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
+    let source = "use std.console (console, print)\nuse std.float (exp)\n\nfn main() ! console, alloc {\n  print(\"{exp(1.0)}\")\n}\n";
+    let program = lower(source.as_bytes()).expect("builds");
+    // The function of eight words that gives eight words.
+    let series = program
+        .functions
+        .iter()
+        .position(|f| f.blocks[0].params.len() == 8 && f.results.len() == 8)
+        .expect("the series is in the program");
+    let inputs: Vec<[u64; 8]> = generate::sample(99, 0, |g| {
+        (0..40)
+            .map(|k| {
+                let mut words = [0u64; 8];
+                for w in words.iter_mut().take(7) {
+                    *w = g.below(1 << 32) as u64;
+                }
+                // `r` is below `ln 2`, so `r / 64` is below 0.0109: 700 of the
+                // 65536 that the top word counts.
+                words[7] = g.below(700) as u64;
+                match k {
+                    0 => [0; 8],
+                    1 => [0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 699],
+                    _ => words,
+                }
+            })
+            .collect()
+    });
+    let mut worst = i64::MIN;
+    for words in inputs {
+        let got = scalar::call(&program, series, &words);
+        let r = exact::from_words(&words, 240).ldexp(6);
+        let want = exact::exp(&r);
+        let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
+        worst = worst.max(distance);
+        assert!(distance < -228, "r / 64 = {words:x?} is wrong by about 2^{distance}");
+    }
+    eprintln!("the series is wrong by under 2^{worst}");
 }

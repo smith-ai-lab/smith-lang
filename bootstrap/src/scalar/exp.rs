@@ -6,7 +6,7 @@
 //! point, in eight words of 32 bits that each sit in a number of 64. `x` is
 //! cut as `x = q * ln 2 + r` with `r` between 0 and `ln 2`, the series of
 //! `exp(r / 64)` is summed to 24 terms, which is past the 240 bits, and the
-//! result is squared six times. The error is under 2^-230, and a float whose
+//! result is squared six times. The error is under 2^-228, and a float whose
 //! `exp` is that near half way between two floats does not exist, as the
 //! worst cases that are known need under 2^-120. The sum and the products are
 //! of whole numbers, so every target gives the same bits.

@@ -201,7 +201,7 @@ impl Big {
     }
 
     /// The least `k` with `|self| < 2^k`, or 0 for 0.
-    fn magnitude_bits(&self) -> i64 {
+    pub fn magnitude_bits(&self) -> i64 {
         if self.is_zero() {
             0
         } else {
@@ -629,4 +629,25 @@ pub fn sin_f32(x: f32) -> u32 {
 
 pub fn cos_f32(x: f32) -> u32 {
     sin_cos(&Big::from_f64(f64::from(x))).1.to_f32_bits()
+}
+
+/// The number of words of 32 bits, the least first, each in a number of 64,
+/// that has `point` bits after the point.
+pub fn from_words(words: &[u64], point: i64) -> Big {
+    let mut sum = Big::zero();
+    for (i, word) in words.iter().enumerate() {
+        let part = Big::from_u64(*word).ldexp(32 * i as i64 - point);
+        sum = sum.add_at(&part, 600);
+    }
+    sum
+}
+
+/// The least `k` with `|a - b| < 2^k`.
+pub fn distance_bits(a: &Big, b: &Big) -> i64 {
+    let difference = a.sub_at(b, 600);
+    if difference.is_zero() {
+        i64::MIN
+    } else {
+        difference.magnitude_bits()
+    }
 }
