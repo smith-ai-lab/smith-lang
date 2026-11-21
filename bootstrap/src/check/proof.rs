@@ -1789,6 +1789,7 @@ impl<'a> Checker<'a> {
             extra: Vec::new(),
             unknown_effect: false,
             missing: Vec::new(),
+            used: Vec::new(),
             names: sig.params.clone(),
             params: sig.params.len(),
             vars: Vec::new(),

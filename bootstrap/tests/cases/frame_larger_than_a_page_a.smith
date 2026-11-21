@@ -98,7 +98,7 @@ fn h1[T](p0: T, f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str ! console {
   ""
 }
 
-fn h2(p0: Cat, f0: fn(str, Cat, ()) -> Pet, f1: fn(Pet, (str, Cat)) -> (str, Cat)) -> str ! console {
+fn h2(p0: Cat, f0: fn(str, Cat, ()) -> Pet, f1: fn(Pet, (str, Cat)) -> (str, Cat)) -> str {
   v13 = f0("", Cat(name: p0.name), ())
   v14 = f1(f0(p0.name, Cat(name: p0.name), ()), f1(Pet.none, (p0.name, Cat(name: p0.name))))
   p0.name

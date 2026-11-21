@@ -2478,6 +2478,7 @@ fn check_file(
         walking: Vec::new(),
         walked_calls: Vec::new(),
         kernel_calls: Vec::new(),
+        unused_effects: Vec::new(),
         circles: Vec::new(),
     };
     checker.main(main);
@@ -2514,6 +2515,13 @@ fn check_file(
         }
     }
     if whole {
+        // What a function of the library lists and does not need is as much a
+        // mistake there as in a program, and is read as one.
+        let as_value: Set<Pos> = (checker.fn_values.values())
+            .map(|&i| file.functions[i].pos)
+            .collect();
+        let unused = unused_effect_warnings(&checker.unused_effects, &as_value, of_std);
+        checker.errors.extend(unused);
         return Err(checker.errors);
     }
     if !checker.errors.is_empty() {
@@ -2529,6 +2537,10 @@ fn check_file(
         args: Vec::new(),
     };
     let kernel_calls = std::mem::take(&mut checker.kernel_calls);
+    let unused_effects = std::mem::take(&mut checker.unused_effects);
+    let as_value: Set<Pos> = (checker.fn_values.values())
+        .map(|&i| file.functions[i].pos)
+        .collect();
     let typed = Typed {
         defs: &defs,
         types: checker.types,
@@ -2583,10 +2595,36 @@ fn check_file(
                 .filter(|item| !matches!(item, Item::Impl(i) if unbuilt.contains(i)))
                 .collect();
             let mut all = warnings(&file, &built);
+            all.extend(unused_effect_warnings(&unused_effects, &as_value, |at| {
+                !of_std(at)
+            }));
             all.extend(import_warnings);
             all
         },
     })
+}
+
+/// The warnings for the effects functions list and nothing in them needs, at
+/// the places `wanted` says, leaving out the functions used as values, which
+/// may list an effect for the type they are given.
+fn unused_effect_warnings(
+    unused: &[(Pos, String, String, Pos, String)],
+    as_value: &Set<Pos>,
+    wanted: impl Fn(Pos) -> bool,
+) -> Vec<Error> {
+    (unused.iter())
+        .filter(|(pos, _, _, at, _)| wanted(*at) && !of_prelude(*at) && !as_value.contains(pos))
+        .map(|(_, name, effect, at, fix)| {
+            Error::new(
+                *at,
+                format!(
+                    "`{name}` lists the `{}` effect, and nothing in it needs it",
+                    written_name(effect)
+                ),
+            )
+            .with_fix(format!("write `{fix}`"))
+        })
+        .collect()
 }
 
 /// Where reaching starts: at the function the program starts at, and, in a
@@ -6353,6 +6391,10 @@ struct Checker<'a> {
     /// The calls whose `requires` the kernel works out when the program is
     /// checked whole.
     kernel_calls: Vec<proof::KernelCall>,
+    /// The effects a function lists that nothing in its body needs: the place
+    /// of the function, its name, the effect, where it is listed, and the
+    /// signature without the effects nothing in it needs.
+    unused_effects: Vec<(Pos, String, String, Pos, String)>,
 }
 
 /// What is expected of an expression's value.
@@ -6596,6 +6638,8 @@ struct Body<'a> {
     unknown_effect: bool,
     /// The effects already reported missing, each reported once.
     missing: Vec<String>,
+    /// The listed effects something in the body needed.
+    used: Vec<String>,
     /// The names defined so far, and what each gives.
     names: Vec<(String, Ty)>,
     /// How many of the names are parameters, which come first.
@@ -7114,6 +7158,7 @@ impl<'a> Checker<'a> {
         let defs = self.defs;
         let view = defs.view(template);
         let f = view.f;
+        let errors_before = self.errors.len();
         let mut listed = Vec::new();
         let mut unknown_effect = false;
         for (effect, _) in view.effects {
@@ -7134,6 +7179,7 @@ impl<'a> Checker<'a> {
             extra: Vec::new(),
             unknown_effect,
             missing: Vec::new(),
+            used: Vec::new(),
             names: view.params.clone(),
             params: view.params.len(),
             vars: Vec::new(),
@@ -7203,6 +7249,35 @@ impl<'a> Checker<'a> {
                 ),
             )),
             _ => {}
+        }
+        if !view.effects.is_empty()
+            && matches!(template, Template::Free(_))
+            && !body.unknown_effect
+            && self.errors.len() == errors_before
+        {
+            let is_used = |e: &str| body.used.iter().any(|u| written_name(u) == written_name(e));
+            let unused: Vec<&(String, Pos)> =
+                view.effects.iter().filter(|(e, _)| !is_used(e)).collect();
+            if !unused.is_empty() {
+                let kept: Vec<&str> = (view.effects.iter())
+                    .filter(|(e, _)| is_used(e))
+                    .map(|(e, _)| written_name(e))
+                    .collect();
+                let fix = written(f, &kept);
+                for (effect, at) in unused {
+                    let known =
+                        (self.unused_effects.iter()).any(|(_, _, e, p, _)| e == effect && p == at);
+                    if !known {
+                        self.unused_effects.push((
+                            f.pos,
+                            f.name.clone(),
+                            effect.clone(),
+                            *at,
+                            fix.clone(),
+                        ));
+                    }
+                }
+            }
         }
         match body.numbers {
             Numbers::Finding(places) => places,

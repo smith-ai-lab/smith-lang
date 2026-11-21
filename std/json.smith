@@ -340,7 +340,7 @@ struct Check {
   clash: Option[Clash]
 }
 
-fn note_clash(to: take Check, of: str, case: str, member: str) -> Check ! alloc {
+fn note_clash(to: take Check, of: str, case: str, member: str) -> Check {
   var w = to
   match w.clash {
     .none { w.clash = Option.some(Clash(of: of, case: case, member: member)) }
@@ -350,7 +350,7 @@ fn note_clash(to: take Check, of: str, case: str, member: str) -> Check ! alloc 
 }
 
 // A value that is not a struct, held by a case, is written under `value`.
-fn begin(to: take Check) -> Check ! alloc {
+fn begin(to: take Check) -> Check {
   var w = to
   if w.held {
     w.held = false
@@ -363,13 +363,13 @@ fn begin(to: take Check) -> Check ! alloc {
   w
 }
 
-fn deeper(to: take Check) -> Check ! alloc {
+fn deeper(to: take Check) -> Check {
   var w = begin(to)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
-fn shallower(to: take Check) -> Check ! alloc {
+fn shallower(to: take Check) -> Check {
   var w = to
   w.depth = saturating_sub(w.depth, 1)
   w
