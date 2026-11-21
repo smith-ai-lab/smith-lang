@@ -412,10 +412,20 @@ impl<'a> Lowering<'a> {
                 unreachable!("checked")
             };
             let double = float_bits(size) == form::FloatBits::F64;
+            let at = match self.exp_table {
+                Some(at) => at,
+                None => {
+                    self.data.push(form::exp_table());
+                    let at = self.data.len() - 1;
+                    self.exp_table = Some(at);
+                    at
+                }
+            };
+            let table = out.constant(form::Constant::Data(at), form::Type::Address);
             let values = self.call_runtime(
                 out,
                 Runtime::Exp { double },
-                vec![args[0]],
+                vec![args[0], table],
                 vec![form::Type::Float(float_bits(size))],
             );
             return (ty, values);

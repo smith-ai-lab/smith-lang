@@ -62,6 +62,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         copies: Map::default(),
         runtimes: Vec::new(),
         float_tables: None,
+        exp_table: None,
         data: Vec::new(),
         files: Map::default(),
         unders: Map::default(),
@@ -140,6 +141,8 @@ struct Lowering<'a> {
     /// Where the two tables of the text of a float are in the data, once a
     /// program asks for one.
     float_tables: Option<(usize, usize)>,
+    /// The place among the data of the table that `exp` reads, once it is made.
+    exp_table: Option<usize>,
     /// The number of the name of the file of each module, once it is asked for.
     files: Map<usize, u32>,
 }
