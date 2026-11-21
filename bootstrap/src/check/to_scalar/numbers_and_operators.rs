@@ -67,10 +67,14 @@ impl<'a> Lowering<'a> {
         }
         let (taken, a) = self.expr(out, left, env);
         let b = self.expr(out, right, env).1;
-        if let Ty::Int(t) = &ty
-            && t.wide()
-        {
-            return self.wide_operation(out, (op, expr.pos()), (ty.clone(), taken, a, b));
+        // The numbers are two words when the result is, and when a quotient or
+        // a remainder is taken of numbers that are, whose result is smaller.
+        if matches!(&ty, Ty::Int(t) if t.wide()) || matches!(&taken, Ty::Int(t) if t.wide()) {
+            let not_negative = matches!(
+                typed.type_of(left, env),
+                Ty::Int(t) if t.min() >= 0
+            );
+            return self.wide_operation(out, (op, right, not_negative), (ty.clone(), taken, a, b));
         }
         let b = b[0];
         let word = match op {
@@ -1136,8 +1140,8 @@ impl<'a> Lowering<'a> {
     fn wide_operation(
         &mut self,
         out: &mut Out<'a>,
-        (op, pos): (ArithOp, Pos),
-        (ty, _taken, a, b): (Ty, Ty, Vec<form::Value>, Vec<form::Value>),
+        (op, right, not_negative): (ArithOp, &'a Expr, bool),
+        (ty, taken, a, b): (Ty, Ty, Vec<form::Value>, Vec<form::Value>),
     ) -> (Ty, Vec<form::Value>) {
         let values = match op {
             ArithOp::Add => {
@@ -1168,14 +1172,146 @@ impl<'a> Lowering<'a> {
                 vec![low, out.binary(form::Binary::Add, sum, second)]
             }
             ArithOp::Div | ArithOp::Rem => {
-                self.errors.push(Error::unsupported(
-                    pos,
-                    "`/` and `%` of a range of more than 64 bits",
-                ));
-                vec![a[0], a[1]]
+                let Ty::Int(at) = &taken else {
+                    unreachable!("checked")
+                };
+                let power = match right {
+                    Expr::Number {
+                        magnitude,
+                        negative: false,
+                        ..
+                    } if magnitude.is_power_of_two() && *magnitude > 1 => Some(*magnitude),
+                    _ => None,
+                };
+                let both = match power {
+                    Some(power) if not_negative || !at.signed() => {
+                        self.wide_by_power(out, op, power.trailing_zeros(), (a[0], a[1]))
+                    }
+                    _ => self.wide_division(out, (op, at.signed()), (a[0], a[1]), (b[0], b[1])),
+                };
+                // The result is kept at the size of its own range, which holds
+                // it: the low word is the number where it is smaller.
+                match &ty {
+                    Ty::Int(result) if !result.wide() => {
+                        vec![out.resize(result.signed(), both[0], bits_of(*result))]
+                    }
+                    _ => both,
+                }
             }
         };
         (ty, values)
+    }
+
+    /// The two words of `a / 2^k` or `a % 2^k` of a number that is not negative,
+    /// for `k` from 1 to 127: the halves of the number moved or kept, and no
+    /// instruction more than that.
+    fn wide_by_power(
+        &mut self,
+        out: &mut Out<'a>,
+        op: ArithOp,
+        k: u32,
+        (low, high): (form::Value, form::Value),
+    ) -> Vec<form::Value> {
+        let word = |out: &mut Out<'a>, n: u128| out.int(form::Bits::B64, n as i128);
+        let zero = word(out, 0);
+        match (op, k) {
+            (ArithOp::Div, 64) => vec![high, zero],
+            (ArithOp::Div, k) if k > 64 => {
+                let by = word(out, u128::from(k - 64));
+                vec![out.binary(form::Binary::ShiftRightU, high, by), zero]
+            }
+            (ArithOp::Div, k) => {
+                let by = word(out, u128::from(k));
+                let back = word(out, u128::from(64 - k));
+                let down = out.binary(form::Binary::ShiftRightU, low, by);
+                let across = out.binary(form::Binary::ShiftLeft, high, back);
+                vec![
+                    out.binary(form::Binary::Or, down, across),
+                    out.binary(form::Binary::ShiftRightU, high, by),
+                ]
+            }
+            (_, 64) => vec![low, zero],
+            (_, k) if k > 64 => {
+                let mask = word(out, (1u128 << (k - 64)) - 1);
+                vec![low, out.binary(form::Binary::And, high, mask)]
+            }
+            (_, k) => {
+                let mask = word(out, (1u128 << k) - 1);
+                vec![out.binary(form::Binary::And, low, mask), zero]
+            }
+        }
+    }
+
+    /// The two words of `a` taken from 0, the number negated.
+    fn wide_negated(
+        &mut self,
+        out: &mut Out<'a>,
+        (low, high): (form::Value, form::Value),
+    ) -> (form::Value, form::Value) {
+        let zero = out.int(form::Bits::B64, 0);
+        let off = out.binary(form::Binary::Sub, zero, low);
+        let borrowed = out.compare(form::Compare::LessU, zero, low);
+        let borrow = out.resize(false, borrowed, form::Bits::B64);
+        let off_high = out.binary(form::Binary::Sub, zero, high);
+        (off, out.binary(form::Binary::Sub, off_high, borrow))
+    }
+
+    /// The two words of `a` negated where `on`, a byte, is not 0.
+    fn wide_negated_if(
+        &mut self,
+        out: &mut Out<'a>,
+        on: form::Value,
+        a: (form::Value, form::Value),
+    ) -> (form::Value, form::Value) {
+        let (low, high) = self.wide_negated(out, a);
+        (out.choose(on, low, a.0), out.choose(on, high, a.1))
+    }
+
+    /// The two words of `a / b` or `a % b` of numbers that are two words each and
+    /// whose divisor is not 0, by the function of the runtime that divides
+    /// numbers that are not negative: a signed quotient is that of the sizes,
+    /// negative when the signs differ, and what is left over has the sign of the
+    /// number divided.
+    fn wide_division(
+        &mut self,
+        out: &mut Out<'a>,
+        (op, signed): (ArithOp, bool),
+        a: (form::Value, form::Value),
+        b: (form::Value, form::Value),
+    ) -> Vec<form::Value> {
+        let (a_size, b_size, a_negative, b_negative) = if signed {
+            let zero = out.int(form::Bits::B64, 0);
+            let a_negative = out.compare(form::Compare::LessS, a.1, zero);
+            let b_negative = out.compare(form::Compare::LessS, b.1, zero);
+            (
+                self.wide_negated_if(out, a_negative, a),
+                self.wide_negated_if(out, b_negative, b),
+                a_negative,
+                b_negative,
+            )
+        } else {
+            let no = out.int(form::Bits::B8, 0);
+            (a, b, no, no)
+        };
+        let words = self.call_runtime(
+            out,
+            Runtime::DivideWide,
+            vec![a_size.0, a_size.1, b_size.0, b_size.1],
+            vec![form::Type::Int(form::Bits::B64); 4],
+        );
+        let (value, negative) = match op {
+            ArithOp::Div => {
+                let differ = out.binary(form::Binary::Xor, a_negative, b_negative);
+                ((words[0], words[1]), differ)
+            }
+            _ => ((words[2], words[3]), a_negative),
+        };
+        let (low, high) = if signed {
+            self.wide_negated_if(out, negative, value)
+        } else {
+            value
+        };
+        vec![low, high]
     }
 
     /// Whether `a` is below `b`, both two words, for numbers that are signed or

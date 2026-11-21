@@ -375,8 +375,10 @@ impl Builder<'_, '_> {
     fn lin(&mut self, e: &Expr) -> Option<Lin> {
         // A range whose greatest number is above `i128::MAX` has no fact, as no
         // bound of it is a number the proof holds, so nothing is proven of a
-        // value of one.
-        if matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none())
+        // value of one. A number written is its own value, whatever range it is
+        // taken at.
+        if !matches!(e, Expr::Number { .. })
+            && matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none())
             || matches!(e, Expr::Name { name, .. } if matches!(
                 self.body.names.iter().rev().find(|(n, _)| n == name),
                 Some((_, Ty::Int(t))) if t.ends().is_none()))
