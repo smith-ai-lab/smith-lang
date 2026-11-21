@@ -1,6 +1,6 @@
 {
   # Installs the newest Smith compiler into ~/.local/bin on macOS or Linux.
-  #   curl -fsSL https://raw.githubusercontent.com/smith-ai-lab/smith/main/install.sh | sh
+  #   curl -fsSL https://raw.githubusercontent.com/smith-ai-lab/smith-lang/main/install.sh | sh
   # Downloads the file for this machine from the newest release, checks it against
   # the release's SHA256SUMS, and only then puts it in place.
   # SMITH_RELEASE_URL names the folder the release's files are in, so that a test
@@ -10,7 +10,7 @@
   # gives a non-zero status. Nothing outside the group may be added.
   set -eu
 
-  base=${SMITH_RELEASE_URL:-https://github.com/smith-ai-lab/smith/releases/latest/download}
+  base=${SMITH_RELEASE_URL:-https://github.com/smith-ai-lab/smith-lang/releases/latest/download}
 
   system=$(uname -s)
   chip=$(uname -m)

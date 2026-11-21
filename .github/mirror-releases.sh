@@ -9,7 +9,7 @@
 # Usage: mirror-releases.sh
 set -eu
 
-api=${GITLAB_API:-https://gitlab.com/api/v4/projects/smith-ai-lab%2Fsmith}
+api=${GITLAB_API:-https://gitlab.com/api/v4/projects/smith-ai-lab%2Fsmith-lang}
 size=${PAGE_SIZE:-100}
 work=$(mktemp -d)
 mkdir -p "$work/files"

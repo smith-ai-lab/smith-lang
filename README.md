@@ -13,10 +13,10 @@ The compiler builds a small part of the language so far, and [knowledge/compiler
 On macOS or Linux, one line installs the newest release as `~/.local/bin/smith`:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/smith-ai-lab/smith/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/smith-ai-lab/smith-lang/main/install.sh | sh
 ```
 
-The compiler is one file with no dependencies. Every [release](https://github.com/smith-ai-lab/smith/releases) holds it for six kinds of machine.
+The compiler is one file with no dependencies. Every [release](https://github.com/smith-ai-lab/smith-lang/releases) holds it for six kinds of machine.
 
 | Machine | File |
 | --- | --- |
@@ -30,7 +30,7 @@ The compiler is one file with no dependencies. Every [release](https://github.co
 On Windows, in PowerShell:
 
 ```
-curl.exe -L -o smith.exe https://github.com/smith-ai-lab/smith/releases/latest/download/smith-windows_x64.exe
+curl.exe -L -o smith.exe https://github.com/smith-ai-lab/smith-lang/releases/latest/download/smith-windows_x64.exe
 .\smith.exe --version
 ```
 
