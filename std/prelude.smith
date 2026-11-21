@@ -154,6 +154,7 @@ trait Checked[T] {
 
 trait Float[T] {
   fn sqrt(a: T) -> T
+  fn exp(a: T) -> T
 }
 
 trait Bits[T] {
@@ -688,8 +689,10 @@ impl Repr[f64] {
 
 impl Float[f32] {
   fn sqrt(a: f32) -> f32 { __sqrt(a) }
+  fn exp(a: f32) -> f32 { __exp(a) }
 }
 
 impl Float[f64] {
   fn sqrt(a: f64) -> f64 { __sqrt(a) }
+  fn exp(a: f64) -> f64 { __exp(a) }
 }

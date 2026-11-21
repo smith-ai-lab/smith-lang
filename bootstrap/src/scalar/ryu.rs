@@ -159,31 +159,31 @@ impl Big {
 
 // What a function of Ryu is made of.
 
-fn c(f: &mut Builder, n: u64) -> Value {
+pub(super) fn c(f: &mut Builder, n: u64) -> Value {
     int(f, n)
 }
 
-fn add(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn add(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::Add, a, b)
 }
 
-fn sub(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn sub(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::Sub, a, b)
 }
 
-fn mul(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn mul(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::Mul, a, b)
 }
 
-fn and(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn and(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::And, a, b)
 }
 
-fn or(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn or(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::Or, a, b)
 }
 
-fn xor(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn xor(f: &mut Builder, a: Value, b: Value) -> Value {
     f.binary(Binary::Xor, a, b)
 }
 
@@ -197,26 +197,26 @@ fn shr(f: &mut Builder, a: Value, n: u64) -> Value {
     f.binary(Binary::ShiftRightU, a, n)
 }
 
-fn eq(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn eq(f: &mut Builder, a: Value, b: Value) -> Value {
     f.compare(Compare::Equal, a, b)
 }
 
-fn below(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn below(f: &mut Builder, a: Value, b: Value) -> Value {
     f.compare(Compare::LessU, a, b)
 }
 
-fn below_s(f: &mut Builder, a: Value, b: Value) -> Value {
+pub(super) fn below_s(f: &mut Builder, a: Value, b: Value) -> Value {
     f.compare(Compare::LessS, a, b)
 }
 
 /// Whether `a` is not 1, for a flag.
-fn not(f: &mut Builder, flag: Value) -> Value {
+pub(super) fn not(f: &mut Builder, flag: Value) -> Value {
     let one = byte(f, 1);
     xor(f, flag, one)
 }
 
 /// A flag as a number of 64 bits, 0 or 1.
-fn number(f: &mut Builder, flag: Value) -> Value {
+pub(super) fn number(f: &mut Builder, flag: Value) -> Value {
     f.widen(false, flag, Bits::B64)
 }
 
@@ -225,14 +225,14 @@ fn div10(f: &mut Builder, a: Value) -> Value {
     f.binary(Binary::DivU, a, ten)
 }
 
-fn rem(f: &mut Builder, a: Value, by: u64) -> Value {
+pub(super) fn rem(f: &mut Builder, a: Value, by: u64) -> Value {
     let by = c(f, by);
     f.binary(Binary::RemU, a, by)
 }
 
 /// A loop that runs `body` on the values it carries while `cond` holds of
 /// them, and gives the values after the last round.
-fn looping(
+pub(super) fn looping(
     f: &mut Builder,
     start: Vec<Value>,
     cond: impl FnOnce(&mut Builder, &[Value]) -> Value,
