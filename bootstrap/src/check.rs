@@ -417,6 +417,9 @@ enum Ty {
     /// A `Slice`, a run of elements that cannot change, which holds its one
     /// element type.
     Slice(Vec<Ty>),
+    /// An array of a size written as a number, which holds its one element
+    /// type and its size, and is held in place.
+    Array(Vec<Ty>, u64),
     /// A function: the types of its parameters, followed by the type it
     /// gives.
     Fn(Vec<Ty>),
@@ -1153,6 +1156,19 @@ impl<'a> Defs<'a> {
                 }
             };
         }
+        if let Some(length) = t.length {
+            return match self.resolve(&t.args[0], scope, errors) {
+                Ty::Unknown => Ty::Unknown,
+                Ty::Fn(_) | Ty::Nothing => {
+                    errors.push(Error::unsupported(
+                        t.pos,
+                        "an array of functions or of `()`",
+                    ));
+                    Ty::Unknown
+                }
+                element => Ty::Array(vec![element], length),
+            };
+        }
         if name.is_empty() {
             let items: Vec<Ty> = (t.args.iter())
                 .map(|a| self.resolve(a, scope, errors))
@@ -1498,6 +1514,7 @@ impl<'a> Defs<'a> {
             }
             Ty::List(items) => format!("List[{}]", self.text(&items[0], scope)),
             Ty::Slice(items) => format!("Slice[{}]", self.text(&items[0], scope)),
+            Ty::Array(items, n) => format!("[{n}]{}", self.text(&items[0], scope)),
             Ty::Fn(items) => {
                 let items: Vec<String> = items.iter().map(|t| self.text(t, scope)).collect();
                 function_text(&items)

@@ -313,6 +313,22 @@ impl<'a> Checker<'a> {
                 }
                 Ty::List(of.clone())
             }
+            Want::Ty(Ty::Array(of, n)) => {
+                for item in items {
+                    let given = self.expr(body, item, &Want::Ty(of[0].clone()));
+                    self.expect(body, item, &given, &of[0]);
+                }
+                if items.len() as u64 != *n {
+                    self.errors.push(Error::new(
+                        pos,
+                        format!(
+                            "this array is written with {} elements, and its type has {n}",
+                            items.len()
+                        ),
+                    ));
+                }
+                Ty::Array(of.clone(), *n)
+            }
             Want::Ty(slice @ Ty::Slice(of)) => {
                 if !matches!(of[0], Ty::Int(_)) {
                     for item in items {
@@ -409,11 +425,15 @@ impl<'a> Checker<'a> {
         }
         match list {
             Ty::List(element) | Ty::Slice(element) => {
-                self.in_range(body, of, index, pos);
+                self.in_range(body, of, None, index, pos);
+                element[0].clone()
+            }
+            Ty::Array(element, n) => {
+                self.in_range(body, of, Some(n), index, pos);
                 element[0].clone()
             }
             Ty::Text => {
-                self.in_range(body, of, index, pos);
+                self.in_range(body, of, None, index, pos);
                 Ty::Int(Int::U8)
             }
             Ty::Unknown => Ty::Unknown,

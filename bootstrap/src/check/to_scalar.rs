@@ -805,6 +805,11 @@ impl<'a> Lowering<'a> {
                     self.scalars_into(t, put);
                 }
             }
+            Ty::Array(items, n) => {
+                for _ in 0..*n {
+                    self.scalars_into(&items[0], put);
+                }
+            }
             Ty::Enum(e, args) => {
                 put(form::Type::Int(form::Bits::B8));
                 for place in self.layout(*e, args).places {

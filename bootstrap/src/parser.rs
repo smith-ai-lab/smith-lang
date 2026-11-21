@@ -274,6 +274,9 @@ pub struct Type {
     /// The statement a proof's type is, written as a boolean expression, whose
     /// name is `STATEMENT`.
     pub statement: Option<Box<Expr>>,
+    /// The number of elements of an array type, written `[3]f32`, whose name is
+    /// `ARRAY` and whose one `args` is the type of its elements.
+    pub length: Option<u64>,
 }
 
 /// A bound of a range type: a whole number written out, the name of a
@@ -330,6 +333,10 @@ pub const UNBUILT: &str = "?";
 /// write, and the bounds are in the type's `range`.
 pub const RANGE: &str = "..";
 
+/// The name of an array type, written `[3]f32`. It is no name a program can
+/// write, and the number of elements is in the type's `length`.
+pub const ARRAY: &str = "[]";
+
 /// The name of a type that is a statement: a boolean expression, such as
 /// `a < 10`, that a proof is a value of.
 pub const STATEMENT: &str = "<statement>";
@@ -340,6 +347,8 @@ impl Type {
         let args: Vec<String> = self.args.iter().map(Type::written).collect();
         if let Some((first, end)) = &self.range {
             format!("{}..{}", first.written(), end.written())
+        } else if let Some(length) = self.length {
+            format!("[{length}]{}", args.join(", "))
         } else if self.function {
             let (gives, params) = args.split_last().expect("a result");
             if self
@@ -1188,6 +1197,12 @@ impl Parser<'_> {
         &self.tokens[next].tok
     }
 
+    /// The token `by` places after the current one, or the last.
+    fn peek(&self, by: usize) -> &Tok {
+        let at = (self.at + by).min(self.tokens.len() - 1);
+        &self.tokens[at].tok
+    }
+
     fn bump(&mut self) {
         if self.at + 1 < self.tokens.len() {
             self.at += 1;
@@ -1666,6 +1681,31 @@ impl Parser<'_> {
     /// in brackets and the type of its elements. The type it gives holds the
     /// names the sizes write and the type of the elements.
     fn array_type(&mut self, pos: Pos) -> Result<Type, Error> {
+        if let (Tok::Number(text), Tok::Punct("]")) = (self.peek(1), self.peek(2)) {
+            let text = text.clone();
+            let length = match text.replace('_', "").parse::<u64>() {
+                Ok(length) => length,
+                Err(_) => {
+                    return Err(Error::new(
+                        pos,
+                        "the size of an array is a whole number written in decimal digits",
+                    ));
+                }
+            };
+            self.bump();
+            self.bump();
+            self.bump();
+            let element = self.ty()?;
+            return Ok(Type {
+                name: ARRAY.to_string(),
+                pos,
+                args: vec![element],
+                function: false,
+                range: None,
+                statement: None,
+                length: Some(length),
+            });
+        }
         self.unbuilt.push(Error::unsupported(pos, "an array type"));
         self.bump();
         let mut args = Vec::new();
@@ -1682,6 +1722,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
+                    length: None,
                 }),
                 _ => {}
             }
@@ -1695,6 +1736,7 @@ impl Parser<'_> {
             function: false,
             range: None,
             statement: None,
+            length: None,
         })
     }
 
@@ -1722,6 +1764,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
+                    length: None,
                 })
             }
             Tok::Number(_) | Tok::Punct("-") => self.range_type(pos, names, None),
@@ -1737,6 +1780,7 @@ impl Parser<'_> {
                         function: false,
                         range: None,
                         statement: None,
+                        length: None,
                     };
                     self.bump();
                     let result = self.ty()?;
@@ -1760,6 +1804,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
+                    length: None,
                 })
             }
             tok => Err(self.expected("a type", tok)),
@@ -1818,6 +1863,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
+                    length: None,
                 });
             }
             _ => {}
@@ -1829,6 +1875,7 @@ impl Parser<'_> {
             function: false,
             range: Some((first, end)),
             statement: None,
+            length: None,
         })
     }
 

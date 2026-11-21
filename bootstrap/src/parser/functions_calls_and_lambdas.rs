@@ -268,6 +268,7 @@ impl Parser<'_> {
             function: false,
             range: None,
             statement: Some(Box::new(statement)),
+            length: None,
         })
     }
 
@@ -363,6 +364,7 @@ impl Parser<'_> {
                 function: false,
                 range: None,
                 statement: None,
+                length: None,
             });
         }
         let bang = self.pos();
@@ -379,6 +381,7 @@ impl Parser<'_> {
             function: true,
             range: None,
             statement: None,
+            length: None,
         };
         Ok((function, takes, effects))
     }

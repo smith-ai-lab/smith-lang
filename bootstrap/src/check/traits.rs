@@ -82,6 +82,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
             function: false,
             range: None,
             statement: None,
+            length: None,
         }),
         Expr::Index {
             of,
@@ -104,6 +105,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
                 function: false,
                 range: None,
                 statement: None,
+                length: None,
             })
         }
         Expr::Tuple { pos, items } => Some(Type {
@@ -113,6 +115,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
             function: false,
             range: None,
             statement: None,
+            length: None,
         }),
         _ => None,
     }
