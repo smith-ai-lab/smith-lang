@@ -516,7 +516,7 @@ impl<'a> Lowering<'a> {
             },
             _ => unreachable!("checked"),
         };
-        let values = self.narrowing(out, narrowing, (from, to), values[0]);
+        let values = self.narrowing(out, narrowing, (from, to), &values);
         (ty, values)
     }
 
@@ -1002,10 +1002,14 @@ impl<'a> Lowering<'a> {
         out: &mut Out<'a>,
         narrowing: Narrowing,
         (from, to): (Int, Int),
-        a: form::Value,
+        values: &[form::Value],
     ) -> Vec<form::Value> {
         use form::Compare::*;
         let defs = self.typed.defs;
+        if from.wide() {
+            return self.narrowing_wide(out, narrowing, (from, to), values);
+        }
+        let a = values[0];
         let (wide, narrow) = (bits_of(from), bits_of(to));
         let r = out.resize(from.signed(), a, narrow);
         if narrowing == Narrowing::Wrapping {
@@ -1038,6 +1042,74 @@ impl<'a> Lowering<'a> {
         let none = out.int(form::Bits::B8, none as i128);
         let zero = out.int(narrow, 0);
         vec![out.choose(wrong, none, some), out.choose(wrong, zero, r)]
+    }
+
+    /// `narrowing` of a number that is two words, to a range of 64 bits or
+    /// fewer, or to one that is two words too: the number is compared with the
+    /// least and the greatest of the range as two words, and the low word is
+    /// the number where it fits a range that is one word.
+    fn narrowing_wide(
+        &mut self,
+        out: &mut Out<'a>,
+        narrowing: Narrowing,
+        (from, to): (Int, Int),
+        a: &[form::Value],
+    ) -> Vec<form::Value> {
+        let defs = self.typed.defs;
+        let words = |out: &mut Out<'a>, n: i128| {
+            vec![
+                out.int(form::Bits::B64, n),
+                out.int(form::Bits::B64, n >> 64),
+            ]
+        };
+        let keep = |out: &mut Out<'a>, words: &[form::Value]| {
+            if to.wide() {
+                words.to_vec()
+            } else {
+                vec![out.resize(from.signed(), words[0], bits_of(to))]
+            }
+        };
+        let r = keep(out, a);
+        if narrowing == Narrowing::Wrapping {
+            return r;
+        }
+        let no = out.int(form::Bits::B8, 0);
+        let below = if from.min() < to.min() {
+            let least = words(out, to.min());
+            self.wide_less(out, (from.signed(), to.min() < 0), a, &least)
+        } else {
+            no
+        };
+        let above = if from.max() > to.max() {
+            let greatest = words(out, to.max());
+            self.wide_less(out, (to.max() < 0, from.signed()), &greatest, a)
+        } else {
+            no
+        };
+        if narrowing == Narrowing::Saturating {
+            let (least, greatest) = (words(out, to.min()), words(out, to.max()));
+            let (least, greatest) = (keep(out, &least), keep(out, &greatest));
+            return r
+                .iter()
+                .enumerate()
+                .map(|(i, word)| {
+                    let low = out.choose(below, least[i], *word);
+                    out.choose(above, greatest[i], low)
+                })
+                .collect();
+        }
+        let one = out.int(form::Bits::B8, 1);
+        let wrong = out.choose(below, one, above);
+        let some = defs.case_of(defs.option, "some").expect("a case");
+        let none = defs.case_of(defs.option, "none").expect("a case");
+        let some = out.int(form::Bits::B8, some as i128);
+        let none = out.int(form::Bits::B8, none as i128);
+        let mut values = vec![out.choose(wrong, none, some)];
+        for word in r {
+            let zero = out.constant(form::Constant::Int(0), out.types[word.0]);
+            values.push(out.choose(wrong, zero, word));
+        }
+        values
     }
 
     /// The number `value` of type `from` as a number of type `to`, which
