@@ -4,13 +4,14 @@ title: Integer arithmetic
 description: The exact range that a plain +, -, *, or / gives, the proof asked where a value enters a narrower range, narrow and clamp where nothing proves it or the value is a float, a range of up to 128 bits, and the functions that wrap.
 status: partial
 built:
-  - "a plain `+`, `-`, or `*` of two whole numbers, a literal included, which gives the exact range of the result with nothing proven where a type of 64 bits holds it, and where none does, as of two numbers of 64 bits, takes two sides of one type and compiles when `arith` proves that the result fits that type, and an error that says what could not be proven"
+  - "a plain `+`, `-`, or `*` of two whole numbers, a literal included, which gives the exact range of the result with nothing proven, in two words when it needs 65 to 128 bits, so the product of two `Nat`s is the whole product, printed and compared exactly, which is the type of its operands where `arith` shows that it fits, and which is refused where more than 128 bits are needed, until it is narrowed"
+  - "a value of a range of 65 to 128 bits that enters a range of 64 bits where a condition or a `requires` shows that it fits"
   - "`wrapping_`, `saturating_`, and `checked_` of `add`, `sub`, and `mul`, and `wrapping_div`, `wrapping_rem`, `checked_div`, and `checked_rem` of the traits `Wrapping` and `Checked`, and `checked_div`, `checked_rem`, `wrapping_div`, and `wrapping_rem` of `std.int`, the last two compiling only where `arith` proves the divisor is not zero"
   - "`/` and `%` of two whole numbers, which round toward zero, give the exact range of the quotient and of what is left over, bind as `*` does, and compile when `arith` proves that the divisor is not zero and, for a signed number, that the least number is not divided by -1 where the result would not fit"
   - "a value that enters a narrower range, at a binding, a `var`, an argument, and a result, which compiles when a condition or a `requires` shows that it fits, and an error that says what could not be proven"
   - "a unary `-`, which gives the negated range and groups tighter than `*`"
   - "not `saturating_` of `div` and `rem`"
-  - "not the exact range of a result that no type of 64 bits holds, `narrow(x)` and `clamp(x)` of every range, or of a float, or a range of 65 to 128 bits, which is refused as a wider one is"
+  - "not `/` and `%` of a number of more than 64 bits, `narrow(x)` and `clamp(x)` of a number of more than 64 bits, `wrapping_`, `saturating_`, and `checked_` of one, or `narrow` and `clamp` of a float"
 ---
 
 # Integer arithmetic
