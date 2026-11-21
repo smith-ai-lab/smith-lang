@@ -108,6 +108,29 @@ impl<'a> Checker<'a> {
             [
                 Stmt::Define {
                     name,
+                    value: Expr::Call(c),
+                    var: false,
+                    ..
+                },
+                rest @ ..,
+            ] if c.callee == "replace" && c.qualifier.is_none() => {
+                // `replace(eq, p)` is handed two proofs given before it.
+                match c.args.as_slice() {
+                    [eq, p]
+                        if [eq, p].iter().all(|a| {
+                            matches!(&a.value, Expr::Name { name, .. } if names.contains(name))
+                        }) => {}
+                    _ => self.errors.push(Error::new(
+                        c.pos,
+                        "`replace` is handed two proofs given before it, as `replace(eq, p)`",
+                    )),
+                }
+                names.push(name.clone());
+                self.proof_block(body, rest, names);
+            }
+            [
+                Stmt::Define {
+                    name,
                     value: value @ Expr::Call(c),
                     var: false,
                     ..
@@ -123,7 +146,7 @@ impl<'a> Checker<'a> {
             }
             [first, ..] => self.errors.push(Error::new(
                 stmt_pos(first),
-                "this is not a step of a proof: `same`, `arith`, a name given by `unfold`, or an `if` of steps",
+                "this is not a step of a proof: `same`, `arith`, a name given by `unfold` or `replace`, or an `if` of steps",
             )),
             [] => self.errors.push(Error::new(
                 body.f.map_or(Pos::START, |f| f.pos),

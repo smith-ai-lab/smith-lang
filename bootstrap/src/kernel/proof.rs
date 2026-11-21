@@ -60,6 +60,10 @@ impl Check<'_> {
                         callee: Callee::Function(place),
                         args,
                     } => self.called(*place, args)?,
+                    Kind::Call {
+                        callee: Callee::Step(Step::Replace),
+                        args,
+                    } => self.replace(args)?,
                     _ => self.unfold(value)?,
                 };
                 self.facts.push((name.clone(), fact));
@@ -145,6 +149,51 @@ impl Check<'_> {
         let body = substitute(&f.body, &map);
         let body = self.decide(&body)?;
         Ok(equal(call.clone(), body, step.pos))
+    }
+
+    /// `replace(eq, p)`: `eq` proves `x == y` and `p` proves a statement, and
+    /// the statement `p` proves is given with `y` put where `x` is written, in
+    /// each place. It is refused when `x` is not written in it, and when `eq`
+    /// or `p` is no proof given before.
+    fn replace(&self, handed: &[Term]) -> Result<Term, String> {
+        let fact_of = |what: &str, arg: &Term| -> Result<Term, String> {
+            let Kind::Name(n) = &arg.kind else {
+                return Err(format!(
+                    "`replace` is handed the names of proofs, and {what} is not one"
+                ));
+            };
+            self.facts
+                .iter()
+                .rev()
+                .find(|(k, _)| k == n)
+                .map(|(_, fact)| fact.clone())
+                .ok_or_else(|| format!("`{n}` is no proof here, so `replace` cannot be handed it"))
+        };
+        let eq = fact_of("the first", &handed[0])?;
+        let p = fact_of("the second", &handed[1])?;
+        let Kind::Call {
+            callee: Callee::Operator(Operator::Equal),
+            args: sides,
+        } = &eq.kind
+        else {
+            return Err(format!(
+                "`replace` is handed a proof of an equality `x == y` first, and `{}` is not one",
+                self.render(&eq)
+            ));
+        };
+        let (from, to) = (&sides[0], &sides[1]);
+        let mut found = false;
+        let out = put(&p, from, to, &mut found);
+        if !found {
+            return Err(format!(
+                "`replace` puts `{}` where `{}` is written, and `{}` is not written in `{}`",
+                self.render(to),
+                self.render(from),
+                self.render(from),
+                self.render(&p)
+            ));
+        }
+        Ok(out)
     }
 
     /// A body with each `if` whose condition the cases decide as that case.
@@ -358,6 +407,18 @@ fn equal(a: Term, b: Term, pos: crate::diag::Pos) -> Term {
         Type::Nothing,
         pos,
     )
+}
+
+/// A term with `to` put in each place `from` is written, where the first such
+/// place of a branch is the one that is taken and its parts are left.
+fn put(t: &Term, from: &Term, to: &Term, found: &mut bool) -> Term {
+    if same_shape(t, from) {
+        *found = true;
+        return to.clone();
+    }
+    let mut out = t.clone();
+    let _: Result<(), ()> = out.rebuild(&mut |part| Ok(put(part, from, to, found)));
+    out
 }
 
 /// A term with each name in `map` put as the term it stands for.

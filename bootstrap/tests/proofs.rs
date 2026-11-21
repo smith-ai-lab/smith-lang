@@ -56,6 +56,10 @@ pub const ONCE: &[Test] = &[
         a_push_has_one_more_and_a_slice_has_the_difference_of_its_ends_only_where_it_is_made,
     ),
     (
+        "replace_puts_the_right_side_of_an_equality_where_the_left_side_is_written_in_a_proof",
+        replace_puts_the_right_side_of_an_equality_where_the_left_side_is_written_in_a_proof,
+    ),
+    (
         "unfold_gives_a_name_the_body_binds_as_the_value_it_is_given",
         unfold_gives_a_name_the_body_binds_as_the_value_it_is_given,
     ),
@@ -424,4 +428,39 @@ fn unfold_gives_a_name_the_body_binds_as_the_value_it_is_given() {
         Err(errors) => errors.into_iter().map(|e| e.message).collect(),
     };
     assert!(found.iter().any(|m| m.contains("`arith` cannot get")), "{found:?}");
+}
+
+const CHAIN: &str = "fn b(n: u64) -> u64\n  requires n < 100\n{\n  n + 1\n}\n\n\
+fn a(n: u64) -> u64\n  requires n < 100\n{\n  b(n)\n}\n\n\
+fn small() -> 1 < 2 { same }\n\n\
+fn through(n: u64) -> a(n) == n + 1\n  requires n < 100\n{\n  opened_b = unfold(b(n))\n  opened_a = unfold(a(n))\n  q = replace(opened_b, opened_a)\n  arith(q)\n}\n\n";
+
+/// `replace(eq, p)` gives the statement `p` proves with the right side of `eq`
+/// put where its left side is written, so `a(n) == b(n)` with `b(n) == n + 1`
+/// is `a(n) == n + 1`, which `arith` is handed as the only proof, and what
+/// follows from a statement that was not rewritten is not what follows from it.
+fn replace_puts_the_right_side_of_an_equality_where_the_left_side_is_written_in_a_proof() {
+    let found = messages(&format!("{CHAIN}{MAIN}"));
+    assert!(found.is_empty(), "{found:?}");
+    // The statement that results is the one `arith` is handed: another number
+    // is not got from it.
+    let found = messages(&format!("{}{MAIN}", CHAIN.replace("a(n) == n + 1\n", "a(n) == n + 2\n")));
+    assert!(found.iter().any(|m| m.contains("`arith` cannot get")), "{found:?}");
+    // The other way round, `a(n)` is not written in `b(n) == (n + 1)`.
+    let found = messages(&format!("{}{MAIN}", CHAIN.replace("replace(opened_b, opened_a)", "replace(opened_a, opened_b)")));
+    assert!(
+        found.iter().any(|m| m.contains("`a(n)` is not written in `b(n) == (n + 1)`")),
+        "{found:?}"
+    );
+    // The first is a proof of an equality.
+    let found = messages(&format!("{}{MAIN}", CHAIN.replace("q = replace(opened_b, opened_a)", "s = small()\n  q = replace(s, opened_a)")));
+    assert!(found.iter().any(|m| m.contains("is not one")), "{found:?}");
+    // What is handed is two names of proofs given before.
+    for wrong in ["replace(opened_b)", "replace(opened_b, opened_a, opened_a)", "replace(opened_b, nothing_here)", "replace(opened_b, 1)"] {
+        let found = messages(&format!("{}{MAIN}", CHAIN.replace("replace(opened_b, opened_a)", wrong)));
+        assert!(found.iter().any(|m| m.contains("`replace` is handed two proofs given before it")), "{wrong}: {found:?}");
+    }
+    // A name given by `replace` is used after it and not before it.
+    let found = messages(&format!("{}{MAIN}", CHAIN.replace("opened_a = unfold(a(n))\n  q = replace(opened_b, opened_a)", "q = replace(opened_b, opened_a)\n  opened_a = unfold(a(n))")));
+    assert!(!found.is_empty(), "{found:?}");
 }
