@@ -1296,7 +1296,12 @@ fn function<S: System>(
     for (b, block) in f.blocks.iter().enumerate() {
         asm.bind(w.labels[b]);
         let made = block.instructions.len() - usize::from(w.branches_on_compare[b]);
+        let mut fused = false;
         for (i, instruction) in block.instructions[..made].iter().enumerate() {
+            if fused {
+                fused = false;
+                continue;
+            }
             match w.folded[b][i] {
                 Folded::Skipped => continue,
                 Folded::Store { base, index, scale } => {
@@ -1309,6 +1314,22 @@ fn function<S: System>(
                 continue;
             }
             asm.note_place(instruction.at);
+            if let Some(high) = block.instructions[..made].get(i + 1).filter(|next| {
+                w.folded[b][i + 1] == Folded::No
+                    && !w.before_choice[b][i + 1]
+                    && w.halves_of_a_product(instruction, next)
+            }) {
+                asm.note_place(high.at);
+                w.product(
+                    asm,
+                    &instruction.results,
+                    &high.results,
+                    &instruction.op,
+                    &high.op,
+                );
+                fused = true;
+                continue;
+            }
             match i.checked_sub(1).filter(|j| w.before_choice[b][*j]) {
                 Some(j) => w.choice(asm, &block.instructions[j], instruction),
                 None => w.instruction(asm, &instruction.results, &instruction.op),
@@ -1381,6 +1402,49 @@ fn held(f: &Function, constants: &[Option<u64>]) -> Vec<bool> {
 }
 
 impl<S: System> Writer<'_, S> {
+    /// Whether `low` is the product of two integers of 64 bits and `high` the
+    /// instruction right after it that gives the high half of the same two:
+    /// `mul` and `imul` of one operand give both halves, so they are one
+    /// instruction and not two.
+    fn halves_of_a_product(
+        &self,
+        low: &crate::scalar::Instruction,
+        high: &crate::scalar::Instruction,
+    ) -> bool {
+        let (
+            Op::Binary {
+                op: Binary::Mul,
+                a,
+                b,
+            },
+            Op::Binary {
+                op: top,
+                a: c,
+                b: d,
+            },
+        ) = (&low.op, &high.op)
+        else {
+            return false;
+        };
+        matches!(top, Binary::MulHighU | Binary::MulHighS)
+            && self.width(*a) == 8
+            && ((a, b) == (c, d) || (a, b) == (d, c))
+    }
+
+    /// The two halves of the product of two integers of 64 bits, by the one
+    /// instruction that gives both: the low half is in rax and the high half
+    /// in rdx.
+    fn product(&self, asm: &mut Asm, low: &[Value], high: &[Value], low_op: &Op, high_op: &Op) {
+        let (Op::Binary { a, b, .. }, Op::Binary { op, .. }) = (low_op, high_op) else {
+            unreachable!("a product")
+        };
+        self.read_into(asm, RAX, *a);
+        let b = self.read(asm, RCX, *b);
+        asm.group(if matches!(op, Binary::MulHighU) { 4 } else { 5 }, b);
+        self.finish(asm, low[0], RAX, true);
+        self.finish(asm, high[0], RDX, true);
+    }
+
     /// The number the instruction holds in itself, if it does.
     fn immediate(&self, op: &Op) -> Option<i32> {
         immediate(self.f, &self.constants, op)
