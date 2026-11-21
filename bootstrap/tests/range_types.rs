@@ -391,7 +391,6 @@ fn a_value_is_not_taken_where_a_range_that_does_not_hold_every_number_of_its_ran
 fn the_blocks_of_an_if_and_a_match_give_the_smallest_range_that_holds_them() {
     generate::check(4008, 30, |g: &mut Gen| (range(g), range(g), g.below(2)), |((a, b), (c, d), which)| {
         let (low, high) = (*a.min(c), *b.max(d));
-        let hull_fits = if low < 0 { high <= i64::MAX as i128 } else { high <= u64::MAX as i128 };
         let want = [a, c][*which];
         let source = with_header(format!(
             "fn main() ! console, alloc {{\n  s: Byte = {which}\n  x: {a}..{} = {a}\n  y: {c}..{} = {c}\n  r = if s == 0 {{ x }} else {{ y }}\n  m = match s {{\n    0 {{ y }}\n    _ {{ x }}\n  }}\n  h: {low}..{} = r\n  k: {low}..{} = m\n  print(\"{{h}} {{k}}\")\n}}\n",
@@ -400,10 +399,6 @@ fn the_blocks_of_an_if_and_a_match_give_the_smallest_range_that_holds_them() {
             high + 1,
             high + 1
         ));
-        if !hull_fits {
-            assert!(!compiles(&source), "for\n{source}");
-            return;
-        }
         let other = [c, a][*which];
         assert_eq!(stdout(&source), format!("{want} {other}\n"), "for\n{source}");
     });
