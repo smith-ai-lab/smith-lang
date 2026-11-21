@@ -17,6 +17,7 @@ mod common;
 mod escape;
 mod eval;
 mod exp;
+mod exp_fast;
 mod fold;
 mod fuse;
 mod graph;
@@ -44,6 +45,7 @@ pub use eval::{
     Outcome, call, run, run_copying, run_counting, run_measured, run_taking, run_with_command_line,
     run_with_command_line_and_errors, run_with_limit, run_with_words, run_with_words_and_errors,
 };
+pub use exp_fast::table as exp_table;
 pub use fold::fold;
 pub use fuse::fuse;
 pub use inline::{BOUND, LEAF_BOUND, inline, size};

@@ -49,7 +49,15 @@ pub enum Runtime {
     ExpMultiply,
     /// Takes the eight words of `r / 64`, and gives `exp(r)` as eight words.
     ExpSeries,
-    /// Takes a float, and gives its exponential, the float nearest the exact one.
+    /// Takes a float and the table of `2^(j / 64)`, and gives its exponential
+    /// and whether that is the float nearest the exact one.
+    ExpFast { double: bool },
+    /// Takes a float, and gives its exponential, the float nearest the exact
+    /// one, by the way that is right for every float.
+    ExpExact { double: bool },
+    /// Takes a float and the table of `2^(j / 64)`, and gives its exponential,
+    /// the float nearest the exact one: the fast function's when it is sure,
+    /// and the exact function's when it is not.
     Exp { double: bool },
     /// Takes a number of eight words that is between 0.85 and 1.21, and gives
     /// its reciprocal.
@@ -159,6 +167,8 @@ impl Runtime {
             Runtime::Decimal { .. } => "<decimal>",
             Runtime::ExpMultiply => "<exp_multiply>",
             Runtime::ExpSeries => "<exp_series>",
+            Runtime::ExpFast { .. } => "<exp_fast>",
+            Runtime::ExpExact { .. } => "<exp_exact>",
             Runtime::Exp { .. } => "<exp>",
             Runtime::LnReciprocal => "<ln_reciprocal>",
             Runtime::LnSeries => "<ln_series>",
@@ -204,7 +214,13 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Decimal { bits, signed } => decimal(bits, signed, place(Runtime::Digits)),
         Runtime::ExpMultiply => super::exp::multiply(),
         Runtime::ExpSeries => super::exp::series(place(Runtime::ExpMultiply)),
-        Runtime::Exp { double } => super::exp::exp(double, place(Runtime::ExpSeries)),
+        Runtime::ExpFast { double } => super::exp_fast::fast(double),
+        Runtime::ExpExact { double } => super::exp::exp(double, place(Runtime::ExpSeries)),
+        Runtime::Exp { double } => super::exp_fast::exp(
+            double,
+            place(Runtime::ExpFast { double }),
+            place(Runtime::ExpExact { double }),
+        ),
         Runtime::LnReciprocal => super::ln::reciprocal(place(Runtime::ExpMultiply)),
         Runtime::LnSeries => super::ln::series(place(Runtime::ExpMultiply)),
         Runtime::TrigSeries => super::trig::series(place(Runtime::ExpMultiply)),
