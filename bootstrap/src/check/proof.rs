@@ -1074,13 +1074,25 @@ impl<'a> Checker<'a> {
 
     /// Whether `arith` proves that `index` is below the size of the list
     /// `of`, and if it does not, the goal it could not prove.
-    pub(super) fn in_range(&mut self, body: &mut Body<'a>, of: &Expr, index: &Expr, pos: Pos) {
+    pub(super) fn in_range(
+        &mut self,
+        body: &mut Body<'a>,
+        of: &Expr,
+        fixed: Option<u64>,
+        index: &Expr,
+        pos: Pos,
+    ) {
         if !Self::decided(body) || body.contract {
             return;
         }
         let mut facts = std::mem::take(&mut body.facts);
         let mut builder = self.builder(body, &mut facts, true);
-        let (at, size) = (builder.lin(index), builder.list_size(of));
+        // An array's size is in its type, and a list's is the size of its name.
+        let size = match fixed {
+            Some(n) => Some(constant(i128::from(n))),
+            None => builder.list_size(of),
+        };
+        let at = builder.lin(index);
         let overflow = builder.overflow;
         let goal = match (at, size) {
             (Some(at), Some(size)) if !overflow => self.sum(body, &mut facts, &size, &at, -1),
@@ -1091,13 +1103,14 @@ impl<'a> Checker<'a> {
         body.facts = facts;
         if !goal.as_ref().is_some_and(|g| proves(&used, g)) {
             let (i, xs) = (written_expr(index), written_expr(of));
+            let size = fixed.map_or_else(|| format!("{xs}.size"), |n| n.to_string());
             self.errors.push(
                 Error::new(
                     pos,
-                    format!("cannot prove that `{i} < {xs}.size`, which indexing `{xs}` needs"),
+                    format!("cannot prove that `{i} < {size}`, which indexing `{xs}` needs"),
                 )
                 .with_fix(format!(
-                    "put `{i}` in the range of a `loop` over `0..{xs}.size`, check `{i} < {xs}.size` \
+                    "put `{i}` in the range of a `loop` over `0..{size}`, check `{i} < {size}` \
                      with an `if`, or state it in a `requires`"
                 )),
             );
