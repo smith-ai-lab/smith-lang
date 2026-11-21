@@ -758,6 +758,11 @@ impl<'a> Defs<'a> {
             }
         }
         if let Some((i, all, sol)) = found.pop() {
+            // The parameters of a function are read from a request only when
+            // each is read from a text, or is the one read from the body.
+            if self.from_request == Some(k) && self.request_fault(&types[0]).is_some() {
+                return Found::No;
+            }
             return Found::Yes(all, By::Impl(i, sol));
         }
         if k == self.function {
@@ -1203,6 +1208,11 @@ impl<'a> Defs<'a> {
     /// The end of the error that says `t` has no implementation of trait
     /// `k`, which names the part of `t` that lacks a trait, if that is why.
     pub(super) fn because(&self, k: usize, t: &Ty, scope: &Scope) -> String {
+        if self.from_request == Some(k)
+            && let Some(fault) = self.request_fault(t)
+        {
+            return format!(", as {fault}");
+        }
         if k == self.function
             && let Ty::Named(f) = t
         {
@@ -1234,6 +1244,54 @@ impl<'a> Defs<'a> {
                 self.file.traits[lacks].name
             ),
             None => String::new(),
+        }
+    }
+
+    /// Why the parameters of a function, the fields of the struct `t`, cannot
+    /// be read from a request, if they cannot: each is read from a text when
+    /// its type, or what an `Option` holds, has `FromText`, and one that is not
+    /// is read from the body as JSON when it has `Deserialize`, of which a
+    /// function has at most one.
+    fn request_fault(&self, t: &Ty) -> Option<String> {
+        let (Ty::Struct(s, args), Some(from_text), Some(deserialize)) =
+            (t, self.from_text, self.deserialize)
+        else {
+            return None;
+        };
+        let scope = Scope::default();
+        let has =
+            |k: usize, t: &Ty| matches!(self.meets(k, t, &scope, &mut Vec::new()), Found::Yes(..));
+        let mut body: Vec<&str> = Vec::new();
+        for (field, ty) in self.file.structs[*s].fields.iter().zip(&self.fields[*s]) {
+            let ty = ty.subst(args);
+            let name = field.name.as_str();
+            let inner = match &ty {
+                Ty::Enum(e, items) if *e == self.option => items[0].clone(),
+                other => other.clone(),
+            };
+            if has(from_text, &inner) {
+                if !matches!(inner, Ty::Text | Ty::Int(_)) && inner != self.bool_ty() {
+                    return Some(format!(
+                        "`{name}` is read from a text by its own `FromText`, which a route does not use yet"
+                    ));
+                }
+            } else if has(deserialize, &ty) {
+                body.push(name);
+            } else {
+                return Some(format!(
+                    "`{name}` has no `FromText` for the path or the query, and no `Deserialize` for the body"
+                ));
+            }
+        }
+        match body.as_slice() {
+            [] | [_] => None,
+            [a, b] => Some(format!(
+                "`{a}` and `{b}` are both read from the body, and a function has one parameter for it at most"
+            )),
+            [rest @ .., last] => Some(format!(
+                "`{}`, and `{last}` are all read from the body, and a function has one parameter for it at most",
+                rest.join("`, `")
+            )),
         }
     }
 
