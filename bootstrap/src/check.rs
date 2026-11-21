@@ -7370,9 +7370,28 @@ impl<'a> Checker<'a> {
                     name,
                     pos,
                     fields,
+                    at,
                     value,
                 } => {
-                    let needed = self.place(body, name, *pos, fields);
+                    let mut needed = self.place(body, name, *pos, fields);
+                    // An element of an array is the place, and its index is proven
+                    // as when it is read.
+                    if let (Some(at), Some(held)) = (at, &needed) {
+                        needed = match held {
+                            Ty::Array(..) => Some(self.index(body, &at.0, &at.1, *pos)),
+                            Ty::Unknown => None,
+                            given => {
+                                let given = self.defs.describe(given, body.scope);
+                                self.errors.push(Error::new(
+                                    *pos,
+                                    format!(
+                                        "an element is assigned in an array, and this is {given}"
+                                    ),
+                                ));
+                                None
+                            }
+                        };
+                    }
                     let want = needed.clone().map_or(Want::Any, Want::Ty);
                     let gives = self.expr(body, value, &want);
                     if let Some(needed) = needed {

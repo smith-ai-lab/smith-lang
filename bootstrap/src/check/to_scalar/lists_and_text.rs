@@ -161,6 +161,58 @@ impl<'a> Lowering<'a> {
         (ty, values)
     }
 
+    /// Whether `e`, an index or a field of one, reads inside an array.
+    pub(super) fn over_array(&self, e: &Expr, env: &[Ty]) -> bool {
+        match e {
+            Expr::Index { of, .. } => matches!(self.typed.type_of(of, env), Ty::Array(..)),
+            Expr::Field { of, .. } => self.over_array(of, env),
+            _ => false,
+        }
+    }
+
+    /// Lowers `of[index]` of an array, whose elements are its scalars one
+    /// after another, so that an index known when the program is built picks
+    /// them out and nothing is asked of memory.
+    pub(super) fn array_element(
+        &mut self,
+        out: &mut Out<'a>,
+        expr: &'a Expr,
+        (of, index): (&'a Expr, &'a Expr),
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let (array, values) = self.expr(out, of, env);
+        let Ty::Array(element, _) = array else {
+            unreachable!("checked")
+        };
+        let size = self.size(&element[0]);
+        let at = self.constant_index(expr, index, env);
+        let from = at * size;
+        (element[0].clone(), values[from..from + size].to_vec())
+    }
+
+    /// The number an index of an array is, when it is known where the program
+    /// is built, and otherwise 0 with the error that says it is not built yet.
+    pub(super) fn constant_index(&mut self, expr: &'a Expr, index: &'a Expr, env: &[Ty]) -> usize {
+        match (index, self.typed.type_of(index, env)) {
+            (
+                Expr::Number {
+                    magnitude,
+                    negative: false,
+                    ..
+                },
+                _,
+            ) => *magnitude as usize,
+            (_, Ty::Int(t)) if t.min() == t.max() => t.min() as usize,
+            _ => {
+                self.errors.push(Error::unsupported(
+                    expr.pos(),
+                    "an array read or assigned at an index that is not a number known when the program is built",
+                ));
+                0
+            }
+        }
+    }
+
     /// Works out where the element or the part of one that `expr` reads is,
     /// without reading it: its type, the address of its first byte, and each
     /// of its scalars with its place from the address. `expr` is an index,
@@ -271,6 +323,13 @@ impl<'a> Lowering<'a> {
         env: &[Ty],
     ) -> (Ty, Vec<form::Value>) {
         let ty = self.typed.type_of(expr, env);
+        if matches!(ty, Ty::Array(..)) {
+            let values = items
+                .iter()
+                .flat_map(|item| self.expr(out, item, env).1)
+                .collect();
+            return (ty, values);
+        }
         let scalars = self.element(&ty);
         let (places, stride) = form::element(&scalars);
         if matches!(ty, Ty::Slice(_)) {
