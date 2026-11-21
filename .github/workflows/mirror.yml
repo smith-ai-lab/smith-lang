@@ -56,7 +56,7 @@ jobs:
           refs="$refs $(sh .github/mirror-tags.sh | tr '\n' ' ')"
           # Never forced: if GitLab holds something GitHub does not, this fails.
           # shellcheck disable=SC2086
-          if ! git push --verbose --atomic git@gitlab.com:smith-ai-lab/smith.git $refs; then
+          if ! git push --verbose --atomic git@gitlab.com:smith-ai-lab/smith-lang.git $refs; then
             echo "could not update the mirror on GitLab: see the error above" >&2
             exit 1
           fi
