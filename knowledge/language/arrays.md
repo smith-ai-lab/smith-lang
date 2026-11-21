@@ -5,8 +5,8 @@ description: An array is a fixed number of elements of one type, with its size i
 status: partial
 built:
   - "the `size` of a `List` and of a `str`, a `Nat`, which a program writes as a parameter, a result, a field, and inside another type, and an arithmetic on a `Nat` that `arith` proves fits"
-  - "an array of a size written as a number, `[3]f32`, as a parameter, a result, a binding, a `var`, a field, a case, a tuple, and an element of a list, written as `[1.0, 2.0, 3.0]` where it is expected, which is the same type as another exactly when the size and the element are, and refused when the number of elements written is not the size; its elements are read and assigned at an index that is a number written out, and held in place, so no memory is asked for"
-  - "not a size that is a name, a matrix, arithmetic on sizes, an element read or assigned at an index that is not a number written out, or `loop` over an array"
+  - "an array of a size written as a number, `[3]f32`, as a parameter, a result, a binding, a `var`, a field, a case, a tuple, and an element of a list, written as `[1.0, 2.0, 3.0]` where it is expected, which is the same type as another exactly when the size and the element are, and refused when the number of elements written is not the size; its elements are read and assigned at any index that `arith` proves below the size, and a `loop` runs over its elements in order, all held in place in the frame of the function, so no memory is asked for"
+  - "not a size that is a name, a matrix, or arithmetic on sizes"
 ---
 
 # Arrays and sizes
