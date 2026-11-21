@@ -165,7 +165,14 @@ fn an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where
             "fn tested(a: [{n}]u8, i: Nat) -> u8 {{ a[i] }}\n\nfn main() ! console {{\n  a: [{n}]u8 = [{}]\n  y = tested(a, 0)\n}}\n",
             items.join(", ")
         ));
-        assert!(!compiles(&unproven), "for\n{unproven}");
+        // `arith` refuses it, saying what it could not prove of the size.
+        let errors = check(unproven.as_bytes()).expect_err(&unproven);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message.contains(&format!("cannot prove that `i < {n}`"))),
+            "{errors:?} for\n{unproven}"
+        );
         let assigned = header(format!(
             "fn bump(a: [{n}]u8) -> [{n}]u8 {{\n  var b = a\n  b[{i}] = 100\n  b\n}}\n\nfn main() ! console, alloc {{\n  a: [{n}]u8 = [{}]\n  b = bump(a)\n  print(\"{{a[{i}]}} {{b[{i}]}}\")\n}}\n",
             items.join(", ")
