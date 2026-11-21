@@ -1,0 +1,71 @@
+use std.bits (u32)
+use std.console (console, print)
+use std.int (wrapping_add)
+
+struct Holder {
+  cells: [4]u32
+  count: u32
+}
+
+fn total(a: [4]u32) -> u32 {
+  var sum: u32 = 0
+  loop i in 0..4 {
+    sum = wrapping_add(sum, a[i])
+  }
+  sum
+}
+
+fn bumped(a: [4]u32, at: Nat) -> [4]u32 {
+  var b = a
+  if at < 4 {
+    b[at] = wrapping_add(b[at], 100)
+  }
+  b
+}
+
+fn reversed(a: [4]u32) -> [4]u32 {
+  var b = a
+  loop i in 0..4 {
+    b[i] = a[3 - i]
+  }
+  b
+}
+
+fn depth(n: Nat, a: [4]u32) -> u32 ! alloc
+  decreases n
+{
+  if n == 0 {
+    total(a)
+  } else {
+    var b = a
+    k = n % 4
+    b[k] = wrapping_add(b[k], 1)
+    wrapping_add(depth(n - 1, b), b[k])
+  }
+}
+
+fn pick(h: Holder, at: Nat) -> u32 {
+  if at < 4 { h.cells[at] } else { 0 }
+}
+
+fn main() ! console, alloc {
+  var w: [4]u32 = [1, 2, 3, 4]
+  loop i in 0..4 {
+    w[i] = wrapping_add(w[i], 10)
+  }
+  v = w
+  w[0] = 99
+  print("{total(w)} {total(v)} {w[0]} {v[0]} {w[3]}")
+  c = bumped(v, 2)
+  print("{c[2]} {v[2]} {total(bumped(v, 9))}")
+  r = reversed(v)
+  print("{r[0]} {r[3]}")
+  h = Holder(cells: v, count: 4)
+  var g = h
+  g.cells[1] = 5
+  print("{g.cells[1]} {h.cells[1]} {pick(g, 3)} {pick(g, 1)}")
+  loop x in v {
+    print("{x}")
+  }
+  print("{depth(6, v)}")
+}

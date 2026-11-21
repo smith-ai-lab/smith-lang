@@ -28,6 +28,14 @@ pub const ONCE: &[Test] = &[
         an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where_it_is_proven,
     ),
     (
+        "an_element_is_read_and_assigned_at_an_index_the_program_works_out_as_a_vector_does",
+        an_element_is_read_and_assigned_at_an_index_the_program_works_out_as_a_vector_does,
+    ),
+    (
+        "an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing",
+        an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing,
+    ),
+    (
         "a_function_that_makes_reads_and_returns_arrays_has_no_alloc_and_calls_no_allocator",
         a_function_that_makes_reads_and_returns_arrays_has_no_alloc_and_calls_no_allocator,
     ),
@@ -137,8 +145,8 @@ fn a_literal_of_the_wrong_number_of_elements_is_refused_and_the_error_gives_both
     });
 }
 
-/// `a[i]` compiles when `arith` proves `i` below the size, and is refused
-/// otherwise, the elements of a `var`
+/// `a[i]` compiles when `arith` proves `i` below the size, from the type of
+/// the index or an `if`, and is refused otherwise, the elements of a `var`
 /// are assigned the same way, and the array that was passed is unchanged.
 fn an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where_it_is_proven() {
     generate::check(4104, 12, |g: &mut Gen| (1 + g.below(5), g.below(7)), |(n, i)| {
@@ -148,6 +156,11 @@ fn an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where
             items.join(", ")
         ));
         assert_eq!(compiles(&read), i < n, "for\n{read}");
+        let typed = header(format!(
+            "fn at(a: [{n}]u8, i: 0..{n}) -> u8 {{ a[i] }}\n\nfn tested(a: [{n}]u8, i: Nat) -> u8 {{\n  if i < {n} {{ a[i] }} else {{ 0 }}\n}}\n\nfn main() ! console {{\n  a: [{n}]u8 = [{}]\n  x = at(a, 0)\n  y = tested(a, {i})\n}}\n",
+            items.join(", ")
+        ));
+        assert!(compiles(&typed), "for\n{typed}");
         let unproven = header(format!(
             "fn tested(a: [{n}]u8, i: Nat) -> u8 {{ a[i] }}\n\nfn main() ! console {{\n  a: [{n}]u8 = [{}]\n  y = tested(a, 0)\n}}\n",
             items.join(", ")
@@ -183,5 +196,99 @@ fn a_function_that_makes_reads_and_returns_arrays_has_no_alloc_and_calls_no_allo
             })
         });
         assert!(!allocates, "for\n{source}");
+    });
+}
+
+/// `set` and `get` take the index as a parameter, so it is a number the program
+/// works out and not one written out. Whatever order they are called in, every
+/// element is what a vector given the same writes holds.
+fn an_element_is_read_and_assigned_at_an_index_the_program_works_out_as_a_vector_does() {
+    generate::check(
+        4106,
+        10,
+        |g: &mut Gen| {
+            let n = 1 + g.below(9);
+            let writes: Vec<(usize, u32)> = (0..g.below(12))
+                .map(|_| (g.below(n), g.below(1000) as u32))
+                .collect();
+            (n, writes)
+        },
+        |(n, writes)| {
+            let start: Vec<String> = (0..*n).map(|k| (k * 7).to_string()).collect();
+            let mut model: Vec<u32> = (0..*n as u32).map(|k| k * 7).collect();
+            let mut calls = String::new();
+            for (at, x) in writes {
+                calls += &format!("  w = set(w, {at}, {x})\n");
+                model[*at] = *x;
+            }
+            let reads: String = (0..*n)
+                .map(|k| format!("  print(\"{{get(w, {k})}}\")\n"))
+                .collect();
+            let source = header(format!(
+                "fn set(a: [{n}]u32, at: Nat, x: u32) -> [{n}]u32 {{\n  var b = a\n  if at < {n} {{ b[at] = x }}\n  b\n}}\n\nfn get(a: [{n}]u32, at: Nat) -> u32 {{ if at < {n} {{ a[at] }} else {{ 0 }} }}\n\nfn main() ! console, alloc {{\n  var w: [{n}]u32 = [{}]\n{calls}{reads}  loop x in w {{ print(\"{{x}}\") }}\n}}\n",
+                start.join(", ")
+            ));
+            let expected: String = model
+                .iter()
+                .chain(model.iter())
+                .map(|x| format!("{x}\n"))
+                .collect();
+            assert_eq!(stdout(&source), expected, "for\n{source}");
+            let program = lowered(&source);
+            let allocates = program.functions.iter().any(|f| {
+                f.blocks.iter().flat_map(|b| &b.instructions).any(|i| {
+                    matches!(i.op, Op::System { call: System::Allocate, .. })
+                })
+            });
+            // Only the text built to print asks the allocator, and the program
+            // reads and writes the array through the function's own frame.
+            let frames = program.functions.iter().any(|f| {
+                f.blocks
+                    .iter()
+                    .flat_map(|b| &b.instructions)
+                    .any(|i| matches!(i.op, Op::Frame { .. }))
+            });
+            assert!(frames || !allocates, "for\n{source}");
+        },
+    );
+}
+
+/// How many stores the function `name` holds, written out.
+fn stores_in(program: &scalar::Program, name: &str) -> usize {
+    let f = program
+        .functions
+        .iter()
+        .find(|f| f.name.ends_with(name))
+        .unwrap_or_else(|| panic!("no function {name}"));
+    f.blocks
+        .iter()
+        .flat_map(|b| &b.instructions)
+        .filter(|i| matches!(i.op, Op::Store { .. }))
+        .count()
+}
+
+/// An array that is read at an index the program works out is kept in the
+/// frame, where it is written when it is made and when an element is assigned,
+/// so a read of it again is a load and no store: the stores of a function do
+/// not grow with the reads.
+fn an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing() {
+    generate::check(4107, 8, |g: &mut Gen| (2 + g.below(7), 1 + g.below(6)), |(n, reads)| {
+        let items: Vec<String> = (0..*n).map(|k| k.to_string()).collect();
+        let program = |reads: usize| {
+            let body: String = (0..reads)
+                .map(|_| "  sum = wrapping_add(sum, a[at])\n".to_string())
+                .collect();
+            header(format!(
+                "use std.int (wrapping_add)\n\nfn total(a: [{n}]u32, at: 0..{n}) -> u32 {{\n  var sum: u32 = 0\n{body}  sum\n}}\n\nfn main() ! console, alloc {{\n  a: [{n}]u32 = [{}]\n  x = total(a, 1)\n  print(\"{{x}}\")\n}}\n",
+                items.join(", ")
+            ))
+        };
+        let (one, more) = (lowered(&program(1)), lowered(&program(1 + reads)));
+        assert_eq!(
+            stores_in(&one, "total"),
+            stores_in(&more, "total"),
+            "for\n{}",
+            program(1 + reads)
+        );
     });
 }

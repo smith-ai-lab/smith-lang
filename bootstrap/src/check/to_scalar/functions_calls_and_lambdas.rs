@@ -136,6 +136,9 @@ impl<'a> Lowering<'a> {
         let name = self.name_of(instance);
         let mut out = Out::new();
         out.written = form::names::intern(&name);
+        let mut homed = HashSet::new();
+        indexed_names(&view.f.body, &mut homed);
+        out.homed.insert(out.written, homed);
         out.place = form::Place::of(&name);
         for (name, ty) in &view.params {
             let ty = ty.subst(&instance.args);
@@ -169,6 +172,7 @@ impl<'a> Lowering<'a> {
                         ty: c.ty.clone(),
                         values,
                         func,
+                        home: None,
                     });
                 }
             }
@@ -427,6 +431,7 @@ impl<'a> Lowering<'a> {
             ty: ty.clone(),
             values,
             func,
+            home: None,
         }
     }
 
