@@ -1208,11 +1208,8 @@ impl<'a> Lowering<'a> {
                     let values = self.case(out, &ty, k, payload, env);
                     (ty, values)
                 }
-                Callee::Print | Callee::Eprint => {
-                    let stream = match typed.callee(call, env) {
-                        Callee::Print => form::Stream::Stdout,
-                        _ => form::Stream::Stderr,
-                    };
+                Callee::Eprint => {
+                    let stream = form::Stream::Stderr;
                     let (_, text) = self.expr(out, &call.args[0].value, env);
                     let newline = self.text(out, b"\n");
                     for args in [text, newline] {
@@ -1225,27 +1222,6 @@ impl<'a> Lowering<'a> {
                         );
                     }
                     (Ty::Nothing, Vec::new())
-                }
-                // A handler in force answers the operation, as it answers any
-                // other, and the system answers it when none is.
-                Callee::Fill
-                    if let Some(f) = defs.function(call.name_pos, &call.callee)
-                        && out
-                            .handlers
-                            .iter()
-                            .any(|h| h.effect == defs.operation_of(f).0) =>
-                {
-                    let instance = Instance {
-                        template: Template::Free(f),
-                        args: Vec::new(),
-                    };
-                    let gives = typed.type_of(expr, env);
-                    self.operation_call(out, call, instance, gives, env)
-                }
-                Callee::Fill => {
-                    let (ty, list) = self.expr(out, &call.args[0].value, env);
-                    self.call_runtime(out, Runtime::Entropy, vec![list[0], list[1]], Vec::new());
-                    (ty, list)
                 }
                 Callee::End => {
                     let (_, status) = self.expr(out, &call.args[0].value, env);
@@ -1295,7 +1271,7 @@ impl<'a> Lowering<'a> {
                     // handler answers calls the function here, under the
                     // handlers in force, and not through a function of its
                     // own that has none.
-                    let prepared = match self.handled_function_call(&instance) {
+                    let prepared = match self.handled_function_call(out, &instance) {
                         Some(f) => self.copy_for(
                             out,
                             &Instance {
