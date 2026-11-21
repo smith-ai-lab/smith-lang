@@ -37,6 +37,7 @@ mod trim;
 mod unfuse;
 mod vector;
 mod wellformed;
+mod wide;
 mod words;
 
 pub use build::Builder;

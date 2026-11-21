@@ -44,6 +44,13 @@ pub enum Runtime {
     /// Takes an integer of the size, and gives a new text that is its digits
     /// in decimal, read as a signed number or as an unsigned one.
     Decimal { bits: Bits, signed: bool },
+    /// Takes two numbers of two words each, the low one first, that are not
+    /// negative, the second not 0, and gives the quotient and then what is left
+    /// over, each as two words.
+    DivideWide,
+    /// Takes a number of two words, the low one first, and a byte that is not 0
+    /// when it is signed, and gives a new text that is its digits in decimal.
+    DecimalWide,
     /// Takes two numbers of eight words of 32 bits, each in a number of 64, which
     /// are fixed point with 240 bits after the point, and gives their product.
     ExpMultiply,
@@ -165,6 +172,8 @@ impl Runtime {
             Runtime::Equal => "<equal>",
             Runtime::Digits => "<digits>",
             Runtime::Decimal { .. } => "<decimal>",
+            Runtime::DivideWide => "<divide_wide>",
+            Runtime::DecimalWide => "<decimal_wide>",
             Runtime::ExpMultiply => "<exp_multiply>",
             Runtime::ExpSeries => "<exp_series>",
             Runtime::ExpFast { .. } => "<exp_fast>",
@@ -212,6 +221,8 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Equal => equal(),
         Runtime::Digits => digits(),
         Runtime::Decimal { bits, signed } => decimal(bits, signed, place(Runtime::Digits)),
+        Runtime::DivideWide => super::wide::divide(),
+        Runtime::DecimalWide => super::wide::decimal(place(Runtime::DivideWide)),
         Runtime::ExpMultiply => super::exp::multiply(),
         Runtime::ExpSeries => super::exp::series(place(Runtime::ExpMultiply)),
         Runtime::ExpFast { double } => super::exp_fast::fast(double),

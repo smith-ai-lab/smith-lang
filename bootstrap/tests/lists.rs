@@ -335,7 +335,7 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
     let kept = [
         list(read),
         list("    if k == 7 { xs = [] } else { print(\"{xs[k]}\") }"),
-        field("    print(\"{c.at + 1}\")"),
+        field("    x: u64 = c.at + 1\n    print(\"{x}\")"),
     ];
     for source in &kept {
         assert_eq!(refused(source), Vec::<String>::new(), "for {source}");
@@ -353,8 +353,8 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
         list(&format!(
             "    run({{\n      xs = push(xs, 4)\n      {read}\n    }})"
         )),
-        field("    c.at = 18446744073709551615\n    print(\"{c.at + 1}\")"),
-        field("    c = Cursor(at: 18446744073709551615)\n    print(\"{c.at + 1}\")"),
+        field("    c.at = 18446744073709551615\n    x: u64 = c.at + 1\n    print(\"{x}\")"),
+        field("    c = Cursor(at: 18446744073709551615)\n    x: u64 = c.at + 1\n    print(\"{x}\")"),
     ];
     for source in &lost {
         assert!(!refused(source).is_empty(), "compiles: {source}");
