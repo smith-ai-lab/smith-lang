@@ -44,6 +44,10 @@ pub const ONCE: &[Test] = &[
         "a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division",
         a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division,
     ),
+    (
+        "narrow_and_clamp_of_a_wide_number_give_the_number_where_it_fits_and_the_nearest_otherwise",
+        narrow_and_clamp_of_a_wide_number_give_the_number_where_it_fits_and_the_nearest_otherwise,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -54,6 +58,10 @@ pub const MACHINE: &[Test] = &[
     (
         "every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder",
         every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder,
+    ),
+    (
+        "every_executable_gives_what_the_evaluator_gives_for_narrow_and_clamp_of_a_wide_number",
+        every_executable_gives_what_the_evaluator_gives_for_narrow_and_clamp_of_a_wide_number,
     ),
 ];
 
@@ -407,4 +415,95 @@ fn a_number_above_the_greatest_i128_is_above_every_negative_number_and_every_num
         "false false false true true true\ntrue true false false false true\n.greater .less\n",
         "for\n{source}"
     );
+}
+
+/// A product that needs more than 64 bits, and the type of 64 bits or fewer it
+/// is narrowed to.
+#[derive(Clone, Copy, Debug)]
+struct Narrowing {
+    product: Sum,
+    to: Int,
+}
+
+fn narrowing(g: &mut Gen) -> Narrowing {
+    let wide: Vec<(Int, Int)> = INTS
+        .iter()
+        .flat_map(|a| INTS.iter().map(move |b| (*a, *b)))
+        .filter(|(a, b)| a.bits + b.bits > 64)
+        .collect();
+    let (a, b) = *g.pick(&wide);
+    let to = *g.pick(INTS);
+    // A number that fits `to`, one that is just outside it, and the edges of
+    // the operands, which are the greatest and the least products.
+    let (mut x, mut y) = if g.below(3) == 0 {
+        (value(g, a), 1.min(b.max()).max(b.min()))
+    } else {
+        (value(g, a), value(g, b))
+    };
+    // Where the two are one type and the values show the product fits it, the
+    // product is of that type and there is nothing to narrow.
+    if (a.bits, a.signed) == (b.bits, b.signed) {
+        (x, y) = (a.max(), a.max());
+    }
+    Narrowing {
+        product: Sum {
+            types: (a, b),
+            op: '*',
+            values: (x, y),
+        },
+        to,
+    }
+}
+
+impl Narrowing {
+    fn source(self) -> String {
+        let t = self.to.name;
+        with_header(format!(
+            "use std.int (clamp, narrow)\n\nfn main() ! console, alloc {{\n{}  c: {t} = clamp(p)\n  n: Option[{t}] = narrow(p)\n  print(\"{{c}} {{n}}\")\n}}\n",
+            self.product.source("p")
+        ))
+    }
+
+    fn expected(self) -> String {
+        let p = self.product.result();
+        let below = p.below(Sm::of(self.to.min()));
+        let above = Sm::of(self.to.max()).below(p);
+        let clamped = if below {
+            Sm::of(self.to.min())
+        } else if above {
+            Sm::of(self.to.max())
+        } else {
+            p
+        };
+        let narrowed = if below || above {
+            ".none".to_string()
+        } else {
+            format!(".some({})", p.written())
+        };
+        format!("{} {narrowed}\n", clamped.written())
+    }
+}
+
+/// `clamp` and `narrow` of a product that needs more than 64 bits give the
+/// product where the type expected holds it, and otherwise the nearest number
+/// it holds and `.none`.
+fn narrow_and_clamp_of_a_wide_number_give_the_number_where_it_fits_and_the_nearest_otherwise() {
+    generate::check(4306, 60, narrowing, |n| {
+        let source = n.source();
+        assert_eq!(stdout(&source), n.expected(), "for\n{source}");
+    });
+}
+
+/// Every executable that this machine runs gives what the evaluator gives for
+/// `narrow` and `clamp` of a wide number.
+fn every_executable_gives_what_the_evaluator_gives_for_narrow_and_clamp_of_a_wide_number() {
+    generate::check(4307, 8, narrowing, |n| {
+        let said = Outcome {
+            status: 0,
+            stdout: n.expected().into_bytes(),
+        };
+        for target in targets::runnable() {
+            targets::runs_as(n.source().as_bytes(), target, &said);
+        }
+    });
 }

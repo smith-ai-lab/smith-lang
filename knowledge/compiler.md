@@ -189,7 +189,7 @@ The lexer and parser are hand-written: recursive descent for declarations and a 
 
 ### How a whole number is kept
 
-Today the compiler keeps a whole number as itself, in the smallest of 8, 16, 32, 64, and 128 bits that holds every value of its range, signed when the range has a negative value, so a range is the size it is kept at and no smaller. A range of 65 to 128 bits is two integers of 64, the low one first, and is built for `+`, `-`, `*`, `/`, `%`, the comparisons, and its digits in `Fmt`; a result that needs more than 128 bits is refused. A range as the distance from its least value is planned.
+Today the compiler keeps a whole number as itself, in the smallest of 8, 16, 32, 64, and 128 bits that holds every value of its range, signed when the range has a negative value, so a range is the size it is kept at and no smaller. A range of 65 to 128 bits is two integers of 64, the low one first, and is built for `+`, `-`, `*`, `/`, `%`, the comparisons, `narrow` and `clamp`, and its digits in `Fmt`; a result that needs more than 128 bits is refused. A range as the distance from its least value is planned.
 
 A whole number is a range, and how it is kept is the compiler's choice, which no program can observe. The choice has three parts.
 
