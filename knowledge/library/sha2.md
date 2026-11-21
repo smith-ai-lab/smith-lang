@@ -2,7 +2,10 @@
 type: specification
 title: SHA-256 and HMAC
 description: std.sha2, with sha256, which gives the 32 bytes that stand for any bytes, and hmac_sha256, which signs bytes with a key that is a secret.
-status: planned
+status: partial
+built:
+  - "`sha256`, written in Smith, which gives the 32 bytes of SHA-256 for any `Slice[Byte]`, asks for no memory, carries no effect, and takes a time that depends on the number of bytes alone"
+  - "not `hmac_sha256`"
 ---
 
 # SHA-256 and HMAC
