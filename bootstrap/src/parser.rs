@@ -395,6 +395,9 @@ pub enum Stmt {
         name: String,
         pos: Pos,
         fields: Vec<Named>,
+        /// `x[i] = e` and `x.f[i] = e`, which assign to one element of an array:
+        /// the array, written as it is read, and the index.
+        at: Element,
         value: Expr,
     },
     /// `(a, var b) = e`, which takes a tuple apart. Whether each bare name
@@ -1022,7 +1025,31 @@ type Named = (String, Pos);
 
 /// The name, its place, and the fields a place names, if the expression is
 /// one: a field of a name, or of a field of one.
-fn place(expr: &Expr) -> Option<(String, Pos, Vec<Named>)> {
+type Element = Option<Box<(Expr, Expr)>>;
+
+fn place(expr: &Expr) -> Option<(String, Pos, Vec<Named>, Element)> {
+    if let Expr::Index { of, index, .. } = expr {
+        let (name, pos, fields) = match &**of {
+            Expr::Name { name, pos } => (name.clone(), *pos, Vec::new()),
+            of => {
+                let (name, pos, fields, at) = place(of)?;
+                if at.is_some() {
+                    return None;
+                }
+                (name, pos, fields)
+            }
+        };
+        return Some((
+            name,
+            pos,
+            fields,
+            Some(Box::new(((**of).clone(), (**index).clone()))),
+        ));
+    }
+    place_of_fields(expr).map(|(name, pos, fields)| (name, pos, fields, None))
+}
+
+fn place_of_fields(expr: &Expr) -> Option<(String, Pos, Vec<Named>)> {
     match expr {
         Expr::Field { of, name, pos } => match &**of {
             Expr::Name {
@@ -1030,7 +1057,7 @@ fn place(expr: &Expr) -> Option<(String, Pos, Vec<Named>)> {
                 pos: at,
             } => Some((root.clone(), *at, vec![(name.clone(), *pos)])),
             of => {
-                let (root, at, mut fields) = place(of)?;
+                let (root, at, mut fields) = place_of_fields(of)?;
                 fields.push((name.clone(), *pos));
                 Some((root, at, fields))
             }
@@ -2044,7 +2071,7 @@ impl Parser<'_> {
                 _ => {
                     let expr = self.expr()?;
                     if self.tok() == &Tok::Punct("=")
-                        && let Some((name, pos, fields)) = place(&expr)
+                        && let Some((name, pos, fields, at)) = place(&expr)
                     {
                         self.bump();
                         let value = self.expr()?;
@@ -2052,6 +2079,7 @@ impl Parser<'_> {
                             name,
                             pos,
                             fields,
+                            at,
                             value,
                         });
                     }
