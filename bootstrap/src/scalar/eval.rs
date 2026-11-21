@@ -1,6 +1,8 @@
 //! Runs a program in the scalar form, in-process. What it gives is what the
 //! program does.
 
+use std::collections::HashMap;
+
 use super::vector::{
     lane_of, lane_type, vector_binary, vector_choose, vector_compare, vector_first_set,
     vector_float_binary, vector_float_compare, vector_float_fused, vector_splat, vector_sum,
@@ -587,6 +589,8 @@ struct Frame {
     entered: bool,
     /// The place of the instruction to run next in the block.
     at: usize,
+    /// The address of each `Frame` of the call that has run, by its value.
+    homes: HashMap<usize, usize>,
 }
 
 /// Why a frame stopped: it calls a function, or it returns.
@@ -639,6 +643,7 @@ impl Machine<'_> {
             args,
             entered: false,
             at: 0,
+            homes: HashMap::new(),
         }
     }
 
@@ -652,6 +657,7 @@ impl Machine<'_> {
             args,
             entered,
             at,
+            homes: frame_homes,
             ..
         } = frame;
         loop {
@@ -931,6 +937,17 @@ impl Machine<'_> {
                             function: *function,
                             args,
                         });
+                    }
+                    // The bytes of a frame are those of the function's first run of
+                    // this instruction, and are the same for each run after it.
+                    Op::Frame { bytes } => {
+                        let result = instruction.results[0].0;
+                        let at = *frame_homes.entry(result).or_insert_with(|| {
+                            let at = BASE + self.memory.len();
+                            self.memory.resize(self.memory.len() + *bytes as usize, 0);
+                            at
+                        });
+                        vec![Word::Address(at)]
                     }
                     Op::Load { ty, address } => {
                         let Word::Address(at) = get(address) else {

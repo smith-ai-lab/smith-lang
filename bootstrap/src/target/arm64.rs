@@ -903,6 +903,8 @@ struct Writer<'a, S> {
     fail: usize,
     /// How far below its caller's frame the function's frame reaches.
     frame: u32,
+    /// Where in the frame the bytes of each `Frame` are, by its value.
+    frames: Vec<Option<u32>>,
     /// Where each value is.
     at: Vec<Loc>,
     /// Where each parameter of the function arrives, and where each result
@@ -956,7 +958,20 @@ fn function<S: System>(
     } else {
         below
     };
-    let saved_from = round_up(below + allocation.frame, 8);
+    // The bytes of each `Frame` come after the places of the values that are
+    // kept in the frame.
+    let mut frames: Vec<Option<u32>> = vec![None; f.types.len()];
+    let mut spilled_to = below + allocation.frame;
+    for block in &f.blocks {
+        for i in &block.instructions {
+            if let Op::Frame { bytes } = i.op {
+                spilled_to = round_up(spilled_to, 16);
+                frames[i.results[0].0] = Some(spilled_to);
+                spilled_to += round_up(bytes as u32, 16);
+            }
+        }
+    }
+    let saved_from = round_up(spilled_to, 8);
     // The address the function returns to is kept above its values.
     let total = round_up(saved_from + 8 * allocation.saved.len() as u32, 16) + 16;
     let area = call_area(f, passed);
@@ -999,6 +1014,7 @@ fn function<S: System>(
             functions,
             fail,
             frame: total,
+            frames: frames.clone(),
             at: at.clone(),
             arrive: arrive.clone(),
             leave: leave.clone(),
@@ -1420,6 +1436,12 @@ impl<S: System> Writer<'_, S> {
 
     fn instruction(&self, asm: &mut Asm, results: &[Value], op: &Op) {
         match op {
+            Op::Frame { .. } => {
+                let t = self.target(results[0]);
+                let at = self.frames[results[0].0].expect("a frame that is laid out");
+                asm.add_immediate(0x9100_0000, t, SP, at);
+                self.finish(asm, results[0], t, true);
+            }
             Op::FloatBinary { op, a, b } => {
                 let bits = match op {
                     FloatBinary::Add => 0x1e20_2800,
