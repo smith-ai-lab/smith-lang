@@ -588,11 +588,14 @@ impl<'a> Lowering<'a> {
             unreachable!("an operation is a function")
         };
         let (effect, at) = defs.operation_of(f);
-        let handler = out
-            .handlers
-            .iter()
-            .rposition(|h| h.effect == effect)
-            .expect("an effect that is handled where it is asked of");
+        let Some(handler) = out.handlers.iter().rposition(|h| h.effect == effect) else {
+            // No handler is in force, so the target answers it.
+            assert!(
+                defs.provided(f).is_some(),
+                "an effect that is handled where it is asked of"
+            );
+            return self.provided_answer(out, call, instance, gives, env);
+        };
         let func = out.handlers[handler].operations[at].clone();
         let params = defs.params(instance.template);
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
@@ -614,6 +617,78 @@ impl<'a> Lowering<'a> {
             result.clear();
         }
         (gives, result)
+    }
+
+    /// Lowers a call of an operation that the target answers because no handler
+    /// is in force. `print` of `console` writes its text and then `end` to
+    /// standard output, or to standard error when `to` is `.stderr`, and a `to`
+    /// that is left out is standard output and is not worked out. `fill` of
+    /// `entropy` has the system fill the bytes of its list and gives the list.
+    fn provided_answer(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        instance: Instance,
+        gives: Ty,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let defs = self.typed.defs;
+        let Template::Free(f) = instance.template else {
+            unreachable!("an operation is a function")
+        };
+        let params = defs.params(instance.template);
+        let mut args: Vec<Option<Vec<form::Value>>> = vec![None; params.len()];
+        for (arg, at) in call
+            .args
+            .iter()
+            .zip(params_of(&params, &call.args).expect("checked"))
+        {
+            args[at] = Some(self.passed(out, &arg.value, &params[at].1, env));
+        }
+        if defs.provided(f).is_some_and(|p| p.operation == "fill") {
+            let list = args[0].take().expect("given");
+            self.call_runtime(out, Runtime::Entropy, vec![list[0], list[1]], Vec::new());
+            return (gives, list);
+        }
+        // What a default builds is the place of the call, as for the text.
+        let place = out.place;
+        for (at, default) in defs.left_out(call) {
+            // The stream a call leaves out is standard output.
+            if at != 2 {
+                let from = out.blocks[out.current].instructions.len();
+                args[at] = Some(self.passed(out, default, &params[at].1, &[]));
+                for i in &mut out.blocks[out.current].instructions[from..] {
+                    i.at = place;
+                }
+            }
+        }
+        let text = args[0].take().expect("given");
+        let end = args[1].take().expect("given");
+        let write = |out: &mut Out<'a>, stream: form::Stream| {
+            for args in [text.clone(), end.clone()] {
+                out.emit(
+                    form::Op::System {
+                        call: form::System::Write(stream),
+                        args,
+                    },
+                    Vec::new(),
+                );
+            }
+        };
+        match args[2].take() {
+            None => write(out, form::Stream::Stdout),
+            Some(to) => {
+                let arms = out.switch(to[0], 2);
+                let mut ends = Vec::new();
+                for (arm, stream) in [(0, form::Stream::Stdout), (1, form::Stream::Stderr)] {
+                    out.current = arms[arm];
+                    write(out, stream);
+                    ends.push((out.current, Vec::new()));
+                }
+                out.join(&[], ends);
+            }
+        }
+        (Ty::Nothing, Vec::new())
     }
 
     /// The number of the handler a call of an effect's name installs, which is
@@ -785,7 +860,11 @@ impl<'a> Lowering<'a> {
 
     /// The function that `Function.call` calls, when the instance is that call
     /// and the function carries an effect that a handler answers.
-    pub(super) fn handled_function_call(&self, instance: &Instance) -> Option<usize> {
+    pub(super) fn handled_function_call(
+        &self,
+        out: &Out<'a>,
+        instance: &Instance,
+    ) -> Option<usize> {
         let defs = self.typed.defs;
         let Template::Given(k, 2) = instance.template else {
             return None;
@@ -797,7 +876,12 @@ impl<'a> Lowering<'a> {
             return None;
         };
         (defs.signatures[*f].effects.iter())
-            .any(|e| defs.handled(e))
+            .any(|e| {
+                defs.handled(e)
+                    || defs
+                        .effect_named(e)
+                        .is_some_and(|at| out.handlers.iter().any(|h| h.effect == at))
+            })
             .then_some(*f)
     }
 

@@ -835,19 +835,6 @@ impl Signature {
         }
     }
 
-    /// `fill` of `entropy`: a list of bytes, which the system fills.
-    fn fill() -> Signature {
-        Signature {
-            scope: Scope::default(),
-            params: vec![("bytes".to_string(), Ty::List(vec![Ty::Int(Int::U8)]))],
-            defaults: vec![false],
-            param_defaults: Vec::new(),
-            gives: Ty::List(vec![Ty::Int(Int::U8)]),
-            effects: vec!["entropy".to_string()],
-            fn_effects: Vec::new(),
-        }
-    }
-
     fn print() -> Signature {
         Signature {
             scope: Scope::default(),
@@ -2475,7 +2462,6 @@ fn check_file(
     checker.main(main);
     for &item in &reached {
         match item {
-            Item::Fn(f) if defs.provided(f).is_some() => {}
             Item::Fn(f) => checker.signature(f),
             Item::Struct(s) => checker.structure(s),
             Item::Enum(e) => checker.enumeration(e),
@@ -5724,14 +5710,10 @@ struct View<'a> {
 
 /// What a checked call does, once every type in it is known.
 enum Callee {
-    Print,
     /// `__eprint`, which the prelude calls to write a line to standard error.
     Eprint,
     /// `__end`, which the prelude calls to end the program with a status.
     End,
-    /// `entropy.fill`, which the system answers by filling the bytes of a list
-    /// and giving it back.
-    Fill,
     Construct(usize, Vec<Ty>),
     /// A case of an enum written in full, by its place among the enum's
     /// cases.
@@ -5806,9 +5788,7 @@ impl<'a> Defs<'a> {
                         .map(|f| (f.name.as_str(), f.default.as_ref()))
                         .collect();
                     (fields, false)
-                } else if self.provided_by_name(call.name_pos, name).is_some()
-                    || is_stream_call(call)
-                {
+                } else if is_stream_call(call) {
                     return Vec::new();
                 } else if let Some(f) = self.function(call.name_pos, name) {
                     (params(&file.functions[f]), true)
@@ -6039,9 +6019,6 @@ impl<'a> Typed<'a> {
                     };
                     return Callee::Construct(s, args);
                 }
-                if let Some(provided) = defs.provided_by_name(call.name_pos, name) {
-                    return (provided.answer)();
-                }
                 if name == "__eprint" {
                     return Callee::Eprint;
                 }
@@ -6141,10 +6118,8 @@ impl<'a> Typed<'a> {
                 }
             },
             Callee::Construct(_, args) => args.clone(),
-            Callee::Print
-            | Callee::Eprint
+            Callee::Eprint
             | Callee::End
-            | Callee::Fill
             | Callee::Case(_)
             | Callee::Value
             | Callee::Intrinsic
