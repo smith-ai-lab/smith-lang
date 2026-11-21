@@ -19,6 +19,7 @@ on:
         options:
           - delete-branch
           - dequeue
+          - prune-branches
       branch:
         description: "delete-branch: the branch to delete"
         required: false
@@ -27,17 +28,27 @@ on:
         description: "dequeue: the number of the pull request"
         required: false
         type: string
+      branches:
+        description: "prune-branches: names of branches with no pull request to delete too, separated by spaces"
+        required: false
+        type: string
+      dry-run:
+        description: "prune-branches: say what would be deleted and delete nothing"
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
 jobs:
   run:
-    name: ${{ inputs.operation }} ${{ inputs.branch }}${{ inputs.pull_request }}
+    name: ${{ inputs.operation }} ${{ inputs.branch }}${{ inputs.pull_request }}${{ inputs.operation == 'prune-branches' && inputs.dry-run && ' (dry run)' || '' }}
     runs-on: ubuntu-latest
     permissions:
       # To delete a branch.
       contents: write
-      # To take a pull request out of the merge queue.
+      # To take a pull request out of the merge queue, and to read the pull
+      # requests of a branch.
       pull-requests: write
     steps:
       - name: Run the operation
@@ -51,6 +62,8 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           BRANCH: ${{ inputs.branch }}
           PULL_REQUEST: ${{ inputs.pull_request }}
+          LISTED: ${{ inputs.branches }}
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -eu
 
@@ -91,6 +104,66 @@ jobs:
                     mergeQueueEntry { position state }
                   }
                 }'
+              ;;
+            prune-branches)
+              # Every branch but the default whose pull requests are all merged
+              # or closed, and the branches with no pull request that are named
+              # in `branches`. A branch with an open pull request, a protected
+              # one, `timings`, and a `gh-readonly-queue/*` branch are never
+              # deleted, whatever is listed.
+              for named in $LISTED; do
+                case "$named" in
+                  *[!A-Za-z0-9._/-]* | refs/* | *..*) refuse "'$named' is not a branch name that can be listed" ;;
+                esac
+              done
+              gh api --paginate "repos/$REPOSITORY/branches" --jq '.[] | [.name, .protected] | @tsv' >"$RUNNER_TEMP/branches"
+              deleted=0
+              kept=0
+              while IFS="$(printf '\t')" read -r name protected; do
+                case "$name" in
+                  "$DEFAULT_BRANCH" | main | timings | gh-readonly-queue/*) continue ;;
+                esac
+                if [ "$protected" != "false" ]; then
+                  echo "keep '$name': it is protected"
+                  kept=$((kept + 1))
+                  continue
+                fi
+                open=$(gh api -X GET "repos/$REPOSITORY/pulls" -f state=open -f head="$OWNER:$name" --jq 'length')
+                if [ "$open" != "0" ]; then
+                  echo "keep '$name': it has an open pull request"
+                  kept=$((kept + 1))
+                  continue
+                fi
+                every=$(gh api -X GET "repos/$REPOSITORY/pulls" -f state=all -f head="$OWNER:$name" -f per_page=100 --jq 'length')
+                if [ "$every" != "0" ]; then
+                  why="all of its pull requests are merged or closed"
+                else
+                  case " $LISTED " in
+                    *" $name "*) why="it has no pull request and is listed" ;;
+                    *)
+                      echo "keep '$name': it has no pull request and is not listed"
+                      kept=$((kept + 1))
+                      continue
+                      ;;
+                  esac
+                fi
+                head=$(gh api "repos/$REPOSITORY/branches/$name" --jq .commit.sha)
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "would delete '$name', at $head: $why"
+                else
+                  gh api -X DELETE "repos/$REPOSITORY/git/refs/heads/$name"
+                  echo "deleted '$name', which was at $head: $why. To restore it, create a branch at that commit."
+                fi
+                deleted=$((deleted + 1))
+              done <"$RUNNER_TEMP/branches"
+              for named in $LISTED; do
+                grep -q "^$named$(printf '\t')" "$RUNNER_TEMP/branches" || echo "::warning::'$named' is listed and there is no such branch"
+              done
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "Dry run: $deleted would be deleted and $kept kept. Nothing was deleted."
+              else
+                echo "Deleted $deleted and kept $kept."
+              fi
               ;;
             *)
               refuse "there is no operation '$OPERATION'"
