@@ -14,11 +14,11 @@
 use super::ryu::{and, below, below_s, c, eq, looping, mul, not, number, or, sub};
 use super::{Binary, Bits, Builder, FloatBits, FloatCompare, Function, Type, Value};
 
-const L: Type = Type::Int(Bits::B64);
-const WORDS: usize = 8;
-const MASK: u64 = 0xffff_ffff;
+pub(super) const L: Type = Type::Int(Bits::B64);
+pub(super) const WORDS: usize = 8;
+pub(super) const MASK: u64 = 0xffff_ffff;
 /// The bits after the point.
-const POINT: usize = 240;
+pub(super) const POINT: usize = 240;
 /// How many terms of the series are summed, and how many times the sum is
 /// squared after `r` is divided by 2^SQUARES.
 const TERMS: u64 = 24;
@@ -27,11 +27,11 @@ const SQUARES: usize = 6;
 /// float of any size one that is above 0.
 const SHIFT: u64 = 1100;
 
-type Wide = Vec<Value>;
+pub(super) type Wide = Vec<Value>;
 
 /// `ln 2` in fixed point with 240 bits after the point, and `SHIFT` times it,
 /// as eight words of 32 bits each, the least first.
-fn constants() -> ([u32; WORDS], [u32; WORDS]) {
+pub(super) fn constants() -> ([u32; WORDS], [u32; WORDS]) {
     // The sum of `1 / (k * 2^k)`, with 320 bits after the point, in 11 words.
     const LONG: usize = 11;
     let mut sum = [0u64; LONG];
@@ -75,16 +75,16 @@ fn constants() -> ([u32; WORDS], [u32; WORDS]) {
     (ln2, to_words(many))
 }
 
-fn constant(f: &mut Builder, words: &[u32; WORDS]) -> Wide {
+pub(super) fn constant(f: &mut Builder, words: &[u32; WORDS]) -> Wide {
     words.iter().map(|w| c(f, u64::from(*w))).collect()
 }
 
-fn mask(f: &mut Builder) -> Value {
+pub(super) fn mask(f: &mut Builder) -> Value {
     c(f, MASK)
 }
 
 /// `a + b`, and the carry out.
-fn add_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
+pub(super) fn add_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
     let m = mask(f);
     let mut carry = c(f, 0);
     let mut out = Vec::new();
@@ -99,7 +99,7 @@ fn add_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
 }
 
 /// `a - b`, and 1 if it was below 0.
-fn sub_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
+pub(super) fn sub_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
     let m = mask(f);
     let two_32 = c(f, 1 << 32);
     let one = c(f, 1);
@@ -117,14 +117,14 @@ fn sub_wide(f: &mut Builder, a: &Wide, b: &Wide) -> (Wide, Value) {
     (out, borrow)
 }
 
-fn choose_wide(f: &mut Builder, on: Value, then: &Wide, otherwise: &Wide) -> Wide {
+pub(super) fn choose_wide(f: &mut Builder, on: Value, then: &Wide, otherwise: &Wide) -> Wide {
     (0..WORDS)
         .map(|i| f.choose(on, then[i], otherwise[i]))
         .collect()
 }
 
 /// `a * m` for a number `m` below 2^32.
-fn mul_small(f: &mut Builder, a: &Wide, m: Value) -> Wide {
+pub(super) fn mul_small(f: &mut Builder, a: &Wide, m: Value) -> Wide {
     let mk = mask(f);
     let mut carry = c(f, 0);
     let mut out = Vec::new();
@@ -139,7 +139,7 @@ fn mul_small(f: &mut Builder, a: &Wide, m: Value) -> Wide {
 }
 
 /// `a / n` for a number `n` that is not 0 and below 2^32, rounded down.
-fn div_small(f: &mut Builder, a: &Wide, n: Value) -> Wide {
+pub(super) fn div_small(f: &mut Builder, a: &Wide, n: Value) -> Wide {
     let mut rest = c(f, 0);
     let mut out = vec![rest; WORDS];
     for i in (0..WORDS).rev() {
@@ -184,7 +184,7 @@ fn product(f: &mut Builder, a: &Wide, b: &Wide) -> Wide {
 }
 
 /// `a` moved down by `by` bits, which is below 32.
-fn shift_down(f: &mut Builder, a: &Wide, by: u64) -> Wide {
+pub(super) fn shift_down(f: &mut Builder, a: &Wide, by: u64) -> Wide {
     let m = mask(f);
     let zero = c(f, 0);
     (0..WORDS)

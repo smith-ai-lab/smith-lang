@@ -22,6 +22,7 @@ mod fuse;
 mod graph;
 pub mod handler;
 mod inline;
+mod ln;
 mod recur;
 mod remat;
 mod remove;

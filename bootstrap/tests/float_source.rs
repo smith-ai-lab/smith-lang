@@ -14,7 +14,7 @@ use smith::target::Target;
 use smith::{check, lower};
 
 use crate::Test;
-use crate::exact;
+use crate::exact::{self, Big};
 use crate::generate::{self, Gen};
 use crate::numbers::with_header;
 use crate::targets::{runnable, runs_as};
@@ -43,6 +43,34 @@ pub const ONCE: &[Test] = &[
     (
         "the_square_root_of_an_f64_is_the_float_nearest_the_exact_root",
         || roots_are_what_rust_says::<f64>(5),
+    ),
+    (
+        "the_logarithm_of_an_f32_is_the_float_nearest_the_exact_one_part_1_of_3",
+        || logarithms_are_what_the_reference_says::<f32>(31),
+    ),
+    (
+        "the_logarithm_of_an_f32_is_the_float_nearest_the_exact_one_part_2_of_3",
+        || logarithms_are_what_the_reference_says::<f32>(32),
+    ),
+    (
+        "the_logarithm_of_an_f32_is_the_float_nearest_the_exact_one_part_3_of_3",
+        || logarithms_are_what_the_reference_says::<f32>(33),
+    ),
+    (
+        "the_logarithm_of_an_f64_is_the_float_nearest_the_exact_one_part_1_of_3",
+        || logarithms_are_what_the_reference_says::<f64>(41),
+    ),
+    (
+        "the_logarithm_of_an_f64_is_the_float_nearest_the_exact_one_part_2_of_3",
+        || logarithms_are_what_the_reference_says::<f64>(42),
+    ),
+    (
+        "the_logarithm_of_an_f64_is_the_float_nearest_the_exact_one_part_3_of_3",
+        || logarithms_are_what_the_reference_says::<f64>(43),
+    ),
+    (
+        "the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference",
+        the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference,
     ),
     (
         "the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference",
@@ -114,6 +142,30 @@ pub const MACHINE: &[Test] = &[
     (
         "every_executable_gives_the_square_root_of_an_f64_that_the_evaluator_gives",
         || roots_on_every_executable::<f64>(5),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f32_that_the_evaluator_gives_part_1_of_3",
+        || logarithms_on_every_executable::<f32>(31),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f32_that_the_evaluator_gives_part_2_of_3",
+        || logarithms_on_every_executable::<f32>(32),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f32_that_the_evaluator_gives_part_3_of_3",
+        || logarithms_on_every_executable::<f32>(33),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f64_that_the_evaluator_gives_part_1_of_3",
+        || logarithms_on_every_executable::<f64>(41),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f64_that_the_evaluator_gives_part_2_of_3",
+        || logarithms_on_every_executable::<f64>(42),
+    ),
+    (
+        "every_executable_gives_the_logarithm_of_an_f64_that_the_evaluator_gives_part_3_of_3",
+        || logarithms_on_every_executable::<f64>(43),
     ),
     (
         "every_executable_gives_the_exponential_of_an_f32_that_the_evaluator_gives_part_1_of_3",
@@ -659,6 +711,8 @@ pub fn sources() -> Vec<String> {
         generate::sample(5, 0, root_program::<f64>).0,
         generate::sample(11, 0, exponential_program::<f32>).0,
         generate::sample(21, 0, exponential_program::<f64>).0,
+        generate::sample(31, 0, logarithm_program::<f32>).0,
+        generate::sample(41, 0, logarithm_program::<f64>).0,
     ]
 }
 
@@ -854,6 +908,114 @@ fn exponentials_on_every_executable<T: Float>(seed: u64) {
     }
 }
 
+/// The logarithm of a float above 0 that the reference gives, as a float.
+fn exact_ln<T: Float>(x: T) -> T {
+    if T::NAME == "f32" {
+        T::from_bits(u64::from(exact::ln_f32(f32::from_bits(x.bits() as u32))))
+    } else {
+        T::from_bits(exact::ln_f64(f64::from_bits(x.bits())))
+    }
+}
+
+/// The numbers the logarithm is tried at: those beside 1, where the result is
+/// least, those beside the powers of 2 and of the square root of 2, where the
+/// reduction changes, the least and the greatest, and floats of any size.
+fn logarithm_inputs<T: Float>(g: &mut Gen) -> Vec<T> {
+    let (mantissa, bits) = if T::NAME == "f32" { (23, 32) } else { (52, 64) };
+    let parse = |v: f64| T::parsed(&format!("{v:e}"));
+    let unit = 2f64.powi(-mantissa);
+    let mut values: Vec<T> = Vec::new();
+    for v in [
+        1.0,
+        1.0 + unit,
+        1.0 - unit / 2.0,
+        1.0 + 2.0 * unit,
+        1.0 - unit,
+        2.0,
+        0.5,
+        10.0,
+        0.1,
+        std::f64::consts::E,
+        std::f64::consts::SQRT_2,
+        std::f64::consts::SQRT_2 + 1e-6,
+        std::f64::consts::SQRT_2 - 1e-6,
+        std::f64::consts::FRAC_1_SQRT_2,
+        0.75,
+        1.5,
+        1e30,
+        1e-30,
+        2f64.powi(100),
+        2f64.powi(-100),
+    ] {
+        if let Some(x) = parse(v) {
+            values.push(x);
+        }
+    }
+    // The least normal number, the least subnormal one, and the greatest.
+    for x in T::edges() {
+        if !x.is_nan() && !x.is_infinite() && !x.negative() {
+            values.push(x);
+        }
+    }
+    for k in 0..24 {
+        let word = (g.below(1 << 30) as u64) << 34
+            | (g.below(1 << 30) as u64) << 4
+            | g.below(16) as u64;
+        let mut pattern = word & ((1u64 << (bits - 1)) - 1);
+        // Some of them near 1, and the others with any exponent.
+        if k % 3 == 0 {
+            let near = g.below(4096) as i64 - 2048;
+            let one = if bits == 32 { 0x3f80_0000i64 } else { 0x3ff0_0000_0000_0000i64 };
+            pattern = (one + near) as u64;
+        }
+        let x = T::from_bits(pattern);
+        if !x.is_nan() && !x.is_infinite() {
+            values.push(x);
+        }
+    }
+    values.retain(|x| !x.negative() && x.key() != T::from_bits(0).key());
+    values
+}
+
+/// The program that compares the logarithm of each float with the one the
+/// reference gives, as a float written out, and what it prints. It also tries
+/// 0 and a number below 0.
+fn logarithm_program<T: Float>(g: &mut Gen) -> (String, String) {
+    let values = logarithm_inputs::<T>(g);
+    let t = T::NAME;
+    let mut source = format!(
+        "use std.float (ln)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  below: {t} = -1.0\n",
+        values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
+    );
+    let mut said = String::new();
+    for (i, x) in values.iter().enumerate() {
+        source += &format!("  print(\"{{ln(xs[{i}]) == {}}}\")\n", written(exact_ln(*x)));
+        said += "true\n";
+    }
+    // `-inf` is below 0 and is its own double, and `nan` is after `inf`.
+    source += "  print(\"{ln(zero) < 0.0 and ln(zero) + ln(zero) == ln(zero)}\")\n";
+    source += "  print(\"{ln(below) > 1.0 / zero}\")\n";
+    said += "true\ntrue\n";
+    source += "}\n";
+    (with_header(source), said)
+}
+
+fn logarithms_are_what_the_reference_says<T: Float>(seed: u64) {
+    let (source, said) = generate::sample(seed, 0, logarithm_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), said, "for {source}");
+}
+
+fn logarithms_on_every_executable<T: Float>(seed: u64) {
+    let (source, _) = generate::sample(seed, 0, logarithm_program::<T>);
+    let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    let outcome = scalar::run(&scalar::passes(&lowered));
+    for target in runnable().into_iter().filter(|t: &Target| t.builds_floats()) {
+        runs_as(source.as_bytes(), target, &outcome);
+    }
+}
+
 /// The function of the runtime that sums the series of `exp`, which takes the
 /// eight words of `r / 64` as fixed point with 240 bits after the point and
 /// gives `exp(r)` in the same form, is as near the reference as its comment
@@ -898,4 +1060,110 @@ fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
         assert!(distance < -228, "r / 64 = {words:x?} is wrong by about 2^{distance}");
     }
     eprintln!("the series is wrong by under 2^{worst}");
+}
+
+/// The two functions of the runtime that `ln` is made of, which take eight
+/// words of fixed point with 240 bits after the point: the reciprocal of a
+/// number between 0.85 and 1.21, and `z + z^3 / 3 + ...` of a `z` below 0.18,
+/// are as near the reference as the comment of `ln` says, 2^-228, so that no
+/// float is rounded wrongly for want of bits. The floats cannot show this: a
+/// series cut to 8 terms is wrong by about 2^-45 and shows, but one of 40 is
+/// wrong by about 2^-200 and shows on no float that is known.
+fn the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference() {
+    let source = "use std.console (console, print)\nuse std.float (ln)\n\nfn main() ! console, alloc {\n  print(\"{ln(2.0)}\")\n}\n";
+    let program = lower(source.as_bytes()).expect("builds");
+    // The functions of eight words that give eight words, in the order the
+    // runtime places them: the reciprocal, then the series.
+    let found: Vec<usize> = program
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.blocks[0].params.len() == 8 && f.results.len() == 8)
+        .map(|(i, _)| i)
+        .collect();
+    let [reciprocal, series] = found[..] else {
+        panic!("the reciprocal and the series are in the program, found {found:?}")
+    };
+    let words_of = |value: f64| -> [u64; 8] {
+        // A number below 4 with 240 bits after the point, from a float.
+        let scaled = value * 2f64.powi(60);
+        let mut words = [0u64; 8];
+        let whole = scaled as u64;
+        // `whole * 2^180` as words of 32 bits.
+        for (k, part) in [whole & 0xffff_ffff, whole >> 32].into_iter().enumerate() {
+            let at = 180 + 32 * k;
+            for bit in 0..32 {
+                if part >> bit & 1 == 1 {
+                    let place = at + bit;
+                    words[place / 32] |= 1 << (place % 32);
+                }
+            }
+        }
+        words
+    };
+    let inputs: Vec<[u64; 8]> = generate::sample(98, 0, |g| {
+        (0..30)
+            .map(|k| {
+                let mut words = [0u64; 8];
+                for w in words.iter_mut().take(7) {
+                    *w = g.below(1 << 32) as u64;
+                }
+                // Between 0.85 and 1.21, from the top word: 2^16 is 1.0.
+                words[7] = 55706 + g.below(23593) as u64;
+                match k {
+                    0 => words_of(1.0),
+                    1 => words_of(0.85),
+                    2 => words_of(1.21),
+                    _ => words,
+                }
+            })
+            .collect()
+    });
+    let mut worst = i64::MIN;
+    for words in inputs {
+        let a = exact::from_words(&words, 240);
+        let got = scalar::call(&program, reciprocal, &words);
+        let want = Big::from_u64(1).div_at(&a, 600);
+        let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
+        worst = worst.max(distance);
+        assert!(distance < -228, "1 / {words:x?} is wrong by about 2^{distance}");
+    }
+    let inputs: Vec<[u64; 8]> = generate::sample(97, 0, |g| {
+        (0..30)
+            .map(|k| {
+                let mut words = [0u64; 8];
+                for w in words.iter_mut().take(7) {
+                    *w = g.below(1 << 32) as u64;
+                }
+                // Below 0.18, which is 11796 of the 65536 of the top word.
+                words[7] = g.below(11796) as u64;
+                match k {
+                    0 => [0; 8],
+                    1 => words_of(0.17),
+                    // The greatest, where the series is slowest.
+                    2..=7 => {
+                        words[7] = 11790 + g.below(6) as u64;
+                        words
+                    }
+                    _ => words,
+                }
+            })
+            .collect()
+    });
+    for words in inputs {
+        let z = exact::from_words(&words, 240);
+        let got = scalar::call(&program, series, &words);
+        // `z + z^3 / 3 + ...` is half of `ln((1 + z) / (1 - z))`.
+        let one = Big::from_u64(1);
+        let ratio = one.add_at(&z, 600).div_at(&one.sub_at(&z, 600), 600);
+        let want = if z.is_zero() {
+            Big::zero()
+        } else {
+            exact::ln(&ratio).ldexp(-1)
+        };
+        let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
+        worst = worst.max(distance);
+        assert!(distance < -228, "the series of {words:x?} is wrong by about 2^{distance}");
+    }
+    eprintln!("the reciprocal and the series are wrong by under 2^{worst}");
 }
