@@ -74,7 +74,24 @@ impl<'a> Lowering<'a> {
                 typed.type_of(left, env),
                 Ty::Int(t) if t.min() >= 0
             );
-            return self.wide_operation(out, (op, right, not_negative), (ty.clone(), taken, a, b));
+            // Two numbers of 64 bits or fewer that are both signed or both not
+            // have a product whose halves are the two results of one
+            // instruction, and no product of the words above is needed.
+            let halves = match (typed.type_of(left, env), typed.type_of(right, env)) {
+                (Ty::Int(l), Ty::Int(r)) if !l.wide() && !r.wide() && l.signed() == r.signed() => {
+                    Some(if l.signed() {
+                        form::Binary::MulHighS
+                    } else {
+                        form::Binary::MulHighU
+                    })
+                }
+                _ => None,
+            };
+            return self.wide_operation(
+                out,
+                (op, right, not_negative, halves),
+                (ty.clone(), taken, a, b),
+            );
         }
         let b = b[0];
         let word = match op {
@@ -1227,7 +1244,7 @@ impl<'a> Lowering<'a> {
     fn wide_operation(
         &mut self,
         out: &mut Out<'a>,
-        (op, right, not_negative): (ArithOp, &'a Expr, bool),
+        (op, right, not_negative, halves): (ArithOp, &'a Expr, bool, Option<form::Binary>),
         (ty, taken, a, b): (Ty, Ty, Vec<form::Value>, Vec<form::Value>),
     ) -> (Ty, Vec<form::Value>) {
         let values = match op {
@@ -1247,6 +1264,10 @@ impl<'a> Lowering<'a> {
                 let borrow = out.resize(false, borrowed, form::Bits::B64);
                 let difference = out.binary(form::Binary::Sub, a[1], b[1]);
                 vec![low, out.binary(form::Binary::Sub, difference, borrow)]
+            }
+            ArithOp::Mul if halves.is_some() => {
+                let low = out.binary(form::Binary::Mul, a[0], b[0]);
+                vec![low, out.binary(halves.expect("some"), a[0], b[0])]
             }
             ArithOp::Mul => {
                 // The low words give both halves of their product, and each

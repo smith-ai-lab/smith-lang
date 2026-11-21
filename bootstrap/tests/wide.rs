@@ -8,7 +8,8 @@
 //! and a magnitude of 128 bits, which shares nothing with the compiler.
 
 use smith::scalar::{self, Outcome};
-use smith::{check, lower};
+use smith::target::Target;
+use smith::{check, compile, lower};
 
 use crate::Test;
 use crate::generate::{self, Gen};
@@ -48,6 +49,10 @@ pub const ONCE: &[Test] = &[
         "narrow_and_clamp_of_a_wide_number_give_the_number_where_it_fits_and_the_nearest_otherwise",
         narrow_and_clamp_of_a_wide_number_give_the_number_where_it_fits_and_the_nearest_otherwise,
     ),
+    (
+        "the_product_of_two_numbers_of_64_bits_is_the_one_instruction_each_chip_gives_both_halves_with",
+        the_product_of_two_numbers_of_64_bits_is_the_one_instruction_each_chip_gives_both_halves_with,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -58,6 +63,10 @@ pub const MACHINE: &[Test] = &[
     (
         "every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder",
         every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remainder,
+    ),
+    (
+        "every_executable_gives_the_exact_product_of_two_numbers_known_only_when_it_runs",
+        every_executable_gives_the_exact_product_of_two_numbers_known_only_when_it_runs,
     ),
     (
         "every_executable_gives_what_the_evaluator_gives_for_narrow_and_clamp_of_a_wide_number",
@@ -504,6 +513,159 @@ fn every_executable_gives_what_the_evaluator_gives_for_narrow_and_clamp_of_a_wid
         };
         for target in targets::runnable() {
             targets::runs_as(n.source().as_bytes(), target, &said);
+        }
+    });
+}
+
+/// How many of each instruction that multiplies are in the code of an ELF
+/// executable, which says by its header which chip it is for: on x86-64 they are
+/// `mul` of one operand, `imul` of one operand, and `imul` of two, and on arm64
+/// `mul`, `umulh`, and `smulh`. A file that is not an ELF executable is none.
+fn multiplies(code: &[u8]) -> Option<(bool, [usize; 3])> {
+    const X86_64: u16 = 0x3e;
+    const ARM64: u16 = 0xb7;
+    if !code.starts_with(b"\x7fELF") {
+        return None;
+    }
+    let chip = u16::from_le_bytes([code[18], code[19]]);
+    let mut counts = [0; 3];
+    match chip {
+        X86_64 => {
+            for w in code.windows(3) {
+                // A prefix that makes the operand 64 bits wide, and then the
+                // opcode and the byte that says which register it reads.
+                let rex = w[0] & 0xf8 == 0x48;
+                if rex && w[1] == 0xf7 && w[2] & 0xf8 == 0xe0 {
+                    counts[0] += 1;
+                } else if rex && w[1] == 0xf7 && w[2] & 0xf8 == 0xe8 {
+                    counts[1] += 1;
+                } else if rex && w[1] == 0x0f && w[2] == 0xaf {
+                    counts[2] += 1;
+                }
+            }
+        }
+        ARM64 => {
+            for word in code.chunks_exact(4) {
+                let word = u32::from_le_bytes(word.try_into().unwrap()) & 0xffe0_fc00;
+                for (count, opcode) in counts.iter_mut().zip([0x9b00_7c00, 0x9bc0_7c00, 0x9b40_7c00]) {
+                    *count += usize::from(word == opcode);
+                }
+            }
+        }
+        _ => return None,
+    }
+    Some((chip == X86_64, counts))
+}
+
+/// A program whose operands are known only when it runs, which prints the
+/// result of `op` on two numbers that are both unsigned or both signed.
+fn opaque(signed: bool, op: char) -> String {
+    let (x, ty) = if signed {
+        ("0 - n", "Int")
+    } else {
+        ("n", "Nat")
+    };
+    format!(
+        "use std.console (console, print)\n\nfn main(args: List[str]) ! console, alloc {{\n  n = args.size\n  if n < 9000000000000000000 {{\n    x: {ty} = {x}\n    p = x {op} (x + 1)\n    print(\"{{p}}\")\n  }}\n}}\n"
+    )
+}
+
+/// The product of two numbers of 64 bits is `mul` or `imul` of one operand on
+/// x86-64, which gives both halves, and `mul` with `umulh` or `smulh` on
+/// arm64: next to the same program with a sum in its place, which has the same
+/// code to print the result, a product has those instructions and no more.
+fn the_product_of_two_numbers_of_64_bits_is_the_one_instruction_each_chip_gives_both_halves_with() {
+    let mut chips = 0;
+    for signed in [false, true] {
+        let (product, sum) = (opaque(signed, '*'), opaque(signed, '+'));
+        let high = i64::from(signed);
+        for target in Target::ALL {
+            let built = |source: &str| compile(source.as_bytes(), *target).expect("it builds");
+            let (with, without) = (built(&product), built(&sum));
+            let (Some((x86, with)), Some((_, without))) = (multiplies(&with), multiplies(&without))
+            else {
+                continue;
+            };
+            chips += 1;
+            let more = [0, 1, 2].map(|i| with[i] as i64 - without[i] as i64);
+            // `mul` for numbers that cannot be negative, `imul` for the rest, and
+            // not `imul` of two operands, which gives the low half alone; on arm64
+            // `mul` and the instruction for the high half.
+            let expected = if x86 { [1 - high, high, 0] } else { [1, 1 - high, high] };
+            assert_eq!(more, expected, "{target:?}, signed {signed}, for\n{product}");
+        }
+    }
+    assert!(chips >= 4, "an executable of each chip was not found");
+}
+
+/// A number of the type, anywhere in its range, and as often at its edges.
+fn anywhere(g: &mut Gen, ty: Int) -> i128 {
+    if g.below(3) == 0 {
+        return value(g, ty);
+    }
+    let size = (ty.max() - ty.min() + 1) as u128;
+    let offset = ((g.below(1 << 32) as u128) << 32 | g.below(1 << 32) as u128) % size;
+    ty.min() + offset as i128
+}
+
+/// A product of two numbers of 64 bits or fewer that are both signed or both
+/// not, whose operands are words the program is started with, so that the
+/// compiler does not know them and the product is worked out by the executable.
+#[derive(Clone, Copy, Debug)]
+struct Runtime {
+    types: (Int, Int),
+    values: (i128, i128),
+}
+
+fn runtime(g: &mut Gen) -> Runtime {
+    let signed = g.below(2) == 1;
+    let same: Vec<Int> = INTS.iter().copied().filter(|t| t.signed == signed).collect();
+    let (a, b) = (*g.pick(&same), *g.pick(&same));
+    Runtime {
+        types: (a, b),
+        values: (anywhere(g, a), anywhere(g, b)),
+    }
+}
+
+impl Runtime {
+    fn source(self) -> String {
+        let read = |name: &str, ty: &str| {
+            format!(
+                "fn read_{name}(text: str) -> {ty} ! alloc {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
+            )
+        };
+        with_header(format!(
+            "use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n{}{}fn main(args: List[str]) ! console, alloc {{\n  if args.size == 2 {{\n    a = read_a(args[0])\n    b = read_b(args[1])\n    print(\"{{a * b}}\")\n  }}\n}}\n",
+            read("a", self.types.0.name),
+            read("b", self.types.1.name)
+        ))
+    }
+
+    fn words(self) -> Vec<String> {
+        vec![self.values.0.to_string(), self.values.1.to_string()]
+    }
+
+    fn expected(self) -> String {
+        let product = Sm::of(self.values.0).times(Sm::of(self.values.1));
+        format!("{}\n", product.written())
+    }
+}
+
+/// The product of two numbers that are both signed or both not, which the
+/// compiler cannot know, is the exact product in every executable that this
+/// machine runs, whether a number is negative, at the least or the greatest of
+/// its type, or anywhere between. On arm64 it is `mul` with `smulh` or `umulh`,
+/// and on x86-64 one `mul` or `imul`.
+fn every_executable_gives_the_exact_product_of_two_numbers_known_only_when_it_runs() {
+    generate::check(4308, 40, runtime, |r| {
+        let (source, words, said) = (r.source(), r.words(), r.expected());
+        for target in targets::runnable() {
+            let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
+            targets::record(target, &[&bytes, words.concat().as_bytes(), said.as_bytes()]);
+            if !targets::fingerprinting() {
+                let ran = targets::run_with_words(&bytes, &words);
+                assert_eq!(ran.stdout, said.as_bytes(), "{target:?}, with {words:?}, for\n{source}");
+            }
         }
     });
 }
