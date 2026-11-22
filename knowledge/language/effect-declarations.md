@@ -11,6 +11,7 @@ built:
   - "the effect's name is a function that takes a lambda for each operation, each taking every parameter of the operation, and the body to run, and gives what the body gives"
   - "`net` and `time` are declared by `std/net.smith` and `std/time.smith`, and a program that reaches `main` on Linux with no handler has each of their operations answered by the system, by a function of the module that asks the kernel for plain numbers and builds the `Result` or the handle from them, which a handler replaces"
   - "an effect that the program declares and lists in `main`, which the target does not provide and no handler answers, is one error at its name in the list that names the effect"
+  - "a handler of an operation that has type parameters of its own is refused as not built yet, at the effect's name in the handler, where the handler's lambdas would be checked against the operation's type parameters"
 ---
 
 # Declaring an effect
@@ -103,6 +104,10 @@ pub fn audit[T](body: fn() -> T ! ledger) -> T ! console {
 Another module imports `ledger`, writes `! ledger` on its own functions, calls `pay`, and runs under `audit`. It cannot call `record`: `use app.ledger (record)` is refused as any private name is. It cannot handle `ledger` either, since a handler names every operation, and one it cannot name it cannot give a function for. That is one error, at the effect's name in the handler, which lists the operations that are private: "`ledger` has operations that are private to `app.ledger`, so it cannot be handled here: `record`", with the fix "write `pub` before `record` in `app/ledger.smith`". So what is recorded is what this module's functions record, and nothing else.
 
 An effect that any program may ask and answer, as `log` above, marks each operation `pub`.
+
+## An operation with type parameters
+
+An operation may have type parameters, as `fn put[T](x: take T) -> T` does. A handler's lambda for it is checked as a generic function is, once for every `T`: its `T` is distinct from any parameter of the function the handler is written in, and the lambda cannot assume that `T` is a given type. A lambda that does is refused.
 
 ## The forms
 
