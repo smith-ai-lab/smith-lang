@@ -21,8 +21,16 @@ pub const ONCE: &[Test] = &[
         a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_library,
     ),
     (
-        "every_module_of_the_standard_library_checks_whole",
-        every_module_of_the_standard_library_checks_whole,
+        "every_module_of_the_standard_library_checks_whole_part_1_of_3",
+        || every_module_of_the_standard_library_checks_whole(0),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_2_of_3",
+        || every_module_of_the_standard_library_checks_whole(1),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_3_of_3",
+        || every_module_of_the_standard_library_checks_whole(2),
     ),
 ];
 
@@ -151,7 +159,7 @@ fn a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_li
     assert!(smith::check_library(&[("m", module(3).as_str()), ("console", console)]).is_empty());
 }
 
-fn every_module_of_the_standard_library_checks_whole() {
-    let errors = smith::check_standard_library();
+fn every_module_of_the_standard_library_checks_whole(part: usize) {
+    let errors = smith::check_standard_library_part(part, 3);
     assert!(errors.is_empty(), "{errors:?}");
 }

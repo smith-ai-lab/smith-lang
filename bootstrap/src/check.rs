@@ -2065,18 +2065,25 @@ fn check_reading(
     Err(localize(errors, &labels))
 }
 
-/// The errors in every module of the standard library, each read whole and
-/// checked whole: every function, type, trait, and `impl` in it, whether or not
-/// a program reaches it, as no program is held to reach what it does not.
-pub fn check_standard_library() -> Vec<Error> {
-    check_library(&Library::standard())
+/// The errors in the part `part` of `parts` of the modules of the standard
+/// library, each read whole and checked whole: every function, type, trait, and
+/// `impl` in it, whether or not a program reaches it, as no program is held to
+/// reach what it does not. The parts, numbered from 0, hold every module once.
+pub fn check_standard_library_part(part: usize, parts: usize) -> Vec<Error> {
+    check_library_part(&Library::standard(), part, parts)
 }
 
 /// The errors in every module of the library, each read whole and checked
 /// whole.
 pub fn check_library(library: &Library) -> Vec<Error> {
+    check_library_part(library, 0, 1)
+}
+
+/// The errors in the modules of the library whose place is `part` modulo
+/// `parts`, each read whole and checked whole.
+fn check_library_part(library: &Library, part: usize, parts: usize) -> Vec<Error> {
     let mut found = Vec::new();
-    for (name, _) in &library.modules {
+    for (name, _) in library.modules.iter().skip(part).step_by(parts) {
         let tokens = crate::lexer::lex(b"fn main() {}\n").expect("the file lexes");
         let file = crate::parser::parse(&tokens).expect("the file parses");
         if let Err(errors) =
