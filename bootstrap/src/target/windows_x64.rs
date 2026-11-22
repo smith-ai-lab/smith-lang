@@ -5,8 +5,8 @@
 use super::Part;
 use super::pe::{
     self, EXIT_PROCESS, GET_COMMAND_LINE, GET_STD_HANDLE, MEM_COMMIT_RESERVE, MOST_PER_WRITE,
-    Machine, PAGE_READWRITE, PROCESS_PRNG, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, VIRTUAL_ALLOC,
-    WRITE_FILE,
+    Machine, PAGE_READWRITE, READ_FILE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    VIRTUAL_ALLOC, WRITE_FILE, process_prng,
 };
 use super::x86_64::{self, Asm, Place, R8, R9, RAX, RBX, RCX, RDI, RDX, RSI, Reg, System, Z};
 use crate::scalar::{Program, Stream};
@@ -32,12 +32,17 @@ const RBX_AT: u32 = 48;
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = x86_64::code::<Windows>(program);
+    let (asm, data, parts) = if program.reads() {
+        x86_64::code::<Windows<true>>(program)
+    } else {
+        x86_64::code::<Windows<false>>(program)
+    };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = pe::imports(
         program.allocates(),
         program.takes_arguments(),
         program.asks_for_entropy(),
+        program.reads(),
     );
     let mut at = 0;
     let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
@@ -47,9 +52,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     (executable, super::shifted(parts, pe::IMAGE_BASE + at))
 }
 
-struct Windows;
+/// Whether the program reads standard input, which moves the slot of
+/// `ProcessPrng`.
+struct Windows<const READS: bool>;
 
-impl System for Windows {
+impl<const READS: bool> System for Windows<READS> {
     const RESERVED: u32 = RESERVED;
     const STACK_BY_PAGE: bool = true;
     /// rsi and rdi, which calls preserve.
@@ -91,6 +98,38 @@ impl System for Windows {
         asm.load(RBX, 8, false, Place::Frame(RBX_AT));
     }
 
+    /// Reads from standard input with `ReadFile`, which gives a `BOOL` and
+    /// writes how many bytes it read. A read that fails is the end of the
+    /// input, as `ReadFile` reports the end of a pipe that way, and one that
+    /// reads nothing is. The address and the count are in rsi and rdi, which
+    /// calls preserve, and the handle is kept in rbx, which they preserve too.
+    fn read(asm: &mut Asm, _: usize) {
+        let ended = asm.label();
+        let done = asm.label();
+        asm.store(Place::Frame(RBX_AT), RBX, 8);
+        asm.mov32(RCX, STD_INPUT_HANDLE);
+        asm.call_slot(GET_STD_HANDLE);
+        asm.mov(RBX, RAX);
+        // ReadFile(handle, bytes, at most MOST_PER_WRITE bytes, &read, NULL)
+        asm.mov(R8, RDI);
+        asm.mov32(RAX, MOST_PER_WRITE);
+        asm.cmp(R8, RAX);
+        asm.cmova(R8, RAX);
+        asm.mov(RCX, RBX);
+        asm.mov(RDX, RSI);
+        asm.stack_address(R9, WRITTEN);
+        asm.store_stack_imm32(FIFTH_ARGUMENT, 0);
+        asm.call_slot(READ_FILE);
+        asm.test32(RAX);
+        asm.jcc(Z, ended);
+        asm.load32_stack(RAX, WRITTEN);
+        asm.jmp(done);
+        asm.bind(ended);
+        asm.mov32(RAX, 0);
+        asm.bind(done);
+        asm.load(RBX, 8, false, Place::Frame(RBX_AT));
+    }
+
     fn exit(asm: &mut Asm, status: u32) {
         asm.mov32(RCX, status);
         asm.call_slot(EXIT_PROCESS);
@@ -104,7 +143,7 @@ impl System for Windows {
         let end = asm.label();
         asm.mov(RCX, RDI);
         asm.mov(RDX, RSI);
-        asm.call_slot(PROCESS_PRNG);
+        asm.call_slot(process_prng(READS));
         asm.test32(RAX);
         asm.jcc(Z, refused);
         asm.mov32(RAX, 0);

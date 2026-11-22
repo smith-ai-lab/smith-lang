@@ -22,6 +22,10 @@ pub enum Runtime {
     /// random bytes and ends the program with a failing status, so no byte
     /// that was not filled is ever used. It gives nothing.
     Entropy,
+    /// Takes a prompt, a text, writes it to standard output, and gives a byte
+    /// that is 1 and the next line of standard input without its line break,
+    /// or 0 and no text when standard input has ended.
+    Input,
     /// Takes an address to write to, an address to read from, and a count,
     /// and copies that many bytes, 8 at a time and then the fewer than 8
     /// that are left, one at a time. The two places do not overlap. It gives
@@ -202,6 +206,7 @@ impl Runtime {
             Runtime::Valid => "<valid>",
             Runtime::Check => "<check>",
             Runtime::Entropy => "<entropy>",
+            Runtime::Input => "<input>",
         }
     }
 }
@@ -279,6 +284,7 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Utf8 => words::utf8(),
         Runtime::Valid => words::valid(),
         Runtime::Entropy => words::entropy(),
+        Runtime::Input => words::input(place(Runtime::Copy)),
         Runtime::Check => words::check(
             place(Runtime::Valid),
             place(Runtime::Decimal {

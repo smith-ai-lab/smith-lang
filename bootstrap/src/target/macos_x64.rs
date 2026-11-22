@@ -3,7 +3,9 @@
 //! by `x86_64`.
 
 use super::Part;
-use super::macho::{self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, WRITE};
+use super::macho::{
+    self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, READ, WRITE,
+};
 use super::x86_64::{
     self, Asm, L, LE, NE, Place, R8, R9, R12, RAX, RBX, RCX, RDI, RDX, RSI, Reg, S, System, Z,
 };
@@ -20,7 +22,11 @@ const MACHINE: Machine = Machine {
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let (asm, data, parts) = x86_64::code::<Macos>(program);
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
-    let imports = macho::imports(program.allocates(), program.asks_for_entropy());
+    let imports = macho::imports(
+        program.allocates(),
+        program.asks_for_entropy(),
+        program.reads(),
+    );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
         at = code;
@@ -66,6 +72,35 @@ impl System for Macos {
         asm.jcc(L, interrupted);
         asm.jmp(fail);
         asm.bind(interrupted);
+        asm.call_slot(ERROR);
+        asm.cmp_load32_imm8(RAX, EINTR as i8);
+        asm.jcc(Z, again);
+        asm.jmp(fail);
+        asm.bind(done);
+        asm.load(RBX, 8, false, Place::Frame(0));
+        asm.load(R12, 8, false, Place::Frame(8));
+    }
+
+    /// Reads from file 0, retrying a read that is interrupted, and jumps to
+    /// `fail` if the system refuses it. The place and the count stay in rbx and
+    /// r12, which calls keep, as `write` keeps them.
+    fn read(asm: &mut Asm, fail: usize) {
+        asm.store(Place::Frame(0), RBX, 8);
+        asm.store(Place::Frame(8), R12, 8);
+        asm.mov(RBX, RSI);
+        asm.mov(R12, RDX);
+        let again = asm.label();
+        let done = asm.label();
+        let refused = asm.label();
+        asm.bind(again);
+        asm.mov32(RDI, 0);
+        asm.mov(RSI, RBX);
+        asm.mov(RDX, R12);
+        asm.call_slot(READ);
+        asm.test(RAX);
+        asm.jcc(L, refused);
+        asm.jmp(done);
+        asm.bind(refused);
         asm.call_slot(ERROR);
         asm.cmp_load32_imm8(RAX, EINTR as i8);
         asm.jcc(Z, again);

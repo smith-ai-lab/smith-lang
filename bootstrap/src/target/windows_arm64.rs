@@ -7,8 +7,8 @@ use super::Part;
 use super::arm64::{self, Asm, LS, Place, System, X0, X1, X2, X3, X4, X19, X20, X21};
 use super::pe::{
     self, EXIT_PROCESS, GET_COMMAND_LINE, GET_STD_HANDLE, MEM_COMMIT_RESERVE, MOST_PER_WRITE,
-    Machine, PAGE_READWRITE, PROCESS_PRNG, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, VIRTUAL_ALLOC,
-    WRITE_FILE,
+    Machine, PAGE_READWRITE, READ_FILE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    VIRTUAL_ALLOC, WRITE_FILE, process_prng,
 };
 use crate::scalar::{Program, Stream};
 
@@ -34,12 +34,17 @@ const SAVED: u32 = 8;
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = arm64::code::<Windows>(program);
+    let (asm, data, parts) = if program.reads() {
+        arm64::code::<Windows<true>>(program)
+    } else {
+        arm64::code::<Windows<false>>(program)
+    };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = pe::imports(
         program.allocates(),
         program.takes_arguments(),
         program.asks_for_entropy(),
+        program.reads(),
     );
     let mut at = 0;
     let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
@@ -49,9 +54,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     (executable, super::shifted(parts, pe::IMAGE_BASE + at))
 }
 
-struct Windows;
+/// Whether the program reads standard input, which moves the slot of
+/// `ProcessPrng`.
+struct Windows<const READS: bool>;
 
-impl System for Windows {
+impl<const READS: bool> System for Windows<READS> {
     const RESERVED: u32 = RESERVED;
     const STACK_BY_PAGE: bool = true;
 
@@ -96,6 +103,40 @@ impl System for Windows {
         }
     }
 
+    /// Reads from standard input with `ReadFile`, which gives a `BOOL` and
+    /// writes how many bytes it read. A read that fails is the end of the
+    /// input, as `ReadFile` reports the end of a pipe that way, and one that
+    /// reads nothing is. The place and the count are kept in x19 and x20,
+    /// which calls preserve.
+    fn read(asm: &mut Asm, _: usize) {
+        let ended = asm.label();
+        let done = asm.label();
+        for (i, r) in [X19, X20].into_iter().enumerate() {
+            asm.store(Place::Frame(SAVED + 8 * i as u32), r, 8);
+        }
+        asm.mov(X19, X1);
+        asm.mov(X20, X2);
+        asm.mov64(X0, u64::from(STD_INPUT_HANDLE));
+        asm.call(GET_STD_HANDLE);
+        // ReadFile(handle, bytes, at most MOST_PER_WRITE bytes, &read, NULL)
+        asm.mov64(X2, u64::from(MOST_PER_WRITE));
+        asm.cmp(X20, X2);
+        asm.csel(X2, X20, X2, LS);
+        asm.mov(X1, X19);
+        asm.stack_address(X3, WRITTEN);
+        asm.mov_w(X4, 0);
+        asm.call(READ_FILE);
+        asm.cbz_w(X0, ended);
+        asm.load(X0, 4, false, Place::Frame(WRITTEN));
+        asm.branch(done);
+        asm.bind(ended);
+        asm.mov_w(X0, 0);
+        asm.bind(done);
+        for (i, r) in [X19, X20].into_iter().enumerate() {
+            asm.load(r, 8, false, Place::Frame(SAVED + 8 * i as u32));
+        }
+    }
+
     /// Asks `ProcessPrng` for every byte at once, which takes any count and
     /// gives a `BOOL` that is not 0 when it filled them. The address and the
     /// count are in x1 and x2.
@@ -104,7 +145,7 @@ impl System for Windows {
         let end = asm.label();
         asm.mov(X0, X1);
         asm.mov(X1, X2);
-        asm.call(PROCESS_PRNG);
+        asm.call(process_prng(READS));
         asm.cbz_w(X0, refused);
         asm.mov_w(X0, 0);
         asm.branch(end);

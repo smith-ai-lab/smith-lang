@@ -1059,6 +1059,12 @@ pub trait System {
     /// change, and leaves the others as they were, which it may do by
     /// holding them in the bytes at the bottom of the frame.
     fn write(asm: &mut Asm, stream: Stream, fail: usize);
+    /// Reads at least one byte, and at most as many as the count that is in
+    /// `TEXT.1`, from standard input to the address that is in `TEXT.0`,
+    /// retrying a read that is interrupted, and leaves how many it read in
+    /// rax, which is 0 only at the end of input. It jumps to `fail` if the
+    /// system refuses it. It may change what `write` may.
+    fn read(asm: &mut Asm, fail: usize);
     /// Fills every byte of the bytes whose address is in rdi and whose count
     /// is in rsi with bytes the system gives, asking again until they are
     /// filled, and leaves 0 in rax when it did and another number when the
@@ -2285,6 +2291,22 @@ impl<S: System> Writer<'_, S> {
                     .collect();
                 self.run(asm, &moves);
                 S::write(asm, *stream, self.fail);
+            }
+            Op::System {
+                call: Call::Read,
+                args,
+            } => {
+                let place = [S::TEXT.0, S::TEXT.1];
+                let moves: Vec<Move<Loc>> = (args.iter().zip(place))
+                    .map(|(arg, to)| Move {
+                        to: Loc::Register(to),
+                        from: self.at[arg.0],
+                        width: self.width(*arg),
+                    })
+                    .collect();
+                self.run(asm, &moves);
+                S::read(asm, self.fail);
+                self.finish(asm, results[0], RAX, true);
             }
             Op::System {
                 call: Call::Entropy,

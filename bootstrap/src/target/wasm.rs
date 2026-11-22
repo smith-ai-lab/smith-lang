@@ -1336,6 +1336,7 @@ impl Lowering<'_> {
                 self.code.call(fill);
                 self.set(results[0]);
             }
+            System::Read => unreachable!("a module that reads is refused before it is built"),
             System::Exit => {
                 self.get_wrapped(args[0]);
                 self.code.call(self.context.exit);

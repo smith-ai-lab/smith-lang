@@ -650,3 +650,80 @@ pub(super) fn entropy() -> Function {
     f.ret(vec![]);
     f.finish(&[])
 }
+
+/// Writes the prompt to standard output, and then reads standard input a byte
+/// at a time, up to a line feed, so that nothing after the line is taken from
+/// the program that gave it. It gives 1, and the line without its line break,
+/// a carriage return before the line feed going with it; or, when standard
+/// input has ended, the bytes read since the last line feed as a line if there
+/// are any, and 0 and no line if there are none. The line is in memory that
+/// holds at least what it needs, which is doubled, and the bytes copied, when
+/// it is full.
+pub(super) fn input(copy: usize) -> Function {
+    let mut f = Builder::new();
+    let p = f.params(&[ADDRESS, LENGTH]);
+    f.write_output(p[0], p[1]);
+    let (zero, one) = (int(&mut f, 0), int(&mut f, 1));
+    let first = int(&mut f, 64);
+    let buffer = f.allocate(first);
+    let (head, h) = f.block(&[ADDRESS, LENGTH, LENGTH]);
+    let (buf, room, size) = (h[0], h[1], h[2]);
+    let (grow, _) = f.block(&[]);
+    let (go, g) = f.block(&[ADDRESS, LENGTH]);
+    let (more, _) = f.block(&[]);
+    let (next, _) = f.block(&[]);
+    let (line, _) = f.block(&[]);
+    let (peek, _) = f.block(&[]);
+    let (finish, l) = f.block(&[LENGTH]);
+    let (ended, _) = f.block(&[]);
+    let (partial, _) = f.block(&[]);
+    let (nothing, _) = f.block(&[]);
+    f.jump(head, vec![buffer, first, zero]);
+    f.at(head);
+    let full = f.compare(Compare::Equal, size, room);
+    f.switch(full, vec![(go, vec![buf, room]), (grow, vec![])]);
+    f.at(grow);
+    let twice = f.binary(Binary::Add, room, room);
+    let bigger = f.allocate(twice);
+    f.call(copy, vec![bigger, buf, size], &[]);
+    f.jump(go, vec![bigger, twice]);
+    f.at(go);
+    let (here, space) = (g[0], g[1]);
+    let at = after(&mut f, here, size);
+    let n = f.read(at, one);
+    let none = f.compare(Compare::Equal, n, zero);
+    f.switch(none, vec![(more, vec![]), (ended, vec![])]);
+    f.at(more);
+    let c = f.load(BYTE, at);
+    let feed = byte(&mut f, b'\n');
+    let is_feed = f.compare(Compare::Equal, c, feed);
+    f.switch(is_feed, vec![(next, vec![]), (line, vec![])]);
+    f.at(next);
+    let grown = f.binary(Binary::Add, size, one);
+    f.jump(head, vec![here, space, grown]);
+    f.at(line);
+    let empty = f.compare(Compare::Equal, size, zero);
+    f.switch(empty, vec![(peek, vec![]), (finish, vec![size])]);
+    f.at(peek);
+    let last = f.binary(Binary::Sub, size, one);
+    let place = after(&mut f, here, last);
+    let before = f.load(BYTE, place);
+    let carriage = byte(&mut f, b'\r');
+    let is_carriage = f.compare(Compare::Equal, before, carriage);
+    let kept = f.choose(is_carriage, last, size);
+    f.jump(finish, vec![kept]);
+    f.at(finish);
+    let yes = byte(&mut f, 1);
+    f.ret(vec![yes, here, l[0]]);
+    f.at(ended);
+    let empty = f.compare(Compare::Equal, size, zero);
+    f.switch(empty, vec![(partial, vec![]), (nothing, vec![])]);
+    f.at(partial);
+    let yes = byte(&mut f, 1);
+    f.ret(vec![yes, here, size]);
+    f.at(nothing);
+    let no = byte(&mut f, 0);
+    let null = f.null();
+    f.ret(vec![no, null, zero]);
+    f.finish(&[BYTE, ADDRESS, LENGTH])
+}

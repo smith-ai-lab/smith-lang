@@ -8,6 +8,7 @@ use super::arm64::{self, Asm, EQ, LE, LT, Place, System, X0, X1, X2, X3, X4, X5,
 use super::elf::{self, CODE_ADDRESS, Machine};
 use crate::scalar::{Program, Stream};
 
+const SYS_READ: u16 = 63;
 const SYS_WRITE: u16 = 64;
 const SYS_MMAP: u16 = 222;
 const SYS_GETRANDOM: u16 = 278;
@@ -64,6 +65,29 @@ impl System for Linux {
         asm.bind(done);
         asm.load(X19, 8, false, Place::Frame(0));
         asm.load(X20, 8, false, Place::Frame(8));
+    }
+
+    /// Reads from file 0, retrying a read that is interrupted, and branches to
+    /// `fail` if the kernel refuses it. The kernel gives a failure as minus
+    /// its error number.
+    fn read(asm: &mut Asm, fail: usize) {
+        let again = asm.label();
+        let done = asm.label();
+        let refused = asm.label();
+        asm.bind(again);
+        asm.mov_w(X0, 0);
+        asm.mov_w(X8, SYS_READ);
+        asm.svc();
+        // cmp x0, #0; b.lt refused; b done
+        asm.word(0xf100_001f);
+        asm.cond(LT, refused);
+        asm.branch(done);
+        asm.bind(refused);
+        // cmn x0, #EINTR; b.eq again; b fail
+        asm.word(0xb100_001f | EINTR << 10 | X0 << 5);
+        asm.cond(EQ, again);
+        asm.branch(fail);
+        asm.bind(done);
     }
 
     /// Asks the kernel for the bytes until every one is filled, retrying a

@@ -306,6 +306,9 @@ impl Target {
                 self.name()
             );
         }
+        if self == Target::Wasm && program.reads() {
+            panic!("wasm does not read standard input yet: the program calls input");
+        }
         match self {
             Target::LinuxX64 => linux_x64::emit(program),
             Target::MacosX64 => macos_x64::emit(program),

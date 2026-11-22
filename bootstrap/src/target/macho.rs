@@ -19,7 +19,14 @@ const SIGNATURE_PAGE: usize = 0x1000;
 /// The symbols a program may import from `libSystem`, in the order of their
 /// slots in `__got`. A program that never asks for memory imports only the
 /// first three.
-const IMPORTS: [&str; 5] = ["_write", "___error", "__exit", "_mmap", "_getentropy"];
+const IMPORTS: [&str; 6] = [
+    "_write",
+    "___error",
+    "__exit",
+    "_mmap",
+    "_getentropy",
+    "_read",
+];
 /// `write`, which writes bytes to a file.
 pub const WRITE: usize = 0;
 /// `__error`, which gives the address of the thread's error number.
@@ -30,13 +37,20 @@ pub const EXIT: usize = 2;
 pub const MMAP: usize = 3;
 /// `getentropy`, which fills at most 256 bytes with bytes nobody can predict.
 pub const GETENTROPY: usize = 4;
+/// `read`, which reads bytes from a file.
+pub const READ: usize = 5;
 
 /// The symbols a program imports: `mmap` only if it asks for memory, and
 /// `getentropy` only if it asks for random bytes, which it says it could not
 /// get in a text it asks for memory to write, so it asks for memory too.
-pub fn imports(allocates: bool, entropy: bool) -> &'static [&'static str] {
-    if entropy {
+///
+/// A program that reads standard input imports every one, which costs it
+/// nothing it needs, as it asks for memory to hold what it reads.
+pub fn imports(allocates: bool, entropy: bool, reads: bool) -> &'static [&'static str] {
+    if reads {
         &IMPORTS
+    } else if entropy {
+        &IMPORTS[..5]
     } else if allocates {
         &IMPORTS[..4]
     } else {
