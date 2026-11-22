@@ -87,6 +87,10 @@ pub const MACHINE: &[Test] = &[
         || the_lexer_written_in_smith_lexes_every_case_file_as_the_rust_lexer_does(2),
     ),
     (
+        "a_character_a_mistake_names_is_shown_as_the_rust_lexer_shows_it",
+        a_character_a_mistake_names_is_shown_as_the_rust_lexer_shows_it,
+    ),
+    (
         "strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does",
         strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does,
     ),
@@ -321,6 +325,27 @@ fn strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does() {
         cut.pop();
         texts.push(whole);
         texts.push(cut);
+    }
+    lexes_as_the_rust_lexer_does(&texts);
+}
+
+/// An error names the character it stops at, by its number when it is a
+/// control or white space and as it is otherwise, and the character has one to
+/// four bytes. Each is placed where a character that cannot start a token is
+/// named, and after a backslash in a string and in a character, and the
+/// characters are the ones either side of every kind and of every length.
+fn a_character_a_mistake_names_is_shown_as_the_rust_lexer_shows_it() {
+    const NUMBERS: &[u32] = &[
+        0x01, 0x07, 0x0B, 0x0C, 0x1F, 0x7F, 0x80, 0x84, 0x85, 0x86, 0x9F, 0xA0, 0xA1, 0xA9, 0xE9, 0x1680,
+        0x180E, 0x1FFF, 0x2000, 0x200A, 0x200B, 0x2027, 0x2028, 0x2029, 0x202A, 0x202E, 0x202F, 0x2030,
+        0x205E, 0x205F, 0x2060, 0x2FFF, 0x3000, 0x3001, 0xFFFD, 0x10000, 0x1F600, 0x10FFFF,
+    ];
+    const ASCII: &[char] = &['#', '$', '&', '?', ';', '~', '`', '\\'];
+    let mut texts: Vec<Vec<u8>> = Vec::new();
+    for c in NUMBERS.iter().filter_map(|&n| char::from_u32(n)).chain(ASCII.iter().copied()) {
+        texts.push(format!("a {c} b\n").into_bytes());
+        texts.push(format!("\"\\{c}\"\n").into_bytes());
+        texts.push(format!("'\\{c}'\n").into_bytes());
     }
     lexes_as_the_rust_lexer_does(&texts);
 }

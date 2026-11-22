@@ -17,33 +17,121 @@ fn lexer() -> &'static str {
 /// What a program that lexes each input prints for it. Each input starts with
 /// a line `input`.
 const DRIVER: &str = r#"
-fn show(b: List[Byte]) -> str ! alloc {
-  var s: str = ""
-  loop i in 0..b.size {
-    if i == 0 { s = "{b[i]}" } else { s = "{s},{b[i]}" }
+fn show(s: str) -> str ! alloc {
+  var joined: str = ""
+  loop i in 0..s.size {
+    if i == 0 { joined = "{s[i]}" } else { joined = "{joined},{s[i]}" }
   }
-  s
+  joined
 }
 
-fn show_token(t: Token) ! console, alloc {
+fn keyword_place(k: Keyword) -> Nat {
+  match k {
+    .kw_and { 0 }
+    .kw_as { 1 }
+    .kw_break { 2 }
+    .kw_derive { 3 }
+    .kw_effect { 4 }
+    .kw_else { 5 }
+    .kw_ensures { 6 }
+    .kw_enum { 7 }
+    .kw_fn { 8 }
+    .kw_for { 9 }
+    .kw_foreign { 10 }
+    .kw_if { 11 }
+    .kw_impl { 12 }
+    .kw_in { 13 }
+    .kw_loop { 14 }
+    .kw_match { 15 }
+    .kw_not { 16 }
+    .kw_or { 17 }
+    .kw_out { 18 }
+    .kw_pub { 19 }
+    .kw_requires { 20 }
+    .kw_return { 21 }
+    .kw_struct { 22 }
+    .kw_take { 23 }
+    .kw_trait { 24 }
+    .kw_try { 25 }
+    .kw_use { 26 }
+    .kw_var { 27 }
+    .kw_with { 28 }
+    .kw_without { 29 }
+  }
+}
+
+fn punct_place(p: Punct) -> Nat {
+  match p {
+    .dot_dot { 0 }
+    .arrow { 1 }
+    .plus_equal { 2 }
+    .minus_equal { 3 }
+    .star_equal { 4 }
+    .slash_equal { 5 }
+    .equal_equal { 6 }
+    .bang_equal { 7 }
+    .less_equal { 8 }
+    .greater_equal { 9 }
+    .open_paren { 10 }
+    .close_paren { 11 }
+    .open_bracket { 12 }
+    .close_bracket { 13 }
+    .open_brace { 14 }
+    .close_brace { 15 }
+    .comma { 16 }
+    .colon { 17 }
+    .dot { 18 }
+    .equal { 19 }
+    .less { 20 }
+    .greater { 21 }
+    .plus { 22 }
+    .minus { 23 }
+    .star { 24 }
+    .slash { 25 }
+    .at_sign { 26 }
+    .caret { 27 }
+    .bang { 28 }
+    .pipe_arrow { 29 }
+    .percent { 30 }
+  }
+}
+
+fn show_token(t: Token, fuel: u64) ! console, alloc
+  decreases fuel
+{
   l = t.pos.line
   c = t.pos.col
   match t.tok {
-    .ident(b) { print("ident {l} {c} {show(b)}") }
-    .keyword(k) { print("keyword {l} {c} {k}") }
-    .number(b) { print("number {l} {c} {show(b)}") }
-    .string(b) { print("string {l} {c} {show(b)}") }
-    .interp_open { print("interp_open {l} {c}") }
-    .text(b) { print("text {l} {c} {show(b)}") }
-    .interp_close { print("interp_close {l} {c}") }
-    .punct(k) { print("punct {l} {c} {k}") }
+    .ident(s) { print("ident {l} {c} {show(s)}") }
+    .keyword(k) { print("keyword {l} {c} {keyword_place(k)}") }
+    .number(s) { print("number {l} {c} {show(s)}") }
+    .string(s) { print("string {l} {c} {show(s)}") }
+    .interp(pieces) {
+      print("interp_open {l} {c}")
+      loop i in 0..pieces.size {
+        match pieces[i] {
+          .text(s) { print("text {l} {c} {show(s)}") }
+          .expr(tokens) { if fuel > 0 { show_tokens(tokens, fuel - 1) } }
+        }
+      }
+      print("interp_close {l} {c}")
+    }
+    .punct(p) { print("punct {l} {c} {punct_place(p)}") }
     .newline { print("newline {l} {c}") }
     .eof { print("eof {l} {c}") }
   }
 }
 
+fn show_tokens(tokens: List[Token], fuel: u64) ! console, alloc
+  decreases fuel
+{
+  loop i in 0..tokens.size {
+    if fuel > 0 { show_token(tokens[i], fuel - 1) }
+  }
+}
+
 fn show_error(e: LexError) ! console, alloc {
-  print("error {e.pos.line} {e.pos.col} {e.code} {e.why} {show(e.detail)}")
+  print("error {e.pos.line} {e.pos.col} {e.message}")
 }
 
 fn main() ! console, alloc {
@@ -51,9 +139,7 @@ fn main() ! console, alloc {
   loop k in 0..texts.size {
     print("input")
     match lex(texts[k]) {
-      .ok(tokens) {
-        loop i in 0..tokens.size { show_token(tokens[i]) }
-      }
+      .ok(tokens) { show_tokens(tokens, 100000) }
       .err(errors) {
         loop i in 0..errors.size { show_error(errors[i]) }
       }
@@ -105,81 +191,7 @@ pub fn rust(text: &[u8]) -> Vec<String> {
         Ok(tokens) => tokens.lines().map(str::to_string).collect(),
         Err(errors) => errors
             .iter()
-            .map(|e| format!("error {} {} {}", e.pos.line, e.pos.col, code(&e.message)))
+            .map(|e| format!("error {} {} {}", e.pos.line, e.pos.col, e.message))
             .collect(),
     }
-}
-
-/// The bytes of a character an error shows, as `U+00E9` or between backticks.
-fn shown(text: &str) -> String {
-    let c = match text.strip_prefix("U+") {
-        Some(hex) => char::from_u32(u32::from_str_radix(hex, 16).unwrap()).unwrap(),
-        None => text.trim_matches('`').chars().next().unwrap(),
-    };
-    bytes(c.to_string().as_bytes())
-}
-
-fn bytes(b: &[u8]) -> String {
-    let b: Vec<String> = b.iter().map(|x| x.to_string()).collect();
-    b.join(",")
-}
-
-/// What the lexer written in Smith says for an error of the Rust lexer: the
-/// number of its kind, why, and the bytes it names.
-fn code(message: &str) -> String {
-    let fixed = |code: u32| format!("{code} 0 ");
-    match message {
-        "a carriage return is not allowed in a Smith file" => return fixed(1),
-        "the file is not valid UTF-8 here" => return fixed(2),
-        "a comment must stand on its own line" => return fixed(3),
-        "this string has no closing quote on the line it starts" => return fixed(4),
-        "a character has no closing `'`" => return fixed(7),
-        _ => {}
-    }
-    if message.starts_with("a `}` in a string closes") {
-        return fixed(5);
-    }
-    if message.starts_with("a character is written between") {
-        return fixed(8);
-    }
-    if message.starts_with("a character has no closing `'`, and") {
-        return fixed(10);
-    }
-    if let Some(rest) = message.strip_prefix("unknown escape: a backslash is followed by ") {
-        let (after, allowed) = rest.split_once(", not one of ").unwrap();
-        let code = if allowed.contains('"') { 6 } else { 9 };
-        if after == "nothing" {
-            return format!("{code} 1 ");
-        }
-        return format!("{code} 2 {}", shown(after));
-    }
-    if let Some(rest) = message.strip_prefix("unexpected character ") {
-        return format!("11 0 {}", shown(rest));
-    }
-    if let Some(rest) = message.strip_prefix('`') {
-        let (text, why) = rest.split_once("` is not a number: ").unwrap();
-        let base = |name: &str| match name {
-            "hexadecimal" => 16,
-            "binary" => 2,
-            _ => 10,
-        };
-        let text_bytes = bytes(text.as_bytes());
-        if let Some((name, _)) = why.split_once(" digits are needed here") {
-            return format!("12 {} {text_bytes},0,0", base(name) * 10 + 1);
-        }
-        if why.starts_with("an `_`") {
-            let b = if text.starts_with("0x") {
-                16
-            } else if text.starts_with("0b") {
-                2
-            } else {
-                10
-            };
-            return format!("12 {} {text_bytes},0,0", b * 10 + 2);
-        }
-        let (shown_char, name) = why.split_once(" is not a ").unwrap();
-        let name = name.strip_suffix(" digit").unwrap();
-        return format!("12 {} {text_bytes},0,{}", base(name) * 10 + 3, shown(shown_char));
-    }
-    panic!("an error the lexer written in Smith has no number for: {message}")
 }

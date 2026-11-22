@@ -82,40 +82,107 @@ fn show_use(u: Use) ! console, alloc {
   }
 }
 
-fn found(t: Tok, keywords: List[List[Byte]], puncts: List[List[Byte]]) -> str ! alloc {
-  match t {
-    .ident(b) { "text {show(b)}" }
-    .keyword(k) { if k < keywords.size { "text {show(keywords[k])}" } else { "text" } }
-    .punct(k) { if k < puncts.size { "text {show(puncts[k])}" } else { "text" } }
-    .number(b) { "number {show(b)}" }
-    .newline { "newline" }
-    .eof { "eof" }
-    .string(b) { "string" }
-    .interp_open { "string" }
-    .text(b) { "string" }
-    .interp_close { "string" }
+fn keyword_text(k: Keyword) -> str {
+  match k {
+    .kw_and { "and" }
+    .kw_as { "as" }
+    .kw_break { "break" }
+    .kw_derive { "derive" }
+    .kw_effect { "effect" }
+    .kw_else { "else" }
+    .kw_ensures { "ensures" }
+    .kw_enum { "enum" }
+    .kw_fn { "fn" }
+    .kw_for { "for" }
+    .kw_foreign { "foreign" }
+    .kw_if { "if" }
+    .kw_impl { "impl" }
+    .kw_in { "in" }
+    .kw_loop { "loop" }
+    .kw_match { "match" }
+    .kw_not { "not" }
+    .kw_or { "or" }
+    .kw_out { "out" }
+    .kw_pub { "pub" }
+    .kw_requires { "requires" }
+    .kw_return { "return" }
+    .kw_struct { "struct" }
+    .kw_take { "take" }
+    .kw_trait { "trait" }
+    .kw_try { "try" }
+    .kw_use { "use" }
+    .kw_var { "var" }
+    .kw_with { "with" }
+    .kw_without { "without" }
   }
 }
 
-fn show_error(e: ParseError, keywords: List[List[Byte]], puncts: List[List[Byte]]) ! console, alloc {
+fn punct_text(p: Punct) -> str {
+  match p {
+    .dot_dot { ".." }
+    .arrow { "->" }
+    .plus_equal { "+=" }
+    .minus_equal { "-=" }
+    .star_equal { "*=" }
+    .slash_equal { "/=" }
+    .equal_equal { "==" }
+    .bang_equal { "!=" }
+    .less_equal { "<=" }
+    .greater_equal { ">=" }
+    .open_paren { "(" }
+    .close_paren { ")" }
+    .open_bracket { "[" }
+    .close_bracket { "]" }
+    .open_brace { "\{" }
+    .close_brace { "\}" }
+    .comma { "," }
+    .colon { ":" }
+    .dot { "." }
+    .equal { "=" }
+    .less { "<" }
+    .greater { ">" }
+    .plus { "+" }
+    .minus { "-" }
+    .star { "*" }
+    .slash { "/" }
+    .at_sign { "@" }
+    .caret { "^" }
+    .bang { "!" }
+    .pipe_arrow { "|>" }
+    .percent { "%" }
+  }
+}
+
+fn found(t: Tok) -> str ! alloc {
+  match t {
+    .ident(s) { "text {show(s)}" }
+    .keyword(k) { "text {show(keyword_text(k))}" }
+    .punct(p) { "text {show(punct_text(p))}" }
+    .number(s) { "number {show(s)}" }
+    .newline { "newline" }
+    .eof { "eof" }
+    .string(s) { "string" }
+    .interp(pieces) { "string" }
+  }
+}
+
+fn show_error(e: ParseError) ! console, alloc {
   if e.wanted == 8 or e.wanted == 9 {
     print("error {e.pos.line} {e.pos.col} {e.wanted} -")
   } else {
-    print("error {e.pos.line} {e.pos.col} {e.wanted} {found(e.found, keywords, puncts)}")
+    print("error {e.pos.line} {e.pos.col} {e.wanted} {found(e.found)}")
   }
 }
 
 fn main() ! console, alloc {
   texts = inputs()
-  keywords = keyword_table()
-  puncts = punctuation_table()
   loop k in 0..texts.size {
     print("input")
     match lex(texts[k]) {
       .ok(tokens) {
         r = parse_uses(tokens)
         loop i in 0..r.uses.size { show_use(r.uses[i]) }
-        loop i in 0..r.errors.size { show_error(r.errors[i], keywords, puncts) }
+        loop i in 0..r.errors.size { show_error(r.errors[i]) }
       }
       .err(errors) { print("lex error") }
     }

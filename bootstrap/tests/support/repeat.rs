@@ -57,9 +57,33 @@ fn renamed(text: &str, names: &[&str], copy: usize) -> String {
                 if chars[i] == '\\' {
                     out.push(chars[i]);
                     i += 1;
+                } else if c == '"' && chars[i] == '{' {
+                    // What a string holds in braces is code, as the text of a
+                    // function is, and names the functions it calls.
+                    let mut depth = 0;
+                    let inside = i + 1;
+                    while i < chars.len() {
+                        match chars[i] {
+                            '{' => depth += 1,
+                            '}' => depth -= 1,
+                            _ => {}
+                        }
+                        if depth == 0 {
+                            break;
+                        }
+                        i += 1;
+                    }
+                    let code: String = chars[inside..i].iter().collect();
+                    out.push('{');
+                    out.push_str(&renamed(&code, names, copy));
+                    out.push('}');
+                    i += 1;
+                    continue;
                 }
-                out.push(chars[i]);
-                i += 1;
+                if i < chars.len() {
+                    out.push(chars[i]);
+                    i += 1;
+                }
             }
             if i < chars.len() {
                 out.push(c);
