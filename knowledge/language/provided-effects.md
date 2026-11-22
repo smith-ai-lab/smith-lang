@@ -5,7 +5,7 @@ description: The six effects the standard library declares, the six the compiler
 status: partial
 built:
   - "`entropy` in a signature, required by `fill`, which the system answers on every target, and a handler answers on any"
-  - "`net` and `time` in a signature, required by the operations of `std.net` and `std.time`, which the system answers on Linux on x86-64 and arm64 with a call that waits blocking, which a handler answers on any target with no system call, though a handler of `net` cannot give a `Listener`, a `Connection`, or a `Socket`, and which a program that carries them is refused for any other target with one message that names the target"
+  - "`net` and `time` in a signature, required by the operations of `std.net` and `std.time`, which the system answers on Linux and macOS, on x86-64 and arm64, with a call that waits blocking, which a handler answers on any target with no system call, though a handler of `net` cannot give a `Listener`, a `Connection`, or a `Socket`, and which a program that carries them is refused for Windows and WebAssembly with one message that names the target"
   - "`console`, `alloc`, and `diverge` in a signature, `console` required by `print`, `alloc` by a string that holds an expression, and `diverge` by an open-ended `loop` with no `decreases`"
   - "an operation that the target answers, `print` of `console` and `fill` of `entropy`, is called as any operation of an effect is, and is answered by a handler where one is in force and by the target where none is"
 ---

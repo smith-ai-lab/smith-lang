@@ -60,16 +60,20 @@ pub const MACHINE: &[Test] = &[
         a_port_nothing_listens_at_a_port_in_use_and_a_write_after_the_close_are_each_their_case,
     ),
     (
+        "a_failed_call_holds_its_name_and_the_systems_error_number",
+        a_failed_call_holds_its_name_and_the_systems_error_number,
+    ),
+    (
         "now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given",
         now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given,
     ),
 ];
 
 /// The targets that build the program: those that talk to the kernel.
-fn linux() -> Vec<Target> {
+fn kernel() -> Vec<Target> {
     targets::runnable()
         .into_iter()
-        .filter(|t| t.name().starts_with("linux"))
+        .filter(|t| t.name().starts_with("linux") || t.name().starts_with("macos"))
         .collect()
 }
 
@@ -149,7 +153,7 @@ fn runs(target: Target) -> bool {
 }
 
 fn echo_once_takes_a_connection_and_sends_back_what_it_was_sent() {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -166,7 +170,7 @@ fn echo_once_takes_a_connection_and_sends_back_what_it_was_sent() {
 }
 
 fn ask_gets_the_bytes_a_listener_sends_it() {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -197,7 +201,7 @@ fn lengths(g: &mut Gen) -> Vec<usize> {
 
 fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_gives_no_bytes()
 {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -228,7 +232,7 @@ fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_
 }
 
 fn a_datagram_sent_to_a_bound_socket_is_received_with_the_address_it_came_from() {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -243,7 +247,7 @@ fn a_datagram_sent_to_a_bound_socket_is_received_with_the_address_it_came_from()
 }
 
 fn a_port_nothing_listens_at_a_port_in_use_and_a_write_after_the_close_are_each_their_case() {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -268,8 +272,26 @@ fn a_port_nothing_listens_at_a_port_in_use_and_a_write_after_the_close_are_each_
     }
 }
 
+/// A port of an address the machine does not hold is refused by the system with
+/// "the address is not available", which is 99 on Linux and 49 on macOS.
+fn a_failed_call_holds_its_name_and_the_systems_error_number() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let number = if target.name().starts_with("macos") { 49 } else { 99 };
+        let mut run = Started::new(target, &["elsewhere", "9"]);
+        assert_eq!(
+            run.line(),
+            Some(format!("bind: error {number}")),
+            "{}",
+            target.name()
+        );
+    }
+}
+
 fn now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given() {
-    for target in linux() {
+    for target in kernel() {
         if !runs(target) {
             continue;
         }
@@ -419,7 +441,7 @@ fn a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them
     let program = lower(include_str!("net_program.smith").as_bytes()).unwrap();
     assert!(program.asks_the_kernel());
     for &target in Target::ALL.iter() {
-        if target.name().starts_with("linux") {
+        if target.name().starts_with("linux") || target.name().starts_with("macos") {
             continue;
         }
         let refused = std::panic::catch_unwind(|| target.emit(&program));

@@ -5,8 +5,8 @@ description: The time effect, by which a program reads the clock and waits for a
 status: partial
 built:
   - "`std.time` declares `time`, with `now` and `sleep` as the page shows them"
-  - "on Linux on x86-64 and arm64 the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given; a handler answers both on every target"
-  - "not another target than Linux, a `sleep` that suspends its task, or one that a cancelled task ends"
+  - "on Linux and macOS, on x86-64 and arm64, the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given; a handler answers both on every target"
+  - "not Windows, a `sleep` that suspends its task, or one that a cancelled task ends"
 ---
 
 # Time
