@@ -6031,9 +6031,15 @@ fn is_prelude_call(call: &Call, name: &str) -> bool {
     call.qualifier.is_none() && call.callee == name && of_prelude(call.pos)
 }
 
-/// Whether a call is of `__eprint` or `__end`, which only the prelude calls.
+/// Whether a call is of `__eprint` or `__end`, which the prelude calls for
+/// `main` and the library calls for a server that cannot listen.
+fn is_ending_call(call: &Call, name: &str) -> bool {
+    call.qualifier.is_none() && call.callee == name && (of_prelude(call.pos) || of_std(call.pos))
+}
+
+/// Whether a call is of `__eprint` or `__end`.
 fn is_stream_call(call: &Call) -> bool {
-    is_prelude_call(call, "__eprint") || is_prelude_call(call, "__end")
+    is_ending_call(call, "__eprint") || is_ending_call(call, "__end")
 }
 
 fn addr<T>(node: &T) -> usize {
