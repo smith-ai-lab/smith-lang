@@ -72,26 +72,33 @@ fn params(g: &mut Gen) -> Params {
 /// those fields, in that order, read with the defaults of the function, written
 /// as JSON, equal to themselves, and shown with the name of the function.
 fn the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_is() {
-    generate::check(7931, 20, params, |p| {
-        let list: Vec<String> = (p.defaults.iter().enumerate())
-            .map(|(i, d)| match d {
-                Some(d) => format!("a{i}: str = \"{d}\""),
-                None => format!("a{i}: str"),
-            })
-            .collect();
-        let fields: Vec<String> = (p.said.iter().enumerate())
-            .filter_map(|(i, v)| v.map(|v| format!("\\\"a{i}\\\": \\\"{v}\\\"")))
-            .collect();
+    // Each program holds four functions, one case each, and prints the line of
+    // each, so that a program is checked five times and not twenty.
+    generate::check(7931, 5, |g: &mut Gen| (0..4).map(|_| params(g)).collect::<Vec<_>>(), |batch| {
+        let mut functions = String::new();
+        let mut calls = Vec::new();
+        let mut said = String::new();
+        for (n, p) in batch.iter().enumerate() {
+            let list: Vec<String> = (p.defaults.iter().enumerate())
+                .map(|(i, d)| match d {
+                    Some(d) => format!("a{i}: str = \"{d}\""),
+                    None => format!("a{i}: str"),
+                })
+                .collect();
+            let fields: Vec<String> = (p.said.iter().enumerate())
+                .filter_map(|(i, v)| v.map(|v| format!("\\\"a{i}\\\": \\\"{v}\\\"")))
+                .collect();
+            functions += &format!("fn pick{n}({}) -> str {{ a0 }}\n\n", list.join(", "));
+            calls.push(format!("  print(run(pick{n}, \"\\{{{}\\}}\"))\n", fields.join(", ")));
+            let value = |i: usize| p.said[i].or(p.defaults[i]).expect("a value");
+            let shown: Vec<String> = (0..p.said.len()).map(|i| format!("a{i}: \"{}\"", value(i))).collect();
+            let written: Vec<String> = (0..p.said.len()).map(|i| format!("\"a{i}\":\"{}\"", value(i))).collect();
+            said += &format!("pick{n}.Args({}) {{{}}} true\n", shown.join(", "), written.join(","));
+        }
         let source = format!(
-            "{USES}fn pick({}) -> str {{ a0 }}\n\n{RUN}fn main() ! console, alloc {{\n  \
-             print(run(pick, \"\\{{{}\\}}\"))\n}}\n",
-            list.join(", "),
-            fields.join(", ")
+            "{USES}{functions}{RUN}fn main() ! console, alloc {{\n{}}}\n",
+            calls.concat()
         );
-        let value = |i: usize| p.said[i].or(p.defaults[i]).expect("a value");
-        let shown: Vec<String> = (0..p.said.len()).map(|i| format!("a{i}: \"{}\"", value(i))).collect();
-        let written: Vec<String> = (0..p.said.len()).map(|i| format!("\"a{i}\":\"{}\"", value(i))).collect();
-        let said = format!("pick.Args({}) {{{}}} true\n", shown.join(", "), written.join(","));
         assert_eq!(outcome(&source).stdout, said.into_bytes(), "for\n{source}");
     });
 }
