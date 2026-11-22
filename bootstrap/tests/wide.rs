@@ -191,15 +191,15 @@ fn stdout(source: &str) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
-/// What the program of two sums prints: each result, and the comparisons of the
-/// first with the second.
-fn program_of(p: Sum, q: Sum) -> (String, String) {
+/// What two sums print: each result, and the comparisons of the first with the
+/// second, as the lines of the program that holds them and the text it prints.
+fn lines_of(p: Sum, q: Sum) -> (String, String) {
     let (a, b) = (p.result(), q.result());
-    let source = with_header(format!(
-        "fn main() ! console, alloc {{\n{}{}  print(\"{{p}}\")\n  print(\"{{q}}\")\n  print(\"{{p < q}} {{p <= q}} {{p == q}} {{p > q}} {{p >= q}} {{p != q}}\")\n  print(\"{{Ord.compare(p, q)}}\")\n}}\n",
+    let body = format!(
+        "{}{}  print(\"{{p}}\")\n  print(\"{{q}}\")\n  print(\"{{p < q}} {{p <= q}} {{p == q}} {{p > q}} {{p >= q}} {{p != q}}\")\n  print(\"{{Ord.compare(p, q)}}\")\n",
         p.source("p"),
         q.source("q")
-    ));
+    );
     let order = if a == b {
         ".equal"
     } else if a.below(b) {
@@ -219,15 +219,39 @@ fn program_of(p: Sum, q: Sum) -> (String, String) {
         !less,
         !same
     );
+    (body, expected)
+}
+
+/// The program of two sums, and what it prints.
+fn program_of(p: Sum, q: Sum) -> (String, String) {
+    let (body, expected) = lines_of(p, q);
+    let source = with_header(format!("fn main() ! console, alloc {{\n{body}}}\n"));
+    (source, expected)
+}
+
+/// One program of the pairs, each in a function of its own that `main` calls
+/// in order, and what it prints: the text of each pair after the other.
+fn program_of_pairs(pairs: &[(Sum, Sum)]) -> (String, String) {
+    let (mut functions, mut calls, mut expected) = (String::new(), String::new(), String::new());
+    for (n, (p, q)) in pairs.iter().enumerate() {
+        let (body, said) = lines_of(*p, *q);
+        functions += &format!("fn case{n}() ! console, alloc {{\n{body}}}\n\n");
+        calls += &format!("  case{n}()\n");
+        expected += &said;
+    }
+    let source = with_header(format!("{functions}fn main() ! console, alloc {{\n{calls}}}\n"));
     (source, expected)
 }
 
 /// For every two operations of numbers of 64 bits or fewer, each result is
 /// printed exactly and compared exactly with the other, whether it needs 64 bits
-/// or not, so a product of two numbers of 64 bits is the whole product.
+/// or not, so a product of two numbers of 64 bits is the whole product. Each
+/// program holds ten pairs, one function each, so that the 60 pairs are six
+/// whole checks and not sixty.
 fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly() {
-    generate::check(4301, 60, |g: &mut Gen| (sum(g), sum(g)), |(p, q)| {
-        let (source, expected) = program_of(*p, *q);
+    let pairs = |g: &mut Gen| (0..10).map(|_| (sum(g), sum(g))).collect::<Vec<_>>();
+    generate::check(4301, 6, pairs, |batch| {
+        let (source, expected) = program_of_pairs(batch);
         assert_eq!(stdout(&source), expected, "for\n{source}");
     });
 }
