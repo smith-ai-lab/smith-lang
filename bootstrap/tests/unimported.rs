@@ -132,6 +132,11 @@ fn names() -> &'static [Held] {
         // An operation of an effect, which the lines above do not read, and
         // which `std.html` has a function of the name of too.
         found.push(("input".to_string(), "console"));
+        // The effect of task groups, and its two operations, one of which a
+        // function of `std.text` has the name of too.
+        for name in ["task", "start", "finish"] {
+            found.push((name.to_string(), "task"));
+        }
         for size in ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"] {
             found.push((size.to_string(), "bits"));
         }

@@ -14,6 +14,8 @@ pub(super) enum Kind {
     Poll,
     Result,
     Wait,
+    Address,
+    At,
 }
 
 /// Which call a call is, when it is one that only the library may make.
@@ -26,6 +28,8 @@ pub(super) fn kind(call: &Call) -> Option<Kind> {
         "__poll" => Some(Kind::Poll),
         "__result" => Some(Kind::Result),
         "__wait" => Some(Kind::Wait),
+        "__address" => Some(Kind::Address),
+        "__frame_at" => Some(Kind::At),
         _ => None,
     }
 }
@@ -94,6 +98,16 @@ impl<'a> Checker<'a> {
                 self.arguments(body, call, &signature, false, None, None);
                 signature.gives
             }
+            Kind::Address => {
+                let signature = one("frame", frame, Ty::Int(Int::U64));
+                self.arguments(body, call, &signature, false, None, None);
+                signature.gives
+            }
+            Kind::At => {
+                let signature = one("number", Ty::Int(Int::U64), frame);
+                self.arguments(body, call, &signature, false, None, None);
+                signature.gives
+            }
             Kind::Wait => {
                 let signature = one("wait", Ty::Enum(wait, Vec::new()), Ty::Nothing);
                 self.arguments(body, call, &signature, false, None, None);
@@ -133,16 +147,46 @@ impl<'a> Checker<'a> {
             _ => None,
         };
         let text = |t: &Ty| self.defs.text(t, body.scope);
-        let error = match made.and_then(|c| self.frame_gives.get(&addr(c))) {
+        let gives = made
+            .and_then(|c| self.frame_gives.get(&addr(c)))
+            .or_else(|| self.of_a_task(arg));
+        let error = match gives {
             Some(gives) if gives == read || gives.unknown() || read.unknown() => return,
             Some(gives) => format!(
                 "this frame is read as `{}`, and the lambda it was made of gives `{}`",
                 text(read),
                 text(gives)
             ),
-            None => "what this frame gives is not known here, since it is not the call of `__frame`, or a name that one call of it defined".to_string(),
+            None => "what this frame gives is not known here, since it is not the call of `__frame`, or a name that one call of it defined, or what `finish` gives for the number of a `Task`".to_string(),
         };
         self.errors.push(Error::new(arg.value.pos(), error));
+    }
+}
+
+impl<'a> Checker<'a> {
+    /// What the frame gives that `finish` gives for the number of a `Task[T]`,
+    /// which is `T`, since only `spawn` of `std.task` makes a `Task[T]`, and from
+    /// a frame of a lambda that gives `T`.
+    fn of_a_task(&self, arg: &Arg) -> Option<&Ty> {
+        let Expr::Call(finish) = &arg.value else {
+            return None;
+        };
+        if finish.callee != "finish" || finish.qualifier.is_some() || !of_std(finish.pos) {
+            return None;
+        }
+        let [
+            Arg {
+                value: Expr::Field { of, name, .. },
+                ..
+            },
+        ] = &finish.args[..]
+        else {
+            return None;
+        };
+        match self.types.get(&addr(&**of))? {
+            Ty::Struct(s, args) if name == "number" && Some(*s) == self.defs.task => args.first(),
+            _ => None,
+        }
     }
 }
 

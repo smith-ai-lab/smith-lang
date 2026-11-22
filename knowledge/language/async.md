@@ -21,7 +21,7 @@ Under the scheduler in force the call suspends its task. Under a blocking handle
 
 ## Who may suspend a task
 
-The scheduler in force suspends a task. The scheduler is a handler of [`spawn`](tasks.md), and which one is in force is decided by the program that installs it, as for any handler, so the source is the same under every scheduler. Every other handler written in Smith returns from each operation, so a call under one does not suspend. `fixed_clock` of [Handlers](handlers.md) is such a handler: `now()` under it gives its value and returns.
+The scheduler in force suspends a task. The scheduler is a handler of [`task`](tasks.md), and which one is in force is decided by the program that installs it, as for any handler, so the source is the same under every scheduler. Every other handler written in Smith returns from each operation, so a call under one does not suspend. `fixed_clock` of [Handlers](handlers.md) is such a handler: `now()` under it gives its value and returns.
 
 ## What it compiles to
 

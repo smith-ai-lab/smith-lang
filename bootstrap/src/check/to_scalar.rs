@@ -1563,7 +1563,6 @@ impl<'a> Lowering<'a> {
                 Callee::Value => self.call_value(out, call, env),
                 Callee::Handle(effect) => self.handle(out, expr, call, effect, env),
                 Callee::Arena => self.arena(out, expr, call, env),
-                Callee::Group => self.group(out, expr, call, env),
                 Callee::Intrinsic => self.intrinsic_call(out, expr, call, env),
                 Callee::Kernel => self.kernel_call(out, expr, call, env),
                 Callee::Frames(kind) => self.frames_call(out, expr, call, kind, env),

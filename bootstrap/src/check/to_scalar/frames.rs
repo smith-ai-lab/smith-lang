@@ -129,6 +129,51 @@ impl<'a> Lowering<'a> {
                 debug_assert_eq!(self.scalars(&ty), vec![status, status, WORD]);
                 (ty, values)
             }
+            Kind::Address => {
+                // The number of a frame is where its bytes are, kept by storing
+                // the address in a place of the function and reading it back as
+                // a whole number, as the form has no instruction between them.
+                let (_, frame) = self.expr(out, &call.args[0].value, env);
+                let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+                out.emit(
+                    form::Op::Store {
+                        ty: form::Type::Address,
+                        address: slot,
+                        value: frame[0],
+                    },
+                    Vec::new(),
+                );
+                let number = out.emit(
+                    form::Op::Load {
+                        ty: WORD,
+                        address: slot,
+                    },
+                    vec![WORD],
+                )[0];
+                (ty, vec![number])
+            }
+            Kind::At => {
+                // The frame at a number, whose size nothing reads again.
+                let (_, number) = self.expr(out, &call.args[0].value, env);
+                let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+                out.emit(
+                    form::Op::Store {
+                        ty: WORD,
+                        address: slot,
+                        value: number[0],
+                    },
+                    Vec::new(),
+                );
+                let address = out.emit(
+                    form::Op::Load {
+                        ty: form::Type::Address,
+                        address: slot,
+                    },
+                    vec![form::Type::Address],
+                )[0];
+                let bytes = out.int(form::Bits::B64, 0);
+                (ty, vec![address, bytes])
+            }
             Kind::Result => {
                 let (_, frame) = self.expr(out, &call.args[0].value, env);
                 let types = self.scalars(&ty);
