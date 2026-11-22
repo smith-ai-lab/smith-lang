@@ -71,7 +71,7 @@ fn program(copies: usize) -> String {
         repeat::lexer(file),
         copies,
         "bump",
-        "bump(Lexer(src: ['a', '\\n'], at: 0, pos: Pos(line: 1, col: 1), tokens: [], errors: [],\n               line_has_token: false, keywords: [], puncts: [])).at",
+        "bump(Lexer(src: ['a', '\\n'], at: 0, pos: Pos(line: 1, col: 1), tokens: [], pending: [],\n               errors: [], line_has_token: false)).at",
     )
 }
 

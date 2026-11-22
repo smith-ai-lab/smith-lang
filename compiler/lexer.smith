@@ -1,36 +1,107 @@
-// The lexer of Smith, written in Smith, following bootstrap/src/lexer.rs. It
-// is changed from what knowledge/ teaches only where the compiler cannot build
-// that. Each such place is marked GAP, and says which roadmap issue will remove
-// it. The tests of bootstrap hold it to the Rust lexer.
+// The lexer of Smith, written in Smith, following bootstrap/src/lexer.rs. The
+// tests of bootstrap hold it to the Rust lexer: the same tokens, each at the
+// same line and column, and the same message for each mistake.
 
 use std.ascii (is_digit, is_hex_digit, is_letter)
-use std.bits (u64)
+use std.bits (bit_and, u64)
 use std.console (console, print)
+use std.fmt (hex)
 use std.int (saturating_add, saturating_mul, saturating_sub, wrapping_add, wrapping_mul)
-use std.list (push)
+use std.list (freeze, push)
+use std.utf8 (utf8)
 
 struct Pos {
   line: Nat
   col: Nat
 }
 
-// GAP 3 (#190): a str cannot be made from bytes, so text is kept as bytes.
-// GAP 1 (#258): a type that contains itself is not built, so the pieces of an
-// interpolated string and the tokens of its expressions are one flat run:
-// interp_open, then text and tokens in order, then interp_close.
-// GAP 4 (#190): a keyword and a punctuation are the number of their place in
-// a table.
+// A keyword is written as its case with `kw_` before it, as a keyword cannot be
+// the name of a case.
+enum Keyword {
+  kw_and
+  kw_as
+  kw_break
+  kw_derive
+  kw_effect
+  kw_else
+  kw_ensures
+  kw_enum
+  kw_fn
+  kw_for
+  kw_foreign
+  kw_if
+  kw_impl
+  kw_in
+  kw_loop
+  kw_match
+  kw_not
+  kw_or
+  kw_out
+  kw_pub
+  kw_requires
+  kw_return
+  kw_struct
+  kw_take
+  kw_trait
+  kw_try
+  kw_use
+  kw_var
+  kw_with
+  kw_without
+}
+
+enum Punct {
+  dot_dot
+  arrow
+  plus_equal
+  minus_equal
+  star_equal
+  slash_equal
+  equal_equal
+  bang_equal
+  less_equal
+  greater_equal
+  open_paren
+  close_paren
+  open_bracket
+  close_bracket
+  open_brace
+  close_brace
+  comma
+  colon
+  dot
+  equal
+  less
+  greater
+  plus
+  minus
+  star
+  slash
+  at_sign
+  caret
+  bang
+  pipe_arrow
+  percent
+}
+
+// A number is kept in its source spelling, and a string has its escapes
+// applied. A string that holds expressions is its pieces in order.
 enum Tok {
-  ident: List[Byte]
-  keyword: Nat
-  number: List[Byte]
-  string: List[Byte]
-  interp_open
-  text: List[Byte]
-  interp_close
-  punct: Nat
+  ident: str
+  keyword: Keyword
+  number: str
+  string: str
+  interp: List[Piece]
+  punct: Punct
   newline
   eof
+}
+
+// Text with its escapes applied, or the tokens of an expression in braces,
+// followed by the `}` that closes it.
+enum Piece {
+  text: str
+  expr: List[Token]
 }
 
 struct Token {
@@ -38,49 +109,24 @@ struct Token {
   pos: Pos
 }
 
-// GAP 3 (#190): an error is a number for what is wrong and the bytes it names.
 struct LexError {
   pos: Pos
-  code: u64
-  why: u64
-  detail: List[Byte]
+  message: str
 }
 
 struct Lexer {
-  src: List[Byte]
+  src: Slice[Byte]
   at: Nat
   pos: Pos
   tokens: List[Token]
+  // The line breaks after the last token, which a `|>` that follows takes away.
+  pending: List[Pos]
   errors: List[LexError]
   line_has_token: bool
-  keywords: List[List[Byte]]
-  puncts: List[List[Byte]]
 }
 
-// The errors, by number.
-// 1 a carriage return           2 not valid UTF-8
-// 3 a comment not on its line   4 a string with no closing quote
-// 5 a } that closes nothing     6 unknown escape in a string
-// 7 a character with no close   8 a character with no quotes
-// 9 unknown escape in a char    10 a character that holds more than one
-// 11 unexpected character       12 not a number
-
-fn keyword_table() -> List[List[Byte]] ! alloc {
-  [['a', 'n', 'd'], ['a', 's'], ['b', 'r', 'e', 'a', 'k'], ['d', 'e', 'r', 'i', 'v', 'e'],
-   ['e', 'f', 'f', 'e', 'c', 't'], ['e', 'l', 's', 'e'], ['e', 'n', 's', 'u', 'r', 'e', 's'],
-   ['e', 'n', 'u', 'm'], ['f', 'n'], ['f', 'o', 'r'], ['f', 'o', 'r', 'e', 'i', 'g', 'n'],
-   ['i', 'f'], ['i', 'm', 'p', 'l'], ['i', 'n'], ['l', 'o', 'o', 'p'],
-   ['m', 'a', 't', 'c', 'h'], ['n', 'o', 't'], ['o', 'r'], ['o', 'u', 't'], ['p', 'u', 'b'],
-   ['r', 'e', 'q', 'u', 'i', 'r', 'e', 's'], ['r', 'e', 't', 'u', 'r', 'n'],
-   ['s', 't', 'r', 'u', 'c', 't'], ['t', 'a', 'k', 'e'], ['t', 'r', 'a', 'i', 't'], ['t', 'r', 'y'],
-   ['u', 's', 'e'],
-   ['v', 'a', 'r'], ['w', 'i', 't', 'h'], ['w', 'i', 't', 'h', 'o', 'u', 't']]
-}
-
-fn punctuation_table() -> List[List[Byte]] ! alloc {
-  [['.', '.'], ['-', '>'], ['+', '='], ['-', '='], ['*', '='], ['/', '='], ['=', '='],
-   ['!', '='], ['<', '='], ['>', '='], ['('], [')'], ['['], [']'], ['{'], ['}'], [','],
-   [':'], ['.'], ['='], ['<'], ['>'], ['+'], ['-'], ['*'], ['/'], ['@'], ['^'], ['!'], ['|', '>'], ['%']]
+fn unclosed() -> str {
+  "this string has no closing quote on the line it starts"
 }
 
 // ---- bytes ----
@@ -106,42 +152,38 @@ fn is_word_byte(b: Byte) -> bool { is_name_start(b) or is_digit(b) }
 // A byte that continues a character and does not start one.
 fn is_continuation(b: Byte) -> bool { b >= 0x80 and b <= 0xBF }
 
-fn slice(src: List[Byte], from: Nat, to: Nat) -> List[Byte] ! alloc {
-  var bytes: List[Byte] = []
-  loop i in from..to {
-    if i < src.size { bytes = push(bytes, src[i]) }
-  }
-  bytes
+// The bytes from `from` up to `to`, or none when they are not inside.
+fn part(bytes: Slice[Byte], from: Nat, to: Nat) -> Slice[Byte] {
+  if from <= to and to <= bytes.size { bytes[from..to] } else { bytes[0..0] }
 }
 
-fn has_string(tokens: List[Token], from: Nat) -> bool {
-  var found = false
-  loop i in from..tokens.size {
-    match tokens[i].tok {
-      .string(b) { found = true }
-      .interp_open { found = true }
-      other { }
+// The text of the bytes from `from` up to `to`, which share the memory of
+// `src`. Bytes that are not text give no text, which the lexer never asks for,
+// as it has read the whole file as text already.
+fn text_of(src: Slice[Byte], from: Nat, to: Nat) -> str {
+  match utf8(part(src, from, to)) {
+    .ok(s) { s }
+    .err(e) { "" }
+  }
+}
+
+fn text_from(bytes: take List[Byte]) -> str {
+  match utf8(freeze(bytes)) {
+    .ok(s) { s }
+    .err(e) { "" }
+  }
+}
+
+fn starts_with(src: List[Byte], at: Nat, p: List[Byte]) -> bool {
+  if at <= src.size and p.size <= src.size - at {
+    var same = true
+    loop i in 0..p.size {
+      if src[at + i] != p[i] { same = false }
     }
+    same
+  } else {
+    false
   }
-  found
-}
-
-fn last_code(errors: List[LexError]) -> u64 {
-  if errors.size == 0 { 0 } else { errors[errors.size - 1].code }
-}
-
-fn append(a: take List[Byte], b: List[Byte]) -> List[Byte] ! alloc {
-  var all = a
-  loop i in 0..b.size { all = push(all, b[i]) }
-  all
-}
-
-fn same_bytes(a: List[Byte], b: List[Byte]) -> bool {
-  var same = a.size == b.size
-  loop i in 0..a.size {
-    if same and i < b.size and a[i] != b[i] { same = false }
-  }
-  same
 }
 
 fn index_of(text: List[Byte], target: Byte) -> Option[Nat] {
@@ -150,6 +192,64 @@ fn index_of(text: List[Byte], target: Byte) -> Option[Nat] {
     if found == .none and text[i] == target { found = .some(i) }
   }
   found
+}
+
+// ---- characters ----
+
+fn number_at(b: List[Byte], i: Nat) -> u64 {
+  match byte_at(b, i) {
+    .some(x) { convert(x) }
+    .none { 0 }
+  }
+}
+
+fn low(b: u64, mask: u64) -> u64 { bit_and(b, mask) }
+
+// The number of the character whose bytes are `b`.
+fn code_point(b: List[Byte]) -> u64 {
+  b0 = number_at(b, 0)
+  b1 = low(number_at(b, 1), 0x3F)
+  b2 = low(number_at(b, 2), 0x3F)
+  b3 = low(number_at(b, 3), 0x3F)
+  if b.size == 2 {
+    wrapping_add(wrapping_mul(low(b0, 0x1F), 64), b1)
+  } else if b.size == 3 {
+    wrapping_add(wrapping_add(wrapping_mul(low(b0, 0x0F), 4096), wrapping_mul(b1, 64)), b2)
+  } else if b.size == 4 {
+    wrapping_add(
+      wrapping_add(wrapping_mul(low(b0, 0x07), 262144), wrapping_mul(b1, 4096)),
+      wrapping_add(wrapping_mul(b2, 64), b3))
+  } else {
+    b0
+  }
+}
+
+// Whether the character of the number is one that is a control or white space,
+// which an error shows by its number and not as it is.
+fn is_unseen(code: u64) -> bool {
+  if code < 0x20 or (code >= 0x7F and code <= 0xA0) {
+    true
+  } else if code == 0x1680 or (code >= 0x2000 and code <= 0x200A) {
+    true
+  } else {
+    code == 0x2028 or code == 0x2029 or code == 0x202F or code == 0x205F or code == 0x3000
+  }
+}
+
+// A character as an error shows it.
+fn show_char(c: str) -> str ! alloc {
+  code = code_point(c)
+  if is_unseen(code) { "U+{hex(code, width: 4)}" } else { "`{c}`" }
+}
+
+// What follows a backslash, as an error shows it.
+fn after_backslash(lx: Lexer) -> str ! alloc {
+  match byte_at(lx.src, lx.at) {
+    .none { "nothing" }
+    .some(c) {
+      if c == '\n' { "nothing" } else { show_char(text_of(lx.src, lx.at, char_end(lx.src, lx.at))) }
+    }
+  }
 }
 
 // ---- UTF-8 ----
@@ -214,6 +314,8 @@ fn advance(pos: Pos, b: Byte) -> Pos {
   }
 }
 
+// The mistakes of the text itself: a carriage return, and bytes that are not
+// UTF-8. A file that has one is not read further.
 fn text_errors(src: List[Byte]) -> List[LexError] ! alloc {
   var errors: List[LexError] = []
   var pos = Pos(line: 1, col: 1)
@@ -224,12 +326,12 @@ fn text_errors(src: List[Byte]) -> List[LexError] ! alloc {
       have = valid_prefix(src, i)
       if have == wanted(b) {
         if b == 13 {
-          errors = push(errors, LexError(pos: pos, code: 1, why: 0, detail: []))
+          errors = push(errors, LexError(pos: pos, message: "a carriage return is not allowed in a Smith file"))
         }
         pos = advance(pos, b)
         i = i + have
       } else {
-        errors = push(errors, LexError(pos: pos, code: 2, why: 0, detail: []))
+        errors = push(errors, LexError(pos: pos, message: "the file is not valid UTF-8 here"))
         pos = Pos(line: pos.line, col: saturating_add(pos.col, 1))
         i = i + have
       }
@@ -240,9 +342,9 @@ fn text_errors(src: List[Byte]) -> List[LexError] ! alloc {
 
 // ---- tokens so far ----
 
-fn error_at(lx: take Lexer, pos: Pos, code: u64, why: u64, detail: take List[Byte]) -> Lexer ! alloc {
+fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer ! alloc {
   var next = lx
-  next.errors = push(next.errors, LexError(pos: pos, code: code, why: why, detail: detail))
+  next.errors = push(next.errors, LexError(pos: pos, message: message))
   next
 }
 
@@ -253,11 +355,42 @@ fn is_newline(tok: Tok) -> bool {
   }
 }
 
+fn is_pipe(tok: Tok) -> bool {
+  match tok {
+    .punct(p) {
+      match p {
+        .pipe_arrow { true }
+        other { false }
+      }
+    }
+    other { false }
+  }
+}
+
+// The line breaks that wait are tokens now.
+fn flush(lx: take Lexer) -> Lexer ! alloc {
+  var next = lx
+  waiting = next.pending
+  next.pending = []
+  loop i in 0..waiting.size {
+    next.tokens = push(next.tokens, Token(tok: .newline, pos: waiting[i]))
+  }
+  next
+}
+
+// A line that starts with `|>` goes on from the line before, so the line breaks
+// that wait are not tokens when one is read.
 fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer ! alloc {
   var next = lx
   next.line_has_token = not is_newline(tok)
-  next.tokens = push(next.tokens, Token(tok: tok, pos: pos))
-  next
+  if is_newline(tok) {
+    next.pending = push(next.pending, pos)
+    next
+  } else {
+    if is_pipe(tok) { next.pending = [] } else { next = flush(next) }
+    next.tokens = push(next.tokens, Token(tok: tok, pos: pos))
+    next
+  }
 }
 
 fn bump(lx: take Lexer) -> Lexer {
@@ -285,6 +418,20 @@ fn bump_char(lx: take Lexer) -> Lexer {
   next
 }
 
+// Where the character that starts at `at` ends, which is where `bump_char`
+// would leave a lexer that was there.
+fn char_end(src: List[Byte], at: Nat) -> Nat {
+  var i = at
+  if i < src.size { i = i + 1 }
+  loop round in 0..4 {
+    match byte_at(src, i) {
+      .some(b) { if is_continuation(b) { i = saturating_add(i, 1) } }
+      .none { }
+    }
+  }
+  i
+}
+
 fn take_while_word(lx: take Lexer) -> Lexer {
   rounds = lx.src.size
   var next = lx
@@ -297,15 +444,77 @@ fn take_while_word(lx: take Lexer) -> Lexer {
   next
 }
 
+fn keyword_of(word: str) -> Option[Keyword] {
+  if word == "and" {
+    .some(.kw_and)
+  } else if word == "as" {
+    .some(.kw_as)
+  } else if word == "break" {
+    .some(.kw_break)
+  } else if word == "derive" {
+    .some(.kw_derive)
+  } else if word == "effect" {
+    .some(.kw_effect)
+  } else if word == "else" {
+    .some(.kw_else)
+  } else if word == "ensures" {
+    .some(.kw_ensures)
+  } else if word == "enum" {
+    .some(.kw_enum)
+  } else if word == "fn" {
+    .some(.kw_fn)
+  } else if word == "for" {
+    .some(.kw_for)
+  } else if word == "foreign" {
+    .some(.kw_foreign)
+  } else if word == "if" {
+    .some(.kw_if)
+  } else if word == "impl" {
+    .some(.kw_impl)
+  } else if word == "in" {
+    .some(.kw_in)
+  } else if word == "loop" {
+    .some(.kw_loop)
+  } else if word == "match" {
+    .some(.kw_match)
+  } else if word == "not" {
+    .some(.kw_not)
+  } else if word == "or" {
+    .some(.kw_or)
+  } else if word == "out" {
+    .some(.kw_out)
+  } else if word == "pub" {
+    .some(.kw_pub)
+  } else if word == "requires" {
+    .some(.kw_requires)
+  } else if word == "return" {
+    .some(.kw_return)
+  } else if word == "struct" {
+    .some(.kw_struct)
+  } else if word == "take" {
+    .some(.kw_take)
+  } else if word == "trait" {
+    .some(.kw_trait)
+  } else if word == "try" {
+    .some(.kw_try)
+  } else if word == "use" {
+    .some(.kw_use)
+  } else if word == "var" {
+    .some(.kw_var)
+  } else if word == "with" {
+    .some(.kw_with)
+  } else if word == "without" {
+    .some(.kw_without)
+  } else {
+    .none
+  }
+}
+
 fn word(lx: take Lexer, start: Pos) -> Lexer ! alloc {
   from = lx.at
   next = take_while_word(lx)
-  name = slice(next.src, from, next.at)
-  var found: Option[Nat] = .none
-  loop k in 0..next.keywords.size {
-    if same_bytes(next.keywords[k], name) { found = .some(k) }
-  }
-  tok: Tok = match found {
+  name = text_of(next.src, from, next.at)
+  tok: Tok = match keyword_of(name) {
     .some(k) { .keyword(k) }
     .none { .ident(name) }
   }
@@ -313,7 +522,7 @@ fn word(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 }
 
 fn comment(lx: take Lexer, start: Pos) -> Lexer ! alloc {
-  var next = if lx.line_has_token { error_at(lx, start, 3, 0, []) } else { lx }
+  var next = if lx.line_has_token { error_at(lx, start, "a comment must stand on its own line") } else { lx }
   rounds = next.src.size
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
@@ -326,20 +535,24 @@ fn comment(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // ---- numbers ----
 
-// Why a run of digits is not written as the lexical rules say, or 0 when it
-// is: at least one digit, and an `_` only between two digits. The reasons are
-// 1 no digit, 2 an `_` not between two digits, and 3 a byte that is no digit
-// of the base, which `bad` then holds.
-fn digits(text: List[Byte], base: Byte) -> (u64, Byte) {
-  var why: u64 = 0
-  var bad: Byte = 0
+// Why a run of digits of a base is not written as the lexical rules say, or
+// none when it is: at least one digit, and an `_` only between two digits.
+fn digits(text: Slice[Byte], base: Byte, name: str) -> Option[str] ! alloc {
+  var why: Option[str] = .none
+  var failed = false
   var previous: Byte = 0
-  if text.size == 0 { why = 1 }
+  if text.size == 0 {
+    failed = true
+    why = .some("{name} digits are needed here")
+  }
   loop i in 0..text.size {
     c = text[i]
-    if why == 0 {
+    if not failed {
       if c == '_' {
-        if i == 0 or previous == '_' { why = 2 }
+        if i == 0 or previous == '_' {
+          failed = true
+          why = .some("an `_` stands only between two digits")
+        }
       } else {
         valid = if base == 16 {
           is_hex_digit(c)
@@ -349,39 +562,34 @@ fn digits(text: List[Byte], base: Byte) -> (u64, Byte) {
           is_digit(c)
         }
         if not valid {
-          why = 3
-          bad = c
+          failed = true
+          why = .some("{show_char(text_of(text, i, i + 1))} is not a {name} digit")
         }
       }
       previous = c
     }
   }
-  if why == 0 and previous == '_' { why = 2 }
-  (why, bad)
+  if not failed and previous == '_' {
+    why = .some("an `_` stands only between two digits")
+  }
+  why
 }
 
-// The base is 16, 2, or 10, and the reason is as `digits` gives it.
-struct Problem {
-  base: u64
-  why: u64
-  bad: Byte
+fn first_why(a: Option[str], b: Option[str]) -> Option[str] {
+  match a {
+    .some(m) { .some(m) }
+    .none { b }
+  }
 }
 
-fn problem_of(base: u64, found: (u64, Byte)) -> Problem {
-  (why, bad) = found
-  Problem(base: base, why: why, bad: bad)
-}
-
-fn first_problem(a: Problem, b: Problem) -> Problem {
-  if a.why != 0 { a } else { b }
-}
-
-fn check_number(text: List[Byte]) -> Problem ! alloc {
-  none = Problem(base: 10, why: 0, bad: 0)
+// Why the text of a number, as the lexer reads it, is not written as the
+// lexical rules say, or none when it is.
+fn check_number(text: str) -> Option[str] ! alloc {
+  bytes = text.bytes
   if text.size >= 2 and text[0] == '0' and text[1] == 'x' {
-    problem_of(16, digits(slice(text, 2, text.size), 16))
+    digits(part(bytes, 2, text.size), 16, "hexadecimal")
   } else if text.size >= 2 and text[0] == '0' and text[1] == 'b' {
-    problem_of(2, digits(slice(text, 2, text.size), 2))
+    digits(part(bytes, 2, text.size), 2, "binary")
   } else {
     mantissa_end = match index_of(text, 'e') {
       .some(at) {
@@ -397,27 +605,27 @@ fn check_number(text: List[Byte]) -> Problem ! alloc {
         }
       }
     }
-    mantissa = slice(text, 0, mantissa_end)
+    mantissa = part(bytes, 0, mantissa_end)
     whole_end = match index_of(mantissa, '.') {
       .some(at) { at }
       .none { mantissa.size }
     }
-    first = problem_of(10, digits(slice(mantissa, 0, whole_end), 10))
+    first = digits(part(mantissa, 0, whole_end), 10, "decimal")
     second = if whole_end < mantissa.size {
-      problem_of(10, digits(slice(mantissa, whole_end + 1, mantissa.size), 10))
+      digits(part(mantissa, whole_end + 1, mantissa.size), 10, "decimal")
     } else {
-      none
+      .none
     }
     third = if mantissa_end < text.size {
       var from = mantissa_end + 1
       loop i in from..text.size {
-        if i == from and (text[i] == '+' or text[i] == '-') { from = from + 1 }
+        if text[i] == '+' or text[i] == '-' { from = i + 1 } else { break }
       }
-      problem_of(10, digits(slice(text, from, text.size), 10))
+      digits(part(bytes, from, text.size), 10, "decimal")
     } else {
-      none
+      .none
     }
-    first_problem(first, first_problem(second, third))
+    first_why(first, first_why(second, third))
   }
 }
 
@@ -431,7 +639,7 @@ fn number(lx: take Lexer, start: Pos) -> Lexer ! alloc {
     }
   }
   // The sign of an exponent belongs to the number.
-  so_far = slice(next.src, from, next.at)
+  so_far = text_of(next.src, from, next.at)
   last = if so_far.size > 0 { so_far[so_far.size - 1] } else { 0 }
   is_hex = so_far.size >= 2 and so_far[0] == '0' and so_far[1] == 'x'
   if (last == 'e' or last == 'E') and not is_hex {
@@ -447,90 +655,60 @@ fn number(lx: take Lexer, start: Pos) -> Lexer ! alloc {
       .none { }
     }
   }
-  text = slice(next.src, from, next.at)
-  p = check_number(text)
-  checked = if p.why == 0 {
-    next
-  } else {
-    // the reason is 100 times the base of the number, ten times the reason
-    // and the byte that is not a digit
-    detail = push(push(slice(next.src, from, next.at), 0), p.bad)
-    error_at(next, start, 12, wrapping_add(wrapping_mul(p.base, 10), p.why), detail)
+  text = text_of(next.src, from, next.at)
+  checked = match check_number(text) {
+    .some(why) { error_at(next, start, "`{text}` is not a number: {why}") }
+    .none { next }
   }
   push_token(checked, .number(text), start)
 }
 
 // ---- characters ----
 
-fn close_character(lx: take Lexer, start: Pos, text: take List[Byte], ok: bool) -> Lexer ! alloc {
+fn close_character(lx: take Lexer, start: Pos, from: Nat, ok: bool) -> Lexer ! alloc {
   if byte_at(lx.src, lx.at) == .some('\'') {
     closed = bump(lx)
-    if ok { push_token(closed, .number(push(text, '\'')), start) } else { closed }
+    text = text_of(closed.src, from, closed.at)
+    if ok { push_token(closed, .number(text), start) } else { closed }
   } else {
-    error_at(lx, start, 10, 0, [])
-  }
-}
-
-// Where the character that starts at `at` ends, which is where `bump_char`
-// would leave a lexer that was there.
-fn char_end(src: List[Byte], at: Nat) -> Nat {
-  var i = at
-  if i < src.size { i = i + 1 }
-  loop round in 0..4 {
-    match byte_at(src, i) {
-      .some(b) { if is_continuation(b) { i = saturating_add(i, 1) } }
-      .none { }
-    }
-  }
-  i
-}
-
-fn escape_error(lx: take Lexer, at: Pos, code: u64) -> Lexer ! alloc {
-  // what follows the backslash, or nothing
-  match byte_at(lx.src, lx.at) {
-    .none { error_at(lx, at, code, 1, []) }
-    .some(c) {
-      if c == '\n' {
-        error_at(lx, at, code, 1, [])
-      } else {
-        detail = slice(lx.src, lx.at, char_end(lx.src, lx.at))
-        error_at(lx, at, code, 2, detail)
-      }
-    }
+    error_at(lx, start, "a character has no closing `'`, and holds one character only")
   }
 }
 
 fn character(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+  from = lx.at
   opened = bump(lx)
   at = opened.pos
-  text: List[Byte] = ['\'']
   match byte_at(opened.src, opened.at) {
-    .none { error_at(opened, start, 7, 0, []) }
+    .none { error_at(opened, start, "a character has no closing `'`") }
     .some(c) {
       if c == '\n' {
-        error_at(opened, start, 7, 0, [])
+        error_at(opened, start, "a character has no closing `'`")
       } else if c == '\'' {
-        error_at(bump(opened), start, 8, 0, [])
+        error_at(bump(opened), start, "a character is written between single quotes, and this has none")
       } else if c == '\\' {
         escaped = bump(opened)
         match byte_at(escaped.src, escaped.at) {
           .some(e) {
             if e == '\'' or e == '\\' or e == 'n' or e == 't' {
-              close_character(bump(escaped), start, push(push(text, '\\'), e), true)
-            } else if e == '\n' {
-              close_character(escape_error(escaped, at, 9), start, text, false)
+              close_character(bump(escaped), start, from, true)
             } else {
-              wrong = escape_error(escaped, at, 9)
-              close_character(bump_char(wrong), start, text, false)
+              shown = after_backslash(escaped)
+              wrong = error_at(escaped, at, "unknown escape: a backslash is followed by {shown}, not one of ' \\ n t")
+              if e == '\n' {
+                close_character(wrong, start, from, false)
+              } else {
+                close_character(bump_char(wrong), start, from, false)
+              }
             }
           }
-          .none { close_character(escape_error(escaped, at, 9), start, text, false) }
+          .none {
+            wrong = error_at(escaped, at, "unknown escape: a backslash is followed by nothing, not one of ' \\ n t")
+            close_character(wrong, start, from, false)
+          }
         }
       } else {
-        from = opened.at
-        after = bump_char(opened)
-        bytes = append(text, slice(after.src, from, after.at))
-        close_character(after, start, bytes, true)
+        close_character(bump_char(opened), start, from, true)
       }
     }
   }
@@ -538,40 +716,87 @@ fn character(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // ---- punctuation ----
 
-fn starts_with(src: List[Byte], at: Nat, p: List[Byte]) -> bool {
-  if at <= src.size and p.size <= src.size - at {
-    var same = true
-    loop i in 0..p.size {
-      if src[at + i] != p[i] { same = false }
-    }
-    same
+// The punctuation that starts at `at`, longest first, and how long it is.
+fn punct_at(src: List[Byte], at: Nat) -> Option[(Punct, Nat)] {
+  if starts_with(src, at, "..") {
+    .some((.dot_dot, 2))
+  } else if starts_with(src, at, "->") {
+    .some((.arrow, 2))
+  } else if starts_with(src, at, "+=") {
+    .some((.plus_equal, 2))
+  } else if starts_with(src, at, "-=") {
+    .some((.minus_equal, 2))
+  } else if starts_with(src, at, "*=") {
+    .some((.star_equal, 2))
+  } else if starts_with(src, at, "/=") {
+    .some((.slash_equal, 2))
+  } else if starts_with(src, at, "==") {
+    .some((.equal_equal, 2))
+  } else if starts_with(src, at, "!=") {
+    .some((.bang_equal, 2))
+  } else if starts_with(src, at, "<=") {
+    .some((.less_equal, 2))
+  } else if starts_with(src, at, ">=") {
+    .some((.greater_equal, 2))
+  } else if starts_with(src, at, "(") {
+    .some((.open_paren, 1))
+  } else if starts_with(src, at, ")") {
+    .some((.close_paren, 1))
+  } else if starts_with(src, at, "[") {
+    .some((.open_bracket, 1))
+  } else if starts_with(src, at, "]") {
+    .some((.close_bracket, 1))
+  } else if starts_with(src, at, "\{") {
+    .some((.open_brace, 1))
+  } else if starts_with(src, at, "\}") {
+    .some((.close_brace, 1))
+  } else if starts_with(src, at, ",") {
+    .some((.comma, 1))
+  } else if starts_with(src, at, ":") {
+    .some((.colon, 1))
+  } else if starts_with(src, at, ".") {
+    .some((.dot, 1))
+  } else if starts_with(src, at, "=") {
+    .some((.equal, 1))
+  } else if starts_with(src, at, "<") {
+    .some((.less, 1))
+  } else if starts_with(src, at, ">") {
+    .some((.greater, 1))
+  } else if starts_with(src, at, "+") {
+    .some((.plus, 1))
+  } else if starts_with(src, at, "-") {
+    .some((.minus, 1))
+  } else if starts_with(src, at, "*") {
+    .some((.star, 1))
+  } else if starts_with(src, at, "/") {
+    .some((.slash, 1))
+  } else if starts_with(src, at, "@") {
+    .some((.at_sign, 1))
+  } else if starts_with(src, at, "^") {
+    .some((.caret, 1))
+  } else if starts_with(src, at, "!") {
+    .some((.bang, 1))
+  } else if starts_with(src, at, "|>") {
+    .some((.pipe_arrow, 2))
+  } else if starts_with(src, at, "%") {
+    .some((.percent, 1))
   } else {
-    false
+    .none
   }
 }
 
 fn punct(lx: take Lexer, start: Pos) -> Lexer ! alloc {
-  var found: Option[Nat] = .none
-  loop k in 0..lx.puncts.size {
-    if starts_with(lx.src, lx.at, lx.puncts[k]) {
-      found = .some(k)
-      break
-    }
-  }
-  match found {
+  match punct_at(lx.src, lx.at) {
     .none {
       from = lx.at
       after = bump_char(lx)
-      detail = slice(after.src, from, after.at)
-      error_at(after, start, 11, 0, detail)
+      shown = show_char(text_of(after.src, from, after.at))
+      error_at(after, start, "unexpected character {shown}")
     }
-    .some(k) {
+    .some((p, width)) {
       var next = lx
-      if k < next.puncts.size {
-        width = next.puncts[k].size
-        loop i in 0..width { next = bump(next) }
-      }
-      push_token(next, .punct(k), start)
+      loop i in 0..width { next = bump(next) }
+      push_token(next, .punct(p), start)
     }
   }
 }
@@ -591,35 +816,40 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer ! alloc
 {
   rounds = lx.src.size
   var next = bump(lx)
+  var pieces: List[Piece] = []
   var value: List[Byte] = []
   var interpolated = false
   loop round in 0..rounds {
     at = next.pos
     match byte_at(next.src, next.at) {
       .none {
-        next = error_at(next, start, 4, 0, [])
+        next = error_at(next, start, unclosed())
         break
       }
       .some(c) {
         if c == '\n' {
-          next = error_at(next, start, 4, 0, [])
+          next = error_at(next, start, unclosed())
           break
         } else if c == '"' {
           next = bump(next)
           break
         } else if c == '{' {
           next = bump(next)
-          if not interpolated {
-            next = push_token(next, .interp_open, start)
-            interpolated = true
-          }
-          if value.size > 0 { next = push_token(next, .text(value), start) }
+          interpolated = true
+          if value.size > 0 { pieces = push(pieces, .text(text_from(value))) }
           value = []
-          (after, closed) = if fuel > 0 { expression(next, start, fuel - 1) } else { (next, false) }
-          next = after
-          if not closed { break }
+          if fuel > 0 {
+            (after, tokens) = expression(next, start, fuel - 1)
+            next = after
+            match tokens {
+              .some(inside) { pieces = push(pieces, .expr(inside)) }
+              .none { break }
+            }
+          } else {
+            break
+          }
         } else if c == '}' {
-          next = error_at(bump(next), at, 5, 0, [])
+          next = error_at(bump(next), at, "a `\}` in a string closes no expression")
         } else if c == '\\' {
           next = bump(next)
           match byte_at(next.src, next.at) {
@@ -628,15 +858,14 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer ! alloc
                 next = bump(next)
                 decoded: Byte = if e == 'n' { '\n' } else if e == 't' { '\t' } else { e }
                 value = push(value, decoded)
-              } else if e == '\n' {
-                next = escape_error(next, at, 6)
-                break
               } else {
-                next = bump_char(escape_error(next, at, 6))
+                shown = after_backslash(next)
+                next = error_at(next, at, "unknown escape: a backslash is followed by {shown}, not one of \" \\ \{ \} n t")
+                if e == '\n' { break } else { next = bump_char(next) }
               }
             }
             .none {
-              next = escape_error(next, at, 6)
+              next = error_at(next, at, "unknown escape: a backslash is followed by nothing, not one of \" \\ \{ \} n t")
               break
             }
           }
@@ -648,22 +877,42 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer ! alloc
     }
   }
   if not interpolated {
-    push_token(next, .string(value), start)
+    push_token(next, .string(text_from(value)), start)
   } else {
-    var done = next
-    if value.size > 0 { done = push_token(done, .text(value), start) }
-    push_token(done, .interp_close, start)
+    if value.size > 0 { pieces = push(pieces, .text(text_from(value))) }
+    push_token(next, .interp(pieces), start)
   }
 }
 
-// Reads the tokens of an expression in a string, from after its `{`
-// through the `}` that closes it, and whether it was closed.
-fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, bool) ! alloc
+// Whether a token of the list is a string.
+fn has_string(tokens: List[Token]) -> bool {
+  var found = false
+  loop i in 0..tokens.size {
+    match tokens[i].tok {
+      .string(b) { found = true }
+      .interp(ps) { found = true }
+      other { }
+    }
+  }
+  found
+}
+
+// Whether the last mistake is the string with no closing quote.
+fn last_is_unclosed(errors: List[LexError]) -> bool {
+  if errors.size == 0 { false } else { errors[errors.size - 1].message == unclosed() }
+}
+
+// Reads the tokens of an expression in a string, from after its `{` through the
+// `}` that closes it, which are the tokens when the line has not ended first.
+fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Token]]) ! alloc
   decreases fuel
 {
-  mark = lx.tokens.size
   rounds = lx.src.size
   var next = lx
+  outside = next.tokens
+  waiting = next.pending
+  next.tokens = []
+  next.pending = []
   var depth: Nat = 0
   var closed = false
   loop round in 0..rounds {
@@ -674,7 +923,7 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, bool) ! alloc
         if c == '\n' {
           break
         } else if c == '}' and depth == 0 {
-          next = push_token(bump(next), .punct(15), at)
+          next = push_token(bump(next), .punct(.close_brace), at)
           closed = true
           break
         } else {
@@ -685,18 +934,20 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, bool) ! alloc
       }
     }
   }
+  inside = next.tokens
+  next.tokens = outside
+  next.pending = waiting
   // A string in the braces that the line ends inside is the one without its
   // quote, and it has reported that already.
-  inner = has_string(next.tokens, mark) and last_code(next.errors) == 4
+  inner = has_string(inside) and last_is_unclosed(next.errors)
   if closed {
-    (next, true)
+    (next, .some(inside))
   } else if inner {
-    (next, false)
+    (next, .none)
   } else {
-    (error_at(next, start, 4, 0, []), false)
+    (error_at(next, start, unclosed()), .none)
   }
 }
-
 
 // Reads what starts with `c`, which is not a line break: a space, a
 // comment, or a token.
@@ -741,74 +992,16 @@ fn run(lx: take Lexer) -> Lexer ! alloc {
   push_token(next, .eof, eof)
 }
 
-// 29 is the place of `|>` in the table of punctuation.
-fn is_pipe(tok: Tok) -> bool {
-  match tok {
-    .punct(k) { k == 29 }
-    other { false }
-  }
-}
-
-// Whether a `|>` stands after a line break.
-fn has_break_before_pipe(tokens: List[Token]) -> bool {
-  var found = false
-  loop i in 1..tokens.size {
-    if is_pipe(tokens[i].tok) and is_newline(tokens[i - 1].tok) { found = true }
-  }
-  found
-}
-
-// The token as a new one, since a list does not give away what it holds.
-fn copy_tok(tok: Tok) -> Tok ! alloc {
-  match tok {
-    .ident(b) { .ident(slice(b, 0, b.size)) }
-    .keyword(k) { .keyword(k) }
-    .number(b) { .number(slice(b, 0, b.size)) }
-    .string(b) { .string(slice(b, 0, b.size)) }
-    .interp_open { .interp_open }
-    .text(b) { .text(slice(b, 0, b.size)) }
-    .interp_close { .interp_close }
-    .punct(k) { .punct(k) }
-    .newline { .newline }
-    .eof { .eof }
-  }
-}
-
-// The tokens without the line breaks that stand in front of a `|>`, which
-// goes on from the line before.
-fn without_breaks_before_pipes(tokens: List[Token]) -> List[Token] ! alloc {
-  var kept: List[Token] = []
-  var breaks: List[Pos] = []
-  loop i in 0..tokens.size {
-    if is_newline(tokens[i].tok) {
-      breaks = push(breaks, tokens[i].pos)
-    } else {
-      if not is_pipe(tokens[i].tok) {
-        loop k in 0..breaks.size { kept = push(kept, Token(tok: .newline, pos: breaks[k])) }
-      }
-      breaks = []
-      kept = push(kept, Token(tok: copy_tok(tokens[i].tok), pos: tokens[i].pos))
-    }
-  }
-  kept
-}
-
 // Splits a file into tokens. The last token is always `eof`.
 fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] ! alloc {
   bad = text_errors(src)
   if bad.size > 0 {
     .err(bad)
   } else {
-    lx = Lexer(src: src, at: 0, pos: Pos(line: 1, col: 1), tokens: [], errors: [],
-               line_has_token: false, keywords: keyword_table(), puncts: punctuation_table())
+    lx = Lexer(src: freeze(src), at: 0, pos: Pos(line: 1, col: 1), tokens: [], pending: [],
+               errors: [], line_has_token: false)
     done = run(lx)
-    if done.errors.size > 0 {
-      .err(done.errors)
-    } else if has_break_before_pipe(done.tokens) {
-      .ok(without_breaks_before_pipes(done.tokens))
-    } else {
-      .ok(done.tokens)
-    }
+    if done.errors.size > 0 { .err(done.errors) } else { .ok(done.tokens) }
   }
 }
 

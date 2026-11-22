@@ -16,22 +16,22 @@ use std.list (push)
 
 // ---- the tokens, as the parser reads them ----
 
-// The numbers of the keywords and punctuation, as the lexer's tables place them.
-fn kw_as() -> Nat { 1 }
-fn kw_use() -> Nat { 26 }
-fn p_lparen() -> Nat { 10 }
-fn p_rparen() -> Nat { 11 }
-fn p_comma() -> Nat { 16 }
-fn p_dot() -> Nat { 18 }
+// The keywords and punctuation that the parser asks for.
+fn kw_as() -> Keyword { .kw_as }
+fn kw_use() -> Keyword { .kw_use }
+fn p_lparen() -> Punct { .open_paren }
+fn p_rparen() -> Punct { .close_paren }
+fn p_comma() -> Punct { .comma }
+fn p_dot() -> Punct { .dot }
 
-fn is_keyword(t: Tok, k: Nat) -> bool {
+fn is_keyword(t: Tok, k: Keyword) -> bool {
   match t {
     .keyword(n) { n == k }
     other { false }
   }
 }
 
-fn is_punct(t: Tok, k: Nat) -> bool {
+fn is_punct(t: Tok, k: Punct) -> bool {
   match t {
     .punct(n) { n == k }
     other { false }
@@ -68,7 +68,7 @@ struct ParseError {
 }
 
 struct Name {
-  text: List[Byte]
+  text: str
   pos: Pos
 }
 
@@ -169,9 +169,9 @@ fn skip_item(c: take Cursor, from: Nat) -> Cursor {
       next = skip_breaks(next)
       if pos(next).col == 1 and not continues_item(tok(next)) { break }
     } else {
-      if is_punct(t, 10) or is_punct(t, 12) or is_punct(t, 14) {
+      if is_punct(t, .open_paren) or is_punct(t, .open_bracket) or is_punct(t, .open_brace) {
         depth = saturating_add(depth, 1)
-      } else if is_punct(t, 11) or is_punct(t, 13) or is_punct(t, 15) {
+      } else if is_punct(t, .close_paren) or is_punct(t, .close_bracket) or is_punct(t, .close_brace) {
         depth = saturating_sub(depth, 1)
       }
       next = step(next)
@@ -181,7 +181,7 @@ fn skip_item(c: take Cursor, from: Nat) -> Cursor {
 }
 
 fn continues_item(t: Tok) -> bool {
-  is_punct(t, 14) or is_punct(t, 15) or is_keyword(t, 20) or is_keyword(t, 6)
+  is_punct(t, .open_brace) or is_punct(t, .close_brace) or is_keyword(t, .kw_requires) or is_keyword(t, .kw_ensures)
 }
 
 // ---- use ----
@@ -332,6 +332,12 @@ fn parse_uses(tokens: take List[Token]) -> Uses ! alloc {
 // Everything from here down is written as knowledge/ teaches and is refused by
 // the compiler on main. Each reason is listed on issue #675 with the smallest
 // program that shows it.
+//
+// It was written before the tokens of the lexer were what they are now, and it
+// still reads a keyword, a punctuation, and the text of a token as numbers and
+// bytes, and a string as the flat run of tokens the lexer once gave. It is
+// written again for the tokens above, a `Keyword` and a `Punct` that are cases
+// and a `str` for text, when it is built.
 
 // ---- the tree ----
 
