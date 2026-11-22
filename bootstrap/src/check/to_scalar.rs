@@ -72,6 +72,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         lambdas: Vec::new(),
         starters: Vec::new(),
         poll_any: None,
+        through: None,
         errors: Vec::new(),
     };
     lowering.add(Body::Copy(start));
@@ -87,8 +88,13 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
             Body::Runtime(kind) => runtime::build(kind, &mut |k| lowering.place(Body::Runtime(k))),
             Body::Lambda(k) => lowering.lambda_function(k),
             Body::Starter(k) => lowering.starter_function(k),
-            Body::PollAny => frames::poll_any_stub(),
+            // Its types are those of the scheduler's state, which a program
+            // that is lowered later may be the first to name.
+            Body::PollAny => frames::poll_any_stub(&[]),
         });
+    }
+    if let Some(at) = lowering.poll_any {
+        functions[at] = frames::poll_any_stub(&lowering.through.clone().unwrap_or_default());
     }
     if !lowering.errors.is_empty() {
         return Err(lowering.errors);
@@ -106,7 +112,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
     let frames = form::Frames {
         poll_any: lowering.poll_any,
         starters: lowering.starters,
-        through: Vec::new(),
+        through: lowering.through.clone().unwrap_or_default(),
     };
     let floats = (program.functions.iter())
         .any(|f| f.types.iter().any(|t| matches!(t, form::Type::Float(_))));
@@ -163,6 +169,9 @@ struct Lowering<'a> {
     starters: Vec<form::Starter>,
     /// The function that polls any frame, when the program polls one.
     poll_any: Option<usize>,
+    /// The types of the state of the scheduler that polls the frames, once a
+    /// program polls one under a handler that holds state.
+    through: Option<Vec<form::Type>>,
     /// What is not built yet and a program uses.
     errors: Vec<Error>,
     /// The place of each function of the runtime, which are few: a kind of
@@ -204,6 +213,10 @@ struct Out<'a> {
     written: u32,
     /// The handlers in force at the code being lowered, the innermost last.
     handlers: Vec<Handler<'a>>,
+    /// The handlers whose operation is being lowered in place, the innermost
+    /// last, which are not in force while it is: what they are made of, and
+    /// where each of their frames is.
+    operating: Vec<Operating<'a>>,
     /// The names of each function lowered in place whose array is read or
     /// assigned at an index, by the number of the function's name.
     homed: HashMap<u32, HashSet<String>>,
@@ -251,6 +264,12 @@ struct Handler<'a> {
     def: Option<Rc<HandlerDef<'a>>>,
     frames: Vec<usize>,
     below: usize,
+}
+
+/// A handler whose operation is being lowered in place.
+struct Operating<'a> {
+    def: Rc<HandlerDef<'a>>,
+    frames: Vec<usize>,
 }
 
 /// A name of a frame whose value a copy gives back, because a function of a
@@ -461,6 +480,7 @@ impl<'a> Out<'a> {
             place: form::Place::NONE,
             written: 0,
             handlers: Vec::new(),
+            operating: Vec::new(),
             homed: HashMap::new(),
         };
         out.new_block();

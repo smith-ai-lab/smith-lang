@@ -147,9 +147,19 @@ impl<'a> Lowering<'a> {
             out.define(name, ty, values);
         }
         let mut slots: Vec<Slot> = Vec::new();
-        for (id, def) in context {
+        let order = self.state_last(context.iter().map(|(_, def)| def.effect));
+        let mut maps: Vec<Vec<(usize, usize)>> = vec![Vec::new(); context.len()];
+        let mut made: Vec<Vec<Slot>> = (0..context.len()).map(|_| Vec::new()).collect();
+        for i in order {
+            maps[i] = self.push_frames(&mut out, &context[i].1, &mut made[i]);
+        }
+        // What it gives back is in the order it takes what it is given.
+        let order = self.state_last(context.iter().map(|(_, def)| def.effect));
+        for i in order {
+            slots.append(&mut made[i]);
+        }
+        for ((id, def), map) in context.iter().zip(maps) {
             let below = out.handlers.len();
-            let map = self.push_frames(&mut out, def, &mut slots);
             out.handlers.push(Handler {
                 id: *id,
                 effect: def.effect,
@@ -668,9 +678,22 @@ impl<'a> Lowering<'a> {
             args[at] = Some(self.argument(out, default, &params[at], &[]));
         }
         let args = args.into_iter().map(|a| a.expect("given")).collect();
+        if out.handlers[handler].def.is_none() {
+            let (effect, operations) = (
+                out.handlers[handler].effect,
+                out.handlers[handler].operations.clone(),
+            );
+            let def = self.capture(out, effect, &operations);
+            out.handlers[handler].def = Some(Rc::new(def));
+        }
+        out.operating.push(Operating {
+            def: out.handlers[handler].def.clone().expect("made"),
+            frames: out.handlers[handler].frames.clone(),
+        });
         let outside = out.handlers.split_off(out.handlers[handler].below);
         let mut result = self.run_func(out, func, args, &gives, false);
         out.handlers.extend(outside);
+        out.operating.pop();
         if gives == Ty::Nothing {
             result.clear();
         }
@@ -902,6 +925,15 @@ impl<'a> Lowering<'a> {
                 }
             }
         }
+        // The state of a scheduler goes through each poll, and is given back by
+        // it whether the functions of the scheduler assign it or not.
+        if self.typed.defs.is_scheduler(effect) {
+            for (_, names) in &mut frames {
+                for c in names.iter_mut() {
+                    c.assigned = c.func.is_none() && !c.scalars.is_empty();
+                }
+            }
+        }
         HandlerDef {
             effect,
             operations: operations.to_vec(),
@@ -977,7 +1009,9 @@ impl<'a> Lowering<'a> {
         });
         let mut extra = Vec::new();
         let mut slots = Vec::new();
-        for h in &out.handlers[..upto] {
+        let order = self.state_last(out.handlers[..upto].iter().map(|h| h.effect));
+        for at in order {
+            let h = &out.handlers[at];
             let def = h.def.as_ref().expect("made");
             for (i, (orig, names)) in def.frames.iter().enumerate() {
                 let frame = h.frames.get(i).copied().unwrap_or(*orig);

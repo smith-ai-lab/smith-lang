@@ -1,4 +1,6 @@
-use std.bits (u64)
+use std.bits (bit_xor, shift_right, u64)
+use std.int (checked_rem, wrapping_add, wrapping_mul)
+use std.list (push)
 
 // The functions of task groups: `tasks` opens a group for the rest of a block,
 // `spawn` starts a child in it, and `join` waits for the child and gives its
@@ -93,4 +95,119 @@ pub fn spawn[T](work: take fn() -> T) -> Task[T] ! task {
 
 pub fn join[T](child: take Task[T]) -> T ! task {
   __result(finish(child.number))
+}
+
+// The next number of a sequence that `seed` picks, which mixes the bits of the
+// state well, so that seeds that are near one another give different orders.
+fn mixed(state: u64) -> u64 {
+  a = wrapping_mul(bit_xor(state, shift_right(state, 30)), 13787848793156543929)
+  b = wrapping_mul(bit_xor(a, shift_right(a, 27)), 10723151780598845931)
+  bit_xor(b, shift_right(b, 31))
+}
+
+fn contains(list: List[u64], x: u64) -> bool {
+  var found = false
+  loop i in 0..list.size {
+    if list[i] == x { found = true }
+  }
+  found
+}
+
+// A task that waits for another task to end.
+struct Blocked {
+  task: u64
+  on: u64
+}
+
+// Whether the task may run: it has not ended, and the last task it waited for
+// has ended. `waits` holds each wait of a task for another, and the last of a
+// task's is the one that counts.
+fn runnable(n: u64, ended: List[u64], waits: List[Blocked]) -> bool {
+  if contains(ended, n) { return false }
+  var on = n
+  var waiting = false
+  loop i in 0..waits.size {
+    if waits[i].task == n {
+      waiting = true
+      on = waits[i].on
+    }
+  }
+  if waiting { contains(ended, on) } else { true }
+}
+
+fn count_runnable(started: List[u64], ended: List[u64], waits: List[Blocked]) -> u64 {
+  var count: u64 = 0
+  loop i in 0..started.size {
+    if runnable(started[i], ended, waits) { count = wrapping_add(count, 1) }
+  }
+  count
+}
+
+fn nth_runnable(k: u64, started: List[u64], ended: List[u64], waits: List[Blocked]) -> u64 {
+  var seen: u64 = 0
+  var found: u64 = 0
+  loop i in 0..started.size {
+    if runnable(started[i], ended, waits) {
+      if seen == k { found = started[i] }
+      seen = wrapping_add(seen, 1)
+    }
+  }
+  found
+}
+
+// A scheduler for tests. It starts nothing until a task is waited for, and runs
+// the tasks that may run in an order that `seed` picks: one seed always gives
+// the same order. A task that waits for another is suspended, and runs again
+// when that one has ended. `body` is the first task.
+pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! alloc, diverge {
+  var started: List[u64] = []
+  var ended: List[u64] = []
+  var waits: List[Blocked] = []
+  var rng: u64 = seed
+  task(
+    start: fn(work) {
+      n = __address(work)
+      started = push(started, n)
+      n
+    },
+    finish: fn(child) {
+      if not contains(ended, child) { __wait(.task(child)) }
+      f = __frame_at(child)
+      f
+    },
+    body: {
+      root = __frame(body)
+      top = __address(root)
+      started = push(started, top)
+      loop {
+        if contains(ended, top) { break }
+        many = count_runnable(started, ended, waits)
+        rng = wrapping_add(rng, 11400714819323198485)
+        match checked_rem(mixed(rng), many) {
+          .none {
+            __eprint("every task waits, and none can run")
+            __end(1)
+          }
+          .some(k) {
+            n = nth_runnable(k, started, ended, waits)
+            f = __frame_at(n)
+            match __poll(f) {
+              .done { ended = push(ended, n) }
+              .waiting(w) {
+                match w {
+                  .task(t) { waits = push(waits, Blocked(task: n, on: t)) }
+                  .read(h) { }
+                  .write(h) { }
+                  .time(t) { }
+                }
+              }
+            }
+            __consume(f)
+          }
+        }
+      }
+      result: T = __result(root)
+      result
+    },
+  )
 }
