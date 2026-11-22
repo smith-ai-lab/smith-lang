@@ -1,0 +1,3 @@
+try_without_convert.smith:14:7: there is no implementation of `Try` for `Result[str, A]` and `Result[str, B]`
+  14 |   s = try step()
+     |       ^

@@ -1,0 +1,3 @@
+.ok(3)
+.err(.number(ParseError(at: 0)))
+.err(.range(RangeError(limit: 100)))

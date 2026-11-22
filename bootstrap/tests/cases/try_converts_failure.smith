@@ -1,0 +1,35 @@
+use std.bits (u16)
+use std.console (console, print)
+
+struct ParseError {
+  at: Nat
+}
+
+struct RangeError {
+  limit: Nat
+}
+
+enum PortError {
+  number: ParseError
+  range: RangeError
+}
+
+fn parse_int(text: str) -> Result[Nat, ParseError] {
+  if text.size == 0 { .err(ParseError(at: 0)) } else { .ok(text.size) }
+}
+
+fn in_range(n: Nat) -> Result[u16, RangeError] {
+  if n < 100 { .ok(n) } else { .err(RangeError(limit: 100)) }
+}
+
+fn port(text: str) -> Result[u16, PortError] {
+  n = try parse_int(text)
+  p = try in_range(n)
+  .ok(p)
+}
+
+fn main() ! console, alloc {
+  print("{port("abc")}")
+  print("{port("")}")
+  print("{port("0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789")}")
+}

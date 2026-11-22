@@ -21,11 +21,11 @@ It is the one function of a trait, and a conversion is an implementation of it.
 
 ```
 trait Convert[A, B] {
-  fn convert(a: A) -> B
+  fn convert(a: take A) -> B
 }
 ```
 
-- A conversion loses nothing and cannot fail. What can fail returns an `Option` or a `Result` under a name of its own.
+- A conversion takes its value, which is spent as any value that is taken is, as [Ownership](ownership.md) says. It loses nothing and cannot fail. What can fail returns an `Option` or a `Result` under a name of its own.
 - Each float type converts to every wider one.
 - No type converts to itself, and conversions do not chain: `convert` takes one step.
 

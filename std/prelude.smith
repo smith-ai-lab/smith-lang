@@ -59,7 +59,7 @@ trait Hash[T] {
 }
 
 trait Convert[A, B] {
-  fn convert(a: A) -> B
+  fn convert(a: take A) -> B
 }
 
 trait Function[F, out Args, out R] {
@@ -109,6 +109,17 @@ impl[T, U, E] Try[Result[T, E], Result[U, E], T] {
     match c {
       .ok(x) { .go(x) }
       .err(e) { .stop(.err(e)) }
+    }
+  }
+}
+
+impl[T, U, E, F] Try[Result[T, E], Result[U, F], T]
+  requires Convert[E, F]
+{
+  fn split(c: take Result[T, E]) -> Flow[T, Result[U, F]] {
+    match c {
+      .ok(x) { .go(x) }
+      .err(e) { .stop(.err(convert(e))) }
     }
   }
 }
