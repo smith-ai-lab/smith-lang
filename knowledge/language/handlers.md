@@ -11,6 +11,7 @@ built:
   - "a handler keeps its state in a `var` that its function assigns, as `fake_clock` does: the code under `with`, a function that carries the effect and runs under the handler, the functions that one calls, and a `loop` that asks, all count on the one state, and `two_readings` is `(1, 2)`"
   - "`fake_clock`, `two_readings`, `doubled_clock`, and `doubled` of this page run today with `wrapping_add` and `wrapping_mul` written where the page writes `clamp`, which is not built, and `doubled()` is `84`; `loud_clock` runs as written, prints `asked`, and without `! console` is refused with the error the page gives, whose fix keeps the effects of the parameters"
   - "a `return` in a function that carries the effect and runs under a handler whose functions assign a name is refused as not built yet"
+  - "a lambda given to a task is lowered as a function of its own, built for the handlers in force where it is written, with the names it reads, and what a handler that holds no state reads, kept in its frame; one under a handler that holds state is refused as not built yet"
   - "an effect that the target answers, as `console` is, is handled by the same mechanism: a handler of it answers the operations where it is in force, and the target answers them where none is"
 ---
 
@@ -150,6 +151,8 @@ fn at_two() -> u64 {
 ```
 
 `at_one()` is `1` and `at_two()` is `2`, and `report` costs what its body costs under the handler, and the value of `tick` it is given. A function that runs under two different handlers is built twice, once for each.
+
+A lambda that is given to a task is kept in the task's frame until its group ends, and is resolved where it is written, so the handler in force is still known when the program is built. The function it becomes is built for those handlers, with what a handler that holds no state reads passed in as the names the lambda reads are. A lambda under a handler that holds state is refused until the exclusion of [Tasks](tasks.md) is built.
 
 ## The forms
 

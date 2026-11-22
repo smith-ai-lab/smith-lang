@@ -20,6 +20,7 @@ fn join[T](task: take Task[T]) -> T
 
 - `tasks` runs `body` with `spawn` handled, so a function that opens a group with [`with`](../language/with.md) does not carry `spawn`. It is a handler of `spawn`, which has no operation, so its body is `spawn(body: body)`: the effect's name called with the body and nothing else, as [Handlers](../language/handlers.md) says a handler is written.
 - `spawn` starts `work` as a child of the nearest group and gives the child, a `Task[T]`. The lambda `work` is taken, so what it gives away moves into the child, and it is refused where it assigns a `var` of the function it is written in, as [What a spawned task may use](../language/task-sharing.md) says. The child has an arena of its own, as [Memory of a task](../language/task-arenas.md) says.
+- `std.task` also defines `Frame`, `Wait`, `Handle`, and `Poll`, which the scheduler is written with beside the compiler's `__frame`, `__poll`, `__result`, and `__wait`, as [the compiler](../compiler.md#effects) says. A program has no use for them, and cannot make a `Frame`.
 - `join` waits for the child and gives its value. It takes the child, so a child is joined once.
 
 ```
