@@ -69,28 +69,52 @@ pub const ONCE: &[Test] = &[
         every_module_of_a_function_of_floats_and_whole_numbers_does_what_the_evaluator_says,
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_1_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_1_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(0),
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_2_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_2_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(1),
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_3_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_3_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(2),
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_4_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_4_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(3),
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_5_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_5_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(4),
     ),
     (
-        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_6_of_6",
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_6_of_12",
         || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(5),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_7_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(6),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_8_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(7),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_9_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(8),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_10_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(9),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_11_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(10),
+    ),
+    (
+        "every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does_part_12_of_12",
+        || every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_does(11),
     ),
     (
         "every_module_of_a_fused_product_gives_what_the_evaluator_gives",
@@ -783,7 +807,7 @@ fn every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_do
     if !node() {
         return;
     }
-    let each = crate::float_source::SOURCES / 6;
+    let each = crate::float_source::SOURCES / 12;
     for at in part * each..(part + 1) * each {
         let source = crate::float_source::source(at);
         agree(&after_the_pass(source.as_bytes()));

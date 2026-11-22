@@ -13,8 +13,12 @@ pub const ONCE: &[Test] = &[
         the_reference_gives_the_correctly_rounded_value_of_numbers_whose_value_is_known,
     ),
     (
-        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers",
-        the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers,
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_1_of_2",
+        || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(0),
+    ),
+    (
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_2_of_2",
+        || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(1),
     ),
     (
         "the_reference_rounds_to_the_nearest_and_the_even_one_of_two_as_near",
@@ -60,13 +64,13 @@ fn numbers(g: &mut Gen, range: f64) -> f64 {
     (unit * 2.0 - 1.0) * range
 }
 
-fn the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers() {
+fn the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(part: usize) {
     let xs: Vec<f64> = generate::sample(70, 0, |g| {
         (0..12)
             .map(|k| numbers(g, [1.0, 10.0, 700.0, 100.0][k % 4]))
             .collect()
     });
-    for x in xs {
+    for x in xs.into_iter().skip(part * 6).take(6) {
         let (e, host) = (exact::exp_f64(x), x.exp().to_bits());
         assert!(apart(e, host) <= 1, "exp({x}): {e:#x} for {host:#x}");
         let (s, host) = (exact::sin_f64(x), x.sin());

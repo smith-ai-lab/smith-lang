@@ -71,8 +71,16 @@ pub const ONCE: &[Test] = &[
         a_block_that_comes_to_more_than_largest_bytes_is_an_error_before_that_much_memory_is_asked_for,
     ),
     (
-        "a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one",
-        a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one,
+        "a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one_part_1_of_3",
+        || a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one(0),
+    ),
+    (
+        "a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one_part_2_of_3",
+        || a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one(1),
+    ),
+    (
+        "a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one_part_3_of_3",
+        || a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one(2),
     ),
     (
         "blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program",
@@ -1323,11 +1331,13 @@ fn a_block_that_comes_to_more_than_largest_bytes_is_an_error_before_that_much_me
     }
 }
 
-fn a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one() {
+fn a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one(part: u64) {
     const SECRETS: &[&str] = &["authorization", "cookie", "set-cookie"];
-    generate::check(
+    generate::check_part(
         59607,
         15,
+        part,
+        3,
         |g| {
             let mut list: Vec<(String, String)> = (0..g.below(4) + 1).map(|_| header(g)).collect();
             for _ in 0..g.below(3) + 1 {
