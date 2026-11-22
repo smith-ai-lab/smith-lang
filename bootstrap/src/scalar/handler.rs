@@ -89,8 +89,22 @@ impl State {
 
 /// The program with the stacks passed to every function that needs room.
 pub fn install(program: Program) -> Program {
-    let given: Vec<Vec<bool>> = program.functions.iter().map(escape::given_back).collect();
-    let uses = needing(&program, &given);
+    // The poll of a task runs to a wait and is run again, and what the task made
+    // before the wait is read after it, so everything a poll builds is built in
+    // the stack for results, which its caller goes on with, and a call of a poll
+    // is a call whose result is kept. A task's memory is then below where every
+    // poll after it begins, and nothing a task holds across a wait is overwritten.
+    let polls: Vec<bool> = program.functions.iter().map(is_poll).collect();
+    let given: Vec<Vec<bool>> = (program.functions.iter().enumerate())
+        .map(|(k, f)| {
+            if polls[k] {
+                vec![true; f.types.len()]
+            } else {
+                escape::given_back(f)
+            }
+        })
+        .collect();
+    let uses = needing(&program, &given, &polls);
     let rounds: Vec<escape::Rounds> = (program.functions.iter().enumerate())
         .map(|(k, f)| {
             escape::rounds(f, &|i| match &i.op {
@@ -99,7 +113,9 @@ pub fn install(program: Program) -> Program {
                     ..
                 } => !given[k][i.results[0].0],
                 Op::Call { function, .. } => {
-                    uses[*function].results && !gives_back(f, &given[k], &i.results)
+                    uses[*function].results
+                        && !polls[*function]
+                        && !gives_back(f, &given[k], &i.results)
                 }
                 _ => false,
             })
@@ -116,7 +132,15 @@ pub fn install(program: Program) -> Program {
     let mut functions: Vec<Function> = (program.functions.into_iter().enumerate())
         .map(|(k, f)| {
             if uses[k].any() {
-                with_state(f, &given[k], &rounds[k], &uses, k == program.main, at_take)
+                with_state(
+                    f,
+                    &given[k],
+                    &rounds[k],
+                    &uses,
+                    &polls,
+                    k == program.main,
+                    at_take,
+                )
             } else {
                 without_arenas(f)
             }
@@ -138,6 +162,12 @@ pub fn install(program: Program) -> Program {
     }
 }
 
+/// Whether the function is the poll of a task, or the one that polls any: the
+/// pass `suspend` names them.
+fn is_poll(f: &Function) -> bool {
+    f.name.ends_with("<poll>") || f.name == "<poll any>"
+}
+
 /// Whether what a call gives is memory that the function returns, so that the
 /// callee builds it in the stack for results.
 fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
@@ -148,12 +178,12 @@ fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
 
 /// Which stacks each function takes, which is what it needs where it asks the
 /// system for memory, and where it calls a function that needs some.
-fn needing(program: &Program, given: &[Vec<bool>]) -> Vec<Uses> {
+fn needing(program: &Program, given: &[Vec<bool>], polls: &[bool]) -> Vec<Uses> {
     let mut uses = vec![Uses::default(); program.functions.len()];
     loop {
         let mut changed = false;
         for (k, f) in program.functions.iter().enumerate() {
-            let now = needing_of(f, &given[k], &uses);
+            let now = needing_of(f, &given[k], &uses, polls);
             if now != uses[k] {
                 uses[k] = now;
                 changed = true;
@@ -181,10 +211,11 @@ fn with_state(
     given: &[bool],
     rounds: &escape::Rounds,
     uses: &[Uses],
+    polls: &[bool],
     first: bool,
     take: usize,
 ) -> Function {
-    let me = needing_of(&f, given, uses);
+    let me = needing_of(&f, given, uses, polls);
     let start = |f: &mut Function| State {
         results: me.results.then(|| fresh(f)),
         temporaries: me.temporaries.then(|| fresh(f)),
@@ -266,7 +297,7 @@ fn with_state(
                 }
                 Op::Call { function, args } if uses[*function].any() => {
                     let callee = uses[*function];
-                    let returned = gives_back(&f, given, &i.results);
+                    let returned = polls[*function] || gives_back(&f, given, &i.results);
                     // What the callee does with a stack it is given for its
                     // temporaries is not given back, so a stack that has no
                     // piece yet would lose the one it takes, and the callee may
@@ -438,7 +469,7 @@ fn jump_of(end: &End, j: usize) -> &Jump {
 }
 
 /// Which stacks the function takes.
-fn needing_of(f: &Function, given: &[bool], uses: &[Uses]) -> Uses {
+fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool]) -> Uses {
     let mut now = Uses::default();
     for i in f.blocks.iter().flat_map(|b| &b.instructions) {
         match &i.op {
@@ -454,7 +485,7 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses]) -> Uses {
             }
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
-                if gives_back(f, given, &i.results) {
+                if polls[*function] || gives_back(f, given, &i.results) {
                     now.results |= callee.results;
                     now.temporaries |= callee.temporaries;
                 } else {

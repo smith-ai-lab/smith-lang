@@ -72,6 +72,8 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         lambdas: Vec::new(),
         starters: Vec::new(),
         poll_any: None,
+        defining_frame: false,
+        made_frame: None,
         through: None,
         errors: Vec::new(),
     };
@@ -169,6 +171,10 @@ struct Lowering<'a> {
     starters: Vec<form::Starter>,
     /// The function that polls any frame, when the program polls one.
     poll_any: Option<usize>,
+    /// Whether the value being lowered is the one a name is defined as, which a
+    /// call of `__frame` may be, and the lambda it made a frame of when it was.
+    defining_frame: bool,
+    made_frame: Option<usize>,
     /// The types of the state of the scheduler that polls the frames, once a
     /// program polls one under a handler that holds state.
     through: Option<Vec<form::Type>>,
@@ -213,6 +219,13 @@ struct Out<'a> {
     written: u32,
     /// The handlers in force at the code being lowered, the innermost last.
     handlers: Vec<Handler<'a>>,
+    /// The names that stand for the frame of a block, with the lambda each was
+    /// made of: a block that assigns a name of its function gives it back when the
+    /// frame is read.
+    roots: Vec<(String, usize)>,
+    /// The names that the function being lowered gives back after what it gives,
+    /// which a `return` gives back as they are where it leaves.
+    give_back: Vec<Slot>,
     /// The handlers whose operation is being lowered in place, the innermost
     /// last, which are not in force while it is: what they are made of, and
     /// where each of their frames is.
@@ -274,6 +287,7 @@ struct Operating<'a> {
 
 /// A name of a frame whose value a copy gives back, because a function of a
 /// handler it runs under assigns it, with the scalars it is.
+#[derive(Clone)]
 struct Slot {
     frame: usize,
     name: String,
@@ -481,6 +495,8 @@ impl<'a> Out<'a> {
             written: 0,
             handlers: Vec::new(),
             operating: Vec::new(),
+            give_back: Vec::new(),
+            roots: Vec::new(),
             homed: HashMap::new(),
         };
         out.new_block();
@@ -1323,10 +1339,17 @@ impl<'a> Lowering<'a> {
                     // its statements once each, in order, so an assignment
                     // makes the name stand for the new values from then
                     // on, and a name bound to the old ones keeps them.
+                    self.defining_frame =
+                        matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
                     let (ty, value) = self.expr(out, value, env);
+                    self.defining_frame = false;
+                    let made = self.made_frame.take();
                     match out.find(name) {
                         Some(at) => out.assign(at, value),
                         None => out.define(name, ty, value),
+                    }
+                    if let Some(k) = made {
+                        out.roots.push((name.clone(), k));
                     }
                     Vec::new()
                 }
@@ -1841,10 +1864,18 @@ impl<'a> Lowering<'a> {
                 }
             }
         }
+        // The state of a scheduler is given and taken by every wait and every
+        // call of an operation, which the body may make, so it is carried too.
+        let kept: Vec<(usize, String)> = (self.scheduler_state(out).into_iter())
+            .map(|slot| (slot.frame, slot.name))
+            .collect();
         let mut carried = Vec::new();
         for (f, frame) in out.frames.iter().enumerate() {
             for (at, bound) in frame.iter().enumerate() {
-                if !bound.values.is_empty() && assigned.contains(&(f, bound.name.as_str())) {
+                if !bound.values.is_empty()
+                    && (assigned.contains(&(f, bound.name.as_str()))
+                        || kept.iter().any(|(kf, kn)| *kf == f && *kn == bound.name))
+                {
                     carried.push((f, at));
                 }
             }
@@ -2116,6 +2147,9 @@ impl<'a> Lowering<'a> {
         if let Some(values) = self.after_block(out, m, env) {
             return values;
         }
+        if let Some(values) = self.if_scheduled(out, m, env) {
+            return values;
+        }
         if let Some(values) = self.comparison(out, m, env) {
             return values;
         }
@@ -2212,6 +2246,38 @@ impl<'a> Lowering<'a> {
         // A name the block defines is not there after it.
         let before: Vec<usize> = out.frames.iter().map(Vec::len).collect();
         let values = self.block(out, &go.body, env);
+        for (frame, n) in out.frames.iter_mut().zip(before) {
+            frame.truncate(n);
+        }
+        Some(values)
+    }
+
+    /// An `if` on `__scheduled()`, which is lowered as the one block that holds,
+    /// since whether a scheduler is in force is known where the copy is built, and
+    /// the other block is not part of it.
+    fn if_scheduled(
+        &mut self,
+        out: &mut Out<'a>,
+        m: &'a Match,
+        env: &[Ty],
+    ) -> Option<Vec<form::Value>> {
+        let Expr::Call(call) = &m.of else {
+            return None;
+        };
+        if !matches!(m.form, Form::If { .. })
+            || crate::check::frames::kind(call) != Some(crate::check::frames::Kind::Scheduled)
+        {
+            return None;
+        }
+        let name = if self.scheduler_state(out).is_empty() {
+            "false"
+        } else {
+            "true"
+        };
+        let arm = (m.arms.iter())
+            .find(|arm| matches!(&arm.pattern, Pattern::Case { name: n, .. } if n == name))?;
+        let before: Vec<usize> = out.frames.iter().map(Vec::len).collect();
+        let values = self.block(out, &arm.body, env);
         for (frame, n) in out.frames.iter_mut().zip(before) {
             frame.truncate(n);
         }

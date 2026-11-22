@@ -196,8 +196,10 @@ impl<'a> Defs<'a> {
     /// Whether an effect is `task` of `std.task`, whose handlers are the
     /// schedulers, whose state goes through each poll.
     pub(super) fn is_scheduler(&self, effect: usize) -> bool {
-        let def = &self.file.effects[effect];
-        of_std(def.pos) && written_name(&def.name) == "task"
+        self.file
+            .effects
+            .get(effect)
+            .is_some_and(|def| of_std(def.pos) && written_name(&def.name) == "task")
     }
 
     /// The place among the file's effects of the effect the name is the
@@ -489,6 +491,18 @@ impl<'a> Checker<'a> {
     /// a listed effect with no such name may be it misspelt. A default lists
     /// none, so each thing in it that needs one is reported.
     pub(super) fn needs(&mut self, body: &mut Body, effect: &str, pos: Pos, what: &str) {
+        // A group is a scheduler where none is in force and hands what it starts
+        // to the one in force where one is, so it lists `task` for the copy that
+        // is built for it, and no caller lists it for the group.
+        if written_name(effect) == "task"
+            && what == "`tasks`"
+            && self
+                .defs
+                .function(pos, "tasks")
+                .is_some_and(|f| of_std(self.defs.file.functions[f].pos))
+        {
+            return;
+        }
         // A module of the library that lists an effect of another writes it
         // with that module after it, which is the effect the table names. An
         // effect that the file lists and does not import is written bare and is

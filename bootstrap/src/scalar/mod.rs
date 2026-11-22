@@ -334,6 +334,13 @@ pub enum Raw {
     ClockGetTime,
     /// `nanosleep(time, left)`.
     NanoSleep,
+    /// `epoll_create1(flags)`, which the scheduler of Linux waits with.
+    EpollCreate1,
+    /// `epoll_ctl(epoll, operation, descriptor, event)`.
+    EpollCtl,
+    /// `epoll_pwait(epoll, events, count, milliseconds, 0, 0)`, with no mask of
+    /// signals, which is how `epoll_wait` is asked on every machine.
+    EpollWait,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1122,7 +1129,21 @@ impl Program {
             matches!(
                 i.op,
                 Op::System {
-                    call: System::Raw(_),
+                    call: System::Raw(
+                        Raw::Socket
+                            | Raw::Bind
+                            | Raw::Listen
+                            | Raw::Accept
+                            | Raw::Connect
+                            | Raw::GetSockName
+                            | Raw::SetSockOpt
+                            | Raw::SendTo
+                            | Raw::RecvFrom
+                            | Raw::Close
+                            | Raw::ClockGetTime
+                            | Raw::NanoSleep
+                            | Raw::Kind
+                    ),
                     ..
                 }
             )

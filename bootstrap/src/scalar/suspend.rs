@@ -617,6 +617,25 @@ impl<'a> Machine<'a> {
                         });
                         self.keep(at, &ins.results);
                     }
+                    // What a task builds lives until the task ends, since it is
+                    // read after a wait, and the poll builds all of it in the
+                    // stack for results, which is not put back: an arena in a
+                    // task is no place where memory is released, and its
+                    // token is no value that has to be kept across a wait.
+                    Op::System {
+                        call: System::ArenaOpen,
+                        ..
+                    } => {
+                        self.blocks[at].instructions.push(Instruction {
+                            results: ins.results.clone(),
+                            op: Op::Constant(Constant::Int(0)),
+                            at: ins.at,
+                        });
+                    }
+                    Op::System {
+                        call: System::ArenaClose,
+                        ..
+                    } => {}
                     Op::System {
                         call: System::Suspend,
                         args,

@@ -16,6 +16,7 @@ pub(super) enum Kind {
     Wait,
     Address,
     At,
+    Scheduled,
 }
 
 /// Which call a call is, when it is one that only the library may make.
@@ -30,6 +31,7 @@ pub(super) fn kind(call: &Call) -> Option<Kind> {
         "__wait" => Some(Kind::Wait),
         "__address" => Some(Kind::Address),
         "__frame_at" => Some(Kind::At),
+        "__scheduled" => Some(Kind::Scheduled),
         _ => None,
     }
 }
@@ -56,6 +58,12 @@ impl<'a> Checker<'a> {
         want: &Want,
     ) -> Ty {
         let defs = self.defs;
+        if kind == Kind::Scheduled {
+            // Whether a scheduler that holds state is in force where the call is
+            // written, which is known when the copy is built, so an `if` on it
+            // is lowered as the one block that holds.
+            return self.defs.bool_ty();
+        }
         let (Some(frame), Some(poll), Some(wait)) = (defs.frame, defs.poll, defs.wait) else {
             self.errors.push(Error::new(
                 call.pos,
@@ -108,6 +116,7 @@ impl<'a> Checker<'a> {
                 self.arguments(body, call, &signature, false, None, None);
                 signature.gives
             }
+            Kind::Scheduled => unreachable!("answered before the frame's types are read"),
             Kind::Wait => {
                 let signature = one("wait", Ty::Enum(wait, Vec::new()), Ty::Nothing);
                 self.arguments(body, call, &signature, false, None, None);

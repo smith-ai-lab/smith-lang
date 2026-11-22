@@ -35,7 +35,7 @@ The standard library declares seven effects. Each has operations, and a program 
 | [`time`](../library/time.md) | The clock, and waiting for a time |
 | [`entropy`](../library/entropy.md) | Bytes nobody can predict |
 | `ui` | Windows and events |
-| [`task`](../library/task.md) | Starting a task, and waiting for it, which a [task group](tasks.md) and the system's scheduler answer |
+| [`task`](../library/task.md) | Starting a task, and waiting for it, which a [task group](tasks.md) and the schedulers of the library answer |
 
 `console` is needed by `print`, and a program imports both with `use std.console (console, print)`. A function that calls it lists `console`, as `main` does above.
 

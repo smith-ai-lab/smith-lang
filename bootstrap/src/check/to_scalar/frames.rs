@@ -30,6 +30,10 @@ pub(super) struct LambdaDef<'a> {
     pub context: Vec<(HandlerId, Rc<HandlerDef<'a>>)>,
     /// What the function that makes its frame takes: the scalars of those names.
     pub params: Vec<form::Type>,
+    /// The names of the function around it that it assigns, which it gives back
+    /// after what it gives, and which the function reads the frame in gets back
+    /// when the frame is read.
+    pub assigned: Vec<Slot>,
 }
 
 const WORD: form::Type = form::Type::Int(form::Bits::B64);
@@ -233,6 +237,10 @@ impl<'a> Lowering<'a> {
                 debug_assert_eq!(self.scalars(&ty), vec![status, status, WORD]);
                 (ty, values)
             }
+            Kind::Scheduled => {
+                let state = self.scheduler_state(out);
+                (ty, vec![self.truth(out, !state.is_empty())])
+            }
             Kind::Address => {
                 // The number of a frame is where its bytes are, kept by storing
                 // the address in a place of the function and reading it back as
@@ -280,13 +288,26 @@ impl<'a> Lowering<'a> {
             }
             Kind::Result => {
                 let (_, frame) = self.expr(out, &call.args[0].value, env);
-                let types = self.scalars(&ty);
+                let mut types = self.scalars(&ty);
+                let own = types.len();
+                // The frame of a block that assigns names of its function gives
+                // them back after its value, and the function goes on with them.
+                let given = match &call.args[0].value {
+                    Expr::Name { name, .. } => (out.roots.iter().rev())
+                        .find(|(n, _)| n == name)
+                        .map(|(_, k)| self.lambdas[*k].assigned.clone())
+                        .unwrap_or_default(),
+                    _ => Vec::new(),
+                };
+                types.extend(given.iter().flat_map(|s| s.types.iter().copied()));
                 let (places, _) = form::result_places(&types);
                 let mut values = Vec::new();
                 for (t, at) in types.into_iter().zip(places) {
                     let address = out.moved(frame[0], at);
                     values.push(out.emit(form::Op::Load { ty: t, address }, vec![t])[0]);
                 }
+                let back = values.split_off(own);
+                self.set_state(out, &given, back);
                 (ty, values)
             }
         }
@@ -316,7 +337,41 @@ impl<'a> Lowering<'a> {
             unreachable!("checked")
         };
         let gives = items.last().expect("a result").clone();
-        let own = self.capture(out, 0, &[Func::Lambda(lambda, at, lambda_env.clone())]);
+        let own = self.capture(
+            out,
+            usize::MAX,
+            &[Func::Lambda(lambda, at, lambda_env.clone())],
+        );
+        // What the function reads is passed by value, so what it assigns of the
+        // function around it would be lost: a name it assigns is refused.
+        let mut assigned = Vec::new();
+        for (orig, names) in &own.frames {
+            for c in names.iter().filter(|c| c.assigned) {
+                assigned.push(Slot {
+                    frame: *orig,
+                    name: c.name.clone(),
+                    types: c.scalars.clone(),
+                });
+            }
+        }
+        // A block that a group is made of assigns them, and the frame of one is
+        // read where the block ends. A lambda made a frame in any other place
+        // runs when the function around it has gone on, so what it assigns would
+        // be lost.
+        if !self.defining_frame {
+            for (_, names) in &own.frames {
+                if let Some(c) = names.iter().find(|c| c.assigned) {
+                    self.errors.push(Error::unsupported(
+                        call.pos,
+                        &format!(
+                            "a lambda made a frame that assigns `{}`, a name of the function around it,",
+                            c.name
+                        ),
+                    ));
+                    return (frame.clone(), self.zeros(out, &frame));
+                }
+            }
+        }
         // What the function reads is passed by value, so a name kept in the
         // bytes of the function around it cannot be read from another.
         for (orig, names) in &own.frames {
@@ -390,7 +445,9 @@ impl<'a> Lowering<'a> {
             own,
             context,
             params,
+            assigned,
         }));
+        self.made_frame = Some(k);
         let function = self.add(Body::Lambda(k));
         let place = self.add(Body::Starter(k));
         self.starters.push(form::Starter { place, function });
@@ -416,10 +473,8 @@ impl<'a> Lowering<'a> {
         indexed_names(&def.lambda.body, &mut homed);
         out.homed.insert(out.written, homed);
         out.place = form::Place::of(&name);
-        // What the lambda assigns is refused where it is checked, so nothing
-        // of it is given back.
-        let mut slots = Vec::new();
-        let map = self.push_frames(&mut out, &def.own, &mut slots);
+        let mut own_slots = Vec::new();
+        let map = self.push_frames(&mut out, &def.own, &mut own_slots);
         out.at = (map.iter())
             .find(|(from, _)| *from == def.frame)
             .expect("the frame the lambda is written in")
@@ -450,13 +505,24 @@ impl<'a> Lowering<'a> {
                 below,
             });
         }
+        // What it gives back is what it assigns of the function around it, and
+        // then the scheduler's state.
+        out.give_back = own_slots.iter().chain(&state).cloned().collect();
         let lambda: &'a Lambda = def.lambda;
         let code = Code::Stmts(&lambda.body);
-        let mut result = self.leaving(&mut out, code, &def.env, (&def.gives, true), Vec::new());
+        let limits: Vec<usize> = match out.give_back.is_empty() {
+            true => Vec::new(),
+            false => out.frames.iter().map(Vec::len).collect(),
+        };
+        let mut result = self.leaving(&mut out, code, &def.env, (&def.gives, true), limits);
         if def.gives == Ty::Nothing {
             result.clear();
         }
         let mut results = self.scalars(&def.gives);
+        // What it assigns of the function around it is given back after what it
+        // gives, and then the scheduler's state.
+        result.extend(self.state_values(&out, &own_slots));
+        results.extend(own_slots.iter().flat_map(|s| s.types.iter().copied()));
         // What the scheduler's state is at the end is given back.
         result.extend(self.state_values(&out, &state));
         results.extend(state.iter().flat_map(|s| s.types.iter().copied()));
