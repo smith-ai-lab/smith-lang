@@ -53,7 +53,7 @@ pub const ONCE: &[Test] = &[
     ),
 ];
 
-const COMPARISONS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
+pub const COMPARISONS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
 
 fn run(source: &str) -> Outcome {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
@@ -61,7 +61,7 @@ fn run(source: &str) -> Outcome {
 }
 
 /// A value of the type, at one of its limits or next to one, or between.
-fn near(g: &mut Gen, ty: Int) -> i128 {
+pub fn near(g: &mut Gen, ty: Int) -> i128 {
     let d = g.below(5) as i128 - 2;
     match g.below(3) {
         0 => (ty.min() + d.abs()).min(ty.max()),
@@ -72,9 +72,9 @@ fn near(g: &mut Gen, ty: Int) -> i128 {
 
 /// A statement about the variable `x`, written out, with the function that
 /// says for which values it holds.
-type Statement = (String, Box<dyn Fn(i128) -> bool>);
+pub type Statement = (String, Box<dyn Fn(i128) -> bool>);
 
-fn statement(g: &mut Gen, ty: Int, x: &str, depth: usize) -> Statement {
+pub fn statement(g: &mut Gen, ty: Int, x: &str, depth: usize) -> Statement {
     if depth > 0 && g.one_in(2) {
         let (a, f) = statement(g, ty, x, depth - 1);
         return match g.below(3) {

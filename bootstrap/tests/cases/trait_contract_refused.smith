@@ -1,0 +1,24 @@
+use std.bits (u8)
+use std.console (console, print)
+
+trait Plus[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn plus(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
+impl Plus[u8] {
+  fn valid(a: u8, b: u8) -> bool { a <= 255 - b }
+  fn plus(a: u8, b: u8) -> u8 { a + b }
+}
+
+fn twice[T: Plus](x: T) -> T
+  requires Plus.valid(x, x)
+{
+  Plus.plus(x, x)
+}
+
+fn main() ! console, alloc {
+  n: u8 = 200
+  print("{twice(n)}")
+}

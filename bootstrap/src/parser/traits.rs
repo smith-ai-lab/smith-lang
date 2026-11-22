@@ -82,12 +82,30 @@ impl Parser<'_> {
                 tok => return Err(self.expected("a function's signature or `}`", tok)),
             }
             let (name, pos, generics, params, result, result_name, effects) = self.signature()?;
-            match self.tok() {
-                Tok::Newline | Tok::Punct("}") => {}
-                Tok::Keyword("requires" | "ensures") => {
-                    return Err(Error::unsupported(self.pos(), "a contract"));
+            let mut requires = Vec::new();
+            loop {
+                match self.tok() {
+                    Tok::Newline | Tok::Punct("}") => break,
+                    Tok::Keyword("requires") => {
+                        self.bump();
+                        let no_lambda = std::mem::replace(&mut self.no_lambda, true);
+                        let statement = self.expr();
+                        self.no_lambda = no_lambda;
+                        requires.push(statement?);
+                        if self.tok() == &Tok::Newline
+                            && matches!(
+                                self.tokens.get(self.at + 1).map(|t| &t.tok),
+                                Some(Tok::Keyword("requires"))
+                            )
+                        {
+                            self.bump();
+                        }
+                    }
+                    Tok::Keyword("ensures") => {
+                        return Err(Error::unsupported(self.pos(), "an `ensures` of a trait"));
+                    }
+                    tok => return Err(self.expected("a line break or `}`", tok)),
                 }
-                tok => return Err(self.expected("a line break or `}`", tok)),
             }
             functions.push(Function {
                 name,
@@ -97,7 +115,7 @@ impl Parser<'_> {
                 result,
                 result_name,
                 effects,
-                requires: Vec::new(),
+                requires,
                 needs: Vec::new(),
                 decreases: Vec::new(),
                 ensures: Vec::new(),

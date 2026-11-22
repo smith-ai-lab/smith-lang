@@ -38,6 +38,10 @@ pub(super) enum Key {
     /// the variables it multiplies. Nothing is known of it but the facts
     /// that are about the same product.
     Product(String),
+    /// Whether a function of a trait holds of values whose type is not
+    /// known, as it is written with the values. Nothing is known of it but
+    /// the facts that are about the same text.
+    Atom(String),
 }
 
 impl Key {
@@ -47,9 +51,14 @@ impl Key {
             | Key::Field(_, lo, hi)
             | Key::Fresh(_, lo, hi)
             | Key::Call(_, lo, hi) => Some((*lo, *hi)),
-            Key::Product(_) => None,
+            Key::Product(_) | Key::Atom(_) => None,
         }
     }
+}
+
+/// Whether a type is, or holds, a type parameter.
+fn holds_param(t: &Ty) -> bool {
+    matches!(t, Ty::Param(_)) || t.args().iter().any(holds_param)
 }
 
 /// A function of `Bits` whose result `arith` knows something of.
@@ -124,6 +133,13 @@ pub(super) struct Facts {
     /// While a function's contract is read at a call, the sum each of its
     /// parameters, and its result, stands for there.
     subst: Option<HashMap<String, Lin>>,
+    /// While a requirement of a trait's function is read, the text and the
+    /// type each of its parameters stands for at the call, or in the body of
+    /// the implementation, it is read for.
+    args: Option<HashMap<String, (String, Ty)>>,
+    /// The trait whose function's requirement is read, so that a call it
+    /// writes of another function of the trait needs no trait before it.
+    pub(super) sibling: Option<usize>,
     /// How many predicates are being read through, one inside another.
     depth: usize,
     /// The `var`s, by their place among the names, whose value is tracked
@@ -786,9 +802,147 @@ impl<'a> Checker<'a> {
                     Some(Formula::Or(vec![up, down]))
                 }
             }
-            Expr::Call(call) => self.said_predicate(body, facts, call, holds),
+            Expr::Call(call) => match self.trait_function_of(facts, call) {
+                Some((k, fi)) => self.said_trait(body, facts, call, (k, fi), holds),
+                None => self.said_predicate(body, facts, call, holds),
+            },
             _ => None,
         }
+    }
+
+    /// The function of a trait that a call is of, when it names the trait, or
+    /// is written inside a trait's requirement and names a function of it.
+    fn trait_function_of(&self, facts: &Facts, call: &Call) -> Option<(usize, usize)> {
+        let defs = self.defs;
+        let k = match &call.qualifier {
+            Some((q, at)) => defs.trait_at(*at, q)?,
+            None => facts.sibling?,
+        };
+        let fi = super::traits::trait_function(&defs.file.traits[k], &call.callee)?;
+        Some((k, fi))
+    }
+
+    /// What a call of a function of a trait that returns `bool` says: what the
+    /// body of the implementation its types choose says, with the arguments
+    /// put in, when the types are known, and a fact of its own when they are
+    /// not, which holds where a `requires` of the same call stands.
+    fn said_trait(
+        &self,
+        body: &Body<'a>,
+        facts: &mut Facts,
+        call: &Call,
+        (k, fi): (usize, usize),
+        holds: bool,
+    ) -> Option<Formula> {
+        let defs = self.defs;
+        if facts.depth >= 16 {
+            return None;
+        }
+        let sig = &defs.trait_sigs[k][fi];
+        if sig.gives != defs.bool_ty() {
+            return None;
+        }
+        let places = params_of(&sig.params, &call.args)?;
+        // The text, the type, and the sum of what each argument is.
+        let mut texts = Vec::new();
+        let mut sol: Vec<Option<Ty>> = vec![None; sig.scope.names.len()];
+        let mut sums: Vec<(usize, Lin)> = Vec::new();
+        for (arg, place) in call.args.iter().zip(&places) {
+            let (text, ty) = match (&arg.value, &facts.args) {
+                (Expr::Name { name, .. }, Some(args)) => args.get(name).cloned()?,
+                (_, Some(_)) => return None,
+                (Expr::Name { name, .. }, None) => {
+                    let (_, ty) = body.names.iter().rev().find(|(n, _)| n == name)?;
+                    (name.clone(), ty.clone())
+                }
+                (e, None) => (written_expr(e), self.types.get(&addr(e))?.clone()),
+            };
+            super::unify(&sig.params[*place].1, &ty, &mut sol);
+            if matches!(ty, Ty::Int(_)) {
+                let sum = match &arg.value {
+                    Expr::Name { name, .. } if facts.args.is_some() => {
+                        facts.subst.as_ref().and_then(|s| s.get(name).cloned())
+                    }
+                    e => {
+                        let mut builder = self.builder(body, facts, false);
+                        builder.lin(e).filter(|_| !builder.overflow)
+                    }
+                };
+                if let Some(sum) = sum {
+                    sums.push((*place, sum));
+                }
+            }
+            texts.push(text);
+        }
+        for (i, j) in defs.defaulted(k) {
+            if sol[i].is_none() {
+                sol[i] = sol[j].clone();
+            }
+        }
+        let name = format!(
+            "{}.{}({})",
+            defs.file.traits[k].name,
+            call.callee,
+            texts.join(", ")
+        );
+        let known = |t: &Option<Ty>| t.as_ref().is_some_and(|t| !t.unknown());
+        let outs = &defs.outs[k];
+        let given: Vec<&Option<Ty>> = (sol.iter().zip(outs))
+            .filter(|(_, o)| !**o)
+            .map(|(t, _)| t)
+            .collect();
+        if !given.iter().all(|t| known(t)) {
+            return None;
+        }
+        // Whether any type is one that stands for others.
+        let open = given.iter().any(|t| t.as_ref().is_some_and(holds_param));
+        if open {
+            let mut builder = self.builder(body, facts, true);
+            let mut lin = builder.variable(Key::Atom(name));
+            return Some(if holds {
+                lin.constant = -1;
+                at_least_zero(lin)
+            } else {
+                at_least_zero(lin.negated()?)
+            });
+        }
+        let types: Vec<Ty> = sol
+            .iter()
+            .map(|t| t.clone().unwrap_or(Ty::Unknown))
+            .collect();
+        let super::traits::Found::Yes(_, super::traits::By::Impl(i, _)) =
+            defs.find(k, &types, body.scope, &mut Vec::new())
+        else {
+            return None;
+        };
+        let info = defs.impls[i].as_ref()?;
+        let place = info.fns[fi]?;
+        let def = &defs.file.impls[i].functions[place];
+        let [Stmt::Expr(inner)] = def.body.as_slice() else {
+            return None;
+        };
+        if !def.effects.is_empty()
+            || !def.generics.is_empty()
+            || !info.scope.names.is_empty()
+            || def.result.is_none()
+        {
+            return None;
+        }
+        let named: HashMap<String, Lin> = (sums.into_iter())
+            .filter_map(|(place, sum)| Some((def.params.get(place)?.name.clone(), sum)))
+            .collect();
+        let outer = (
+            facts.subst.replace(named),
+            facts.args.replace(HashMap::new()),
+        );
+        let sibling = facts.sibling.take();
+        facts.depth += 1;
+        let said = self.said(body, facts, inner, holds);
+        facts.depth -= 1;
+        facts.sibling = sibling;
+        facts.subst = outer.0;
+        facts.args = outer.1;
+        said
     }
 
     /// What a call of a predicate says: what the one expression of its body
@@ -1915,8 +2069,15 @@ impl<'a> Checker<'a> {
         let mut facts = std::mem::take(&mut body.facts);
         let mut sums = HashMap::new();
         let mut texts: HashMap<String, String> = HashMap::new();
+        let mut args: HashMap<String, (String, Ty)> = HashMap::new();
         for (arg, place) in call.args.iter().zip(places) {
             let (name, ty) = &sig.params[place];
+            // A parameter whose type is a type parameter is what the argument is.
+            let ty = &match ty {
+                Ty::Param(_) => (self.types.get(&addr(&arg.value)).cloned()).unwrap_or(ty.clone()),
+                ty => ty.clone(),
+            };
+            args.insert(name.clone(), (written_expr(&arg.value), ty.clone()));
             if matches!(ty, Ty::List(_) | Ty::Slice(_)) {
                 let mut builder = self.builder(body, &mut facts, true);
                 if let Some(size) = builder.list_size(&arg.value).filter(|_| !builder.overflow) {
@@ -1948,6 +2109,7 @@ impl<'a> Checker<'a> {
             );
         }
         facts.subst = Some(sums);
+        facts.args = Some(args);
         for requirement in &callee.requires {
             let said = self.said(body, &mut facts, requirement, true);
             let proved = said
@@ -1994,6 +2156,7 @@ impl<'a> Checker<'a> {
             }
         }
         facts.subst = None;
+        facts.args = None;
         body.facts = facts;
     }
 
@@ -2166,6 +2329,7 @@ fn is_local(keys: &[Key], id: usize, outer: usize) -> bool {
             false
         }
         Key::Fresh(..) | Key::Call(..) => false,
+        Key::Atom(_) => true,
     }
 }
 
