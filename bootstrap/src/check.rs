@@ -1973,6 +1973,7 @@ fn check_reading(
     // file that is built asks for by writing `Function`.
     let file_asks = crate::function_args::asks(&file);
     let asks_function = file_asks;
+    let asks_notes = crate::item_notes::asks(&file);
     let mut resolver = Resolver::new(library);
     resolver.whole = whole.is_some();
     let defined: HashSet<String> = defined_names(&file).into_iter().map(String::from).collect();
@@ -2032,6 +2033,10 @@ fn check_reading(
     if asks_function && !file_asks {
         let text = file.text.clone().unwrap_or_else(|| "".into());
         crate::function_args::add(&mut file, &text, 0);
+        // The structs just made have comments to note as the others have.
+        if asks_notes {
+            crate::item_notes::add(&mut file, &text);
+        }
     }
     file.floats |= read.iter().any(|m| m.file.floats);
     let (mut file, items, mut lazy) = splice(file, read, &mut errors, asks_function);
