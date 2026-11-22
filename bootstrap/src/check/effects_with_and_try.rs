@@ -193,6 +193,13 @@ impl<'a> Defs<'a> {
         is_operation(&self.file.functions[f])
     }
 
+    /// Whether an effect is `task` of `std.task`, whose handlers are the
+    /// schedulers, whose state goes through each poll.
+    pub(super) fn is_scheduler(&self, effect: usize) -> bool {
+        let def = &self.file.effects[effect];
+        of_std(def.pos) && written_name(&def.name) == "task"
+    }
+
     /// The place among the file's effects of the effect the name is the
     /// handler of, when it is the name of one.
     pub(super) fn effect_named(&self, name: &str) -> Option<usize> {

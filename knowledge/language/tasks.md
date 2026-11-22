@@ -9,6 +9,7 @@ built:
   - "a function that spawns with no group of its own carries `task`, and its caller that opens the group does not; leaving `task` out is refused: \"`spawn` needs the `task` effect, which `start` does not declare\""
   - "`task` is declared by `std.task` and is imported as `net` is, `use std.task (task, join, spawn, tasks)`; the system's scheduler, which a program that reaches `main` with no group has, and `with tasks()` both run a child to its end in `start`, so a child is never found still running when the block ends"
   - "only `std.task` handles `task`, with `tasks()` and the system's scheduler, and a program that writes a handler of it is refused"
+  - "`with test_scheduler(seed)` of `std.task` runs the tasks in an order that the seed picks, so that a test finds a mistake of order: one seed always gives one order, and a child may start a grandchild and join it, as [Task](../library/task.md) says"
   - "not built: `first`, and a child that runs at the same time as its parent, and a child that runs under a handler that holds state, which is refused as not built yet, as [Handlers and tasks](task-handlers.md) says"
 ---
 
