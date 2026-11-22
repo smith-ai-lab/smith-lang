@@ -311,8 +311,19 @@ impl<'a> Checker<'a> {
     /// none, so each thing in it that needs one is reported.
     pub(super) fn needs(&mut self, body: &mut Body, effect: &str, pos: Pos, what: &str) {
         // A module of the library that lists an effect of another writes it
-        // with that module after it, which is the effect the table names.
-        if body.listed.contains(&effect) || body.listed.iter().any(|l| written_name(l) == effect) {
+        // with that module after it, which is the effect the table names. An
+        // effect that the file lists and does not import is written bare and is
+        // no effect of the file, so it stands for the effect it would import,
+        // and the missing import is reported once where it is listed. A bare
+        // name of an effect the file has is that effect alone.
+        let unimported =
+            |l: &str| !l.contains('@') && !self.defs.declares(l) && l == written_name(effect);
+        if body.listed.contains(&effect)
+            || body
+                .listed
+                .iter()
+                .any(|l| written_name(l) == effect || unimported(l))
+        {
             if !body.used.iter().any(|u| u == effect) {
                 body.used.push(effect.to_string());
             }

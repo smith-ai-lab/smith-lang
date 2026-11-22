@@ -219,6 +219,13 @@ impl Task {
         let mut placed: Vec<Error> = Vec::new();
         for mut e in errors {
             if e.module.is_none() {
+                // The effects of the task are listed again by the program the
+                // compiler writes, and a name the task does not import is the
+                // same missing import, which `project.smith` already says once
+                // where the task lists it.
+                if e.message.ends_with("this file does not import it") {
+                    continue;
+                }
                 e.pos = self.pos;
                 e.module = Some(FILE.to_string());
                 e.fix = None;

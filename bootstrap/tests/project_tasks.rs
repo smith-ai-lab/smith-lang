@@ -329,4 +329,9 @@ fn an_error_of_a_task_is_at_a_line_of_project_smith() {
         }
     }
     assert!(shown > 0, "{err}");
+    // The missing import is said once, where the task lists the effect, and not
+    // again at the task's name.
+    assert_eq!(err.matches("does not import it").count(), 1, "{err}");
+    let (line, col) = (3, "pub fn hi() ! ".len() + 1);
+    assert!(err.contains(&format!("project.smith:{line}:{col}")), "{err}");
 }
