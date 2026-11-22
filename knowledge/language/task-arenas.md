@@ -2,7 +2,10 @@
 type: specification
 title: Memory of a task
 description: Each child task gets its own arena, its result is built in its parent's, and a value lives as long as the task that created it.
-status: planned
+status: partial
+built:
+  - "each child has an arena of its own, which is freed whole when the child ends, and its result is built in its parent's, so a program that spawns a child that builds a list and gives back a number asks the system for the same memory however many children it spawns"
+  - "not built: a task for each connection of a server, which waits for the system"
 ---
 
 # Memory of a task

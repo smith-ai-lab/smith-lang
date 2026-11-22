@@ -1,0 +1,18 @@
+// The functions of task groups: `tasks` opens a group for the rest of a block,
+// `spawn` starts a child in it, and `join` waits for the child and gives its
+// value.
+pub struct Task[T] {
+  value: T
+}
+
+pub fn tasks[T](body: take fn() -> T ! spawn) -> T {
+  spawn(body: body)
+}
+
+pub fn spawn[T](work: take fn() -> T) -> Task[T] ! spawn {
+  Task(value: alloc(body: work))
+}
+
+pub fn join[T](task: take Task[T]) -> T {
+  task.value
+}

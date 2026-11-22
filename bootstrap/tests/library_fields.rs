@@ -78,7 +78,10 @@ fn hidden() -> &'static [Hidden] {
                     .chars()
                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                     .collect();
-                let kept = !resources.contains(&name.as_str());
+                // The program the test writes names the type bare, which a type
+                // with a parameter is not.
+                let generic = head[name.len()..].starts_with('[');
+                let kept = !generic && !resources.contains(&name.as_str());
                 let mut fields = Vec::new();
                 for line in lines.by_ref().take_while(|l| !l.starts_with('}')) {
                     let line = line.trim();

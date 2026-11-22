@@ -2,7 +2,12 @@
 type: specification
 title: Tasks
 description: A task group opened with tasks(), children started with spawn and waited for with join, and the spawn effect.
-status: planned
+status: partial
+built:
+  - "`with tasks()`, `spawn`, and `join`, imported from `std.task`, with `fetch_one` and `fetch_both` as the page writes them, under a handler of `fetch` that a test writes: `join(t)` is what the child's lambda gave"
+  - "a child's lambda runs exactly once if it is joined, a child that is not joined is cancelled when the block ends, and nothing of a child runs after its group's block has ended"
+  - "a function that spawns with no group of its own carries `spawn`, and its caller that opens the group does not; leaving `spawn` out is refused: \"`spawn` needs the `spawn` effect, which `start` does not declare\""
+  - "not built: `first`, and a child that runs at the same time as its parent, so a child runs in place where it is spawned, to its end, and is never found still running when the block ends"
 ---
 
 # Tasks
@@ -12,6 +17,8 @@ Concurrent work runs in tasks, and there are no raw threads or locks. Data is im
 `fetch` is shown by its signature alone. A call such as `fetch(a)` carries the `net` effect.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn fetch(url: str) -> Result[List[Byte], NetError] ! net, alloc
 
 fn fetch_one(url: str) -> Result[List[Byte], NetError] ! net, alloc {
@@ -28,6 +35,8 @@ fn fetch_one(url: str) -> Result[List[Byte], NetError] ! net, alloc {
 A child runs at the same time as its parent, so two spawns run two children together. Each is joined for its value.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
   with tasks()
   ta = spawn { fetch(a) }
@@ -45,6 +54,8 @@ fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! ne
 `first` waits for the first of several children of the same group to finish, and gives its value. It takes one child and the list of the others, so that it is never asked to wait for none, and the children give one type.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn quickest(a: str, b: str, c: str) -> Result[List[Byte], NetError] ! net, alloc {
   with tasks()
   ta = spawn { fetch(a) }
@@ -65,6 +76,8 @@ fn quickest(a: str, b: str, c: str) -> Result[List[Byte], NetError] ! net, alloc
 When the block of `with tasks()` ends, the children still running are cancelled, and the block waits until they have ended. A child whose work must finish is joined, as above. This function does not join its child, so the child is cancelled when the block ends, and the function gives nothing.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn warm(url: str) ! net, alloc {
   with tasks()
   spawn { fetch(url) }
@@ -80,6 +93,7 @@ A function that spawns without opening its own group spawns into its caller's, a
 
 ```
 use std.bits (i32)
+use std.task (spawn, tasks)
 
 fn start(n: i32) ! spawn {
   spawn { n * 2 }
@@ -93,12 +107,13 @@ fn start_two() {
 }
 ```
 
-Leaving `spawn` out of `start` is refused, as is any effect left out of a signature. The compiler does not build this refusal, so no words are quoted.
+Leaving `spawn` out of `start` is refused, as is any effect left out of a signature: "`spawn` needs the `spawn` effect, which `start` does not declare", with the fix "write `fn start(n: i32) ! spawn`".
 
 ## The forms
 
 | Written | Is |
 | --- | --- |
+| `use std.task (join, spawn, tasks)` | Brings in the three functions, which a group needs; the effect `spawn` needs no import |
 | `with tasks()` | A task group for the rest of the block |
 | `spawn { e }` | A child that runs `e`, in the nearest group |
 | `join(t)` | The value of the child `t`, after waiting for it |

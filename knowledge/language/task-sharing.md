@@ -2,7 +2,10 @@
 type: specification
 title: What a spawned task may use
 description: How a spawned lambda uses the values around it: an ordinary value is shared, a var is read as it was at the spawn, and a single-use value moves into the child.
-status: planned
+status: partial
+built:
+  - "an ordinary value is shared by the children of a group, a `var` is read as it was at the spawn, and a value that is used once and is given away by a child moves into it, so the parent has none left and a second child that uses it is refused"
+  - "a child that assigns a `var` of the function it is written in is refused, as the page says"
 ---
 
 # What a spawned task may use
@@ -14,6 +17,8 @@ A spawned lambda runs at the same time as its parent, so three rules say what it
 An ordinary value is immutable, and the child finishes before the group's block ends, so nothing is copied. Both children here read `url`.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn fetch_twice(url: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
   with tasks()
   ta = spawn { fetch(url) }
@@ -30,6 +35,7 @@ A [`var`](var.md) is read as its value at the moment of the spawn, and the child
 
 ```
 use std.bits (i32)
+use std.task (join, spawn, tasks)
 
 fn snapshot() -> i32 {
   var n = 1
@@ -42,10 +48,11 @@ fn snapshot() -> i32 {
 
 The child read `n` as `1`, so `join(t)` is `2` and `snapshot()` is `7`.
 
-A child that assigns a `var` is refused. The compiler does not build this refusal, so no words are quoted.
+A child that assigns a `var` is refused: "this child assigns `n`, which belongs to the function it is spawned in, and a child reads a `var` as it was at the spawn", with the fix "give the new value back as the value of the child, and read it with `join`".
 
 ```
 use std.bits (i32)
+use std.task (join, spawn, tasks)
 
 fn counted() -> i32 {
   var n = 0
@@ -61,6 +68,8 @@ fn counted() -> i32 {
 A single-use value moves into the child, and the parent cannot use it afterwards. Here `conn` belongs to the child after the spawn.
 
 ```
+use std.task (spawn, tasks)
+
 fn serve(listener: Listener) ! net, alloc, diverge {
   with tasks()
   loop {
@@ -70,9 +79,11 @@ fn serve(listener: Listener) ! net, alloc, diverge {
 }
 ```
 
-A `Key` is single-use, as [Lending and take](take.md) says. The parent that spawns with `k1` has none left, so using it again is refused. The compiler does not build this refusal, so no words are quoted.
+A `Key` is single-use, as [Lending and take](take.md) says. The parent that spawns with `k1` has none left, so using it again is refused: "`k1` is used here, after it was given away at" the place of the first spawn.
 
 ```
+use std.task (join, spawn, tasks)
+
 fn two_draws(key: take Key) -> f32 {
   (k1, k2) = split(key)
   with tasks()
