@@ -7,7 +7,9 @@ built:
   - "`std.console` declares `Stream`, with `stdout` and `stderr`, and the effect `console` with `print(text, end, to)`, which a program calls with `end` and `to` as written or left out, `end` being `\"\\n\"` and `to` being `.stdout`; the compiler builds `print` from this declaration"
   - "with no handler in force the target writes the text and then `end` to the stream `to`, which is chosen when the program runs where it is not written as `.stdout` or left out"
   - "a handler of `console` gives a lambda for `print` that takes `text`, `end`, and `to`, as written and as defaulted, and it answers a call of `print` in the code under `with`, in a function that carries `console`, and in a function that one calls, under the handlers outside it; a handler that does not forward a call to the console outside it prints nothing"
-  - "not `input`, which is not declared yet, and so not the handler of this page whose lambda for it is written"
+  - "`input(prompt)` of `std.console`, which a program calls with `prompt` as written or left out, `\"\"` being the default; with no handler in force the target writes the prompt to standard output before it reads, then gives `.some` of the next line of standard input without its line break, `\\n` or `\\r\\n` ending a line, and a last line that has no line break is a line, and `.none` when standard input has ended; a line of any length is given whole, and reading takes from standard input only the bytes of the line"
+  - "`input` on every native target, which are Linux, macOS, and Windows on x86-64 and arm64, and on the evaluator, and in a handler, whose lambda for it, such as `fn(prompt) { input(prompt) }`, hands the call to the console outside it"
+  - "not `input` in a WebAssembly module, which is refused with one message"
 ---
 
 # Console
@@ -60,17 +62,17 @@ use std.console (console, input)
 use std.list (push)
 
 fn capture[T](body: fn() -> T ! console) -> (T, List[str]) ! console, alloc {
-  var out: List[str] = []
+  var seen: List[str] = []
   r = console(
     print: fn(text, end, to) {
       match to {
-        .stdout { out = push(out, "{text}{end}") }
+        .stdout { seen = push(seen, "{text}{end}") }
         .stderr { print(text, end: end, to: .stderr) }
       }
     },
     input: fn(prompt) { input(prompt) },
     body: body,
   )
-  (r, out)
+  (r, seen)
 }
 ```

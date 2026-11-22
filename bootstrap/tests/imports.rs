@@ -224,7 +224,7 @@ fn supplied() -> Vec<(&'static str, Vec<String>)> {
     int.push("wrapping_shift_left".to_string());
     let words = |names: &[&str]| names.iter().map(|n| n.to_string()).collect();
     vec![
-        ("console", words(&["console", "print"])),
+        ("console", words(&["console", "input", "print"])),
         ("list", words(&["push"])),
         ("utf8", words(&["utf8", "Utf8Error"])),
         ("int", int),
@@ -422,7 +422,7 @@ fn a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_not
             if (next - 1) % 6 != part {
                 continue;
             }
-            let bare = if name == "console" || name == "print" {
+            let bare = if name == "console" || name == "print" || name == "input" {
                 "fn main() {\n}\n"
             } else {
                 HELLO
