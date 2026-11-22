@@ -1,0 +1,20 @@
+use std.console (console, print)
+
+struct A {
+  x: Nat
+}
+
+struct B {
+  y: Nat
+}
+
+fn step() -> Result[str, A] { .ok("a") }
+
+fn go() -> Result[str, B] {
+  s = try step()
+  .ok(s)
+}
+
+fn main() ! console, alloc {
+  print("{go()}")
+}

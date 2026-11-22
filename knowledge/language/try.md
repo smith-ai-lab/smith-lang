@@ -6,6 +6,7 @@ status: partial
 built:
   - "`try` as a statement, after a binding, and inside an expression, `Option`, `Result`, and the `Try` trait from the prelude, and a type of a program's own that implements `Try`"
   - "`try` written anywhere an expression is: in a `loop`, in a loop inside a loop, in an arm of a `match`, in a block of an `if`, and in an argument of a call, over an `Option`, a `Result`, a `Flow`, and a type of a program's own"
+  - "`try` of a step whose failure converts to the failure of the function: the `impl` of `Try` for two `Result`s whose failures differ, with `requires Convert[E, F]`, in the prelude, so that a function gathers the failures of its steps into one enum, and a step whose failure has no `Convert` is refused with the words above"
   - "`Try` with the one function `split`, which gives a `Flow`, and `Flow` with its two type parameters"
 ---
 

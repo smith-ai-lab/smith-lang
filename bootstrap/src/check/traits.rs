@@ -1809,7 +1809,9 @@ impl<'a> Checker<'a> {
         }
         // A type that only the result names is the one that is expected.
         let outs = &defs.outs[k];
-        if let Want::Ty(needed @ (Ty::Int(_) | Ty::Enum(..) | Ty::Struct(..) | Ty::Tuple(_))) = want
+        if let Want::Ty(
+            needed @ (Ty::Int(_) | Ty::Enum(..) | Ty::Struct(..) | Ty::Tuple(_) | Ty::Param(_)),
+        ) = want
         {
             let mut wanted = vec![None; sol.len()];
             unify(&sig.gives, needed, &mut wanted);
