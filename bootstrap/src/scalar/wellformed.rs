@@ -579,14 +579,19 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     call: System::Suspend,
                     args,
                 } => {
-                    let [kind, handle] = &args[..] else {
+                    let [kind, handle, state @ ..] = &args[..] else {
                         return Err(Why::WrongCount);
                     };
-                    if !instruction.results.is_empty() {
+                    // What the task goes on with of the scheduler's state is
+                    // what the poll that resumes it is given.
+                    if instruction.results.len() != state.len() {
                         return Err(Why::WrongCount);
                     }
                     used(kind, i, Type::Int(Bits::B64))?;
                     used(handle, i, Type::Int(Bits::B64))?;
+                    for (given, result) in state.iter().zip(&instruction.results) {
+                        used(given, i, f.types[result.0])?;
+                    }
                 }
                 Op::System {
                     call: System::ArenaOpen,

@@ -22,6 +22,10 @@ pub const ONCE: &[Test] = &[
         a_state_machine_gives_a_wait_each_time_the_function_waits_and_no_other_time,
     ),
     (
+        "the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it",
+        the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it,
+    ),
+    (
         "a_program_with_no_wait_is_not_changed",
         a_program_with_no_wait_is_not_changed,
     ),
@@ -537,4 +541,104 @@ fn a_recursion_a_thousand_deep_with_a_wait_at_each_level_gives_the_right_number_
         assert_eq!(waited, waits, "n {n}");
         assert_eq!(waiting, n as usize, "n {n}");
     }
+}
+
+/// A function whose last parameter and last result are the state of a
+/// scheduler: it waits twice, and after each wait goes on with the state it is
+/// given, which the scheduler may have changed while the task was suspended.
+fn spend() -> Function {
+    let mut b = Builder::new();
+    let [x, state] = b.params(&[LONG, LONG])[..] else {
+        unreachable!()
+    };
+    let kind = b.int(Bits::B64, 7);
+    let first = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, x, state],
+        },
+        &[LONG],
+    )[0];
+    let more = b.binary(Binary::Add, first, x);
+    let kind = b.int(Bits::B64, 8);
+    let second = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, x, more],
+        },
+        &[LONG],
+    )[0];
+    let sum = b.binary(Binary::Add, second, x);
+    b.ret(vec![sum, second]);
+    b.finish(&[LONG, LONG])
+}
+
+/// A function that calls `spend`, and waits once more with the state it gave.
+fn spend_and_wait() -> Function {
+    let mut b = Builder::new();
+    let [x, state] = b.params(&[LONG, LONG])[..] else {
+        unreachable!()
+    };
+    let made = b.call(0, vec![x, state], &[LONG, LONG]);
+    let kind = b.int(Bits::B64, 9);
+    let after = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, made[0], made[1]],
+        },
+        &[LONG],
+    )[0];
+    let sum = b.binary(Binary::Add, made[0], after);
+    b.ret(vec![sum, after]);
+    b.finish(&[LONG, LONG])
+}
+
+/// The scheduler's state is given to each poll and given back by it, and the
+/// task goes on with what it is given after a wait, so what the scheduler does
+/// to the state while the task is suspended is seen by the task, and what the
+/// task does to it is seen by the scheduler after each poll. No frame holds it:
+/// if one did, the task would go on with the state it had when it waited.
+fn the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it() {
+    let mut main = Builder::new();
+    main.ret(vec![]);
+    let program = Program {
+        data: Vec::new(),
+        functions: vec![spend(), spend_and_wait(), main.finish(&[])],
+        main: 2,
+    };
+    assert_eq!(scalar::check(&program), Ok(()));
+    let frames = scalar::Frames {
+        poll_any: None,
+        starters: Vec::new(),
+        through: vec![LONG],
+    };
+    let made = scalar::suspend_frames(program, &frames).expect("no call reaches itself");
+    assert_eq!(scalar::check(&made.program), Ok(()));
+    let poll_any = made.poll_any.expect("a function waits");
+    let outer = made.tasks.iter().find(|t| t.start == 1).expect("a task");
+    let mut state = vec![1u64];
+    let mut seen = Vec::new();
+    let (got, waited, waiting) = scalar::poll_through(
+        &made.program,
+        poll_any,
+        outer,
+        &[2],
+        &mut state,
+        &mut |state| {
+            // The scheduler sees the state the task gave at its wait, and
+            // changes it before the next poll.
+            seen.push(state[0]);
+            state[0] += 1000;
+        },
+        &mut |_, _| false,
+    );
+    // The task gave 1, 1003, and 2003 at its three waits, each a thousand more
+    // than the one before it plus what the task added, and went on with what it
+    // was given: 1001, 2003, and 3003.
+    assert_eq!(seen, vec![1, 1003, 2003]);
+    assert_eq!(state, vec![3003]);
+    assert_eq!(got, vec![2005 + 3003]);
+    assert_eq!(waiting, 3);
+    let kinds: Vec<(u64, u64)> = waited.iter().map(|w| (w.kind, w.handle)).collect();
+    assert_eq!(kinds, vec![(7, 2), (8, 2), (9, 2005)]);
 }

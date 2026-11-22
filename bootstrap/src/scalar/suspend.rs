@@ -45,7 +45,8 @@ pub struct Task {
     /// The start, which is where the function was: it takes the address of the
     /// frame and then the parameters the function took.
     pub start: usize,
-    /// The poll: it takes the address of the frame, and gives a status that is 0
+    /// The poll: it takes the address of the frame and the state of the
+    /// scheduler, and gives that state, and a status that is 0
     /// when the task is done and 1 when it waits, and the kind and the handle of
     /// the wait. The values the function gave are in the frame when it is done,
     /// at `result_at`.
@@ -74,6 +75,14 @@ pub struct Frames {
     pub poll_any: Option<usize>,
     /// The functions that make a frame.
     pub starters: Vec<Starter>,
+    /// The types of the state of the scheduler that polls the frames, which is
+    /// given to each poll and given back by it, and which no frame saves. Each
+    /// function that suspends takes these as its last parameters and gives them
+    /// as its last results, and `System::Suspend` takes them after the kind and
+    /// the handle and gives them as the state the task goes on with. They are
+    /// last, after what the function takes and gives of its own, as the state of
+    /// any handler is.
+    pub through: Vec<Type>,
 }
 
 /// A function that makes the frame of another and starts it. The lowering gives
@@ -136,9 +145,15 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
     let mut tasks: HashMap<usize, Task> = HashMap::new();
     let mut polls = Vec::new();
     for f in order {
-        let (start, poll, task) =
-            Machine::new(&program.functions[f], f, ids[&f], &tasks, &suspends)
-                .build(functions.len() + polls.len());
+        let (start, poll, task) = Machine::new(
+            &program.functions[f],
+            f,
+            ids[&f],
+            &tasks,
+            &suspends,
+            &frames.through,
+        )
+        .build(functions.len() + polls.len());
         functions[f] = start;
         polls.push(poll);
         tasks.insert(f, task);
@@ -156,11 +171,11 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
     let list: Vec<Task> = list.into_iter().map(|(_, t)| t).collect();
     let poll_any = match frames.poll_any {
         Some(place) => {
-            functions[place] = any_poll(&list);
+            functions[place] = any_poll(&list, &frames.through);
             Some(place)
         }
         None => {
-            functions.push(any_poll(&list));
+            functions.push(any_poll(&list, &frames.through));
             Some(functions.len() - 1)
         }
     };
@@ -359,6 +374,8 @@ struct Machine<'a> {
     states: Vec<usize>,
     start_name: String,
     suspends: &'a HashSet<usize>,
+    /// The types of the state the poll is given and gives back.
+    through: &'a [Type],
 }
 
 fn align(n: u64, to: u64) -> u64 {
@@ -376,6 +393,7 @@ impl<'a> Machine<'a> {
         id: u64,
         tasks: &'a HashMap<usize, Task>,
         suspends: &'a HashSet<usize>,
+        through: &'a [Type],
     ) -> Machine<'a> {
         let live = alive_across(original, suspends);
         let place = |at: &mut u64, ty: Type| {
@@ -384,8 +402,10 @@ impl<'a> Machine<'a> {
             *at += ty.bytes();
             here
         };
-        let (result_at, mut at) = result_places(&original.results);
+        let (result_at, mut at) =
+            result_places(&original.results[..original.results.len() - through.len()]);
         let param_slot = (original.blocks[0].params.iter())
+            .take(original.blocks[0].params.len() - through.len())
             .map(|p| place(&mut at, original.types[p.0]))
             .collect();
         let mut frame_at = HashMap::new();
@@ -431,6 +451,7 @@ impl<'a> Machine<'a> {
             states: Vec::new(),
             start_name: format!("{}<start {index}>", original.name),
             suspends,
+            through,
         }
     }
 
@@ -518,11 +539,26 @@ impl<'a> Machine<'a> {
     }
 
     /// Ends the block by giving the wait: the state is where the poll goes on.
-    fn give_wait(&mut self, into: usize, state: u64, kind: Value, handle: Value) {
+    fn give_wait(
+        &mut self,
+        into: usize,
+        state: u64,
+        kind: Value,
+        handle: Value,
+        through: &[Value],
+    ) {
         let n = self.word(into, state);
         self.save(into, 0, n);
         let status = self.emit(into, Op::Constant(Constant::Int(1)), &[STATUS], Place::NONE)[0];
-        self.blocks[into].end = End::Return(vec![status, kind, handle]);
+        let mut given = through.to_vec();
+        given.extend([status, kind, handle]);
+        self.blocks[into].end = End::Return(given);
+    }
+
+    /// Values of the types of the state the poll is given.
+    fn state_values(&mut self) -> Vec<Value> {
+        let types = self.through.to_vec();
+        types.into_iter().map(|t| self.fresh(t)).collect()
     }
 
     fn build(mut self, poll_index: usize) -> (Function, Function, Task) {
@@ -531,8 +567,12 @@ impl<'a> Machine<'a> {
         // function is the block after it, so a jump goes one further.
         let frame = self.fresh(Type::Address);
         self.frame = frame;
-        let dispatch = self.new_block(vec![frame]);
-        let entry = self.new_block(Vec::new());
+        let given = self.state_values();
+        let mut dispatch_params = vec![frame];
+        dispatch_params.extend(given.iter().copied());
+        let dispatch = self.new_block(dispatch_params);
+        let entered = self.state_values();
+        let entry = self.new_block(entered.clone());
         let first = self.blocks.len();
         for block in &original.blocks {
             self.new_block(block.params.clone());
@@ -540,11 +580,13 @@ impl<'a> Machine<'a> {
         let after = |b: usize| first + b;
         // State 0 starts the function: its parameters are in the frame.
         self.states.push(entry);
-        let params = original.blocks[0].params.clone();
+        let own = original.blocks[0].params.len() - self.through.len();
+        let params = original.blocks[0].params[..own].to_vec();
         let mut args = Vec::new();
         for (p, offset) in params.iter().zip(self.param_slot.clone()) {
             args.push(self.load(entry, offset, original.types[p.0]));
         }
+        args.extend(entered);
         self.blocks[entry].end = End::Jump(Jump {
             block: after(0),
             args,
@@ -581,18 +623,23 @@ impl<'a> Machine<'a> {
                     } => {
                         let state = self.states.len() as u64;
                         let (kind, handle) = (args[0], args[1]);
-                        let resume = self.new_block(Vec::new());
+                        let through = args[2..].to_vec();
+                        // The state the task goes on with is what the poll that
+                        // resumes it is given.
+                        let resume = self.new_block(ins.results.clone());
                         self.states.push(resume);
-                        self.give_wait(at, state, kind, handle);
+                        self.give_wait(at, state, kind, handle, &through);
                         at = resume;
                     }
                     Op::Call { function, args } if self.suspends.contains(function) => {
                         let (offset, task) = self.callee_at[&(b, i)];
                         let task = task.clone();
                         let state = self.states.len() as u64;
+                        let k = self.through.len();
+                        let own = args.len() - k;
                         let callee = self.within(at, offset);
                         let mut given = vec![callee];
-                        given.extend(args.iter().copied());
+                        given.extend(args[..own].iter().copied());
                         self.blocks[at].instructions.push(Instruction {
                             results: Vec::new(),
                             op: Op::Call {
@@ -604,51 +651,63 @@ impl<'a> Machine<'a> {
                         let n = self.word(at, state);
                         self.save(at, 0, n);
                         // The poll of the callee, where the state comes back to.
-                        let polls = self.new_block(Vec::new());
+                        let polled = self.state_values();
+                        let polls = self.new_block(polled.clone());
                         self.states.push(polls);
                         self.blocks[at].end = End::Jump(Jump {
                             block: polls,
-                            args: Vec::new(),
+                            args: args[own..].to_vec(),
                         });
                         let callee = self.within(polls, offset);
+                        let mut types = self.through.to_vec();
+                        types.extend([STATUS, WORD, WORD]);
+                        let mut passed = vec![callee];
+                        passed.extend(polled);
                         let given = self.emit(
                             polls,
                             Op::Call {
                                 function: task.poll,
-                                args: vec![callee],
+                                args: passed,
                             },
-                            &[STATUS, WORD, WORD],
+                            &types,
                             ins.at,
                         );
-                        let waits = self.new_block(Vec::new());
-                        let done = self.new_block(Vec::new());
+                        let (state, rest) = given.split_at(k);
+                        let waiting = self.state_values();
+                        let waits = self.new_block(waiting.clone());
+                        // What the callee gave of the state is what the call
+                        // gave of it, whether the callee is done or not.
+                        let done = self.new_block(ins.results[ins.results.len() - k..].to_vec());
                         self.blocks[polls].end = End::Switch {
-                            on: given[0],
+                            on: rest[0],
                             jumps: vec![
                                 Jump {
                                     block: done,
-                                    args: Vec::new(),
+                                    args: state.to_vec(),
                                 },
                                 Jump {
                                     block: waits,
-                                    args: Vec::new(),
+                                    args: state.to_vec(),
                                 },
                             ],
                         };
-                        let values = vec![
+                        let mut values = waiting;
+                        values.push(
                             self.emit(
                                 waits,
                                 Op::Constant(Constant::Int(1)),
                                 &[STATUS],
                                 Place::NONE,
                             )[0],
-                            given[1],
-                            given[2],
-                        ];
+                        );
+                        values.extend([rest[1], rest[2]]);
                         self.blocks[waits].end = End::Return(values);
                         // What the callee gave is in its frame, and is read as the
                         // values the call gave.
-                        for (r, place) in ins.results.iter().zip(&task.result_at) {
+                        for (r, place) in ins.results[..ins.results.len() - k]
+                            .iter()
+                            .zip(&task.result_at)
+                        {
                             let address = self.within(done, offset + place);
                             let ty = self.types[r.0];
                             self.blocks[done].instructions.push(Instruction {
@@ -689,10 +748,13 @@ impl<'a> Machine<'a> {
                     let status =
                         self.emit(at, Op::Constant(Constant::Int(0)), &[STATUS], Place::NONE)[0];
                     let kind = self.word(at, 0);
-                    for (v, place) in values.iter().zip(self.result_at.clone()) {
+                    let own = values.len() - self.through.len();
+                    for (v, place) in values[..own].iter().zip(self.result_at.clone()) {
                         self.save(at, place, by(*v));
                     }
-                    End::Return(vec![status, kind, kind])
+                    let mut given: Vec<Value> = values[own..].iter().map(|v| by(*v)).collect();
+                    given.extend([status, kind, kind]);
+                    End::Return(given)
                 }
             };
         }
@@ -702,12 +764,13 @@ impl<'a> Machine<'a> {
             .into_iter()
             .map(|block| Jump {
                 block,
-                args: Vec::new(),
+                args: given.clone(),
             })
             .collect();
         self.blocks[dispatch].end = End::Switch { on: state, jumps };
 
-        let poll_results = vec![STATUS, WORD, WORD];
+        let mut poll_results = self.through.to_vec();
+        poll_results.extend([STATUS, WORD, WORD]);
         let poll = Function {
             types: std::mem::take(&mut self.types),
             results: poll_results,
@@ -723,7 +786,7 @@ impl<'a> Machine<'a> {
             id: self.id,
             result_at: self.result_at.clone(),
             bytes: self.bytes,
-            results: original.results.clone(),
+            results: original.results[..original.results.len() - self.through.len()].to_vec(),
         };
         (start, poll, task)
     }
@@ -733,7 +796,8 @@ impl<'a> Machine<'a> {
     fn start(&self) -> Function {
         let original = self.original;
         let mut types = vec![Type::Address];
-        let params: Vec<Value> = (original.blocks[0].params.iter())
+        let own = original.blocks[0].params.len() - self.through.len();
+        let params: Vec<Value> = (original.blocks[0].params[..own].iter())
             .map(|p| {
                 types.push(original.types[p.0]);
                 Value(types.len() - 1)
@@ -764,7 +828,7 @@ impl<'a> Machine<'a> {
             (params
                 .iter()
                 .zip(&self.param_slot)
-                .zip(&original.blocks[0].params))
+                .zip(original.blocks[0].params[..own].iter()))
             .map(|((p, at), o)| (*at, *p, original.types[o.0])),
         );
         for (offset, value, ty) in saved {
@@ -878,11 +942,15 @@ fn alive_across(f: &Function, suspends: &HashSet<usize>) -> HashSet<Value> {
 /// poll runs it, and polls it, giving what that poll gives. A frame is polled
 /// without knowing which function it is of, as a scheduler that holds frames of
 /// many functions does.
-fn any_poll(tasks: &[Task]) -> Function {
+fn any_poll(tasks: &[Task], through: &[Type]) -> Function {
     let mut types = vec![Type::Address];
+    types.extend(through.iter().copied());
     let frame = Value(0);
+    let given: Vec<Value> = (1..=through.len()).map(Value).collect();
     let mut blocks = vec![Block {
-        params: vec![frame],
+        params: std::iter::once(frame)
+            .chain(given.iter().copied())
+            .collect(),
         instructions: Vec::new(),
         end: End::Return(Vec::new()),
     }];
@@ -917,18 +985,21 @@ fn any_poll(tasks: &[Task]) -> Function {
     });
     let mut jumps = Vec::new();
     for task in tasks {
-        let results = vec![
+        let mut results: Vec<Value> = through.iter().map(|t| fresh(&mut types, *t)).collect();
+        results.extend([
             fresh(&mut types, STATUS),
             fresh(&mut types, WORD),
             fresh(&mut types, WORD),
-        ];
+        ]);
         blocks.push(Block {
             params: Vec::new(),
             instructions: vec![Instruction {
                 results: results.clone(),
                 op: Op::Call {
                     function: task.poll,
-                    args: vec![frame],
+                    args: std::iter::once(frame)
+                        .chain(given.iter().copied())
+                        .collect(),
                 },
                 at: Place::NONE,
             }],
@@ -940,9 +1011,11 @@ fn any_poll(tasks: &[Task]) -> Function {
         });
     }
     blocks[0].end = End::Switch { on: id, jumps };
+    let mut results = through.to_vec();
+    results.extend([STATUS, WORD, WORD]);
     Function {
         types,
-        results: vec![STATUS, WORD, WORD],
+        results,
         blocks,
         cold: false,
         name: "<poll any>".to_string(),
