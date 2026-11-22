@@ -637,9 +637,35 @@ impl<'a> Defs<'a> {
             .collect()
     }
 
+    /// The types of trait `k` as they are written: one that is what its
+    /// default makes it, as the second of `Eq[Tree, Tree]`, is left out.
+    pub(super) fn written(&self, k: usize, types: &[Ty]) -> Vec<Ty> {
+        let mut written = types.to_vec();
+        for (i, j) in self.defaulted(k) {
+            if types.get(i) == types.get(j) {
+                written[i] = Ty::Unknown;
+            }
+        }
+        written
+    }
+
+    /// What an error says of the part of the type that has no implementation,
+    /// when the trait is for one type, as `Eq` is for two that are the same.
+    pub(super) fn blame(&self, k: usize, types: &[Ty], scope: &Scope) -> String {
+        let written = self.written(k, types);
+        let alone: Vec<&Ty> = (types.iter().zip(&written))
+            .filter(|(_, w)| **w != Ty::Unknown)
+            .map(|(t, _)| t)
+            .collect();
+        match alone.as_slice() {
+            [t] => self.because(k, t, scope),
+            _ => String::new(),
+        }
+    }
+
     /// The trait's types other than its `out` ones, as an error names them.
     pub(super) fn types_of(&self, k: usize, types: &[Ty], scope: &Scope) -> String {
-        let shown: Vec<String> = (types.iter().zip(&self.outs[k]))
+        let shown: Vec<String> = (self.written(k, types).iter().zip(&self.outs[k]))
             .filter(|(t, out)| !**out && **t != Ty::Unknown)
             .map(|(t, _)| self.text(t, scope))
             .collect();
@@ -1732,6 +1758,12 @@ impl<'a> Checker<'a> {
         let mut sol = self.arguments(body, call, sig, false, Some((k, want)), None);
         let reported = std::mem::replace(&mut self.no_impl, outer);
         self.call_type_args(body, call, k, &mut sol);
+        // A type of the trait that nothing names is the one its default says.
+        for (i, j) in defs.defaulted(k) {
+            if sol[i].is_none() {
+                sol[i] = sol[j].clone();
+            }
+        }
         if reported || self.refusals != refused || self.function_for_parameter(&sol, call.pos) {
             return Ty::Unknown;
         }
@@ -1930,10 +1962,7 @@ impl<'a> Checker<'a> {
             }
             match defs.meets_types(r.of, &types, body.scope, &mut Vec::new()) {
                 Found::No => {
-                    let because = match types.as_slice() {
-                        [t] => defs.because(r.of, t, body.scope),
-                        _ => String::new(),
-                    };
+                    let because = defs.blame(r.of, &types, body.scope);
                     self.errors.push(Error::new(
                         call.pos,
                         format!(
@@ -1963,6 +1992,7 @@ impl<'a> Checker<'a> {
         // Only a trait of one type is given automatically, so only then
         // is a part to blame.
         let because = match types {
+            [_, _] if k != defs.convert() => defs.blame(k, types, body.scope),
             [t] => defs.because(k, t, body.scope),
             [a, Ty::Enum(e, args)] if k == defs.convert() => {
                 let (a, to) = (defs.text(a, body.scope), defs.text(&types[1], body.scope));

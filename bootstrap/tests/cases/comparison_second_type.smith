@@ -1,0 +1,25 @@
+use std.bits (i64, u8)
+use std.console (console, print)
+
+struct Cat {
+  name: str
+  age: u8
+}
+
+fn same[T: Eq](a: T, b: T) -> bool { Eq.eq(a, b) }
+
+fn below[T: Ord](a: T, b: T) -> bool { a < b }
+
+fn word(b: bool) -> str {
+  if b { "yes" } else { "no" }
+}
+
+fn wide(a: u8, b: i64) -> bool { a < b }
+
+fn main() ! console {
+  tom = Cat(name: "Tom", age: 3)
+  print(word(same(tom, Cat(name: "Tom", age: 3))))
+  print(word(below(tom.age, 4)))
+  print(word(below("b", "a")))
+  print(word(wide(tom.age, 2)))
+}

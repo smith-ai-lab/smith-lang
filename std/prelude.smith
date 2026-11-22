@@ -28,12 +28,12 @@ struct Utf8Error {
   pub at: Nat
 }
 
-trait Eq[T] {
-  fn eq(a: T, b: T) -> bool
+trait Eq[A, B = A] {
+  fn eq(a: A, b: B) -> bool
 }
 
-trait Ord[T] {
-  fn compare(a: T, b: T) -> Order
+trait Ord[A, B = A] {
+  fn compare(a: A, b: B) -> Order
 }
 
 trait Hash[T] {
