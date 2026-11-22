@@ -25,6 +25,10 @@ use crate::{choices, enums, lambdas, numbers, programs, repeat, text, tuples};
 
 pub const ONCE: &[Test] = &[
     (
+        "functions_that_call_one_another_are_written_as_loops_and_branches_and_print_what_they_printed",
+        functions_that_call_one_another_are_written_as_loops_and_branches_and_print_what_they_printed,
+    ),
+    (
         "every_case_prints_under_node_what_its_out_file_says",
         every_case_prints_under_node_what_its_out_file_says,
     ),
@@ -811,5 +815,158 @@ fn every_module_runs_the_programs_of_floats_written_in_smith_as_the_evaluator_do
     for at in part * each..(part + 1) * each {
         let source = crate::float_source::source(at);
         agree(&after_the_pass(source.as_bytes()));
+    }
+}
+
+/// Functions that call one another, each with a `decreases`, and the text each
+/// program prints. A call that is made inside a loop returns into the loop, and
+/// the return of a call that is made in a branch joins the branch that did not
+/// make it, and neither may leave a function whose blocks are not written as
+/// loops and branches.
+const FUNCTIONS_THAT_CALL_ONE_ANOTHER: &[(&str, &str)] = &[
+    (
+        // Two functions that call each other, one of them from inside a loop.
+        "use std.bits (u64)
+use std.console (console, print)
+use std.int (wrapping_add)
+
+fn string(n: u64, fuel: u64) -> u64 ! alloc
+  decreases fuel
+{
+  var total: u64 = 0
+  loop i in 0..3 {
+    if fuel > 0 {
+      total = wrapping_add(total, expression(n, fuel - 1))
+    }
+  }
+  total
+}
+
+fn expression(n: u64, fuel: u64) -> u64 ! alloc
+  decreases fuel
+{
+  if fuel > 0 { wrapping_add(n, string(n, fuel - 1)) } else { n }
+}
+
+fn main() ! console, alloc {
+  print(\"{string(1, 6)}\")
+}
+",
+        "39\n",
+    ),
+    (
+        // Three functions in a circle, each with a loop that calls the next, a
+        // `break`, and a pair for a result.
+        "use std.bits (u64)
+use std.console (console, print)
+use std.int (wrapping_add)
+
+fn token(n: u64, fuel: u64) -> u64 ! alloc
+  decreases fuel
+{
+  if n % 2 == 0 and fuel > 0 { string(n, fuel - 1) } else { n }
+}
+
+fn string(n: u64, fuel: u64) -> u64 ! alloc
+  decreases fuel
+{
+  var total: u64 = 0
+  loop i in 0..3 {
+    if fuel > 0 {
+      (a, closed) = expression(n, fuel - 1)
+      total = wrapping_add(total, a)
+      if not closed { break }
+    }
+  }
+  total
+}
+
+fn expression(n: u64, fuel: u64) -> (u64, bool) ! alloc
+  decreases fuel
+{
+  var total: u64 = 0
+  var closed = false
+  loop i in 0..3 {
+    if fuel > 0 {
+      total = wrapping_add(total, token(wrapping_add(n, 1), fuel - 1))
+      if total > 100 {
+        closed = true
+        break
+      }
+    }
+  }
+  (total, closed)
+}
+
+fn main() ! console, alloc {
+  var total: u64 = 0
+  loop i in 0..5 {
+    total = wrapping_add(total, token(i, 6))
+  }
+  print(\"{total}\")
+}
+",
+        "31\n",
+    ),
+    (
+        // A function that calls itself and then runs a loop.
+        "use std.bits (u64)
+use std.console (console, print)
+use std.int (wrapping_add)
+
+fn walk(n: u64) -> u64 ! alloc
+  decreases n
+{
+  if n == 0 {
+    0
+  } else {
+    inner = walk(n - 1)
+    var total: u64 = inner
+    loop i in 0..4 {
+      total = wrapping_add(total, i)
+      if total > 1000 { break }
+    }
+    total
+  }
+}
+
+fn main() ! console, alloc {
+  print(\"{walk(5)}\")
+}
+",
+        "30\n",
+    ),
+    (
+        // Two functions that call each other with no loop, where the return of
+        // the call joins the branch that made none.
+        "use std.bits (u64)
+use std.console (console, print)
+
+fn even(n: u64) -> bool ! alloc
+  decreases n
+{
+  if n == 0 { true } else { not odd(n - 1) }
+}
+
+fn odd(n: u64) -> bool ! alloc
+  decreases n
+{
+  if n == 0 { false } else { not even(n - 1) }
+}
+
+fn main() ! console, alloc {
+  print(\"{even(10)}\")
+}
+",
+        "true\n",
+    ),
+];
+
+fn functions_that_call_one_another_are_written_as_loops_and_branches_and_print_what_they_printed() {
+    for (source, printed) in FUNCTIONS_THAT_CALL_ONE_ANOTHER {
+        let program = after_the_pass(source.as_bytes());
+        assert!(written_as_loops(&program), "{source}");
+        let said = scalar::run(&program);
+        assert_eq!(String::from_utf8(said.stdout).unwrap(), *printed, "{source}");
     }
 }
