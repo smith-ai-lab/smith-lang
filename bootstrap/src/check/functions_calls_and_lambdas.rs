@@ -803,10 +803,7 @@ impl<'a> Checker<'a> {
                 }
                 match defs.meets_types(r.of, &types, body.scope, &mut Vec::new()) {
                     Found::No => {
-                        let because = match types.as_slice() {
-                            [t] => defs.because(r.of, t, body.scope),
-                            _ => String::new(),
-                        };
+                        let because = defs.blame(r.of, &types, body.scope);
                         self.errors.push(Error::new(
                             call.pos,
                             format!(

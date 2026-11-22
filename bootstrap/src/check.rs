@@ -1454,6 +1454,22 @@ impl<'a> Defs<'a> {
         signature
     }
 
+    /// The parameters of trait `k` whose default is an earlier parameter, each
+    /// with the one it defaults to, as `B = A` of `Eq` does.
+    fn defaulted(&self, k: usize) -> Vec<(usize, usize)> {
+        let generics = &self.file.traits[k].generics;
+        (generics.iter().enumerate())
+            .filter_map(|(i, g)| {
+                if self.outs[k][i] {
+                    return None;
+                }
+                let d = g.default.as_ref()?;
+                let j = generics.iter().position(|other| other.name == d.name)?;
+                (j < i).then_some((i, j))
+            })
+            .collect()
+    }
+
     fn signature_read(&self, f: &Function, scope: Scope) -> Signature {
         Signature {
             params: (f.params.iter())
@@ -2434,6 +2450,15 @@ fn check_file(
                         t.generics.iter().chain(&f.generics).cloned().collect();
                     let mut sig = defs.signature(f, defs.scope(&generics, &[]));
                     sig.param_defaults = Vec::new();
+                    // A comparison has the two sides of one type, so a
+                    // parameter that defaults to the first is the first.
+                    if matches!(t.name.as_str(), "Eq" | "Ord") {
+                        for (_, ty) in &mut sig.params {
+                            if *ty == Ty::Param(1) {
+                                *ty = Ty::Param(0);
+                            }
+                        }
+                    }
                     sig
                 })
                 .collect()
@@ -6203,6 +6228,11 @@ impl<'a> Typed<'a> {
         };
         let sig = &defs.trait_sigs[k][fi];
         let mut types = solve(&sig.params, sig.scope.names.len());
+        for (i, j) in defs.defaulted(k) {
+            if types[i] == Ty::Unknown {
+                types[i] = types[j].clone();
+            }
+        }
         // The types the call writes after its trait are those of the trait.
         if let Some(written) = self.type_args.get(&addr(call)) {
             for (t, w) in types.iter_mut().zip(written) {
