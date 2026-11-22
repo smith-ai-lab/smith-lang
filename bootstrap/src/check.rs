@@ -7030,9 +7030,25 @@ impl<'a> Checker<'a> {
             (Ty::Fn(_), Ty::Param(p))
                 if self.fn_values.contains_key(&addr(value)) && defs.bounded(vars, *p) =>
             {
-                let named = Ty::Named(self.fn_values[&addr(value)]);
+                let f = self.fn_values[&addr(value)];
+                let named = Ty::Named(f);
                 self.named.insert(addr(value));
-                if !unify(pattern, &named, sol) {
+                let asks_function = vars
+                    .requires
+                    .iter()
+                    .any(|r| r.of == defs.function && r.types.contains(pattern));
+                if asks_function
+                    && defs.file.functions[f]
+                        .params
+                        .iter()
+                        .any(|q| q.name.starts_with("pattern@"))
+                {
+                    let message = format!(
+                        "`{}` has a pattern for a parameter, so it has no `Function`",
+                        defs.file.functions[f].name
+                    );
+                    self.errors.push(Error::new(value.pos(), message));
+                } else if !unify(pattern, &named, sol) {
                     let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
                     let message =
                         self.mismatch(body, value, defs.describe(&named, body.scope), needed);
