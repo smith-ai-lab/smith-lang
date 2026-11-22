@@ -44,9 +44,9 @@ mod words;
 pub use build::Builder;
 pub use common::common;
 pub use eval::{
-    Outcome, Waited, call, call_waiting, poll_to_end, run, run_copying, run_counting, run_measured,
-    run_taking, run_with_command_line, run_with_command_line_and_errors, run_with_input,
-    run_with_limit, run_with_words, run_with_words_and_errors,
+    Outcome, Waited, call, call_waiting, poll_through, poll_to_end, run, run_copying, run_counting,
+    run_measured, run_taking, run_with_command_line, run_with_command_line_and_errors,
+    run_with_input, run_with_limit, run_with_words, run_with_words_and_errors,
 };
 pub use exp_fast::table as exp_table;
 pub use fold::fold;
@@ -297,7 +297,9 @@ pub enum System {
     Raw(Raw),
     /// Waits for what the two 64-bit integers it takes say: the kind of the
     /// wait and the handle it is on, which the library gives their meaning. It
-    /// gives nothing. A task that runs it suspends and is resumed after the
+    /// takes the state of the scheduler after them, and gives that state back,
+    /// as the state the task goes on with, which the poll that resumes it is
+    /// given. A task that runs it suspends and is resumed after the
     /// wait is over, with every value it held. It is made by the lowering of a
     /// function that suspends and is gone once `suspend` has made that function
     /// a state machine, so no target builds it.

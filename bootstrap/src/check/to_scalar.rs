@@ -106,6 +106,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
     let frames = form::Frames {
         poll_any: lowering.poll_any,
         starters: lowering.starters,
+        through: Vec::new(),
     };
     let floats = (program.functions.iter())
         .any(|f| f.types.iter().any(|t| matches!(t, form::Type::Float(_))));

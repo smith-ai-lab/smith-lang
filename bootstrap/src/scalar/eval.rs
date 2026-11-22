@@ -368,6 +368,30 @@ pub fn poll_to_end(
     args: &[u64],
     ready: &mut dyn FnMut(u64, u64) -> bool,
 ) -> (Vec<u64>, Vec<Waited>, usize) {
+    poll_through(
+        program,
+        poll_any,
+        task,
+        args,
+        &mut Vec::new(),
+        &mut |_| {},
+        ready,
+    )
+}
+
+/// `poll_to_end` for a program whose polls take the state of a scheduler and give
+/// it back: `state` is given to the first poll and holds what the last gave,
+/// and `between` is run with it after each poll that says the task waits, where
+/// the scheduler may change it before the next poll is given it.
+pub fn poll_through(
+    program: &Program,
+    poll_any: usize,
+    task: &super::Task,
+    args: &[u64],
+    state: &mut Vec<u64>,
+    between: &mut dyn FnMut(&mut Vec<u64>),
+    ready: &mut dyn FnMut(u64, u64) -> bool,
+) -> (Vec<u64>, Vec<Waited>, usize) {
     let mut machine = alone(program, ready);
     machine.memory.resize(16, 0);
     let frame = BASE + machine.memory.len();
@@ -382,16 +406,15 @@ pub fn poll_to_end(
     machine.call(task.start, words).ok().expect("memory");
     let mut waiting = 0;
     loop {
-        let given = machine
-            .call(poll_any, vec![Word::Address(frame)])
-            .ok()
-            .expect("memory");
-        let mut given = integers(given).into_iter();
-        let status = given.next().expect("a status");
-        let (kind, handle) = (
-            given.next().expect("a kind"),
-            given.next().expect("a handle"),
-        );
+        let mut words = vec![Word::Address(frame)];
+        words.extend(state.iter().map(|n| Word::Int(*n)));
+        let given = machine.call(poll_any, words).ok().expect("memory");
+        let mut given = integers(given);
+        let rest = given.split_off(state.len());
+        *state = given;
+        let mut rest = rest.into_iter();
+        let status = rest.next().expect("a status");
+        let (kind, handle) = (rest.next().expect("a kind"), rest.next().expect("a handle"));
         if status == 0 {
             let results = (task.result_at.iter().zip(&task.results))
                 .map(|(at, ty)| {
@@ -406,6 +429,7 @@ pub fn poll_to_end(
         }
         waiting += 1;
         machine.wait(kind, handle);
+        between(state);
     }
 }
 
@@ -1194,7 +1218,9 @@ impl Machine<'_> {
                             panic!("a wait that is not of two numbers")
                         };
                         self.wait(kind, handle);
-                        Vec::new()
+                        // The state goes on as it was, since nothing else runs
+                        // between the wait and what follows it.
+                        args[2..].iter().map(get).collect()
                     }
                     Op::System {
                         call: System::ArenaOpen | System::ArenaClose,
