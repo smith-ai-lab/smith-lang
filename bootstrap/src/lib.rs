@@ -367,7 +367,14 @@ fn in_order(mut errors: Vec<diag::Error>) -> Vec<diag::Error> {
 /// The errors in every module of the standard library, each read whole and
 /// checked whole, whether or not a program reaches what is in it.
 pub fn check_standard_library() -> Vec<diag::Error> {
-    in_order(check::check_standard_library())
+    check_standard_library_part(0, 1)
+}
+
+/// The errors in the part `part` of `parts` of the modules of the standard
+/// library, each read whole and checked whole, whether or not a program reaches
+/// what is in it. The parts, numbered from 0, hold every module once.
+pub fn check_standard_library_part(part: usize, parts: usize) -> Vec<diag::Error> {
+    in_order(check::check_standard_library_part(part, parts))
 }
 
 /// The errors in every module of a library, given as a name and a source each,
