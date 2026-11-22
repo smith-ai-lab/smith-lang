@@ -5385,7 +5385,9 @@ fn pattern_names(pattern: &Pattern) -> Vec<(&str, Pos)> {
     match pattern {
         Pattern::Bind { name, pos, .. } => vec![(name.as_str(), *pos)],
         Pattern::Case { inner, .. } => inner.as_deref().map_or(Vec::new(), pattern_names),
-        Pattern::Tuple { items, .. } => items.iter().flat_map(pattern_names).collect(),
+        Pattern::Tuple { items, .. } | Pattern::List { items, .. } => {
+            items.iter().flat_map(pattern_names).collect()
+        }
         Pattern::Number { .. } | Pattern::Text { .. } => Vec::new(),
     }
 }
@@ -6495,11 +6497,13 @@ enum End<'e> {
 /// patterns match.
 ///
 /// `Int` matches the whole number equal to it, and `Text` the text equal to
-/// it.
+/// it, and `List` a list of as many elements as it has patterns, whose
+/// elements they match.
 enum Pat {
     Any,
     Case(usize, Option<Box<Pat>>),
     Tuple(Vec<Pat>),
+    List(Vec<Pat>),
     Int(i128),
     Text(Vec<u8>),
 }
@@ -6518,7 +6522,9 @@ fn specialize<'p>(rows: &[Vec<&'p Pat>], k: usize, holds: bool) -> Rows<'p> {
             let inner = match r[0] {
                 Pat::Any => &ANY,
                 Pat::Case(j, inner) if *j == k => inner.as_deref().unwrap_or(&ANY),
-                Pat::Case(..) | Pat::Tuple(_) | Pat::Int(_) | Pat::Text(_) => return None,
+                Pat::Case(..) | Pat::Tuple(_) | Pat::List(_) | Pat::Int(_) | Pat::Text(_) => {
+                    return None;
+                }
             };
             let mut row = if holds { vec![inner] } else { Vec::new() };
             row.extend(&r[1..]);
@@ -6538,6 +6544,23 @@ fn spread<'p>(rows: &[Vec<&'p Pat>], n: usize) -> Rows<'p> {
             };
             row.extend(&r[1..]);
             row
+        })
+        .collect()
+}
+
+/// The rows whose first pattern matches a list of `n` elements, with that
+/// pattern replaced by a pattern for each element. A pattern that matches
+/// anything matches each element with anything too.
+fn elements<'p>(rows: &[Vec<&'p Pat>], n: usize) -> Rows<'p> {
+    (rows.iter())
+        .filter_map(|r| {
+            let mut row: Vec<&Pat> = match r[0] {
+                Pat::Any => vec![&ANY; n],
+                Pat::List(items) if items.len() == n => items.iter().collect(),
+                _ => return None,
+            };
+            row.extend(&r[1..]);
+            Some(row)
         })
         .collect()
 }
@@ -6600,7 +6623,7 @@ fn missing_rows(defs: &Defs, rows: &[Vec<&Pat>], tys: &[Ty]) -> Vec<Vec<String>>
             out
         }
         // No list of literals covers every number or every text.
-        Ty::Int(_) | Ty::Flex(_) | Ty::Text => {
+        Ty::Int(_) | Ty::Flex(_) | Ty::Text | Ty::List(_) => {
             let rows: Rows = (rows.iter())
                 .filter(|r| matches!(r[0], Pat::Any))
                 .map(|r| r[1..].to_vec())
@@ -6663,7 +6686,17 @@ fn useful_row(defs: &Defs, rows: &[Vec<&Pat>], row: &[&Pat], tys: &[Ty]) -> bool
                 let row = specialize(&[row.to_vec()], k, holds.is_some()).remove(0);
                 useful_row(defs, &rows, &row, &tys)
             }),
-        (_, Ty::Int(_) | Ty::Flex(_) | Ty::Text) => {
+        (Pat::List(items), Ty::List(of)) => {
+            let n = items.len();
+            let tys: Vec<Ty> = (0..n)
+                .map(|_| of[0].clone())
+                .chain(rest.iter().cloned())
+                .collect();
+            let rows = elements(rows, n);
+            let row = elements(&[row.to_vec()], n).remove(0);
+            useful_row(defs, &rows, &row, &tys)
+        }
+        (_, Ty::Int(_) | Ty::Flex(_) | Ty::Text | Ty::List(_)) => {
             // A literal is matched again by the same literal and by a bare
             // name, and a bare name only by a bare name.
             let same = |p: &Pat| match (row[0], p) {
@@ -8605,6 +8638,54 @@ impl<'a> Checker<'a> {
                     });
                 }
                 out.map(Pat::Tuple)
+            }
+            Pattern::List { pos, items } => {
+                let inner: Vec<&Pattern> = items.iter().collect();
+                if assigned.is_some() {
+                    self.errors
+                        .push(Error::unsupported(*pos, "a list in a binding's pattern"));
+                    return quietly(self, binds, assigned, &inner);
+                }
+                let element = match ty {
+                    Ty::List(of) => &of[0],
+                    Ty::Unknown => return quietly(self, binds, assigned, &inner),
+                    other => {
+                        self.errors.push(Error::new(
+                            *pos,
+                            format!(
+                                "this pattern takes apart a list, and it matches {}",
+                                defs.describe(other, body.scope)
+                            ),
+                        ));
+                        return quietly(self, binds, assigned, &inner);
+                    }
+                };
+                let mut out = Some(Vec::new());
+                for part in items {
+                    let before = binds.len();
+                    let item = self.pattern(body, part, element, binds, None);
+                    // A name holds a copy of its element, as the list keeps
+                    // the element.
+                    for (name, ty, _) in &binds[before..] {
+                        if name != "_"
+                            && *ty != Ty::Unknown
+                            && !ownership::copies(defs, body.scope, ty)
+                        {
+                            self.errors.push(Error::new(
+                                part.pos(),
+                                format!(
+                                    "`{name}` would hold {}, which a list keeps and cannot copy",
+                                    defs.describe(ty, body.scope)
+                                ),
+                            ));
+                        }
+                    }
+                    out = out.zip(item).map(|(mut out, item)| {
+                        out.push(item);
+                        out
+                    });
+                }
+                out.map(Pat::List)
             }
             Pattern::Number {
                 text,

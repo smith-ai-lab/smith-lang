@@ -6,6 +6,7 @@ status: partial
 built:
   - "the `size` of a `List` and of a `str`, a `Nat`, which a program writes as a parameter, a result, a field, and inside another type, and an arithmetic on a `Nat` that `arith` proves fits"
   - "an array of a size written as a number, `[3]f32`, as a parameter, a result, a binding, a `var`, a field, a case, a tuple, and an element of a list, written as `[1.0, 2.0, 3.0]` where it is expected, which is the same type as another exactly when the size and the element are, and refused when the number of elements written is not the size; its elements are read and assigned at any index that `arith` proves below the size, and a `loop` runs over its elements in order, all held in place in the frame of the function, so no memory is asked for"
+  - "a pattern in brackets on a `List`, as [Patterns in brackets](array-patterns.md) says, and not on an array"
   - "not a size that is a name, a matrix, or arithmetic on sizes"
 ---
 

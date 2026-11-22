@@ -2,7 +2,10 @@
 type: specification
 title: Patterns in brackets
 description: A pattern in brackets takes an array apart with one pattern for each element, and matches a List of exactly that many elements.
-status: planned
+status: partial
+built:
+  - "a pattern in brackets in a `match` on a `List`, as `[]`, `[x]`, or `[\"build\", path]`, matching a list of exactly that many elements, where each part is a bare name, a literal, a case, a tuple, or another pattern in brackets, the first pattern that matches is taken, and a `match` with no bare name at the end or a pattern the ones before it cover is refused"
+  - "not a pattern in brackets on an array, or a name for an element that cannot be copied"
 ---
 
 # Patterns in brackets

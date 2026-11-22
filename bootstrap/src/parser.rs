@@ -639,6 +639,13 @@ pub enum Pattern {
         pos: Pos,
         items: Vec<Pattern>,
     },
+    /// A list of exactly as many elements as there are patterns, each of
+    /// which matches its element.
+    List {
+        /// Where the `[` is.
+        pos: Pos,
+        items: Vec<Pattern>,
+    },
     /// A whole number or a character, which matches a value equal to it.
     Number {
         text: String,
@@ -657,6 +664,7 @@ impl Pattern {
             Pattern::Bind { pos, var, .. } => var.unwrap_or(*pos),
             Pattern::Case { pos, .. }
             | Pattern::Tuple { pos, .. }
+            | Pattern::List { pos, .. }
             | Pattern::Number { pos, .. }
             | Pattern::Text { pos, .. } => *pos,
         }
@@ -2701,6 +2709,10 @@ impl Parser<'_> {
                     1 => Err(Error::unsupported(pos, "one pattern in parentheses")),
                     _ => Ok(Pattern::Tuple { pos, items }),
                 }
+            }
+            Tok::Punct("[") => {
+                let items = self.list_until("]", Self::pattern)?;
+                Ok(Pattern::List { pos, items })
             }
             Tok::Number(text) => {
                 let text = text.clone();

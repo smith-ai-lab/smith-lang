@@ -9,7 +9,8 @@ built:
   - "a function with a type parameter, bounded by `Eq` or `Ord` or by nothing, takes and gives a `List[T]`, reads its size and elements, compares them, loops over them, and pushes, and is specialised for each element type as any generic function is; a list written out where `T` is settled by no other argument is refused with one error, as is `[]`, and one where another argument settles it takes that type"
   - "`loop v in xs` over a `List` of any type, which is built as [`loop`](../language/loop.md) says"
   - "`==` of two lists of one type, and `Fmt` and `Repr` of a list, each as its element has them, alone and inside a struct, a tuple, an `Option`, or another list; the same for a `Slice`"
-  - "not `items`, slicing, summing, or a pattern in brackets"
+  - "a pattern in brackets in a `match` on a `List`, which matches a list of exactly that many elements, each part being any pattern, a bare name at the end taking the whole list"
+  - "not `items`, slicing, summing, or a name for an element that cannot be copied in a pattern in brackets"
 ---
 
 # List
