@@ -9,6 +9,7 @@ use std.json (In, json_ended, json_in, to_json)
 use std.list (append, copy, freeze, push)
 use std.net (Connection, Listener, NetError, accept, close, listen_on, net, read, stop, write)
 use std.serialize (Serialize)
+use std.task (spawn, tasks)
 use std.utf8 (utf8)
 
 pub struct Request {
@@ -1119,14 +1120,20 @@ fn open(port: 0..65536) -> Result[Listener, NetError] ! net {
   }
 }
 
+// Serves each connection in a task of its own, so that a connection that says
+// nothing holds up no other: the tasks wait in the scheduler of the group, which
+// holds no thread for a task that waits.
 fn serve_listener[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
   requires Discard[T]
 {
+  with tasks()
   loop {
     match accept(l) {
       .ok(c) {
-        serve_connection(c, body)
-        close(c)
+        spawn {
+          serve_connection(c, body)
+          close(c)
+        }
       }
       .err(e) { }
     }
