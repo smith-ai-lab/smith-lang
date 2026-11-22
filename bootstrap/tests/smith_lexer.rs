@@ -87,8 +87,8 @@ pub const MACHINE: &[Test] = &[
         || the_lexer_written_in_smith_lexes_every_case_file_as_the_rust_lexer_does(2),
     ),
     (
-        "strings_nested_four_and_five_deep_are_lexed_differently_until_recursion_is_built",
-        strings_nested_four_and_five_deep_are_lexed_differently_until_recursion_is_built,
+        "strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does",
+        strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does,
     ),
 ];
 
@@ -311,45 +311,16 @@ fn nested(depth: usize) -> Vec<u8> {
     text.into_bytes()
 }
 
-/// The lexer written in Smith reads strings nested three deep, as recursion is
-/// not built, and misreads four and five deep, which the Rust lexer reads. The
-/// work-round is marked `GAP 2` in `compiler/lexer.smith`. This test expects the
-/// difference, and fails when it is gone, so that the work-round is taken out
-/// then.
-fn strings_nested_four_and_five_deep_are_lexed_differently_until_recursion_is_built() {
-    let texts = [nested(3), nested(4), nested(5)];
-    let refs: Vec<&[u8]> = texts.iter().map(|t| t.as_slice()).collect();
-    let source = lexer_form::program(&refs);
-    let expected = lexer_form::expected(&refs);
-    for target in targets::runnable() {
-        let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
-        targets::record(target, &[&bytes, expected.as_bytes()]);
-        if targets::fingerprinting() {
-            continue;
-        }
-        let said = String::from_utf8(targets::run(&bytes).stdout).unwrap();
-        let (said, expected) = (lines_of_each(&said), lines_of_each(&expected));
-        assert_eq!(said[0], expected[0], "three deep, {}", target.name());
-        for deep in [1, 2] {
-            assert_ne!(
-                said[deep], expected[deep],
-                "{} deep is now read as the Rust lexer reads it: take out `GAP 2` of \
-                 compiler/lexer.smith, and this test, for {}",
-                deep + 3,
-                target.name()
-            );
-        }
+/// A string inside an expression of a string, to any depth, is read as the
+/// Rust lexer reads it, and so is the same with its closing quote missing.
+fn strings_nested_to_any_depth_are_lexed_as_the_rust_lexer_does() {
+    let mut texts = Vec::new();
+    for depth in 0..9 {
+        let whole = nested(depth);
+        let mut cut = whole.clone();
+        cut.pop();
+        texts.push(whole);
+        texts.push(cut);
     }
-}
-
-fn lines_of_each(all: &str) -> Vec<Vec<String>> {
-    let mut each: Vec<Vec<String>> = Vec::new();
-    for line in all.lines() {
-        if line == "input" {
-            each.push(Vec::new());
-        } else {
-            each.last_mut().unwrap().push(line.to_string());
-        }
-    }
-    each
+    lexes_as_the_rust_lexer_does(&texts);
 }

@@ -6,7 +6,7 @@
 use std.ascii (is_digit, is_hex_digit, is_letter)
 use std.bits (u64)
 use std.console (console, print)
-use std.int (saturating_add, saturating_sub, wrapping_add, wrapping_mul)
+use std.int (saturating_add, saturating_mul, saturating_sub, wrapping_add, wrapping_mul)
 use std.list (push)
 
 struct Pos {
@@ -578,34 +578,17 @@ fn punct(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // ---- strings ----
 
-// GAP 2 (no roadmap issue yet, as #189 does not cover functions that call one
-// another): `token`, `string`, and `expression` call one another, which is
-// recursion, and recursion is not built. A string in an expression in a
-// string in an expression is read as deep as three copies of the functions
-// go, and below that a quote is read as the unexpected character it would be
-// outside a string.
-
-// Reads what starts with `c`, which is not a line break: a space, a
-// comment, or a token.
-fn token3(lx: take Lexer, start: Pos, c: Byte) -> Lexer ! alloc {
-  if c == ' ' or c == '\t' {
-    bump(lx)
-  } else if c == '/' and byte_after(lx.src, lx.at) == .some('/') {
-    comment(lx, start)
-  } else if c == '\'' {
-    character(lx, start)
-  } else if is_name_start(c) {
-    word(lx, start)
-  } else if is_digit(c) {
-    number(lx, start)
-  } else {
-    punct(lx, start)
-  }
-}
+// `token`, `string`, and `expression` call one another, as a string holds
+// expressions whose tokens may be strings. Each call takes less fuel than the
+// call that made it, which is what `decreases` states. A string nested n deep
+// takes 3n calls and 2n bytes, so the fuel `lex` starts with, three times the
+// size of the source and three more, is never spent by a file.
 
 // Reads a string literal. Each mistake inside it is reported, and the string
 // still becomes a token, so that the rest of the line is read.
-fn string2(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer ! alloc
+  decreases fuel
+{
   rounds = lx.src.size
   var next = bump(lx)
   var value: List[Byte] = []
@@ -632,7 +615,7 @@ fn string2(lx: take Lexer, start: Pos) -> Lexer ! alloc {
           }
           if value.size > 0 { next = push_token(next, .text(value), start) }
           value = []
-          (after, closed) = expression2(next, start)
+          (after, closed) = if fuel > 0 { expression(next, start, fuel - 1) } else { (next, false) }
           next = after
           if not closed { break }
         } else if c == '}' {
@@ -675,7 +658,9 @@ fn string2(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // Reads the tokens of an expression in a string, from after its `{`
 // through the `}` that closes it, and whether it was closed.
-fn expression2(lx: take Lexer, start: Pos) -> (Lexer, bool) ! alloc {
+fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, bool) ! alloc
+  decreases fuel
+{
   mark = lx.tokens.size
   rounds = lx.src.size
   var next = lx
@@ -695,7 +680,7 @@ fn expression2(lx: take Lexer, start: Pos) -> (Lexer, bool) ! alloc {
         } else {
           if c == '{' { depth = saturating_add(depth, 1) }
           if c == '}' { depth = saturating_sub(depth, 1) }
-          next = token3(next, at, c)
+          next = if fuel > 0 { token(next, at, c, fuel - 1) } else { next }
         }
       }
     }
@@ -715,273 +700,15 @@ fn expression2(lx: take Lexer, start: Pos) -> (Lexer, bool) ! alloc {
 
 // Reads what starts with `c`, which is not a line break: a space, a
 // comment, or a token.
-fn token2(lx: take Lexer, start: Pos, c: Byte) -> Lexer ! alloc {
+fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer ! alloc
+  decreases fuel
+{
   if c == ' ' or c == '\t' {
     bump(lx)
   } else if c == '/' and byte_after(lx.src, lx.at) == .some('/') {
     comment(lx, start)
   } else if c == '"' {
-    string2(lx, start)
-  } else if c == '\'' {
-    character(lx, start)
-  } else if is_name_start(c) {
-    word(lx, start)
-  } else if is_digit(c) {
-    number(lx, start)
-  } else {
-    punct(lx, start)
-  }
-}
-
-// Reads a string literal. Each mistake inside it is reported, and the string
-// still becomes a token, so that the rest of the line is read.
-fn string1(lx: take Lexer, start: Pos) -> Lexer ! alloc {
-  rounds = lx.src.size
-  var next = bump(lx)
-  var value: List[Byte] = []
-  var interpolated = false
-  loop round in 0..rounds {
-    at = next.pos
-    match byte_at(next.src, next.at) {
-      .none {
-        next = error_at(next, start, 4, 0, [])
-        break
-      }
-      .some(c) {
-        if c == '\n' {
-          next = error_at(next, start, 4, 0, [])
-          break
-        } else if c == '"' {
-          next = bump(next)
-          break
-        } else if c == '{' {
-          next = bump(next)
-          if not interpolated {
-            next = push_token(next, .interp_open, start)
-            interpolated = true
-          }
-          if value.size > 0 { next = push_token(next, .text(value), start) }
-          value = []
-          (after, closed) = expression1(next, start)
-          next = after
-          if not closed { break }
-        } else if c == '}' {
-          next = error_at(bump(next), at, 5, 0, [])
-        } else if c == '\\' {
-          next = bump(next)
-          match byte_at(next.src, next.at) {
-            .some(e) {
-              if e == '"' or e == '\\' or e == '{' or e == '}' or e == 'n' or e == 't' {
-                next = bump(next)
-                decoded: Byte = if e == 'n' { '\n' } else if e == 't' { '\t' } else { e }
-                value = push(value, decoded)
-              } else if e == '\n' {
-                next = escape_error(next, at, 6)
-                break
-              } else {
-                next = bump_char(escape_error(next, at, 6))
-              }
-            }
-            .none {
-              next = escape_error(next, at, 6)
-              break
-            }
-          }
-        } else {
-          next = bump(next)
-          value = push(value, c)
-        }
-      }
-    }
-  }
-  if not interpolated {
-    push_token(next, .string(value), start)
-  } else {
-    var done = next
-    if value.size > 0 { done = push_token(done, .text(value), start) }
-    push_token(done, .interp_close, start)
-  }
-}
-
-// Reads the tokens of an expression in a string, from after its `{`
-// through the `}` that closes it, and whether it was closed.
-fn expression1(lx: take Lexer, start: Pos) -> (Lexer, bool) ! alloc {
-  mark = lx.tokens.size
-  rounds = lx.src.size
-  var next = lx
-  var depth: Nat = 0
-  var closed = false
-  loop round in 0..rounds {
-    at = next.pos
-    match byte_at(next.src, next.at) {
-      .none { break }
-      .some(c) {
-        if c == '\n' {
-          break
-        } else if c == '}' and depth == 0 {
-          next = push_token(bump(next), .punct(15), at)
-          closed = true
-          break
-        } else {
-          if c == '{' { depth = saturating_add(depth, 1) }
-          if c == '}' { depth = saturating_sub(depth, 1) }
-          next = token2(next, at, c)
-        }
-      }
-    }
-  }
-  // A string in the braces that the line ends inside is the one without its
-  // quote, and it has reported that already.
-  inner = has_string(next.tokens, mark) and last_code(next.errors) == 4
-  if closed {
-    (next, true)
-  } else if inner {
-    (next, false)
-  } else {
-    (error_at(next, start, 4, 0, []), false)
-  }
-}
-
-
-// Reads what starts with `c`, which is not a line break: a space, a
-// comment, or a token.
-fn token1(lx: take Lexer, start: Pos, c: Byte) -> Lexer ! alloc {
-  if c == ' ' or c == '\t' {
-    bump(lx)
-  } else if c == '/' and byte_after(lx.src, lx.at) == .some('/') {
-    comment(lx, start)
-  } else if c == '"' {
-    string1(lx, start)
-  } else if c == '\'' {
-    character(lx, start)
-  } else if is_name_start(c) {
-    word(lx, start)
-  } else if is_digit(c) {
-    number(lx, start)
-  } else {
-    punct(lx, start)
-  }
-}
-
-// Reads a string literal. Each mistake inside it is reported, and the string
-// still becomes a token, so that the rest of the line is read.
-fn string0(lx: take Lexer, start: Pos) -> Lexer ! alloc {
-  rounds = lx.src.size
-  var next = bump(lx)
-  var value: List[Byte] = []
-  var interpolated = false
-  loop round in 0..rounds {
-    at = next.pos
-    match byte_at(next.src, next.at) {
-      .none {
-        next = error_at(next, start, 4, 0, [])
-        break
-      }
-      .some(c) {
-        if c == '\n' {
-          next = error_at(next, start, 4, 0, [])
-          break
-        } else if c == '"' {
-          next = bump(next)
-          break
-        } else if c == '{' {
-          next = bump(next)
-          if not interpolated {
-            next = push_token(next, .interp_open, start)
-            interpolated = true
-          }
-          if value.size > 0 { next = push_token(next, .text(value), start) }
-          value = []
-          (after, closed) = expression0(next, start)
-          next = after
-          if not closed { break }
-        } else if c == '}' {
-          next = error_at(bump(next), at, 5, 0, [])
-        } else if c == '\\' {
-          next = bump(next)
-          match byte_at(next.src, next.at) {
-            .some(e) {
-              if e == '"' or e == '\\' or e == '{' or e == '}' or e == 'n' or e == 't' {
-                next = bump(next)
-                decoded: Byte = if e == 'n' { '\n' } else if e == 't' { '\t' } else { e }
-                value = push(value, decoded)
-              } else if e == '\n' {
-                next = escape_error(next, at, 6)
-                break
-              } else {
-                next = bump_char(escape_error(next, at, 6))
-              }
-            }
-            .none {
-              next = escape_error(next, at, 6)
-              break
-            }
-          }
-        } else {
-          next = bump(next)
-          value = push(value, c)
-        }
-      }
-    }
-  }
-  if not interpolated {
-    push_token(next, .string(value), start)
-  } else {
-    var done = next
-    if value.size > 0 { done = push_token(done, .text(value), start) }
-    push_token(done, .interp_close, start)
-  }
-}
-
-// Reads the tokens of an expression in a string, from after its `{`
-// through the `}` that closes it, and whether it was closed.
-fn expression0(lx: take Lexer, start: Pos) -> (Lexer, bool) ! alloc {
-  mark = lx.tokens.size
-  rounds = lx.src.size
-  var next = lx
-  var depth: Nat = 0
-  var closed = false
-  loop round in 0..rounds {
-    at = next.pos
-    match byte_at(next.src, next.at) {
-      .none { break }
-      .some(c) {
-        if c == '\n' {
-          break
-        } else if c == '}' and depth == 0 {
-          next = push_token(bump(next), .punct(15), at)
-          closed = true
-          break
-        } else {
-          if c == '{' { depth = saturating_add(depth, 1) }
-          if c == '}' { depth = saturating_sub(depth, 1) }
-          next = token1(next, at, c)
-        }
-      }
-    }
-  }
-  // A string in the braces that the line ends inside is the one without its
-  // quote, and it has reported that already.
-  inner = has_string(next.tokens, mark) and last_code(next.errors) == 4
-  if closed {
-    (next, true)
-  } else if inner {
-    (next, false)
-  } else {
-    (error_at(next, start, 4, 0, []), false)
-  }
-}
-
-
-// Reads what starts with `c`, which is not a line break: a space, a
-// comment, or a token.
-fn token0(lx: take Lexer, start: Pos, c: Byte) -> Lexer ! alloc {
-  if c == ' ' or c == '\t' {
-    bump(lx)
-  } else if c == '/' and byte_after(lx.src, lx.at) == .some('/') {
-    comment(lx, start)
-  } else if c == '"' {
-    string0(lx, start)
+    if fuel > 0 { string(lx, start, fuel - 1) } else { lx }
   } else if c == '\'' {
     character(lx, start)
   } else if is_name_start(c) {
@@ -995,6 +722,7 @@ fn token0(lx: take Lexer, start: Pos, c: Byte) -> Lexer ! alloc {
 
 fn run(lx: take Lexer) -> Lexer ! alloc {
   rounds = lx.src.size
+  fuel = saturating_add(saturating_mul(rounds, 3), 3)
   var next = lx
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
@@ -1004,7 +732,7 @@ fn run(lx: take Lexer) -> Lexer ! alloc {
         if c == '\n' {
           next = push_token(bump(next), .newline, start)
         } else {
-          next = token0(next, start, c)
+          next = token(next, start, c, fuel)
         }
       }
     }
