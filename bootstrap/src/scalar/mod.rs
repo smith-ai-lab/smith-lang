@@ -56,7 +56,7 @@ pub use recur::recur;
 pub use remat::rematerialized;
 pub use remove::{WALKS, remove, remove_counting};
 pub use ryu::tables as ryu_tables;
-pub use suspend::{Suspended, Task, suspend};
+pub use suspend::{Frames, Starter, Suspended, Task, result_places, suspend, suspend_frames};
 pub use tail::tail;
 pub use thread::thread;
 pub use trim::trim;

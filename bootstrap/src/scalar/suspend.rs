@@ -64,6 +64,32 @@ pub struct Task {
     pub results: Vec<Type>,
 }
 
+/// What the lowering asks of `suspend` for the frames of tasks that a program
+/// makes: a frame is made by a function that the lowering placed, whose body is
+/// the pass's to write, because only the pass knows how many bytes the frame has.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Frames {
+    /// The place of the function that polls any frame, where the pass puts it,
+    /// when the program polls one.
+    pub poll_any: Option<usize>,
+    /// The functions that make a frame.
+    pub starters: Vec<Starter>,
+}
+
+/// A function that makes the frame of another and starts it. The lowering gives
+/// it the types of the parameters of the function the frame is of, and the types
+/// of what it gives, an address and a length; the pass writes its body: it asks
+/// the arena in force for the bytes of the frame, starts the function in them
+/// with the parameters, and gives the address of the frame and how many bytes
+/// it has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Starter {
+    /// The place of the function that makes the frame.
+    pub place: usize,
+    /// The function the frame is of, which is a task whether it waits or not.
+    pub function: usize,
+}
+
 /// The program with each function that suspends made a state machine, and each
 /// of those functions.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,7 +108,14 @@ const WORD: Type = Type::Int(Bits::B64);
 /// The program with each function that suspends made a state machine. A program
 /// with none is given back as it was.
 pub fn suspend(program: Program) -> Result<Suspended, String> {
-    let suspends = suspending(&program);
+    suspend_frames(program, &Frames::default())
+}
+
+/// `suspend` for a program that makes frames of its own: each function of
+/// `frames.starters` is a task even when it never waits, its starter is given
+/// its body, and the function that polls any frame is put where it says.
+pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, String> {
+    let suspends = suspending(&program, frames.starters.iter().map(|s| s.function));
     if suspends.is_empty() {
         return Ok(Suspended {
             program,
@@ -113,9 +146,24 @@ pub fn suspend(program: Program) -> Result<Suspended, String> {
     functions.extend(polls);
     let mut list: Vec<(usize, Task)> = tasks.into_iter().collect();
     list.sort_by_key(|(f, _)| *f);
+    for starter in &frames.starters {
+        let task = &list[list
+            .binary_search_by_key(&starter.function, |(f, _)| *f)
+            .expect("a task")]
+        .1;
+        functions[starter.place] = make_frame(&program.functions[starter.place], task);
+    }
     let list: Vec<Task> = list.into_iter().map(|(_, t)| t).collect();
-    let poll_any = Some(functions.len());
-    functions.push(any_poll(&list));
+    let poll_any = match frames.poll_any {
+        Some(place) => {
+            functions[place] = any_poll(&list);
+            Some(place)
+        }
+        None => {
+            functions.push(any_poll(&list));
+            Some(functions.len() - 1)
+        }
+    };
     Ok(Suspended {
         program: Program {
             data: program.data,
@@ -127,12 +175,82 @@ pub fn suspend(program: Program) -> Result<Suspended, String> {
     })
 }
 
-/// The functions that run `System::Suspend`, and those that call one of the
-/// functions that do, which is each function that suspends.
-fn suspending(program: &Program) -> HashSet<usize> {
+/// Where the values a function gives are in its frame, in the order it gives
+/// them, and how many bytes the frame holds before what follows them. They come
+/// first, so the same types are at the same places in the frame of every
+/// function that gives them, and a frame is read for what it gave without
+/// knowing which function it is of.
+pub fn result_places(types: &[Type]) -> (Vec<u64>, u64) {
+    let mut at = 16u64;
+    let places = types
+        .iter()
+        .map(|ty| {
+            at = align(at, ty.bytes());
+            let here = at;
+            at += ty.bytes();
+            here
+        })
+        .collect();
+    (places, at)
+}
+
+/// The function that makes the frame of a task and starts it, in the place of
+/// `stub`, which has the parameters the task takes: it asks for the bytes of the
+/// frame, starts the task in them, and gives the address and the number of bytes.
+fn make_frame(stub: &Function, task: &Task) -> Function {
+    let params = stub.blocks[0].params.clone();
+    let mut types = stub.types.clone();
+    let mut fresh = |ty: Type| {
+        types.push(ty);
+        Value(types.len() - 1)
+    };
+    let (bytes, frame) = (fresh(WORD), fresh(Type::Address));
+    let mut instructions = vec![
+        Instruction {
+            results: vec![bytes],
+            op: Op::Constant(Constant::Int(task.bytes)),
+            at: Place::NONE,
+        },
+        Instruction {
+            results: vec![frame],
+            op: Op::System {
+                call: System::Allocate,
+                args: vec![bytes],
+            },
+            at: Place::NONE,
+        },
+    ];
+    let mut args = vec![frame];
+    args.extend(params.iter().copied());
+    instructions.push(Instruction {
+        results: Vec::new(),
+        op: Op::Call {
+            function: task.start,
+            args,
+        },
+        at: Place::NONE,
+    });
+    Function {
+        types,
+        results: vec![Type::Address, WORD],
+        blocks: vec![Block {
+            params,
+            instructions,
+            end: End::Return(vec![frame, bytes]),
+        }],
+        cold: stub.cold,
+        name: stub.name.clone(),
+    }
+    .named(stub.name.clone())
+}
+
+/// The functions that run `System::Suspend`, those the lowering made frames of,
+/// and those that call one of them, which is each function that suspends.
+fn suspending(program: &Program, forced: impl Iterator<Item = usize>) -> HashSet<usize> {
     let mut found: HashSet<usize> = (program.functions.iter().enumerate())
         .filter(|(_, f)| f.blocks.iter().flat_map(|b| &b.instructions).any(waits))
         .map(|(i, _)| i)
+        .chain(forced)
         .collect();
     loop {
         let before = found.len();
@@ -260,16 +378,13 @@ impl<'a> Machine<'a> {
         suspends: &'a HashSet<usize>,
     ) -> Machine<'a> {
         let live = alive_across(original, suspends);
-        let mut at = 16u64;
         let place = |at: &mut u64, ty: Type| {
             *at = align(*at, ty.bytes());
             let here = *at;
             *at += ty.bytes();
             here
         };
-        let result_at: Vec<u64> = (original.results.iter())
-            .map(|ty| place(&mut at, *ty))
-            .collect();
+        let (result_at, mut at) = result_places(&original.results);
         let param_slot = (original.blocks[0].params.iter())
             .map(|p| place(&mut at, original.types[p.0]))
             .collect();
