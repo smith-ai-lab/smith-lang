@@ -1090,24 +1090,32 @@ fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
         .iter()
         .position(|f| f.blocks[0].params.len() == 8 && f.results.len() == 8)
         .expect("the series is in the program");
-    let inputs: Vec<[u64; 8]> = generate::sample(99, 0, |g| {
+    // The inputs the argument in `compiler.md` says are the worst, which no seed
+    // moves: 0, the greatest `r / 64` there is (`ln 2 / 64` is 709.8 of the
+    // 65536 that the top word counts, so the top word is 709 and the rest
+    // 1s, which is above it), the one that failed with a bound of 2^-229, and
+    // some whose words are all 1s or all 0s below a top word.
+    let mut inputs: Vec<[u64; 8]> = vec![
+        [0; 8],
+        [0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 709],
+        [0, 0, 0, 0, 0, 0, 0, 709],
+        [0x8000_0000, 0x8000_0000, 0x8000_0000, 0x8000_0000, 0x8000_0000, 0x8000_0000, 0x8000_0000, 709],
+        [0xe16a8f6a, 0x420ec0f4, 0x43ce6075, 0xa73541f5, 0xdb79f636, 0xf0c0485a, 0x0cac9e4a, 0x29e],
+    ];
+    inputs.extend(generate::sample(99, 0, |g| {
         (0..40)
-            .map(|k| {
+            .map(|_| {
                 let mut words = [0u64; 8];
                 for w in words.iter_mut().take(7) {
                     *w = g.below(1 << 32) as u64;
                 }
-                // `r` is below `ln 2`, so `r / 64` is below 0.0109: 700 of the
+                // `r` is below `ln 2`, so `r / 64` is below 0.01084: 709 of the
                 // 65536 that the top word counts.
-                words[7] = g.below(700) as u64;
-                match k {
-                    0 => [0; 8],
-                    1 => [0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 0xffff_ffff, 699],
-                    _ => words,
-                }
+                words[7] = g.below(710) as u64;
+                words
             })
-            .collect()
-    });
+            .collect::<Vec<_>>()
+    }));
     let mut worst = i64::MIN;
     for words in inputs {
         let got = scalar::call(&program, series, &words);
@@ -1115,7 +1123,7 @@ fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
         let want = exact::exp(&r);
         let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
         worst = worst.max(distance);
-        assert!(distance < -228, "r / 64 = {words:x?} is wrong by about 2^{distance}");
+        assert!(distance <= -228, "r / 64 = {words:x?} is wrong by about 2^{distance}");
     }
     eprintln!("the series is wrong by under 2^{worst}");
 }
@@ -1184,7 +1192,7 @@ fn the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_refe
         let want = Big::from_u64(1).div_at(&a, 600);
         let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
         worst = worst.max(distance);
-        assert!(distance < -228, "1 / {words:x?} is wrong by about 2^{distance}");
+        assert!(distance <= -228, "1 / {words:x?} is wrong by about 2^{distance}");
     }
     let inputs: Vec<[u64; 8]> = generate::sample(97, 0, |g| {
         (0..30)
@@ -1221,7 +1229,7 @@ fn the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_refe
         };
         let distance = exact::distance_bits(&exact::from_words(&got, 240), &want);
         worst = worst.max(distance);
-        assert!(distance < -228, "the series of {words:x?} is wrong by about 2^{distance}");
+        assert!(distance <= -228, "the series of {words:x?} is wrong by about 2^{distance}");
     }
     eprintln!("the reciprocal and the series are wrong by under 2^{worst}");
 }
@@ -1378,7 +1386,7 @@ fn the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_ref
         let signed = if got[1] == 1 { magnitude.negated() } else { magnitude };
         let distance = exact::distance_bits(&signed, &r);
         worst = worst.max(distance);
-        assert!(distance < -228, "{m} * 2^{e} is reduced wrongly by about 2^{distance}");
+        assert!(distance <= -228, "{m} * 2^{e} is reduced wrongly by about 2^{distance}");
     }
     let inputs: Vec<[u64; 8]> = generate::sample(95, 0, |g| {
         (0..30)
@@ -1408,7 +1416,7 @@ fn the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_ref
         for (part, want) in [(&got[..8], sine), (&got[8..], cosine)] {
             let distance = exact::distance_bits(&exact::from_words(part, 240), &want);
             worst = worst.max(distance);
-            assert!(distance < -228, "the series of {words:x?} is wrong by about 2^{distance}");
+            assert!(distance <= -228, "the series of {words:x?} is wrong by about 2^{distance}");
         }
     }
     eprintln!("the reduction and the series are wrong by under 2^{worst}");
