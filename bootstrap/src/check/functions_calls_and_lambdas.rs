@@ -718,6 +718,9 @@ impl<'a> Checker<'a> {
         if is_kernel(call) {
             return self.kernel(body, call);
         }
+        if let Some(kind) = super::frames::kind(call) {
+            return self.frames(body, call, kind, want);
+        }
         if is_intrinsic(call) {
             return self.intrinsic(body, call);
         }

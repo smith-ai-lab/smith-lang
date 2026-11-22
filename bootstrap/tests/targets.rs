@@ -354,6 +354,16 @@ pub fn scalar_runs_as(program: &scalar::Program, target: Target, said: &Outcome)
     }
 }
 
+/// `runs_as` for a program that is built with the modules of `library` in place
+/// of the standard library's.
+pub fn runs_as_in(source: &[u8], library: &[(&str, &str)], target: Target, said: &Outcome) {
+    let bytes = smith::compile_in(source, library, target).unwrap_or_else(|e| panic!("{e:?}"));
+    record(target, &[&bytes, &said.stdout, &said.status.to_le_bytes()]);
+    if !fingerprinting() {
+        assert_eq!(run(&bytes), *said, "{}", target.name());
+    }
+}
+
 /// Builds `source` for `target` and checks that its executable does what
 /// `said` says, or, for a fingerprint, notes both.
 pub fn runs_as(source: &[u8], target: Target, said: &Outcome) {

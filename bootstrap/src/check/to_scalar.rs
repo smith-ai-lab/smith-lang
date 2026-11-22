@@ -27,6 +27,7 @@ use super::*;
 use crate::scalar as form;
 use crate::scalar::runtime::{self, Runtime};
 
+mod frames;
 mod functions_calls_and_lambdas;
 mod lists_and_text;
 mod numbers_and_operators;
@@ -68,6 +69,9 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         unders: Map::default(),
         handler_ids: Map::default(),
         contexts: Map::default(),
+        lambdas: Vec::new(),
+        starters: Vec::new(),
+        poll_any: None,
         errors: Vec::new(),
     };
     lowering.add(Body::Copy(start));
@@ -81,6 +85,9 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
             Body::Copy(instance) => lowering.function(&instance),
             Body::Under(instance, ids) => lowering.function_under(&instance, &ids),
             Body::Runtime(kind) => runtime::build(kind, &mut |k| lowering.place(Body::Runtime(k))),
+            Body::Lambda(k) => lowering.lambda_function(k),
+            Body::Starter(k) => lowering.starter_function(k),
+            Body::PollAny => frames::poll_any_stub(),
         });
     }
     if !lowering.errors.is_empty() {
@@ -96,6 +103,10 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         functions,
         main: usize::from(takes),
     };
+    let frames = form::Frames {
+        poll_any: lowering.poll_any,
+        starters: lowering.starters,
+    };
     let floats = (program.functions.iter())
         .any(|f| f.types.iter().any(|t| matches!(t, form::Type::Float(_))));
     let program = form::tail(if floats {
@@ -103,7 +114,13 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
     } else {
         program
     });
-    Ok(form::handler::install(form::recur(program)))
+    // A function that waits is a state machine, and a lambda made a frame is one
+    // whether it waits or not, once the functions that call themselves have a
+    // stack of their own.
+    match form::suspend_frames(form::recur(program), &frames) {
+        Ok(suspended) => Ok(form::handler::install(suspended.program)),
+        Err(message) => Err(vec![Error::new(Pos { line: 1, col: 1 }, message)]),
+    }
 }
 
 /// A function of the program: a copy of one the source defines, or one the
@@ -115,6 +132,13 @@ enum Body {
     /// handlers it runs under.
     Under(Instance, Vec<HandlerId>),
     Runtime(Runtime),
+    /// The function a lambda made a frame of becomes, by its place among the
+    /// lambdas that were: it takes the names it reads and gives what it gives.
+    Lambda(usize),
+    /// The function that makes the frame of that lambda, which `suspend` writes.
+    Starter(usize),
+    /// The function that polls any frame, which `suspend` writes.
+    PollAny,
 }
 
 struct Lowering<'a> {
@@ -132,6 +156,12 @@ struct Lowering<'a> {
     handler_ids: Map<(usize, Vec<HandlerId>), HandlerId>,
     /// What each choice of handlers a copy runs under is made of.
     contexts: Map<Vec<HandlerId>, Vec<(HandlerId, Rc<HandlerDef<'a>>)>>,
+    /// The lambdas that were made frames, which are each a function of its own.
+    lambdas: Vec<Rc<frames::LambdaDef<'a>>>,
+    /// The function that makes the frame of each, and the function it is of.
+    starters: Vec<form::Starter>,
+    /// The function that polls any frame, when the program polls one.
+    poll_any: Option<usize>,
     /// What is not built yet and a program uses.
     errors: Vec<Error>,
     /// The place of each function of the runtime, which are few: a kind of
@@ -1146,6 +1176,8 @@ impl<'a> Lowering<'a> {
             Body::Runtime(kind) => (self.runtimes.iter())
                 .find(|(k, _)| k == kind)
                 .map(|&(_, at)| at),
+            Body::PollAny => self.poll_any,
+            Body::Lambda(_) | Body::Starter(_) => None,
         };
         found.unwrap_or_else(|| self.add(body))
     }
@@ -1161,6 +1193,8 @@ impl<'a> Lowering<'a> {
                 self.unders.insert((instance.clone(), ids.clone()), at);
             }
             Body::Runtime(kind) => self.runtimes.push((kind.clone(), at)),
+            Body::PollAny => self.poll_any = Some(at),
+            Body::Lambda(_) | Body::Starter(_) => {}
         }
         self.bodies.push(body);
         at
@@ -1532,6 +1566,7 @@ impl<'a> Lowering<'a> {
                 Callee::Group => self.group(out, expr, call, env),
                 Callee::Intrinsic => self.intrinsic_call(out, expr, call, env),
                 Callee::Kernel => self.kernel_call(out, expr, call, env),
+                Callee::Frames(kind) => self.frames_call(out, expr, call, kind, env),
                 Callee::Run(instance, _)
                     if !matches!(instance.template, Template::Given(..))
                         && numbers_and_operators::number_function(

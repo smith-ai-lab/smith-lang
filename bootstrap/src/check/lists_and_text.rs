@@ -49,6 +49,9 @@ pub(super) fn gives_away(defs: &Defs, call: &Call, arg: &Arg) -> bool {
         return call.callee == "__consume"
             || (call.callee == "__sized" && std::ptr::eq(arg, &call.args[0]));
     }
+    if super::frames::takes_frame(call) {
+        return true;
+    }
     match is_push(defs, call) {
         true => !is_append(call) || std::ptr::eq(arg, &call.args[0]),
         false => is_freeze(defs, call),

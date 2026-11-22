@@ -6,7 +6,7 @@ use super::*;
 
 /// The names a block writes where it uses a name: as a name, as the function
 /// a call calls, or as what it assigns.
-fn used_names(body: &[Stmt]) -> Vec<&str> {
+pub(super) fn used_names(body: &[Stmt]) -> Vec<&str> {
     let mut names = Vec::new();
     for e in exprs(values(body)) {
         match e {
@@ -24,7 +24,7 @@ fn used_names(body: &[Stmt]) -> Vec<&str> {
 }
 
 /// The function with the frame it is written in numbered as `map` says.
-fn moved<'a>(func: &Func<'a>, map: &[(usize, usize)]) -> Func<'a> {
+pub(super) fn moved<'a>(func: &Func<'a>, map: &[(usize, usize)]) -> Func<'a> {
     let to = |frame: &usize| {
         map.iter()
             .find(|(from, _)| from == frame)
@@ -149,33 +149,7 @@ impl<'a> Lowering<'a> {
         let mut slots: Vec<Slot> = Vec::new();
         for (id, def) in context {
             let below = out.handlers.len();
-            let mut map: Vec<(usize, usize)> = Vec::new();
-            for (orig, _) in &def.frames {
-                map.push((*orig, out.frames.len()));
-                out.frames.push(Vec::new());
-            }
-            for ((_, names), (_, frame)) in def.frames.iter().zip(&map) {
-                for c in names {
-                    let (values, func) = match &c.func {
-                        Some(func) => (Vec::new(), Some(moved(func, &map))),
-                        None => (out.params(&c.scalars), None),
-                    };
-                    if c.assigned {
-                        slots.push(Slot {
-                            frame: *frame,
-                            name: c.name.clone(),
-                            types: c.scalars.clone(),
-                        });
-                    }
-                    out.frames[*frame].push(Bound {
-                        name: c.name.clone(),
-                        ty: c.ty.clone(),
-                        values,
-                        func,
-                        home: None,
-                    });
-                }
-            }
+            let map = self.push_frames(&mut out, def, &mut slots);
             out.handlers.push(Handler {
                 id: *id,
                 effect: def.effect,
@@ -216,6 +190,47 @@ impl<'a> Lowering<'a> {
             cold: false,
             name,
         }
+    }
+
+    /// Makes a frame of `out` for each frame a handler's functions use, with the
+    /// names they use in it: a name that stands for values is a parameter, one
+    /// that holds a function holds it as it is, moved to the new frames. Gives
+    /// which new frame each of the old ones is, and notes in `slots` each name
+    /// the functions assign.
+    pub(super) fn push_frames(
+        &mut self,
+        out: &mut Out<'a>,
+        def: &HandlerDef<'a>,
+        slots: &mut Vec<Slot>,
+    ) -> Vec<(usize, usize)> {
+        let mut map: Vec<(usize, usize)> = Vec::new();
+        for (orig, _) in &def.frames {
+            map.push((*orig, out.frames.len()));
+            out.frames.push(Vec::new());
+        }
+        for ((_, names), (_, frame)) in def.frames.iter().zip(&map) {
+            for c in names {
+                let (values, func) = match &c.func {
+                    Some(func) => (Vec::new(), Some(moved(func, &map))),
+                    None => (out.params(&c.scalars), None),
+                };
+                if c.assigned {
+                    slots.push(Slot {
+                        frame: *frame,
+                        name: c.name.clone(),
+                        types: c.scalars.clone(),
+                    });
+                }
+                out.frames[*frame].push(Bound {
+                    name: c.name.clone(),
+                    ty: c.ty.clone(),
+                    values,
+                    func,
+                    home: None,
+                });
+            }
+        }
+        map
     }
 
     /// What the map of an executable calls the copy of a function: its module
@@ -847,7 +862,12 @@ impl<'a> Lowering<'a> {
 
     /// What a handler is made of: the names its functions use, and those that
     /// the functions they hold use in turn, found in the frames of `out`.
-    fn capture(&mut self, out: &Out<'a>, effect: usize, operations: &[Func<'a>]) -> HandlerDef<'a> {
+    pub(super) fn capture(
+        &mut self,
+        out: &Out<'a>,
+        effect: usize,
+        operations: &[Func<'a>],
+    ) -> HandlerDef<'a> {
         let mut frames: Vec<(usize, Vec<Captured<'a>>)> = Vec::new();
         let mut work: Vec<(usize, &'a [Stmt])> = Vec::new();
         let reach = |func: &Func<'a>, frames: &mut Vec<(usize, Vec<Captured<'a>>)>| {

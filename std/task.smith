@@ -1,6 +1,40 @@
+use std.bits (u64)
+
 // The functions of task groups: `tasks` opens a group for the rest of a block,
 // `spawn` starts a child in it, and `join` waits for the child and gives its
 // value.
+//
+// The types below are what the library's scheduler is written with, beside the
+// compiler's `__frame`, `__poll`, `__result`, and `__wait`, which only the
+// library may call. A `Frame` is the memory of a lambda made a task, and is
+// used exactly once, so it ends by `__result`.
+pub struct Frame {
+  memory: Slice[Byte]
+}
+
+without Copy for Frame
+without Discard for Frame
+
+// What the system calls a thing that a task waits on, as `Connection` holds one.
+pub struct Handle {
+  pub number: u64
+}
+
+// What a task waits for: a handle to be ready to read or to write, a moment of
+// the clock in milliseconds, or another task, by its number, to end.
+pub enum Wait {
+  read: Handle
+  write: Handle
+  time: u64
+  task: u64
+}
+
+// What polling a frame says: that the task is done, or what it waits for.
+pub enum Poll {
+  done
+  waiting: Wait
+}
+
 pub struct Task[T] {
   value: T
 }
