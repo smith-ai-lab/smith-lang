@@ -918,6 +918,31 @@ impl<'a> Checker<'a> {
         let info = defs.impls[i].as_ref()?;
         let place = info.fns[fi]?;
         let def = &defs.file.impls[i].functions[place];
+        // For a whole number, `valid` of an operator is that the answer fits.
+        if let Some(op) = defs.operators.iter().position(|o| *o == k)
+            && super::of_prelude(def.pos)
+            && let [Ty::Int(t), ..] = types.as_slice()
+            && let Some(ends) = t.ends()
+        {
+            let at = |p: usize| sums.iter().find(|(q, _)| *q == p).map(|(_, l)| l.clone());
+            let (a, b) = (at(0)?, at(1)?);
+            let mut builder = self.builder(body, facts, false);
+            let answer = match op {
+                0 => builder.combine(&a, 1, &b),
+                1 => builder.combine(&a, -1, &b),
+                _ if a.terms.is_empty() => builder.scaled(a.constant, &b),
+                _ if b.terms.is_empty() => builder.scaled(b.constant, &a),
+                _ => return None,
+            };
+            if builder.overflow {
+                return None;
+            }
+            let (mut above, mut below) = (builder.scaled(-1, &answer), answer);
+            above.constant = above.constant.checked_add(ends.1)?;
+            below.constant = below.constant.checked_sub(ends.0)?;
+            let fits = Formula::And(vec![at_least_zero(below), at_least_zero(above)]);
+            return if holds { Some(fits) } else { fits.not() };
+        }
         let [Stmt::Expr(inner)] = def.body.as_slice() else {
             return None;
         };
@@ -2059,46 +2084,62 @@ impl<'a> Checker<'a> {
         callee: &Function,
         sig: &Signature,
     ) {
-        if !Self::decided(body) || (callee.requires.is_empty() && callee.ensures.is_empty()) {
-            return;
-        }
         // A call with an argument for no parameter is reported, and proves nothing.
         let Some(places) = params_of(&sig.params, &call.args) else {
             return;
         };
+        let args = call.args.iter().map(|a| &a.value).zip(places).collect();
+        self.contract_at(body, (call.pos, addr(call), Some(call)), args, callee, sig);
+    }
+
+    /// The same where what is called is written as an operator, or as a call:
+    /// `at` is where it is, the key of the value it gives, and the call, if it
+    /// is one, and `args` are the arguments, each with the place of its
+    /// parameter.
+    pub(super) fn contract_at(
+        &mut self,
+        body: &mut Body<'a>,
+        (pos, key, call): (Pos, usize, Option<&Call>),
+        args: Vec<(&Expr, usize)>,
+        callee: &Function,
+        sig: &Signature,
+    ) {
+        if !Self::decided(body) || (callee.requires.is_empty() && callee.ensures.is_empty()) {
+            return;
+        }
         let mut facts = std::mem::take(&mut body.facts);
         let mut sums = HashMap::new();
         let mut texts: HashMap<String, String> = HashMap::new();
-        let mut args: HashMap<String, (String, Ty)> = HashMap::new();
-        for (arg, place) in call.args.iter().zip(places) {
+        let mut given: HashMap<String, (String, Ty)> = HashMap::new();
+        for (arg, place) in args {
             let (name, ty) = &sig.params[place];
             // A parameter whose type is a type parameter is what the argument is.
             let ty = &match ty {
-                Ty::Param(_) => (self.types.get(&addr(&arg.value)).cloned()).unwrap_or(ty.clone()),
+                Ty::Param(_) => (self.types.get(&addr(arg)).cloned()).unwrap_or(ty.clone()),
                 ty => ty.clone(),
             };
-            args.insert(name.clone(), (written_expr(&arg.value), ty.clone()));
+            given.insert(name.clone(), (written_expr(arg), ty.clone()));
             if matches!(ty, Ty::List(_) | Ty::Slice(_)) {
                 let mut builder = self.builder(body, &mut facts, true);
-                if let Some(size) = builder.list_size(&arg.value).filter(|_| !builder.overflow) {
+                if let Some(size) = builder.list_size(arg).filter(|_| !builder.overflow) {
                     sums.insert(format!("{name}.size"), size);
                 }
-                texts.insert(name.clone(), written_expr(&arg.value));
+                texts.insert(name.clone(), written_expr(arg));
                 continue;
             }
             if matches!(ty, Ty::Text) {
-                texts.insert(name.clone(), written_expr(&arg.value));
+                texts.insert(name.clone(), written_expr(arg));
                 continue;
             }
             if !matches!(ty, Ty::Int(_)) {
                 continue;
             }
             let mut builder = self.builder(body, &mut facts, true);
-            let sum = builder.lin(&arg.value).filter(|_| !builder.overflow);
+            let sum = builder.lin(arg).filter(|_| !builder.overflow);
             if let Some(sum) = sum {
                 sums.insert(name.clone(), sum);
             }
-            let text = written_expr(&arg.value);
+            let text = written_expr(arg);
             texts.insert(
                 name.clone(),
                 if text.contains(' ') {
@@ -2109,7 +2150,7 @@ impl<'a> Checker<'a> {
             );
         }
         facts.subst = Some(sums);
-        facts.args = Some(args);
+        facts.args = Some(given);
         for requirement in &callee.requires {
             let said = self.said(body, &mut facts, requirement, true);
             let proved = said
@@ -2118,6 +2159,7 @@ impl<'a> Checker<'a> {
             if !proved {
                 let goal = written_contract(&|n| texts.get(n).cloned(), requirement);
                 if said.is_none()
+                    && let Some(call) = call
                     && let Some(pending) =
                         self.for_the_kernel(requirement, call, &sig.params, &goal)
                 {
@@ -2126,7 +2168,7 @@ impl<'a> Checker<'a> {
                 }
                 self.errors.push(
                     Error::new(
-                        call.pos,
+                        pos,
                         format!(
                             "cannot prove that `{goal}`, which `{}` requires of its arguments",
                             callee.name
@@ -2139,7 +2181,7 @@ impl<'a> Checker<'a> {
             }
         }
         if let (Some((name, _)), Ty::Int(t)) = (&callee.result_name, &sig.gives) {
-            let id = facts.id(Key::Call(addr(call), t.min(), t.max()));
+            let id = facts.id(Key::Call(key, t.min(), t.max()));
             let result = Lin {
                 terms: BTreeMap::from([(id, 1)]),
                 constant: 0,

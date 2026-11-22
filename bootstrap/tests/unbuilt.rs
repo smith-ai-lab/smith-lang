@@ -309,7 +309,7 @@ fn a_use_of_what_is_not_built_in_a_file_with_a_placed_mistake_gives_both_errors(
 /// and the functions that use what is not built, and uses what they give.
 fn program_that_runs_unbuilt(g: &mut Gen) -> (Vec<u8>, Expected, Vec<Pos>) {
     let (head, mistake, mentions) = if g.one_in(2) {
-        ("fn bad(a: Int) -> Int {\n  a ", "+ \"b\"", "whole numbers")
+        ("fn bad(a: Int) -> Int {\n  a ", "+ \"b\"", "no implementation of `Add`")
     } else {
         ("fn bad(a: Int) -> str {\n  ", "a", "text")
     };
