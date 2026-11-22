@@ -1238,13 +1238,8 @@ fn file_with_syntax_errors(g: &mut Gen) -> (String, Vec<(Pos, &'static str)>) {
             "b: str) {}\n}",
             Some("`,` or `)`"),
         ),
-        // A function in a trait has no body, so a contract after its
+        // A function in a trait has no body, so an `ensures` after its
         // signature is not supported yet, on the line after it or not.
-        (
-            "trait T[A] {\n  fn f(x: A) -> str\n    ",
-            "requires x > 1\n}",
-            Some("not supported yet"),
-        ),
         (
             "trait T[A] {\n  fn f(x: A) -> str\n    ",
             "ensures x > 1\n}",

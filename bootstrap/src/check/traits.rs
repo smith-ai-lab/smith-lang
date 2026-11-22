@@ -1510,6 +1510,46 @@ impl<'a> Checker<'a> {
             self.params(f, &defs.trait_sigs[k][i].scope);
             self.defaults(f, &defs.trait_sigs[k][i]);
             self.effects(&f.effects);
+            for requirement in &f.requires {
+                self.trait_requirement(k, f, requirement);
+            }
+        }
+    }
+
+    /// Checks one `requires` of a trait's function: a call of a function of the
+    /// trait that gives a `bool`, on the parameters of the function.
+    fn trait_requirement(&mut self, k: usize, f: &Function, requirement: &Expr) {
+        let defs = self.defs;
+        let t = &defs.file.traits[k];
+        let sibling = match requirement {
+            Expr::Call(c) if c.qualifier.as_ref().is_none_or(|(q, _)| *q == t.name) => {
+                traits::trait_function(t, &c.callee).map(|fi| (c, &t.functions[fi]))
+            }
+            _ => None,
+        };
+        let Some((call, callee)) = sibling else {
+            self.errors.push(Error::new(
+                requirement.pos(),
+                format!(
+                    "a `requires` of a function of `{}` is a call of a function of the trait",
+                    t.name
+                ),
+            ));
+            return;
+        };
+        let bool_named = callee.result.as_ref().is_some_and(|r| r.name == "bool");
+        let on_parameters = call.args.iter().all(
+            |a| matches!(&a.value, Expr::Name { name, .. } if f.params.iter().any(|p| p.name == *name)),
+        );
+        if !bool_named || !on_parameters || call.args.len() != callee.params.len() {
+            self.errors.push(Error::new(
+                requirement.pos(),
+                format!(
+                    "a `requires` of `{}` is a call of a function of `{}` that gives a `bool`, \
+                     with the parameters of `{}` as its arguments",
+                    f.name, t.name, f.name
+                ),
+            ));
         }
     }
 
@@ -1867,6 +1907,13 @@ impl<'a> Checker<'a> {
                     && self.errors.len() == mistakes
                 {
                     self.wrapping_division(body, call, sig);
+                }
+                if !defs.file.traits[k].functions[fi].requires.is_empty()
+                    && self.errors.len() == mistakes
+                {
+                    body.facts.sibling = Some(k);
+                    self.contract_call(body, call, &defs.file.traits[k].functions[fi], sig);
+                    body.facts.sibling = None;
                 }
                 let mut all = all;
                 all.extend(own);

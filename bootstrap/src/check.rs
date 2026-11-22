@@ -7354,6 +7354,20 @@ impl<'a> Checker<'a> {
             if !f.ensures.is_empty() {
                 proof::tails(&f.body, &mut body.tails);
             }
+        } else if let Template::Impl(i, place) = template
+            && f.requires.is_empty()
+            && f.ensures.is_empty()
+        {
+            // What the trait's function requires holds in the body of the one
+            // that implements it.
+            let info = self.defs.impls[i].as_ref().expect("known");
+            if let Some(fi) = info.fns.iter().position(|p| *p == Some(place)) {
+                body.facts.sibling = Some(info.of);
+                for requirement in &self.defs.file.traits[info.of].functions[fi].requires {
+                    self.assume(&mut body, requirement, true);
+                }
+                body.facts.sibling = None;
+            }
         } else if let Some(contract) = f.requires.first().or(f.ensures.first()) {
             self.errors.push(Error::unsupported(
                 contract.pos(),

@@ -1,0 +1,4 @@
+trait_contract_refused.smith:23:11: cannot prove that `Plus.valid(n, n)`, which `twice` requires of its arguments
+  23 |   print("{twice(n)}")
+     |           ^
+  fix: check the arguments first with an `if`, or state it in a `requires`
