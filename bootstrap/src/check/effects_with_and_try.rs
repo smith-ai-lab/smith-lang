@@ -239,6 +239,17 @@ impl<'a> Defs<'a> {
         )
     }
 
+    /// The first operation of an effect that has type parameters of its own,
+    /// which a handler would have to check its lambda against as parameters
+    /// distinct from its own.
+    pub(super) fn generic_operation(&self, effect: usize) -> Option<&str> {
+        let def = &self.file.effects[effect];
+        def.operations.iter().find_map(|name| {
+            let f = self.function(def.pos, name)?;
+            (!self.signatures[f].scope.names.is_empty()).then(|| written_name(name))
+        })
+    }
+
     /// The signature of a call of an effect's name: a function for each
     /// operation, which takes all of the operation's parameters, and the body
     /// to run with them in force, which may carry the effect and gives what
@@ -373,6 +384,19 @@ impl<'a> Checker<'a> {
                 )
                 .with_fix("write `with tasks()`, which `std.task` has"),
             );
+            self.refusals += 1;
+            return self.unknown_call(body, call);
+        }
+        // The type parameters of an operation are not told from the handler's
+        // own, so a lambda written for one would be checked against the wrong
+        // type and give a value it did not compute.
+        if let Some(operation) = self.defs.generic_operation(effect) {
+            self.errors.push(Error::unsupported(
+                call.name_pos,
+                &format!(
+                    "a handler of `{operation}`, an operation with type parameters of its own,"
+                ),
+            ));
             self.refusals += 1;
             return self.unknown_call(body, call);
         }
