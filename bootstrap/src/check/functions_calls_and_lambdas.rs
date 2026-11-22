@@ -745,6 +745,9 @@ impl<'a> Checker<'a> {
         ) {
             return self.handler_call(body, call, effect);
         }
+        if is_arena_call(defs, call) {
+            return self.arena_call(body, call);
+        }
         // A name that holds the function `g` by the type `g` is called as `g` is.
         let named = body
             .names

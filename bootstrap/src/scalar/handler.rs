@@ -106,7 +106,10 @@ pub fn install(program: Program) -> Program {
         })
         .collect();
     if !uses[program.main].any() {
-        return program;
+        return Program {
+            functions: program.functions.into_iter().map(without_arenas).collect(),
+            ..program
+        };
     }
     let at_take = program.functions.len();
     let main = program.functions[program.main].clone();
@@ -115,7 +118,7 @@ pub fn install(program: Program) -> Program {
             if uses[k].any() {
                 with_state(f, &given[k], &rounds[k], &uses, k == program.main, at_take)
             } else {
-                f
+                without_arenas(f)
             }
         })
         .collect();
@@ -192,12 +195,57 @@ fn with_state(
         block.params.splice(0..0, start.values());
     }
     let starts = at_start.clone();
-    for (k, start) in at_start.into_iter().enumerate() {
-        let mut now = start;
+    // What the stack for temporaries was where each arena of the function
+    // opened, which its closing puts back. The blocks are taken so that the
+    // block that opens an arena comes before the block that closes it.
+    let mut opened: Vec<(Value, Option<[Value; 2]>)> = Vec::new();
+    let order = if opens_arena(&f) {
+        reverse_postorder(&f)
+    } else {
+        (0..f.blocks.len()).collect()
+    };
+    for k in order {
+        let mut now = at_start[k];
         let instructions = std::mem::take(&mut f.blocks[k].instructions);
         let mut kept: Vec<Instruction> = Vec::with_capacity(instructions.len());
         for mut i in instructions {
             match &mut i.op {
+                Op::System {
+                    call: System::ArenaOpen,
+                    ..
+                } => {
+                    // The function the program starts with has a piece for the
+                    // stack first, as before a loop whose rounds release what
+                    // they take, since what is taken in the arena is not
+                    // remembered once the stack is put back.
+                    if let (true, Some([at, left])) = (first, now.temporaries) {
+                        let made = fresh(&mut f);
+                        kept.push(Instruction {
+                            results: made.to_vec(),
+                            op: Op::Call {
+                                function: take + 1,
+                                args: vec![at, left],
+                            },
+                            at: Place::of("<stack_take>"),
+                        });
+                        now.temporaries = Some(made);
+                    }
+                    opened.push((i.results[0], now.temporaries));
+                    continue;
+                }
+                Op::System {
+                    call: System::ArenaClose,
+                    args,
+                } => {
+                    let (_, saved) = opened
+                        .iter()
+                        .find(|(token, _)| *token == args[0])
+                        .expect("an arena that was opened");
+                    if now.temporaries.is_some() {
+                        now.temporaries = *saved;
+                    }
+                    continue;
+                }
                 Op::System {
                     call: System::Allocate,
                     args,
@@ -327,6 +375,57 @@ fn with_state(
         f.results.splice(0..0, PAIR);
     }
     f
+}
+
+/// Whether the function opens an arena.
+fn opens_arena(f: &Function) -> bool {
+    (f.blocks.iter().flat_map(|b| &b.instructions)).any(|i| {
+        matches!(
+            i.op,
+            Op::System {
+                call: System::ArenaOpen,
+                ..
+            }
+        )
+    })
+}
+
+/// The function without the openings and closings of arenas, for one that
+/// takes no stack, so that there is nothing to put back.
+fn without_arenas(mut f: Function) -> Function {
+    for block in &mut f.blocks {
+        block.instructions.retain(|i| {
+            !matches!(
+                i.op,
+                Op::System {
+                    call: System::ArenaOpen | System::ArenaClose,
+                    ..
+                }
+            )
+        });
+    }
+    f
+}
+
+/// The blocks that can be reached, each after the blocks that dominate it.
+fn reverse_postorder(f: &Function) -> Vec<usize> {
+    fn visit(f: &Function, b: usize, seen: &mut [bool], out: &mut Vec<usize>) {
+        if seen[b] {
+            return;
+        }
+        seen[b] = true;
+        for j in super::graph::jumps(&f.blocks[b].end) {
+            visit(f, j.block, seen, out);
+        }
+        out.push(b);
+    }
+    let mut seen = vec![false; f.blocks.len()];
+    let mut out = Vec::new();
+    visit(f, 0, &mut seen, &mut out);
+    out.reverse();
+    // A block that cannot be reached is still given the stacks.
+    out.extend((0..f.blocks.len()).filter(|b| !seen[*b]));
+    out
 }
 
 /// The jump at the place `j` of how a block ends.

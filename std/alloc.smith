@@ -1,0 +1,5 @@
+// Gives the rest of a block an arena of its own, which is freed whole when
+// the block ends, as `with arena()` does.
+pub fn arena[T](body: fn() -> T ! alloc) -> T {
+  alloc(body: body)
+}

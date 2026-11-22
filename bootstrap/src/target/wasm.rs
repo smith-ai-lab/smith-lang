@@ -1340,6 +1340,9 @@ impl Lowering<'_> {
             System::Raw(_) => {
                 unreachable!("a module that asks the kernel is refused before it is built")
             }
+            System::ArenaOpen | System::ArenaClose => {
+                unreachable!("an arena is gone once the stacks of `alloc` are passed")
+            }
             System::Exit => {
                 self.get_wrapped(args[0]);
                 self.code.call(self.context.exit);

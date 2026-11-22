@@ -54,7 +54,9 @@ use crate::parser::{
     Arg, ArithOp, Arm, Bound, Call, Enum, Expr, File, Form, Function, Generic, Impl, Lambda, Loop,
     Match, Over, Part, Pattern, Qualified, Range, Stmt, Struct, Trait, Type, Use,
 };
-use effects_with_and_try::{BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, provided_by};
+use effects_with_and_try::{
+    BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, is_arena_call, provided_by,
+};
 use lists_and_text::{as_read, is_freeze, is_push, is_utf8};
 use names::{Naming, Resolution, own_final, renamed_tokens};
 use numbers_and_operators::{
@@ -5826,6 +5828,9 @@ enum Callee {
     /// body to run with them in force: the effect, by its place among the
     /// file's.
     Handle(usize),
+    /// `alloc`, called with the body to run, which gives the body a fresh
+    /// arena that is freed whole when it ends.
+    Arena,
 }
 
 /// For each argument of a call, the place of its parameter, or none when an
@@ -6176,6 +6181,9 @@ impl<'a> Typed<'a> {
                 if let Some(effect) = defs.effect_named(name) {
                     return Callee::Handle(effect);
                 }
+                if is_arena_call(defs, call) {
+                    return Callee::Arena;
+                }
                 defs.trait_fns_at(call.name_pos, name).expect("checked")[0]
             }
             Some((q, at)) => {
@@ -6237,6 +6245,7 @@ impl<'a> Typed<'a> {
             | Callee::Freeze
             | Callee::Utf8
             | Callee::Handle(_)
+            | Callee::Arena
             | Callee::Float
             | Callee::Narrow(_) => Vec::new(),
         }

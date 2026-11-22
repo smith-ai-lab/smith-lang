@@ -6,6 +6,7 @@ status: partial
 built:
   - "the `alloc` effect, carried by every function that builds a text at run time"
   - "a function's temporaries released when it returns, and its result built in its caller's memory and never copied"
+  - "`with arena()`, imported from `std.alloc`, which handles `alloc` for the rest of its block: a function whose every allocation is under it carries no `alloc`, and neither does its caller; what the block allocates and does not hand out is released when it ends, in no instruction that depends on how much that was; a value that is the value of the block, or is assigned to a `var` outside it, is built in the memory outside, and a `return` in the block ends the block"
 ---
 
 # The alloc effect and arenas
@@ -72,13 +73,15 @@ A `var` that is replaced is updated in place when its old value is provably unus
 `with arena()` handles `alloc` for the rest of a block with a fresh arena, which is freed whole when the block ends.
 
 ```
+use std.alloc (arena)
+
 fn handle(req: Request) -> Response {
   with arena()
   respond(req, sum_of_squares(req.n))
 }
 ```
 
-`handle` carries no `alloc`, though `sum_of_squares` does, as the arena handles it. Everything `respond` and the functions below it allocate is freed when `handle` returns, and the `Response` is built in the caller's memory.
+`arena` is a function of [`std.alloc`](../library/alloc.md) that handles `alloc`. `handle` carries no `alloc`, though `sum_of_squares` does, as the arena handles it, and without the `with` line `handle` is refused: "`sum_of_squares` needs the `alloc` effect, which `handle` does not declare". Everything `respond` and the functions below it allocate is freed when `handle` returns, and the `Response` is built in the caller's memory.
 
 ## Whose memory a value is in
 
@@ -92,6 +95,7 @@ In `handle`, the list `sum_of_squares` builds belongs to the arena of the `with`
 | Written | Is |
 | --- | --- |
 | `fn f() ! alloc` | `f` allocates, and its caller must have `alloc` or handle it |
+| `use std.alloc (arena)` | Brings in `arena`, which `with` needs |
 | `with arena()` | The rest of the block allocates in a fresh arena, freed when the block ends |
 
 Next: [Recursion](recursion.md)

@@ -2098,6 +2098,7 @@ pub fn shared_and_copied(g: &mut Gen) -> (String, String) {
 /// Each module of the standard library, with the names of it that a program
 /// of a test may write.
 const STD_NAMES: &[(&str, &[&str])] = &[
+    ("std.alloc", &["arena"]),
     (
         "std.ascii",
         &["is_digit", "is_hex_digit", "is_letter", "is_space"],
