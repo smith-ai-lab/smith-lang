@@ -1,0 +1,42 @@
+use std.bits (u64)
+use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.http (get, http, listen, post, routes)
+use std.net (net)
+
+struct User {
+  id: u64
+  name: str
+}
+
+struct NewUser {
+  name: str
+}
+
+fn user(id: u64) -> User {
+  User(id: id, name: "Ana")
+}
+
+fn create(new: NewUser) -> User {
+  User(id: new.name.size, name: new.name)
+}
+
+// The program of the page's deployment: two routes.
+fn app() ! http, alloc {
+  with routes()
+  get("/users/:id", user)
+  post("/users", create)
+}
+
+// What `serve` of `project.smith` does, at the port a test gives.
+fn main(args: List[str]) ! net, alloc, diverge {
+  if args.size == 0 { return }
+  number: Result[Nat, ReadError] = from_text("port", args[0])
+  match number {
+    .ok(port) {
+      with listen(port: port)
+      app()
+    }
+    .err(e) { }
+  }
+}

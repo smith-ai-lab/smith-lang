@@ -9,7 +9,8 @@ built:
   - "`Respond`, whose function `respond(value)` gives a `Response`: `Serialize` gives it for every type with `Serialize`, as JSON with status 200 and the header `content-type: application/json`, and the library writes `impl`s for `Html` (status 200, `text/html; charset=utf-8`), `Text` (200, `text/plain; charset=utf-8`), `Redirect` (302 with the header `location`), `()` (204, no body), and `Result[T, E]` for a `T` with `Respond` and an `E` with `Status` and `Serialize`, which is the response of the value, or status `status(e)` with `e` as JSON; a type's own `impl` is the one used, as [Traits](../language/traits.md#when-two-impls-fit) says"
   - "the effect `http`, whose operations `request` and `send` are what a deployment answers, `routes`, the handler that asks `http` for the request, answers it with the first route whose method and path it fits and with 404 when none does, and gives the response to `http`, and `get`, `post`, `put`, `patch`, and `delete`, which each take a path and a function, read its parameters from the request by `FromRequest`, call it through `Function`, answer with what it gives by `Respond`, and answer 400 with the path and the problem of the `ReadError` as JSON when the request does not fit; the effects of the function are asked of the handlers in force where its name is written, so a `with` of a handler of them is written before `with routes()`"
   - "`FromRequest`, which `get` and the other methods require of the struct of the function's parameters, is found for it only when each parameter has `FromText` (or is an `Option` of a type that has it) except at most one that has `Deserialize`, read from the body; a function with a parameter that is neither, or with two for the body, is refused where its name is given, with an error that names the parameters, and a type of a program's own `FromText` is refused as not used by a route yet"
-  - "not the check of a path that names a part the function has no parameter for, `at`, a guard, `listen`, or the reading of a percent sign in a part"
+  - "`listen(port: p)` of `std.http` on Linux and macOS, on x86-64 and arm64, which answers `http` from a socket as [Where the requests come from](#where-the-requests-come-from) says, one connection at a time, with a head of at most 16384 bytes and a body of at most a megabyte, read by `std.http1` whether it has a length or comes in chunks"
+  - "not the check of a path that names a part the function has no parameter for, `at`, a guard, or the reading of a percent sign in a part"
 ---
 
 # HTTP server
@@ -168,10 +169,18 @@ fn bearer[T](check: fn(token: str) -> Option[Caller], body: fn() -> T ! identity
 `routes` asks for each request and gives each response through the effect `http`, and does not know where they come from. What answers `http` is the deployment and not the program. A native executable, for every system Smith builds for, listens on a socket. In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) the operations of `http` are imports, which a host that is called for each request supplies. A test answers `http` with a handler of its own that gives the requests it wants, so a server is tested with no network. The source is the same for all of them, and what a deployment needs told, as the port a socket listens on, is said in `project.smith` and not in the program, as [Deployments](../language/deployments.md) says.
 
 ```
-fn listen[T](port: Nat, body: fn() -> T ! http) -> T ! net, alloc
+fn listen[T](port: Nat, body: fn() -> T ! http) -> T ! net, alloc, diverge
+  requires Discard[T]
 ```
 
-`listen` is the handler of a native executable. It answers `http` for the block it is given by listening on the port, through `net`, and is installed with `with listen(port: 8080)`.
+`listen` is the handler of a native executable. It answers `http` for the block it is given by listening on the port, through `net`, and is installed with `with listen(port: 8080)`. A server serves until it is stopped, so `listen` carries `diverge`, and so does the deployment that installs it, and `listen` never gives the `T` that its block gives.
+
+- **One connection at a time.** `listen` listens on the port at every address of the machine, takes a connection, serves the requests it sends one after another, and takes the next connection when it ends. For each request it runs the block once, with `request` giving that request and `send` taking its response, so `routes` answers it.
+- **A request is read by [`std.http1`](http1.md),** its head of at most 16384 bytes and its body of at most a megabyte, whether the body has a length or comes in chunks, and a body that is not UTF-8 is refused. The path and the query of the target are the parts of `Request`.
+- **A response is written whole.** Its status line has the reason of the status, its headers are those the block gave but `content-length`, `connection`, and `transfer-encoding`, and a header that holds a line break is left out. `content-length` is the size of the body, and so every response, with no body or with one, says where it ends.
+- **A request that is refused is answered 400 and the connection is closed.** That is every request `std.http1` refuses, a body that is too long or not UTF-8, and one the connection ends in the middle of, which is closed with nothing said. The next connection is served.
+- **A connection is kept** for the next request of `HTTP/1.1` unless the request says `connection: close`, and of `HTTP/1.0` only if it says `connection: keep-alive`, as [`std.http1`](http1.md#answering-a-request-of-http10) says. A client that sent the next request before it had the response to this one has it answered with `connection: close`, and the connection is closed, which is a response a client of HTTP/1.1 is ready for and sends the rest again.
+- **A port that cannot be listened on ends the program.** The error is written to the standard error and the status is 1, as a write the system refuses ends a program, since nothing can be served. A connection that cannot be taken is passed over.
 
 ## The parts of a request
 
