@@ -1,0 +1,4 @@
+// The package a project is: what `package` of `project.smith` holds.
+pub struct Package {
+  pub name: str
+}
