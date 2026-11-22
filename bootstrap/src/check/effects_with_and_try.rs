@@ -155,7 +155,7 @@ fn group_signature() -> Signature {
 
 /// The signature of a call of `alloc`: the body to run, which may carry
 /// `alloc`, and gives what the call gives.
-fn arena_signature() -> Signature {
+pub(super) fn arena_signature() -> Signature {
     Signature {
         scope: Scope {
             names: vec!["T".to_string()],

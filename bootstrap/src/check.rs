@@ -35,6 +35,7 @@ use std::sync::{Arc, OnceLock};
 mod arith;
 mod core_term;
 mod effects_with_and_try;
+mod frames;
 mod functions_calls_and_lambdas;
 mod lists_and_text;
 mod names;
@@ -931,6 +932,12 @@ struct Defs<'a> {
     /// in the file's structs and enums, when the program has that module.
     read_error: Option<usize>,
     problem: Option<usize>,
+    /// The `Frame` of `std.task`, by its place in the file's structs, and its
+    /// `Poll` and `Wait`, by their places in the file's enums, when the program
+    /// has that module.
+    frame: Option<usize>,
+    poll: Option<usize>,
+    wait: Option<usize>,
     /// The prelude's `bool`, `Order`, `Option`, `Flow`, and `Result`, by their
     /// places in the file's enums.
     boolean: usize,
@@ -2401,6 +2408,9 @@ fn check_file(
         from_request: library_item(&file, &items, "std.http", Kind::Trait, "FromRequest"),
         read_error: library_item(&file, &items, "std.deserialize", Kind::Struct, "ReadError"),
         problem: library_item(&file, &items, "std.deserialize", Kind::Enum, "Problem"),
+        frame: library_item(&file, &items, "std.task", Kind::Struct, "Frame"),
+        poll: library_item(&file, &items, "std.task", Kind::Enum, "Poll"),
+        wait: library_item(&file, &items, "std.task", Kind::Enum, "Wait"),
         boolean: prelude_item(&file, Kind::Enum, "bool"),
         order: prelude_item(&file, Kind::Enum, "Order"),
         option: prelude_item(&file, Kind::Enum, "Option"),
@@ -2513,6 +2523,7 @@ fn check_file(
         named: Set::default(),
         named_calls: Map::default(),
         type_args: Map::default(),
+        frame_gives: Map::default(),
         no_impl: false,
         refusals: 0,
         zero_divisors: Vec::new(),
@@ -5842,6 +5853,9 @@ enum Callee {
     /// `__system`, `__reserve`, or `__sized`, which the library's `std.net` and
     /// `std.time` call to ask the kernel and to make the list it fills.
     Kernel,
+    /// `__frame`, `__poll`, `__result`, or `__wait`, which the library's
+    /// scheduler is written with.
+    Frames(frames::Kind),
     /// `push`, which gives a list with one more element.
     Push,
     /// `freeze`, which gives the memory of a list as a slice.
@@ -6057,6 +6071,7 @@ fn is_kernel(call: &Call) -> bool {
 fn is_intrinsic(call: &Call) -> bool {
     call.qualifier.is_none()
         && call.callee.starts_with("__")
+        && frames::kind(call).is_none()
         && !lists_and_text::is_library_call(call)
         && (of_prelude(call.pos) || of_std(call.pos))
 }
@@ -6196,6 +6211,9 @@ impl<'a> Typed<'a> {
                 if is_kernel(call) {
                     return Callee::Kernel;
                 }
+                if let Some(kind) = frames::kind(call) {
+                    return Callee::Frames(kind);
+                }
                 if is_intrinsic(call) {
                     return Callee::Intrinsic;
                 }
@@ -6306,6 +6324,7 @@ impl<'a> Typed<'a> {
             | Callee::Value
             | Callee::Intrinsic
             | Callee::Kernel
+            | Callee::Frames(_)
             | Callee::Push
             | Callee::Freeze
             | Callee::Utf8
@@ -6496,6 +6515,9 @@ struct Checker<'a> {
     /// Whether the type a part of a case is fitted to was settled by the type
     /// that was asked for, which a range that is narrower is taken to.
     settled: bool,
+    /// What the lambda of each call of `__frame` gives, by the address of the
+    /// call, which `__result` reads a frame at.
+    frame_gives: Map<usize, Ty>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
     /// The names of functions passed as values, by their addresses, with

@@ -313,6 +313,17 @@ pub fn lower_in(
         .map_err(in_order)
 }
 
+/// The program a source file describes, as the target's executable, when the
+/// modules that `use std.<name>` reads are those given, as `lower_in` has them.
+pub fn compile_in(
+    source: &[u8],
+    library: &[(&str, &str)],
+    target: Target,
+) -> Result<Vec<u8>, Vec<diag::Error>> {
+    let program = lower_in(source, library)?;
+    Ok(emit(program, target, false, &mut Timings::new())?.executable)
+}
+
 /// The core term of each function of a source file that has one, which is a
 /// function made of whole numbers and `bool`, or the errors `compile` reports
 /// before a target is involved.

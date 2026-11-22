@@ -1111,7 +1111,8 @@ impl<'a> Walk<'a> {
         }
         let handler_body = call.qualifier.is_none()
             && (super::effects_with_and_try::is_arena_call(defs, call)
-                || super::effects_with_and_try::is_group_call(call));
+                || super::effects_with_and_try::is_group_call(call)
+                || super::frames::is_frame_call(call));
         let mut position = 0;
         let mut given: Vec<(usize, &Expr)> = Vec::new();
         for arg in &call.args {
