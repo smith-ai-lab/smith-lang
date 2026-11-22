@@ -432,7 +432,7 @@ fn a_handler_a_test_writes_answers_net_and_time_with_no_system_call() {
 /// program with no handler would have.
 const HANDLED: &str = "use std.console (console, print)
 use std.list (freeze)
-use std.net (Connection, NetError, close, connect, net, read, write)
+use std.net (Connection, NetError, close, connect, net, read, release_connection, release_listener, release_socket, write)
 use std.time (now, time)
 
 fn ask(question: str) -> Result[List[Byte], NetError] ! net, alloc {
@@ -445,15 +445,15 @@ fn main() ! console, alloc {
   net(
     listen_on: fn(host, port) { .err(.refused) },
     accept: fn(l) { .err(.refused) },
-    stop: fn(l) { },
+    stop: fn(l) { n = release_listener(l) },
     connect_to: fn(host, port) { .err(.refused) },
     read: fn(c, most) { .ok([104, 101, 108, 108, 111]) },
     write: fn(c, bytes) { .ok(()) },
-    close: fn(c) { },
+    close: fn(c) { n = release_connection(c) },
     bind_to: fn(host, port) { .err(.refused) },
     send: fn(s, to, bytes) { .ok(()) },
     receive: fn(s, most) { .err(.refused) },
-    unbind: fn(s) { }
+    unbind: fn(s) { n = release_socket(s) }
   ) {
     time(now: { 11 }, sleep: fn(ms) { }) {
       match ask(\"x\") {

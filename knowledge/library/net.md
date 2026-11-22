@@ -10,6 +10,7 @@ built:
   - "`failed` holds the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
   - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing; a handler that gives a `Listener`, a `Connection`, or a `Socket` is not built, as its handle is private to `std.net`"
   - "on Linux a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` for the connection while other tasks run, and a call with no group blocks, as it did; macOS blocks until #967"
+  - "`release_listener`, `release_connection`, and `release_socket`, each taking its value, ending it with no system call, and giving back the number of the handle it held"
   - "not Windows, or a name looked up"
 ---
 
@@ -104,6 +105,33 @@ fn echo_once(port: 0..65536) -> Result[(), NetError] ! net, alloc {
 ```
 
 `echo_once` takes one connection, sends back what it reads, and ends. The connection is closed on every path, as a `try` that left before `close(c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
+
+## Ending a value in a handler
+
+A handler's lambda for `stop`, `close`, or `unbind` takes the value, as [Handlers](../language/handlers.md) says, and ends it with `release_listener`, `release_connection`, or `release_socket`. Each makes no system call and gives back the number of the handle the value held, so a handler knows which one it was given.
+
+```
+use std.net (net, release_connection, release_listener, release_socket)
+
+fn ended[T](body: fn() -> T ! net) -> T {
+  net(
+    listen_on: fn(host, port) { .err(.refused) },
+    accept: fn(l) { .err(.refused) },
+    stop: fn(l) { n = release_listener(l) },
+    connect_to: fn(host, port) { .err(.refused) },
+    read: fn(c, most) { .err(.closed) },
+    write: fn(c, bytes) { .err(.closed) },
+    close: fn(c) { n = release_connection(c) },
+    bind_to: fn(host, port) { .err(.refused) },
+    send: fn(s, to, bytes) { .err(.closed) },
+    receive: fn(s, most) { .err(.closed) },
+    unbind: fn(s) { n = release_socket(s) },
+    body: body,
+  )
+}
+```
+
+The system's handler never calls them. A value that the system's handler opened and that is released leaks its handle and does not close it, so only a handler that a test writes calls them.
 
 ## What answers it
 

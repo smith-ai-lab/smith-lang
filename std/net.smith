@@ -73,6 +73,27 @@ pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError
   result
 }
 
+// Ends a value without a system call and gives the handle it held, so a handler
+// that a test writes knows which one it was given. What the system opened is not
+// closed.
+pub fn release_listener(x: take Listener) -> Nat {
+  h = x.handle
+  __consume(x)
+  count(h)
+}
+
+pub fn release_connection(x: take Connection) -> Nat {
+  h = x.handle
+  __consume(x)
+  count(h)
+}
+
+pub fn release_socket(x: take Socket) -> Nat {
+  h = x.handle
+  __consume(x)
+  count(h)
+}
+
 // The numbers of the kernel's calls, in the order the compiler gives them to
 // `__system`: socket, bind, listen, accept, connect, getsockname, setsockopt,
 // sendto, recvfrom, close. The number 12 is not a call: it is 1 when the kernel
