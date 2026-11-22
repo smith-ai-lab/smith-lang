@@ -36,6 +36,24 @@ trait Ord[A, B = A] {
   fn compare(a: A, b: B) -> Order
 }
 
+trait Add[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn add(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
+trait Sub[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn sub(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
+trait Mul[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn mul(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
 trait Hash[T] {
   fn hash(value: T) -> u64
 }
@@ -704,4 +722,124 @@ impl Float[f64] {
   fn ln(a: f64) -> f64 { __ln(a) }
   fn sin(a: f64) -> f64 { __sin(a) }
   fn cos(a: f64) -> f64 { __cos(a) }
+}
+
+impl Add[i8] {
+  fn valid(a: i8, b: i8) -> bool { __fits_add(a, b) }
+  fn add(a: i8, b: i8) -> i8 { __wrapping_add(a, b) }
+}
+
+impl Sub[i8] {
+  fn valid(a: i8, b: i8) -> bool { __fits_sub(a, b) }
+  fn sub(a: i8, b: i8) -> i8 { __wrapping_sub(a, b) }
+}
+
+impl Mul[i8] {
+  fn valid(a: i8, b: i8) -> bool { __fits_mul(a, b) }
+  fn mul(a: i8, b: i8) -> i8 { __wrapping_mul(a, b) }
+}
+
+impl Add[i16] {
+  fn valid(a: i16, b: i16) -> bool { __fits_add(a, b) }
+  fn add(a: i16, b: i16) -> i16 { __wrapping_add(a, b) }
+}
+
+impl Sub[i16] {
+  fn valid(a: i16, b: i16) -> bool { __fits_sub(a, b) }
+  fn sub(a: i16, b: i16) -> i16 { __wrapping_sub(a, b) }
+}
+
+impl Mul[i16] {
+  fn valid(a: i16, b: i16) -> bool { __fits_mul(a, b) }
+  fn mul(a: i16, b: i16) -> i16 { __wrapping_mul(a, b) }
+}
+
+impl Add[i32] {
+  fn valid(a: i32, b: i32) -> bool { __fits_add(a, b) }
+  fn add(a: i32, b: i32) -> i32 { __wrapping_add(a, b) }
+}
+
+impl Sub[i32] {
+  fn valid(a: i32, b: i32) -> bool { __fits_sub(a, b) }
+  fn sub(a: i32, b: i32) -> i32 { __wrapping_sub(a, b) }
+}
+
+impl Mul[i32] {
+  fn valid(a: i32, b: i32) -> bool { __fits_mul(a, b) }
+  fn mul(a: i32, b: i32) -> i32 { __wrapping_mul(a, b) }
+}
+
+impl Add[i64] {
+  fn valid(a: i64, b: i64) -> bool { __fits_add(a, b) }
+  fn add(a: i64, b: i64) -> i64 { __wrapping_add(a, b) }
+}
+
+impl Sub[i64] {
+  fn valid(a: i64, b: i64) -> bool { __fits_sub(a, b) }
+  fn sub(a: i64, b: i64) -> i64 { __wrapping_sub(a, b) }
+}
+
+impl Mul[i64] {
+  fn valid(a: i64, b: i64) -> bool { __fits_mul(a, b) }
+  fn mul(a: i64, b: i64) -> i64 { __wrapping_mul(a, b) }
+}
+
+impl Add[u8] {
+  fn valid(a: u8, b: u8) -> bool { __fits_add(a, b) }
+  fn add(a: u8, b: u8) -> u8 { __wrapping_add(a, b) }
+}
+
+impl Sub[u8] {
+  fn valid(a: u8, b: u8) -> bool { __fits_sub(a, b) }
+  fn sub(a: u8, b: u8) -> u8 { __wrapping_sub(a, b) }
+}
+
+impl Mul[u8] {
+  fn valid(a: u8, b: u8) -> bool { __fits_mul(a, b) }
+  fn mul(a: u8, b: u8) -> u8 { __wrapping_mul(a, b) }
+}
+
+impl Add[u16] {
+  fn valid(a: u16, b: u16) -> bool { __fits_add(a, b) }
+  fn add(a: u16, b: u16) -> u16 { __wrapping_add(a, b) }
+}
+
+impl Sub[u16] {
+  fn valid(a: u16, b: u16) -> bool { __fits_sub(a, b) }
+  fn sub(a: u16, b: u16) -> u16 { __wrapping_sub(a, b) }
+}
+
+impl Mul[u16] {
+  fn valid(a: u16, b: u16) -> bool { __fits_mul(a, b) }
+  fn mul(a: u16, b: u16) -> u16 { __wrapping_mul(a, b) }
+}
+
+impl Add[u32] {
+  fn valid(a: u32, b: u32) -> bool { __fits_add(a, b) }
+  fn add(a: u32, b: u32) -> u32 { __wrapping_add(a, b) }
+}
+
+impl Sub[u32] {
+  fn valid(a: u32, b: u32) -> bool { __fits_sub(a, b) }
+  fn sub(a: u32, b: u32) -> u32 { __wrapping_sub(a, b) }
+}
+
+impl Mul[u32] {
+  fn valid(a: u32, b: u32) -> bool { __fits_mul(a, b) }
+  fn mul(a: u32, b: u32) -> u32 { __wrapping_mul(a, b) }
+}
+
+impl Add[u64] {
+  fn valid(a: u64, b: u64) -> bool { __fits_add(a, b) }
+  fn add(a: u64, b: u64) -> u64 { __wrapping_add(a, b) }
+}
+
+impl Sub[u64] {
+  fn valid(a: u64, b: u64) -> bool { __fits_sub(a, b) }
+  fn sub(a: u64, b: u64) -> u64 { __wrapping_sub(a, b) }
+}
+
+impl Mul[u64] {
+  fn valid(a: u64, b: u64) -> bool { __fits_mul(a, b) }
+  fn mul(a: u64, b: u64) -> u64 { __wrapping_mul(a, b) }
 }

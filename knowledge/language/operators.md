@@ -2,7 +2,11 @@
 type: specification
 title: Operators
 description: An arithmetic operator as a call of a trait function, operands of different types, and derive, which writes an impl field by field.
-status: planned
+status: partial
+built:
+  - "`a + b`, `a - b`, and `a * b` as calls of `Add.add`, `Sub.sub`, and `Mul.mul` where the two sides are not both whole numbers or both floats: an `impl` of the trait for the two types, whose `valid` is `true` or a comparison of the whole numbers it is given, makes the operator work on a type of a program's own, with the third type of the trait as its result, and no `impl` is one error that names the trait and both types"
+  - "a type parameter that `Add`, `Sub`, or `Mul` bounds has the operator, `valid` is proven by a `requires` of the same call or at the call by the `impl` of the type, and for `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, and `u64` it is that the answer fits, which the `impl` of the prelude says with a function the compiler builds, so the operator is one instruction in a copy for a whole number type; a product of two sides that are not numbers known is not proven"
+  - "a whole number's `+`, `-`, and `*`, where both sides are whole numbers, as [Integer arithmetic](arithmetic.md) says, which is not a call; `/`, `%`, `^`, `-a`, floats, and `derive` are not built"
 ---
 
 # Operators
@@ -85,7 +89,7 @@ An operator compiles only where its `valid` is proven, as `x[i]` compiles only w
 - For a float, `valid` is `true`, as a float has an answer for every pair.
 - For a type of a program's own, it is what its `impl` says, as `Rect` above.
 
-Inside a function with a type parameter nothing is known of `T`, so nothing proves that `x + x` has an answer. The function says so in a `requires`, as `twice` does, and each caller proves it for the type it calls with. `twice(200)` with a `u8` is refused where it is called, as `200 + 200` written there would be. Without the `requires`, `twice` itself is refused at its `+`. Operators through traits are not built, so no words are quoted.
+Inside a function with a type parameter nothing is known of `T`, so nothing proves that `x + x` has an answer. The function says so in a `requires`, as `twice` does, and each caller proves it for the type it calls with. `twice(200)` with a `u8` is refused where it is called, as `200 + 200` written there would be. Without the `requires`, `twice` itself is refused at its `+`.
 
 ## Operands of different types
 

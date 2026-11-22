@@ -919,6 +919,13 @@ impl<'a> Checker<'a> {
                     l.clone()
                 }
             }
+            _ if !unary
+                && matches!(op, ArithOp::Add | ArithOp::Sub | ArithOp::Mul)
+                && !(matches!(l, Ty::Int(_) | Ty::Flex(_))
+                    && matches!(r, Ty::Int(_) | Ty::Flex(_))) =>
+            {
+                return self.operator(body, (op, left, right, op_pos), (&l, &r));
+            }
             (other, _) | (_, other) if !matches!(other, Ty::Int(_) | Ty::Flex(_)) => {
                 let given = defs.describe(other, body.scope);
                 self.errors.push(
@@ -936,6 +943,57 @@ impl<'a> Checker<'a> {
             self.fits(body, expr, t);
         }
         gives
+    }
+
+    /// Checks `left + right`, `left - right`, or `left * right` of two types
+    /// that are not both whole numbers, which is a call of the function of the
+    /// trait of the operator that the two types choose. It compiles where the
+    /// `requires` of that function is proven.
+    fn operator(
+        &mut self,
+        body: &mut Body<'a>,
+        (op, left, right, op_pos): (ArithOp, &Expr, &Expr, Pos),
+        (l, r): (&Ty, &Ty),
+    ) -> Ty {
+        let defs = self.defs;
+        let (k, name) = match op {
+            ArithOp::Add => (defs.operators[0], "add"),
+            ArithOp::Sub => (defs.operators[1], "sub"),
+            _ => (defs.operators[2], "mul"),
+        };
+        let fi = traits::trait_function(&defs.file.traits[k], name).expect("a function");
+        let types = vec![l.clone(), r.clone(), Ty::Unknown];
+        match defs.find(k, &types, body.scope, &mut Vec::new()) {
+            Found::Yes(all, _) => {
+                let sig = &defs.trait_sigs[k][fi];
+                body.facts.sibling = Some(k);
+                self.contract_at(
+                    body,
+                    (op_pos, addr(left), None),
+                    vec![(left, 0), (right, 1)],
+                    &defs.file.traits[k].functions[fi],
+                    sig,
+                );
+                body.facts.sibling = None;
+                all[2].clone()
+            }
+            Found::No => {
+                self.errors.push(Error::new(
+                    op_pos,
+                    format!(
+                        "there is no implementation of `{}` for {}",
+                        defs.file.traits[k].name,
+                        defs.types_of(k, &types, body.scope)
+                    ),
+                ));
+                Ty::Unknown
+            }
+            Found::Two(a, b) => {
+                self.errors.push(defs.ambiguous(op_pos, a, b));
+                Ty::Unknown
+            }
+            Found::Unknown => Ty::Unknown,
+        }
     }
 
     /// Checks the measure `e` of a `decreases`, which is an expression of whole
@@ -1272,7 +1330,7 @@ impl<'a> Checker<'a> {
             .collect();
         let ty = tys[0].clone();
         match call.callee.as_str() {
-            "__equal" => defs.bool_ty(),
+            "__equal" | "__fits_add" | "__fits_sub" | "__fits_mul" => defs.bool_ty(),
             "__compare" => Ty::Enum(defs.order, Vec::new()),
             "__decimal" | "__float_text" => {
                 self.needs(body, "alloc", call.pos, &format!("`{}`", call.callee));

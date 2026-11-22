@@ -901,6 +901,8 @@ struct Defs<'a> {
     /// The prelude's `Ord`, `Hash`, `Convert`, and `Bits`, by their places in
     /// the file's traits.
     ord: usize,
+    /// The traits of `+`, `-`, and `*`.
+    operators: [usize; 3],
     hash: usize,
     convert: usize,
     bits: usize,
@@ -2384,6 +2386,7 @@ fn check_file(
         exit: prelude_item(&file, Kind::Trait, "Exit"),
         iterate: prelude_item(&file, Kind::Trait, "Iterate"),
         ord: prelude_item(&file, Kind::Trait, "Ord"),
+        operators: ["Add", "Sub", "Mul"].map(|n| prelude_item(&file, Kind::Trait, n)),
         hash: prelude_item(&file, Kind::Trait, "Hash"),
         convert: prelude_item(&file, Kind::Trait, "Convert"),
         bits: try_prelude_trait(&file, "Bits").unwrap_or(usize::MAX),
@@ -6112,6 +6115,38 @@ impl<'a> Typed<'a> {
         self.types[&addr(e)].subst(env)
     }
 
+    /// The function that `left + right`, `left - right`, or `left * right`
+    /// runs when the two sides are not both whole numbers, or both floats, in
+    /// the copy of the definition with the type parameters `env`, and the type
+    /// it gives. Nothing when the operation is one instruction.
+    fn operator(
+        &self,
+        expr: &Expr,
+        op: ArithOp,
+        sides: (&Expr, &Expr),
+        env: &[Ty],
+    ) -> Option<(Instance, Ty)> {
+        let defs = self.defs;
+        let gives = self.type_of(expr, env);
+        if matches!(gives, Ty::Int(_) | Ty::Float(_) | Ty::Flex(_)) {
+            return None;
+        }
+        let (k, name) = match op {
+            ArithOp::Add => (defs.operators[0], "add"),
+            ArithOp::Sub => (defs.operators[1], "sub"),
+            ArithOp::Mul => (defs.operators[2], "mul"),
+            _ => return None,
+        };
+        let fi = traits::trait_function(&defs.file.traits[k], name)?;
+        let types = vec![
+            self.type_of(sides.0, env),
+            self.type_of(sides.1, env),
+            gives.clone(),
+        ];
+        let (instance, all) = defs.chosen(k, fi, types, Vec::new());
+        Some((instance, defs.trait_sigs[k][fi].gives.subst(&all)))
+    }
+
     /// What a checked call does, with the type parameters of the definition
     /// it is written in replaced by `env`.
     fn callee(&self, call: &Call, env: &[Ty]) -> Callee {
@@ -6345,6 +6380,16 @@ impl<'a> Typed<'a> {
                 && let Some(o) = &l.over
             {
                 out.push((l.pos, self.each_of(o, &instance.args)));
+            }
+            if let Expr::Arith {
+                op,
+                left,
+                right,
+                op_pos,
+            } = e
+                && let Some((callee, _)) = self.operator(e, *op, (left, right), &instance.args)
+            {
+                out.push((*op_pos, callee));
             }
             let Expr::Call(call) = e else {
                 continue;

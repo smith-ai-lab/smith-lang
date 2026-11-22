@@ -1,0 +1,4 @@
+operator_twice_refused.smith:26:11: cannot prove that `Add.valid(n, n)`, which `twice` requires of its arguments
+  26 |   print("{twice(n)}")
+     |           ^
+  fix: check the arguments first with an `if`, or state it in a `requires`

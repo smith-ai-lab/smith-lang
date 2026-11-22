@@ -65,6 +65,9 @@ impl<'a> Lowering<'a> {
         if let Ty::Float(_) = ty {
             return self.float_operation(out, (op, left, right, op_pos), ty, env);
         }
+        if let Some((instance, gives)) = typed.operator(expr, op, (left, right), env) {
+            return self.operator_call(out, instance, gives, (left, right), env);
+        }
         let (taken, a) = self.expr(out, left, env);
         let b = self.expr(out, right, env).1;
         // The numbers are two words when the result is, and when a quotient or
@@ -103,6 +106,28 @@ impl<'a> Lowering<'a> {
             }
         };
         (ty, vec![out.binary(word, a[0], b)])
+    }
+
+    /// Lowers an operator that is a call of the function `instance` of the
+    /// trait of the operator, on the two sides.
+    fn operator_call(
+        &mut self,
+        out: &mut Out<'a>,
+        instance: Instance,
+        gives: Ty,
+        (left, right): (&'a Expr, &'a Expr),
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let defs = self.typed.defs;
+        let params = defs.params(instance.template);
+        let prepared = self.copy_for(out, &instance);
+        let mut args = Vec::new();
+        for (side, (_, param)) in [left, right].into_iter().zip(&params) {
+            let param = param.subst(&instance.args);
+            args.extend(self.passed(out, side, &param, env));
+        }
+        let results = self.finish_call(out, prepared, args, &gives);
+        (gives, results)
     }
 
     /// Lowers `left + right`, `left - right`, `left * right`, or
@@ -929,6 +954,17 @@ impl<'a> Lowering<'a> {
                     (_, false) => form::Binary::ShiftRightU,
                 };
                 vec![out.binary(op, a, by)]
+            }
+            // Whether the answer fits, which the checked operation says.
+            "__fits_add" | "__fits_sub" | "__fits_mul" => {
+                let op = &name["__fits_".len()..];
+                let answer = self.arithmetic(out, "checked", op, t, a, b.expect("two"));
+                let some = defs.case_of(defs.option, "some").expect("a case");
+                let some = out.constant(
+                    form::Constant::Int(some as u64),
+                    form::Type::Int(form::Bits::B8),
+                );
+                vec![out.compare(form::Compare::Equal, answer[0], some)]
             }
             "__decimal" => {
                 let kind = Runtime::Decimal {
