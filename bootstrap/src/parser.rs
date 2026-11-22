@@ -1233,9 +1233,7 @@ impl Parser<'_> {
     }
 
     fn bump(&mut self) {
-        if self.at + 1 < self.tokens.len() {
-            self.at += 1;
-        }
+        self.at += 1;
     }
 
     fn skip_newlines(&mut self) {
