@@ -26,9 +26,11 @@
 //! in its place, polls it, goes on when it is done, and gives its wait when it is
 //! not, with the state of the call so that the next poll goes to the callee.
 //!
-//! A function that suspends, and so the program it is in, cannot call itself:
-//! a frame that holds the frame of a callee holds a fixed number of bytes, which
-//! a call of itself would not.
+//! The pass runs after `recur`, so no function reaches itself: a function that
+//! called itself has a stack of its own in memory, and the pointers to that stack
+//! are values like any other, saved in the frame across a wait. A frame therefore
+//! holds a fixed number of bytes however deep a recursion goes. A program that
+//! still has a function that reaches itself is not one the pass is given.
 
 use std::collections::{HashMap, HashSet};
 
@@ -137,7 +139,8 @@ fn waits(ins: &Instruction) -> bool {
 }
 
 /// The functions that suspend, each after the ones it calls. A function that
-/// suspends and is reached from itself is refused.
+/// suspends and is reached from itself is not a program the pass is given, since
+/// `recur` runs first, and is refused.
 fn callees_first(program: &Program, suspends: &HashSet<usize>) -> Result<Vec<usize>, String> {
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
@@ -155,7 +158,7 @@ fn callees_first(program: &Program, suspends: &HashSet<usize>) -> Result<Vec<usi
             Some(Mark::Done) => return Ok(()),
             Some(Mark::Open) => {
                 return Err(format!(
-                    "`{}` suspends and calls itself, and its frame would hold its own",
+                    "`{}` suspends and reaches itself, and `recur` has not run",
                     program.functions[f].name
                 ));
             }
