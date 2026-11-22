@@ -32,6 +32,10 @@ pub const ONCE: &[Test] = &[
         "an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it",
         an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it,
     ),
+    (
+        "a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted",
+        a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted,
+    ),
 ];
 
 /// A parameter of an operation: its type, and whether it has a default.
@@ -312,6 +316,64 @@ fn an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it() {
             assert_eq!(got, want, "for\n{source}\n{found:?}");
             for (e, name) in found.iter().zip(&names) {
                 assert!(e.message.contains(&format!("`{name}`")), "{e:?}");
+            }
+        },
+    );
+}
+
+/// A handler of an operation with type parameters of its own, which passes the
+/// value through, puts it in a struct, or gives it back, is refused at the
+/// effect's name as not built, and the same handler of an operation with no
+/// type parameter is accepted.
+fn a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted() {
+    generate::check(
+        6107,
+        30,
+        |g: &mut Gen| (g.below(3), g.below(3)),
+        |(parameters, lambda)| {
+            let names = ["T", "U"];
+            let own = &names[..*parameters];
+            let generics = if own.is_empty() {
+                String::new()
+            } else {
+                format!("[{}]", own.join(", "))
+            };
+            let ty = if own.is_empty() { "str" } else { own[0] };
+            let takes: Vec<String> = (own.iter().enumerate())
+                .map(|(i, t)| format!("x{i}: take {t}"))
+                .collect();
+            let takes = if takes.is_empty() {
+                "x0: take str".to_string()
+            } else {
+                takes.join(", ")
+            };
+            let lambda_args = (0..own.len().max(1))
+                .map(|i| format!("x{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let call_args = vec!["\"s\""; own.len().max(1)].join(", ");
+            let x = "x0";
+            let given = match lambda {
+                0 => x.to_string(),
+                1 => format!("keep(item: {x}).item"),
+                _ => format!("same({x})"),
+            };
+            let source = format!(
+                "struct keep[A] {{\n  item: A\n}}\n\n\
+                 fn same[A](a: take A) -> A {{ a }}\n\n\
+                 effect fx {{\n  fn put{generics}({takes}) -> {ty}\n}}\n\n\
+                 fn run[R](body: fn() -> R ! fx) -> R {{\n  fx(put: fn({lambda_args}) {{ {given} }}, body: body)\n}}\n\n\
+                 fn main() {{\n  with run()\n  x = put({call_args})\n}}\n"
+            );
+            let found = errors(&source);
+            if own.is_empty() {
+                assert!(found.is_empty(), "for\n{source}\n{found:?}");
+            } else {
+                let at = place(&source, "fx(put");
+                assert_eq!(found.len(), 1, "for\n{source}\n{found:?}");
+                assert_eq!(found[0].pos, at, "for\n{source}\n{found:?}");
+                assert!(found[0].unbuilt, "{found:?}");
+                assert!(found[0].message.contains("`put`"), "{found:?}");
             }
         },
     );
