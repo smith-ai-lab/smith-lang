@@ -46,9 +46,16 @@ pub struct Task {
     /// frame and then the parameters the function took.
     pub start: usize,
     /// The poll: it takes the address of the frame, and gives a status that is 0
-    /// when the task is done and 1 when it waits, a kind and a handle, and then
-    /// the values the function gave.
+    /// when the task is done and 1 when it waits, and the kind and the handle of
+    /// the wait. The values the function gave are in the frame when it is done,
+    /// at `result_at`.
     pub poll: usize,
+    /// The number in the frame's header that says which poll runs it, so that a
+    /// frame is polled without knowing which function it is of.
+    pub id: u64,
+    /// Where in the frame each value the function gave is, once it is done, in
+    /// the order the function gave them.
+    pub result_at: Vec<u64>,
     /// How many bytes the frame has, and so how many the one who starts the
     /// task must give it. The address is a multiple of 16.
     pub bytes: u64,
@@ -63,6 +70,10 @@ pub struct Task {
 pub struct Suspended {
     pub program: Program,
     pub tasks: Vec<Task>,
+    /// The function that takes the address of any frame, reads which poll runs
+    /// it from the frame's header, and polls it. It is there when a function
+    /// suspends.
+    pub poll_any: Option<usize>,
 }
 
 const STATUS: Type = Type::Int(Bits::B8);
@@ -76,18 +87,25 @@ pub fn suspend(program: Program) -> Result<Suspended, String> {
         return Ok(Suspended {
             program,
             tasks: Vec::new(),
+            poll_any: None,
         });
     }
     if suspends.contains(&program.main) {
         return Err("`main` suspends, and nothing is there to resume it".to_string());
     }
     let order = callees_first(&program, &suspends)?;
+    let mut ranked: Vec<usize> = suspends.iter().copied().collect();
+    ranked.sort_unstable();
+    let ids: HashMap<usize, u64> = (ranked.iter().enumerate())
+        .map(|(id, f)| (*f, id as u64))
+        .collect();
     let mut functions = program.functions.clone();
     let mut tasks: HashMap<usize, Task> = HashMap::new();
     let mut polls = Vec::new();
     for f in order {
-        let (start, poll, task) = Machine::new(&program.functions[f], f, &tasks, &suspends)
-            .build(functions.len() + polls.len());
+        let (start, poll, task) =
+            Machine::new(&program.functions[f], f, ids[&f], &tasks, &suspends)
+                .build(functions.len() + polls.len());
         functions[f] = start;
         polls.push(poll);
         tasks.insert(f, task);
@@ -95,13 +113,17 @@ pub fn suspend(program: Program) -> Result<Suspended, String> {
     functions.extend(polls);
     let mut list: Vec<(usize, Task)> = tasks.into_iter().collect();
     list.sort_by_key(|(f, _)| *f);
+    let list: Vec<Task> = list.into_iter().map(|(_, t)| t).collect();
+    let poll_any = Some(functions.len());
+    functions.push(any_poll(&list));
     Ok(Suspended {
         program: Program {
             data: program.data,
             functions,
             main: program.main,
         },
-        tasks: list.into_iter().map(|(_, t)| t).collect(),
+        tasks: list,
+        poll_any,
     })
 }
 
@@ -196,6 +218,8 @@ fn callees_first(program: &Program, suspends: &HashSet<usize>) -> Result<Vec<usi
 struct Machine<'a> {
     original: &'a Function,
     index: usize,
+    id: u64,
+    result_at: Vec<u64>,
     name: String,
     /// The place in the frame of each value alive across a suspension.
     slot: HashMap<Value, u64>,
@@ -215,7 +239,6 @@ struct Machine<'a> {
     frame: Value,
     /// The place in the poll of each state: where it goes on.
     states: Vec<usize>,
-    results: Vec<Type>,
     start_name: String,
     suspends: &'a HashSet<usize>,
 }
@@ -232,17 +255,21 @@ impl<'a> Machine<'a> {
     fn new(
         original: &'a Function,
         index: usize,
+        id: u64,
         tasks: &'a HashMap<usize, Task>,
         suspends: &'a HashSet<usize>,
     ) -> Machine<'a> {
         let live = alive_across(original, suspends);
-        let mut at = 8u64;
+        let mut at = 16u64;
         let place = |at: &mut u64, ty: Type| {
             *at = align(*at, ty.bytes());
             let here = *at;
             *at += ty.bytes();
             here
         };
+        let result_at: Vec<u64> = (original.results.iter())
+            .map(|ty| place(&mut at, *ty))
+            .collect();
         let param_slot = (original.blocks[0].params.iter())
             .map(|p| place(&mut at, original.types[p.0]))
             .collect();
@@ -275,6 +302,8 @@ impl<'a> Machine<'a> {
         Machine {
             original,
             index,
+            id,
+            result_at,
             name: original.name.clone(),
             slot,
             param_slot,
@@ -285,7 +314,6 @@ impl<'a> Machine<'a> {
             blocks: Vec::new(),
             frame: Value(0),
             states: Vec::new(),
-            results: original.results.clone(),
             start_name: format!("{}<start {index}>", original.name),
             suspends,
         }
@@ -294,16 +322,6 @@ impl<'a> Machine<'a> {
     fn fresh(&mut self, ty: Type) -> Value {
         self.types.push(ty);
         Value(self.types.len() - 1)
-    }
-
-    fn zero(&mut self, into: usize, ty: Type) -> Value {
-        let c = match ty {
-            Type::Int(_) => Constant::Int(0),
-            Type::Float(_) => Constant::Float(0),
-            Type::Address => Constant::Null,
-            Type::Vector(_) => Constant::Vector(0, 0),
-        };
-        self.emit(into, Op::Constant(c), &[ty], Place::NONE)[0]
     }
 
     fn emit(&mut self, into: usize, op: Op, results: &[Type], at: Place) -> Vec<Value> {
@@ -389,11 +407,7 @@ impl<'a> Machine<'a> {
         let n = self.word(into, state);
         self.save(into, 0, n);
         let status = self.emit(into, Op::Constant(Constant::Int(1)), &[STATUS], Place::NONE)[0];
-        let mut values = vec![status, kind, handle];
-        for ty in self.results.clone() {
-            values.push(self.zero(into, ty));
-        }
-        self.blocks[into].end = End::Return(values);
+        self.blocks[into].end = End::Return(vec![status, kind, handle]);
     }
 
     fn build(mut self, poll_index: usize) -> (Function, Function, Task) {
@@ -482,25 +496,23 @@ impl<'a> Machine<'a> {
                             args: Vec::new(),
                         });
                         let callee = self.within(polls, offset);
-                        let mut types = vec![STATUS, WORD, WORD];
-                        types.extend(task.results.iter().copied());
                         let given = self.emit(
                             polls,
                             Op::Call {
                                 function: task.poll,
                                 args: vec![callee],
                             },
-                            &types,
+                            &[STATUS, WORD, WORD],
                             ins.at,
                         );
                         let waits = self.new_block(Vec::new());
-                        let done = self.new_block(ins.results.clone());
+                        let done = self.new_block(Vec::new());
                         self.blocks[polls].end = End::Switch {
                             on: given[0],
                             jumps: vec![
                                 Jump {
                                     block: done,
-                                    args: given[3..].to_vec(),
+                                    args: Vec::new(),
                                 },
                                 Jump {
                                     block: waits,
@@ -508,7 +520,7 @@ impl<'a> Machine<'a> {
                                 },
                             ],
                         };
-                        let mut values = vec![
+                        let values = vec![
                             self.emit(
                                 waits,
                                 Op::Constant(Constant::Int(1)),
@@ -518,10 +530,18 @@ impl<'a> Machine<'a> {
                             given[1],
                             given[2],
                         ];
-                        for ty in self.results.clone() {
-                            values.push(self.zero(waits, ty));
-                        }
                         self.blocks[waits].end = End::Return(values);
+                        // What the callee gave is in its frame, and is read as the
+                        // values the call gave.
+                        for (r, place) in ins.results.iter().zip(&task.result_at) {
+                            let address = self.within(done, offset + place);
+                            let ty = self.types[r.0];
+                            self.blocks[done].instructions.push(Instruction {
+                                results: vec![*r],
+                                op: Op::Load { ty, address },
+                                at: ins.at,
+                            });
+                        }
                         self.keep(done, &ins.results);
                         at = done;
                     }
@@ -554,9 +574,10 @@ impl<'a> Machine<'a> {
                     let status =
                         self.emit(at, Op::Constant(Constant::Int(0)), &[STATUS], Place::NONE)[0];
                     let kind = self.word(at, 0);
-                    let mut all = vec![status, kind, kind];
-                    all.extend(values.iter().map(|v| by(*v)));
-                    End::Return(all)
+                    for (v, place) in values.iter().zip(self.result_at.clone()) {
+                        self.save(at, place, by(*v));
+                    }
+                    End::Return(vec![status, kind, kind])
                 }
             };
         }
@@ -571,8 +592,7 @@ impl<'a> Machine<'a> {
             .collect();
         self.blocks[dispatch].end = End::Switch { on: state, jumps };
 
-        let mut poll_results = vec![STATUS, WORD, WORD];
-        poll_results.extend(original.results.iter().copied());
+        let poll_results = vec![STATUS, WORD, WORD];
         let poll = Function {
             types: std::mem::take(&mut self.types),
             results: poll_results,
@@ -585,6 +605,8 @@ impl<'a> Machine<'a> {
         let task = Task {
             start: self.index,
             poll: poll_index,
+            id: self.id,
+            result_at: self.result_at.clone(),
             bytes: self.bytes,
             results: original.results.clone(),
         };
@@ -621,7 +643,8 @@ impl<'a> Machine<'a> {
         };
         let frame = Value(0);
         let state = make(&mut types, Op::Constant(Constant::Int(0)), Some(WORD));
-        let mut saved = vec![(0, state, WORD)];
+        let id = make(&mut types, Op::Constant(Constant::Int(self.id)), Some(WORD));
+        let mut saved = vec![(0, state, WORD), (8, id, WORD)];
         saved.extend(
             (params
                 .iter()
@@ -734,4 +757,80 @@ fn alive_across(f: &Function, suspends: &HashSet<usize>) -> HashSet<Value> {
         }
     }
     alive
+}
+
+/// The function that takes the address of a frame, reads from its header which
+/// poll runs it, and polls it, giving what that poll gives. A frame is polled
+/// without knowing which function it is of, as a scheduler that holds frames of
+/// many functions does.
+fn any_poll(tasks: &[Task]) -> Function {
+    let mut types = vec![Type::Address];
+    let frame = Value(0);
+    let mut blocks = vec![Block {
+        params: vec![frame],
+        instructions: Vec::new(),
+        end: End::Return(Vec::new()),
+    }];
+    let fresh = |types: &mut Vec<Type>, ty: Type| {
+        types.push(ty);
+        Value(types.len() - 1)
+    };
+    let eight = fresh(&mut types, WORD);
+    let at = fresh(&mut types, Type::Address);
+    let id = fresh(&mut types, WORD);
+    blocks[0].instructions.push(Instruction {
+        results: vec![eight],
+        op: Op::Constant(Constant::Int(8)),
+        at: Place::NONE,
+    });
+    blocks[0].instructions.push(Instruction {
+        results: vec![at],
+        op: Op::Binary {
+            op: Binary::Add,
+            a: frame,
+            b: eight,
+        },
+        at: Place::NONE,
+    });
+    blocks[0].instructions.push(Instruction {
+        results: vec![id],
+        op: Op::Load {
+            ty: WORD,
+            address: at,
+        },
+        at: Place::NONE,
+    });
+    let mut jumps = Vec::new();
+    for task in tasks {
+        let results = vec![
+            fresh(&mut types, STATUS),
+            fresh(&mut types, WORD),
+            fresh(&mut types, WORD),
+        ];
+        blocks.push(Block {
+            params: Vec::new(),
+            instructions: vec![Instruction {
+                results: results.clone(),
+                op: Op::Call {
+                    function: task.poll,
+                    args: vec![frame],
+                },
+                at: Place::NONE,
+            }],
+            end: End::Return(results),
+        });
+        jumps.push(Jump {
+            block: blocks.len() - 1,
+            args: Vec::new(),
+        });
+    }
+    blocks[0].end = End::Switch { on: id, jumps };
+    Function {
+        types,
+        results: vec![STATUS, WORD, WORD],
+        blocks,
+        cold: false,
+        name: "<poll any>".to_string(),
+    }
+    .named("<poll any>")
 }

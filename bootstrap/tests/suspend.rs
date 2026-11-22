@@ -326,29 +326,31 @@ fn a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of
     generate::check(160, 150, cases, |case| {
         let program = program_of(case);
         assert_eq!(scalar::check(&program), Ok(()));
-        let top = case.functions.len() - 1;
-        let made = scalar::suspend(scalar::recur(program.clone())).expect("a program that reaches itself");
-        // A function that never reaches a wait is not made a state machine.
-        let Some(task) = made.tasks.iter().find(|t| t.start == top) else {
+        if !waits_of(&program) {
             return;
-        };
-        for order in 0..4u64 {
-            let mut asks = Readiness(order);
-            let (want, waits) = scalar::call_waiting(&program, top, &[case.given, case.depth], &mut |k, h| {
-                asks.answer(k, h)
-            });
-            let mut asks = Readiness(order);
-            let (got, waited, waiting) = scalar::poll_to_end(
-                &made.program,
-                task.start,
-                task.poll,
-                task.bytes,
-                &[case.given, case.depth],
-                &mut |k, h| asks.answer(k, h),
-            );
-            assert_eq!(got, want, "order {order}");
-            assert_eq!(waited, waits, "order {order}");
-            assert_eq!(waiting, waits.len(), "order {order}");
+        }
+        let made = scalar::suspend(scalar::recur(program.clone()))
+            .expect("a program that reaches itself");
+        let poll_any = made.poll_any.expect("a program with a function that waits");
+        // Each function that waits is a task, and each is polled through the
+        // one function that finds the poll from the frame.
+        for task in &made.tasks {
+            for order in 0..4u64 {
+                let args = [case.given, case.depth];
+                let mut asks = Readiness(order);
+                let (want, waits) =
+                    scalar::call_waiting(&program, task.start, &args, &mut |k, h| {
+                        asks.answer(k, h)
+                    });
+                let mut asks = Readiness(order);
+                let (got, waited, waiting) =
+                    scalar::poll_to_end(&made.program, poll_any, task, &args, &mut |k, h| {
+                        asks.answer(k, h)
+                    });
+                assert_eq!(got, want, "order {order}");
+                assert_eq!(waited, waits, "order {order}");
+                assert_eq!(waiting, waits.len(), "order {order}");
+            }
         }
     });
 }
@@ -376,14 +378,9 @@ fn a_state_machine_gives_a_wait_each_time_the_function_waits_and_no_other_time()
     let kinds: Vec<u64> = waits.iter().map(|w| w.kind).collect();
     assert_eq!(kinds, vec![2, 1, 1, 3]);
     assert!(waits.iter().all(|w| !w.ready));
-    let (_, waited, waiting) = scalar::poll_to_end(
-        &made.program,
-        task.start,
-        task.poll,
-        task.bytes,
-        &[5, 0],
-        &mut |_, _| false,
-    );
+    let poll_any = made.poll_any.expect("a function waits");
+    let (_, waited, waiting) =
+        scalar::poll_to_end(&made.program, poll_any, task, &[5, 0], &mut |_, _| false);
     assert_eq!(waited, waits);
     assert_eq!(waiting, 4);
 }
@@ -525,19 +522,16 @@ fn a_recursion_a_thousand_deep_with_a_wait_at_each_level_gives_the_right_number_
     let made = scalar::suspend(scalar::recur(program.clone())).expect("no call reaches itself");
     assert_eq!(scalar::check(&made.program), Ok(()));
     let task = &made.tasks[0];
+    let poll_any = made.poll_any.expect("a function waits");
     for n in [0u64, 1, 5, 1000, 1500] {
         let mut asks = Readiness(n);
         let (want, waits) =
             scalar::call_waiting(&program, 0, &[n], &mut |k, h| asks.answer(k, h));
         let mut asks = Readiness(n);
-        let (got, waited, waiting) = scalar::poll_to_end(
-            &made.program,
-            task.start,
-            task.poll,
-            task.bytes,
-            &[n],
-            &mut |k, h| asks.answer(k, h),
-        );
+        let (got, waited, waiting) =
+            scalar::poll_to_end(&made.program, poll_any, task, &[n], &mut |k, h| {
+                asks.answer(k, h)
+            });
         assert_eq!(want, vec![n], "n {n}");
         assert_eq!(got, want, "n {n}");
         assert_eq!(waited, waits, "n {n}");
