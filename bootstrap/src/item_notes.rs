@@ -1,18 +1,20 @@
 //! The comment on each struct, field, enum, and case of a file, which
 //! `Describe` tells with the item. It is noted only when the file asks for a
-//! description, so a program that describes nothing holds none.
+//! description, or offers a tool, which is described to a client, so a program
+//! that describes nothing holds none.
 
 use crate::comments;
 use crate::parser::File;
 
 /// Whether the file writes the name of the trait `Describe`, or imports the
-/// module that defines it.
+/// module that defines it or `std.mcp`, whose tools are described.
 pub(crate) fn asks(file: &File) -> bool {
     file.idents.iter().any(|(name, _)| name == "Describe")
-        || file
-            .uses
-            .iter()
-            .any(|u| u.module.len() == 2 && u.module[0].0 == "std" && u.module[1].0 == "describe")
+        || file.uses.iter().any(|u| {
+            u.module.len() == 2
+                && u.module[0].0 == "std"
+                && (u.module[1].0 == "describe" || u.module[1].0 == "mcp")
+        })
 }
 
 /// Notes the comment on each struct, field, enum, and case of the file that
