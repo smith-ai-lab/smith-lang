@@ -576,6 +576,19 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
+                    call: System::Suspend,
+                    args,
+                } => {
+                    let [kind, handle] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !instruction.results.is_empty() {
+                        return Err(Why::WrongCount);
+                    }
+                    used(kind, i, Type::Int(Bits::B64))?;
+                    used(handle, i, Type::Int(Bits::B64))?;
+                }
+                Op::System {
                     call: System::ArenaOpen,
                     args,
                 } => {

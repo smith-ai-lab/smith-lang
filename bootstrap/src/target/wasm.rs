@@ -1343,6 +1343,9 @@ impl Lowering<'_> {
             System::ArenaOpen | System::ArenaClose => {
                 unreachable!("an arena is gone once the stacks of `alloc` are passed")
             }
+            System::Suspend => {
+                unreachable!("a suspension is gone once the state machines are made")
+            }
             System::Exit => {
                 self.get_wrapped(args[0]);
                 self.code.call(self.context.exit);
