@@ -2,7 +2,12 @@
 type: specification
 title: Project tasks
 description: A public function in project.smith, run by name, whose parameters are its command-line flags and whose effects say what it may do.
-status: planned
+status: partial
+built:
+  - "a public function of `project.smith`, read as the module `project` from the nearest `project.smith` at or above the folder the command runs in, built with `smith build <task>` and run with `smith <task> --<flag> <value>`, whose parameters of `str`, a whole number, `bool`, one with a default, and an `Option` are its flags, spelled as the parameter is, with a `bool` bare and one with a default or of type `Option` left out as the page says"
+  - "a flag spelled another way, a flag given twice, a value that does not read as its parameter's type, and a missing required flag, each one error that names the flag, and a task that gives `.err(e)` printing `e` and ending with a status that is not 0"
+  - "a task named as a command, refused where it is written"
+  - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages"
 ---
 
 # Project tasks

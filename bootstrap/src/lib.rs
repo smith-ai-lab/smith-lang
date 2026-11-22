@@ -12,6 +12,7 @@ mod item_notes;
 pub mod kernel;
 mod lexer;
 mod parser;
+pub mod project;
 pub mod scalar;
 pub mod target;
 pub mod timings;

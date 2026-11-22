@@ -8,10 +8,13 @@ use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
 
 use smith::diag;
+use smith::project;
 use smith::target::Target;
 use smith::timings::Timings;
 
-const USAGE: &str = "usage: smith build [--target <target>] [--timings] [--map] [<file>.smith]
+const USAGE: &str =
+    "usage: smith build [--target <target>] [--timings] [--map] [<file>.smith | <task>]
+       smith <task> [--<flag> <value>...]
        smith run [--target <target>] [--timings] [<file>.smith [<word>...]]
        smith check [--timings] [<file>.smith]
        smith --version";
@@ -38,6 +41,9 @@ fn main() -> ExitCode {
 struct Request {
     target: Target,
     entry: PathBuf,
+    /// The task of `project.smith` the executable starts at, when a name that is
+    /// not a file's was given.
+    task: Option<String>,
     timings: bool,
     /// Whether `smith build` writes the map of the executable beside it.
     map: bool,
@@ -84,6 +90,11 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
             run(&executable, &request.words)
         }
         "check" => check(rest),
+        task if find_root()
+            .is_some_and(|root| tasks_of(&root).is_ok_and(|read| read.task(task).is_some())) =>
+        {
+            run_task(task, rest)
+        }
         "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
             Err(format!("smith {name} is not supported yet"))
         }
@@ -96,6 +107,7 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
 fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
     let mut target = None;
     let mut entry = None;
+    let mut task = None;
     let mut timings = false;
     let mut map = false;
     let mut words = Vec::new();
@@ -120,8 +132,10 @@ fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
             map = true;
         } else if arg.starts_with("--") {
             return Err(format!("unknown flag `{arg}`\n{USAGE}"));
-        } else if entry.is_some() {
+        } else if entry.is_some() || task.is_some() {
             return Err(format!("only one file can be built\n{USAGE}"));
+        } else if !with_words && !arg.ends_with(".smith") {
+            task = Some(arg.to_string());
         } else {
             entry = Some(PathBuf::from(arg));
             if with_words {
@@ -141,6 +155,7 @@ fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
     Ok(Request {
         target,
         entry: entry.unwrap_or_else(|| PathBuf::from("main.smith")),
+        task,
         timings,
         map,
         words,
@@ -209,6 +224,9 @@ struct Files {
     entry: Option<String>,
     /// The modules a `use` has read, in the order they were asked for.
     read: RefCell<BTreeSet<String>>,
+    /// The text of the module `project`, when a task is built: the file
+    /// `project.smith` without the lines the compiler reads no further.
+    project: Option<String>,
 }
 
 impl Files {
@@ -231,6 +249,7 @@ impl Files {
             root,
             entry,
             read: RefCell::new(BTreeSet::new()),
+            project: None,
         })
     }
 
@@ -246,6 +265,10 @@ impl smith::Source for Files {
     /// The text of the file of the module with the name, which is noted as
     /// read.
     fn source(&self, module: &str) -> Option<String> {
+        if let (Some(text), "project") = (&self.project, module) {
+            self.read.borrow_mut().insert(module.to_string());
+            return Some(text.clone());
+        }
         let path = self
             .root
             .join(format!("{}.smith", module.replace('.', "/")));
@@ -335,6 +358,9 @@ fn build(request: &Request) -> Result<PathBuf, String> {
 /// Builds the entry into an executable in the current folder, and returns
 /// its path.
 fn build_timed(request: &Request, timings: &mut Timings) -> Result<PathBuf, String> {
+    if let Some(task) = &request.task {
+        return build_task(task, request, timings);
+    }
     let entry = &request.entry;
     let (stem, source) = read_entry(entry)?;
     let files = Files::in_current_folder(entry)?;
@@ -397,4 +423,94 @@ fn run(executable: &Path, words: &[OsString]) -> Result<ExitCode, String> {
         .map_err(|e| format!("{}: {e}", executable.display()))?;
     let code = status.code().unwrap_or(1);
     Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
+}
+
+/// The nearest folder at or above this one that holds a `project.smith`.
+fn find_root() -> Option<PathBuf> {
+    let here = std::env::current_dir().ok()?;
+    here.ancestors()
+        .find(|folder| folder.join("project.smith").is_file())
+        .map(Path::to_path_buf)
+}
+
+/// What the `project.smith` of the folder says, or the errors in it as they
+/// are printed.
+fn tasks_of(root: &Path) -> Result<project::Read, String> {
+    let file = root.join("project.smith");
+    let source = std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let text = String::from_utf8_lossy(&source).into_owned();
+    project::read(&text).map_err(|errors| {
+        let shown = diag::render_with("project.smith", text.as_bytes(), &errors, &|_| text.clone());
+        shown.strip_suffix('\n').unwrap_or(&shown).to_string()
+    })
+}
+
+/// Builds the executable that starts at a task of `project.smith`, which is
+/// named after the package, in the folder that holds the file.
+fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<PathBuf, String> {
+    let root = find_root().ok_or_else(|| {
+        format!("no project.smith is in this folder or above it, so there is no task `{task}`")
+    })?;
+    let read = tasks_of(&root)?;
+    let Some(found) = read.task(task) else {
+        let names: Vec<&str> = read.tasks.iter().map(|t| t.name.as_str()).collect();
+        return Err(format!(
+            "`{task}` is not a task of project.smith, which has: {}",
+            names.join(", ")
+        ));
+    };
+    let program = found.program();
+    let files = Files {
+        root: root.clone(),
+        entry: None,
+        read: RefCell::new(BTreeSet::new()),
+        project: Some(read.module.clone()),
+    };
+    let built = smith::compile_project_files_timed(
+        program.as_bytes(),
+        &files.project(),
+        request.target,
+        request.map,
+        timings,
+    )
+    .map_err(|errors| {
+        let errors = project::explain(errors);
+        let text = files.render("project.smith", program.as_bytes(), &errors);
+        text.strip_suffix('\n').unwrap_or(&text).to_string()
+    })?;
+    let name = read.package.clone().unwrap_or_else(|| {
+        root.file_name()
+            .map_or_else(|| "main".to_string(), |n| n.to_string_lossy().into_owned())
+    });
+    let output = root.join(request.target.executable_name(&name));
+    timings
+        .stage("write", || {
+            write_executable(&output, &built.executable, request.target.is_machine_code())?;
+            for (extension, bytes) in &built.beside {
+                write_executable(&output.with_extension(extension), bytes, false)?;
+            }
+            Ok(())
+        })
+        .map_err(|e: std::io::Error| format!("{}: {e}", output.display()))?;
+    Ok(output)
+}
+
+/// Builds a task for this machine and runs it with the flags it is given.
+fn run_task(task: &str, flags: &[OsString]) -> Result<ExitCode, String> {
+    let target = Target::host().ok_or_else(|| {
+        format!(
+            "this machine, {}, is not a target",
+            Target::host_description()
+        )
+    })?;
+    let request = Request {
+        target,
+        entry: PathBuf::from("main.smith"),
+        task: Some(task.to_string()),
+        timings: false,
+        map: false,
+        words: flags.to_vec(),
+    };
+    let executable = build(&request)?;
+    run(&executable, flags)
 }
