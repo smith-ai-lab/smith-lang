@@ -55,7 +55,8 @@ use crate::parser::{
     Match, Over, Part, Pattern, Qualified, Range, Stmt, Struct, Trait, Type, Use,
 };
 use effects_with_and_try::{
-    BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, is_arena_call, provided_by,
+    BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, is_arena_call, is_group_call,
+    provided_by,
 };
 use lists_and_text::{as_read, is_freeze, is_push, is_utf8};
 use names::{Naming, Resolution, own_final, renamed_tokens};
@@ -128,7 +129,6 @@ const PRELUDE_LISTED: &[&str] = &[
     "FromString",
     "FromArray",
     "alloc",
-    "spawn",
     "gpu",
     "diverge",
     "foreign",
@@ -5831,6 +5831,8 @@ enum Callee {
     /// `alloc`, called with the body to run, which gives the body a fresh
     /// arena that is freed whole when it ends.
     Arena,
+    /// `spawn`, called with the body to run, which opens a task group for it.
+    Group,
 }
 
 /// For each argument of a call, the place of its parameter, or none when an
@@ -6142,6 +6144,9 @@ impl<'a> Typed<'a> {
                 if is_intrinsic(call) {
                     return Callee::Intrinsic;
                 }
+                if is_group_call(call) {
+                    return Callee::Group;
+                }
                 if is_push(defs, call) {
                     return Callee::Push;
                 }
@@ -6246,6 +6251,7 @@ impl<'a> Typed<'a> {
             | Callee::Utf8
             | Callee::Handle(_)
             | Callee::Arena
+            | Callee::Group
             | Callee::Float
             | Callee::Narrow(_) => Vec::new(),
         }
@@ -7348,6 +7354,12 @@ impl<'a> Checker<'a> {
                     .collect();
                 let fix = written(f, &kept);
                 for (effect, at) in unused {
+                    // The function of the library that starts a child carries
+                    // `spawn` for its callers, and has nothing of its own to do
+                    // with it.
+                    if written_name(effect) == "spawn" && of_std(f.pos) {
+                        continue;
+                    }
                     let known =
                         (self.unused_effects.iter()).any(|(_, _, e, p, _)| e == effect && p == at);
                     if !known {

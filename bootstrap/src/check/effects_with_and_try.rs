@@ -8,11 +8,10 @@ use crate::parser::{EffectDef, is_operation};
 pub(super) const LIBRARY_EFFECTS: &[&str] = &["fs", "net", "time", "ui"];
 
 /// The effects the compiler builds.
-pub(super) const BUILT: &[&str] = &["console", "alloc", "diverge"];
+pub(super) const BUILT: &[&str] = &["console", "alloc", "diverge", "spawn"];
 
 /// The effects built into the compiler.
-pub(super) const BUILT_IN_EFFECTS: &[&str] =
-    &["alloc", "spawn", "gpu", "diverge", "foreign", "exec"];
+pub(super) const BUILT_IN_EFFECTS: &[&str] = &["alloc", "gpu", "diverge", "foreign", "exec"];
 
 /// An operation of an effect that the target answers when the effect reaches
 /// `main` with no handler: the effect and the operation as the library's
@@ -135,6 +134,23 @@ pub(super) fn is_arena_call(defs: &Defs, call: &Call) -> bool {
     written_name(&call.callee) == "alloc"
         && defs.effect_named(&call.callee).is_none()
         && defs.function(call.name_pos, &call.callee).is_none()
+}
+
+/// Whether a call is of `spawn` with the body to run, which opens a task group
+/// for it, and not of the function `spawn`, whose one argument is the work of
+/// the child and is never labelled `body`.
+pub(super) fn is_group_call(call: &Call) -> bool {
+    written_name(&call.callee) == "spawn"
+        && matches!(&call.args[..], [arg] if arg.name.as_ref().is_some_and(|(n, _)| n == "body"))
+}
+
+/// The signature of a call of `spawn` with a body: the body to run, which may
+/// carry `spawn`, and gives what the call gives.
+fn group_signature() -> Signature {
+    Signature {
+        fn_effects: vec![vec!["spawn".to_string()]],
+        ..arena_signature()
+    }
 }
 
 /// The signature of a call of `alloc`: the body to run, which may carry
@@ -365,6 +381,47 @@ impl<'a> Checker<'a> {
         let signature = arena_signature();
         let sol = self.arguments(body, call, &signature, false, None, None);
         signature.gives.solved(&sol)
+    }
+
+    /// Checks a call of `spawn` with a body, which opens a task group for it.
+    pub(super) fn group_call(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
+        let signature = group_signature();
+        let sol = self.arguments(body, call, &signature, false, None, None);
+        signature.gives.solved(&sol)
+    }
+
+    /// Refuses a child that assigns a `var` of the function it is written in:
+    /// a child reads a `var` as it was at the spawn, and what it finds out
+    /// comes back through `join`.
+    pub(super) fn child_assigns(&mut self, body: &Body<'a>, call: &Call) {
+        for arg in &call.args {
+            let Expr::Lambda(l) = &arg.value else {
+                continue;
+            };
+            for stmt in statements(&l.body) {
+                let (Stmt::Assign { name, pos, .. }
+                | Stmt::Define {
+                    name,
+                    pos,
+                    var: false,
+                    ..
+                }) = stmt
+                else {
+                    continue;
+                };
+                if body.vars.iter().any(|v| v == name) {
+                    self.errors.push(
+                        Error::new(
+                            *pos,
+                            format!(
+                                "this child assigns `{name}`, which belongs to the function it is spawned in, and a child reads a `var` as it was at the spawn"
+                            ),
+                        )
+                        .with_fix("give the new value back as the value of the child, and read it with `join`"),
+                    );
+                }
+            }
+        }
     }
 
     /// Checks a list of effects: each named once, each one there is.

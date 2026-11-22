@@ -724,6 +724,9 @@ impl<'a> Checker<'a> {
         if is_intrinsic(call) {
             return self.intrinsic(body, call);
         }
+        if is_group_call(call) {
+            return self.group_call(body, call);
+        }
         if is_push(defs, call) {
             return self.push(body, call, want);
         }
@@ -780,6 +783,9 @@ impl<'a> Checker<'a> {
             };
             let is_print = defs.provided(f).is_some_and(|p| p.through.is_none());
             let mut sol = self.arguments(body, call, sig, is_print, None, placed);
+            if name == "spawn" && of_std(defs.file.functions[f].pos) {
+                self.child_assigns(body, call);
+            }
             defs.complete_outs(&sig.scope.requires, &mut sol, body.scope);
             for (i, d) in sig.param_defaults.iter().enumerate() {
                 if let (None, Some(d)) = (&sol[i], d) {
@@ -1110,6 +1116,27 @@ impl<'a> Checker<'a> {
                     t => Want::Ty(t),
                 },
                 None => Want::Ty(Ty::Unknown),
+            };
+            // A block whose type nothing else settles is of the type the place
+            // of the call needs, as the value of a function is.
+            let wanted = match (param, &arg.value, &wanted) {
+                (Some(i), Expr::Lambda(_), Want::Ty(Ty::Fn(items)))
+                    if items.last().is_some_and(Ty::unknown) =>
+                {
+                    match signature.params[i].1.partial(&from_place) {
+                        Ty::Fn(placed)
+                            if placed.last().is_some_and(|t| !t.unknown())
+                                && placed.len() == items.len() =>
+                        {
+                            let mut items = items.clone();
+                            *items.last_mut().expect("a result") =
+                                placed.last().cloned().expect("a result");
+                            Want::Ty(Ty::Fn(items))
+                        }
+                        _ => wanted,
+                    }
+                }
+                _ => wanted,
             };
             if let (Some(i), Want::Any) = (param, &wanted)
                 && (matches!(arg.value, Expr::Number { .. })
