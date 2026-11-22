@@ -15,14 +15,16 @@ pub(crate) fn asks(file: &File) -> bool {
 /// Makes the struct of the arguments of each function of the file that has
 /// one, and notes each with the comment on its function. `number` is the
 /// number of the module, whose places are that many steps on. A function that is
-/// an operation of an effect, has type parameters, or takes a function, has
-/// none.
+/// an operation of an effect, has type parameters, takes a function, or has a
+/// pattern for a parameter, has none.
 pub(crate) fn add(file: &mut File, source: &str, number: usize) {
     let mut made = Vec::new();
     for f in &file.functions {
         if parser::is_operation(f)
             || !f.generics.is_empty()
-            || f.params.iter().any(|p| p.ty.function)
+            || f.params
+                .iter()
+                .any(|p| p.ty.function || p.name.starts_with("pattern@"))
         {
             continue;
         }
