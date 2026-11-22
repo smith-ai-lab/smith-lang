@@ -24,6 +24,7 @@ mod graph;
 pub mod handler;
 mod inline;
 mod ln;
+pub mod pool;
 mod recur;
 mod remat;
 mod remove;
