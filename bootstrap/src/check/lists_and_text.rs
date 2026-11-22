@@ -45,6 +45,10 @@ fn is_append(call: &Call) -> bool {
 /// list `append` adds to, which it takes, and not the one it adds from, which
 /// it lends.
 pub(super) fn gives_away(defs: &Defs, call: &Call, arg: &Arg) -> bool {
+    if super::is_kernel(call) {
+        return call.callee == "__consume"
+            || (call.callee == "__sized" && std::ptr::eq(arg, &call.args[0]));
+    }
     match is_push(defs, call) {
         true => !is_append(call) || std::ptr::eq(arg, &call.args[0]),
         false => is_freeze(defs, call),

@@ -537,6 +537,77 @@ impl<'a> Lowering<'a> {
         (ty, values)
     }
 
+    /// Lowers `__system`, which asks the kernel for the call its first
+    /// argument numbers, in the order of `Raw`, with the words after it: a
+    /// whole number is widened to 64 bits, and a list, a slice, or a text is
+    /// its address. It gives what the kernel gives. Lowers `__reserve`, which
+    /// asks for as many bytes as it is given and gives a list of them with
+    /// none as its elements, and `__sized`, which gives the list it is given
+    /// with as many elements as it is told.
+    pub(super) fn kernel_call(
+        &mut self,
+        out: &mut Out<'a>,
+        expr: &'a Expr,
+        call: &'a Call,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let ty = self.typed.type_of(expr, env);
+        let mut words = Vec::new();
+        for arg in &call.args {
+            let (ty, values) = self.expr(out, &arg.value, env);
+            words.push(match ty {
+                Ty::Int(i) => out.resize(i.signed(), values[0], form::Bits::B64),
+                _ => values[0],
+            });
+        }
+        match call.callee.as_str() {
+            "__consume" => (ty, Vec::new()),
+            "__reserve" => {
+                let address = out.emit(
+                    form::Op::System {
+                        call: form::System::Allocate,
+                        args: vec![words[0]],
+                    },
+                    vec![form::Type::Address],
+                )[0];
+                let none = out.int(form::Bits::B64, 0);
+                (ty, vec![address, none, words[0]])
+            }
+            "__sized" => {
+                let (_, list) = self.expr(out, &call.args[0].value, env);
+                (ty, vec![list[0], words[1], list[2]])
+            }
+            _ => {
+                let Expr::Number { magnitude, .. } = &call.args[0].value else {
+                    unreachable!("checked")
+                };
+                use form::Raw::*;
+                let order = [
+                    Socket,
+                    Bind,
+                    Listen,
+                    Accept,
+                    Connect,
+                    GetSockName,
+                    SetSockOpt,
+                    SendTo,
+                    RecvFrom,
+                    Close,
+                    ClockGetTime,
+                    NanoSleep,
+                ];
+                let raw = order[*magnitude as usize];
+                let call = form::System::Raw(raw);
+                let args = words[1..].to_vec();
+                let given = out.emit(
+                    form::Op::System { call, args },
+                    vec![form::Type::Int(form::Bits::B64)],
+                );
+                (ty, given)
+            }
+        }
+    }
+
     /// Lowers a call of a function the compiler builds for the prelude's
     /// operations on numbers.
     pub(super) fn intrinsic_call(

@@ -1283,6 +1283,26 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Checks a call of `__system`, which gives the 64-bit number the kernel
+    /// gives, of `__reserve`, which gives a list of bytes with room and no
+    /// elements, and of `__sized`, which gives the list it is given with the
+    /// size it says.
+    pub(super) fn kernel(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
+        let tys: Vec<Ty> = (call.args.iter())
+            .map(|a| self.expr(body, &a.value, &Want::Any))
+            .collect();
+        let bytes = Ty::List(vec![Ty::Int(Int::U8)]);
+        match call.callee.as_str() {
+            "__system" => Ty::Int(Int::I64),
+            "__consume" => Ty::Nothing,
+            "__reserve" => {
+                self.needs(body, "alloc", call.pos, "`__reserve`");
+                bytes
+            }
+            _ => tys.first().cloned().unwrap_or(bytes),
+        }
+    }
+
     /// Checks a call of `wrapping_div` or `wrapping_rem`, which compiles only
     /// when `arith` proves that the divisor is not zero.
     pub(super) fn wrapping_division(&mut self, body: &mut Body<'a>, call: &Call, sig: &Signature) {

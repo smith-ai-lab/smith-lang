@@ -1526,6 +1526,7 @@ impl<'a> Lowering<'a> {
                 Callee::Value => self.call_value(out, call, env),
                 Callee::Handle(effect) => self.handle(out, expr, call, effect, env),
                 Callee::Intrinsic => self.intrinsic_call(out, expr, call, env),
+                Callee::Kernel => self.kernel_call(out, expr, call, env),
                 Callee::Run(instance, _)
                     if !matches!(instance.template, Template::Given(..))
                         && numbers_and_operators::number_function(
