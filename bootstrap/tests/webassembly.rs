@@ -331,12 +331,12 @@ fn a_program_that_prints_asks_its_host_for_the_console_and_no_other_does() {
 
 fn a_program_with_an_effect_that_is_not_built_is_one_error_that_names_it() {
     for target in modules() {
-        let (dir, output) = built(target, "waits", b"fn main() ! net {\n}\n");
+        let (dir, output) = built(target, "waits", b"fn main() ! ui {\n}\n");
         assert!(!output.status.success());
         let errors = stderr(&output);
         let places = errors.lines().filter(|l| l.contains(".smith:")).count();
         assert_eq!(places, 1, "{errors}");
-        assert!(errors.contains("`net`"), "{errors}");
+        assert!(errors.contains("`ui`"), "{errors}");
         assert!(!dir.join(target.executable_name("waits")).exists());
         assert!(!dir.join("waits.js").exists());
     }

@@ -2,7 +2,14 @@
 type: specification
 title: The network
 description: The net effect of std.net, for connections and datagrams, each a value used exactly once, with a write that sends everything and a read that gives what has come.
-status: planned
+status: partial
+built:
+  - "`std.net` declares `net`, with the operations, `Address`, and `NetError` as the page shows them, and `Listener`, `Connection`, and `Socket`, each a struct with one private field, the system's handle, and neither `Copy` nor `Discard`"
+  - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
+  - "on Linux on x86-64 and arm64 the system answers every operation, and a call that waits blocks; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is `failed` with the one message that looking up a name is not built"
+  - "`failed` holds the call's name and the system's error number, as `connect: error 111`; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
+  - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing; a handler that gives a `Listener`, a `Connection`, or a `Socket` is not built, as its handle is private to `std.net`"
+  - "not another target than Linux, a call that suspends its task, or a name looked up"
 ---
 
 # The network
@@ -78,19 +85,24 @@ enum NetError {
 `listen`, `connect`, and `bind` are written for [`with`](../language/with.md), as `open` of [`std.fs`](fs.md) is: each lends what it opens to the rest of the block and ends it afterwards, on every path. Most code writes these and none of `stop`, `close`, and `unbind`.
 
 ```
-use std.net (NetError, accept, listen, net, read, write)
+use std.list (freeze)
+use std.net (Connection, NetError, accept, close, listen, net, read, write)
+
+fn turn(c: Connection) -> Result[(), NetError] ! net, alloc {
+  bytes = try read(c, 4096)
+  write(c, freeze(bytes))
+}
 
 fn echo_once(port: 0..65536) -> Result[(), NetError] ! net, alloc {
   with l = listen("::", port)
   c = try accept(l)
-  bytes = try read(c, 4096)
-  try write(c, bytes)
+  result = turn(c)
   close(c)
-  .ok(())
+  result
 }
 ```
 
-`echo_once` takes one connection, sends back what it reads, and ends.
+`echo_once` takes one connection, sends back what it reads, and ends. The connection is closed on every path, as a `try` that left before `close(c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
 
 ## What answers it
 

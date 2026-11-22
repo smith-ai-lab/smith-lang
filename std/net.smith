@@ -1,0 +1,456 @@
+use std.bits (bit_and, i64, shift_right, u16)
+use std.int (checked_add, checked_mul, narrow, saturating_add, saturating_sub)
+use std.list (push)
+use std.text (Text, append_ascii, finish, text)
+
+pub struct Listener {
+  handle: i64
+}
+
+pub struct Connection {
+  handle: i64
+}
+
+pub struct Socket {
+  handle: i64
+}
+
+without Copy for Listener
+without Discard for Listener
+without Copy for Connection
+without Discard for Connection
+without Copy for Socket
+without Discard for Socket
+
+pub struct Address {
+  pub host: str
+  pub port: 0..65536
+}
+
+pub enum NetError {
+  unknown_host: str
+  refused
+  in_use
+  closed
+  failed: str
+}
+
+pub effect net {
+  pub fn listen_on(host: str, port: 0..65536) -> Result[Listener, NetError]
+  pub fn accept(l: Listener) -> Result[Connection, NetError]
+  pub fn stop(l: take Listener)
+
+  pub fn connect_to(host: str, port: 0..65536) -> Result[Connection, NetError]
+  pub fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc
+  pub fn write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError]
+  pub fn close(c: take Connection)
+
+  pub fn bind_to(host: str, port: 0..65536) -> Result[Socket, NetError]
+  pub fn send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError]
+  pub fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc
+  pub fn unbind(s: take Socket)
+}
+
+pub fn listen[T](host: str, port: 0..65536, body: fn(Listener) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+  l = try listen_on(host, port)
+  result = body(l)
+  stop(l)
+  result
+}
+
+pub fn connect[T](host: str, port: 0..65536, body: fn(Connection) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+  c = try connect_to(host, port)
+  result = body(c)
+  close(c)
+  result
+}
+
+pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+  s = try bind_to(host, port)
+  result = body(s)
+  unbind(s)
+  result
+}
+
+// The numbers of the kernel's calls, in the order the compiler gives them to
+// `__system`: socket, bind, listen, accept, connect, getsockname, setsockopt,
+// sendto, recvfrom, close.
+
+// What the kernel gave, when it refused: minus its error number.
+fn failure(call: str, given: i64) -> NetError ! alloc {
+  code = 0 - given
+  if code == 111 {
+    .refused
+  } else if code == 98 {
+    .in_use
+  } else if code == 32 or code == 104 {
+    .closed
+  } else {
+    .failed("{call}: error {code}")
+  }
+}
+
+fn hex_digit(b: Byte) -> Option[Byte] {
+  if b >= 48 and b <= 57 {
+    .some(b - 48)
+  } else if b >= 97 and b <= 102 {
+    .some(b - 87)
+  } else if b >= 65 and b <= 70 {
+    .some(b - 55)
+  } else {
+    .none
+  }
+}
+
+// The four bytes of an address written as numbers with dots.
+fn ipv4(host: str) -> Option[List[Byte]] ! alloc {
+  var parts: List[Byte] = []
+  var current: Nat = 0
+  var digits: Nat = 0
+  loop i in 0..host.size {
+    c = host[i]
+    if c >= 48 and c <= 57 {
+      wide: Nat = c - 48
+      current = try checked_add(try checked_mul(current, 10), wide)
+      digits = try checked_add(digits, 1)
+      if current > 255 { return .none }
+    } else if c == 46 {
+      if digits == 0 { return .none }
+      part: Option[Byte] = narrow(current)
+      parts = push(parts, try part)
+      current = 0
+      digits = 0
+    } else {
+      return .none
+    }
+  }
+  if digits == 0 { return .none }
+  last: Option[Byte] = narrow(current)
+  parts = push(parts, try last)
+  if parts.size != 4 { return .none }
+  .some(parts)
+}
+
+// The sixteen bytes of an address written with colons, as `::1` is.
+fn ipv6(host: str) -> Option[List[Byte]] ! alloc {
+  var before: List[Byte] = []
+  var after: List[Byte] = []
+  var gap = false
+  var current: Nat = 0
+  var digits: Nat = 0
+  loop i in 0..host.size {
+    c = host[i]
+    if c == 58 {
+      if i == 0 {
+        if host.size < 2 { return .none }
+        if host[1] != 58 { return .none }
+      } else if host[i - 1] == 58 {
+        if gap { return .none }
+        gap = true
+      } else {
+        if digits == 0 { return .none }
+        maybe: Option[u16] = narrow(current)
+        group = try maybe
+        if gap {
+          after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+        } else {
+          before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+        }
+        current = 0
+        digits = 0
+      }
+    } else {
+      d = try hex_digit(c)
+      if digits == 4 { return .none }
+      wide: Nat = d
+      current = try checked_add(try checked_mul(current, 16), wide)
+      digits = try checked_add(digits, 1)
+    }
+  }
+  if digits > 0 {
+    maybe: Option[u16] = narrow(current)
+    group = try maybe
+    if gap {
+      after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+    } else {
+      before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+    }
+  } else if host.size > 0 and host[host.size - 1] == 58 {
+    if host.size < 2 { return .none }
+    if host[host.size - 2] != 58 { return .none }
+  }
+  var made = before
+  if gap {
+    if made.size + after.size > 14 { return .none }
+    missing: Nat = 16 - made.size - after.size
+    loop k in 0..missing { made = push(made, 0) }
+    loop k in 0..after.size { made = push(made, after[k]) }
+  } else {
+    if made.size != 16 { return .none }
+  }
+  .some(made)
+}
+
+// Where a socket is: the kernel's name for the family of its address, and the
+// address as the kernel reads it, which is a `sockaddr_in` of sixteen bytes for
+// a number written with dots and a `sockaddr_in6` of twenty-eight bytes for
+// one written with colons.
+struct Place {
+  family: Byte
+  bytes: List[Byte]
+}
+
+fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
+  if host == "localhost" {
+    return place("127.0.0.1", port)
+  }
+  high = bit_and(shift_right(port, 8), 255)
+  low = bit_and(port, 255)
+  match ipv4(host) {
+    .some(four) {
+      var made: List[Byte] = []
+      made = push(push(made, 2), 0)
+      made = push(push(made, high), low)
+      loop k in 0..four.size { made = push(made, four[k]) }
+      loop k in 0..8 { made = push(made, 0) }
+      return .ok(Place(family: 2, bytes: made))
+    }
+    .none { }
+  }
+  match ipv6(host) {
+    .some(sixteen) {
+      var made: List[Byte] = []
+      made = push(push(made, 10), 0)
+      made = push(push(made, high), low)
+      loop k in 0..4 { made = push(made, 0) }
+      loop k in 0..sixteen.size { made = push(made, sixteen[k]) }
+      loop k in 0..4 { made = push(made, 0) }
+      .ok(Place(family: 10, bytes: made))
+    }
+    .none { .err(.failed("looking up a host name is not built")) }
+  }
+}
+
+// Four bytes that the kernel reads as the number `n`.
+fn number(n: Byte) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  made = push(push(made, n), 0)
+  made = push(push(made, 0), 0)
+  made
+}
+
+fn zeros(n: Nat) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  loop k in 0..n { made = push(made, 0) }
+  made
+}
+
+// The character of a digit of base 16.
+fn hex_char(d: 0..16) -> 0..128 {
+  if d < 10 { 48 + d } else { 87 + d }
+}
+
+// The digits of a group, with none that is a zero at the front.
+fn hex(t: take Text, n: Nat) -> Text ! alloc {
+  var made = t
+  if n >= 4096 { made = append_ascii(made, hex_char((n / 4096) % 16)) }
+  if n >= 256 { made = append_ascii(made, hex_char((n / 256) % 16)) }
+  if n >= 16 { made = append_ascii(made, hex_char((n / 16) % 16)) }
+  append_ascii(made, hex_char(n % 16))
+}
+
+// The host a peer's address holds, from the family it says and where the
+// address is in the bytes.
+fn host_text(bytes: List[Byte]) -> str ! alloc {
+  if bytes.size < 24 { return "" }
+  if bytes[0] == 2 {
+    return "{bytes[4]}.{bytes[5]}.{bytes[6]}.{bytes[7]}"
+  }
+  var mapped = true
+  loop k in 0..10 { if bytes[8 + k] != 0 { mapped = false } }
+  if bytes[18] != 255 or bytes[19] != 255 { mapped = false }
+  if mapped {
+    return "{bytes[20]}.{bytes[21]}.{bytes[22]}.{bytes[23]}"
+  }
+  var groups: List[u16] = []
+  loop k in 0..8 {
+    group: u16 = bytes[8 + 2 * k] * 256 + bytes[9 + 2 * k]
+    groups = push(groups, group)
+  }
+  var start: Nat = 0
+  var length: Nat = 0
+  var run_start: Nat = 0
+  var run: Nat = 0
+  loop k in 0..groups.size {
+    if groups[k] == 0 {
+      if run == 0 { run_start = k }
+      run = saturating_add(run, 1)
+      if run > length {
+        length = run
+        start = run_start
+      }
+    } else {
+      run = 0
+    }
+  }
+  var t = text()
+  var skip: Nat = 0
+  var gap = false
+  loop k in 0..groups.size {
+    if skip > 0 {
+      skip = skip - 1
+    } else if length >= 2 and k == start {
+      t = append_ascii(append_ascii(t, 58), 58)
+      skip = saturating_sub(length, 1)
+      gap = true
+    } else {
+      if k > 0 and not gap { t = append_ascii(t, 58) }
+      t = hex(t, groups[k])
+      gap = false
+    }
+  }
+  finish(t)
+}
+
+fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! alloc {
+  where = try place(host, port)
+  fd = __system(0, where.family, 1, 0, 0, 0, 0)
+  if fd < 0 { return .err(failure("socket", fd)) }
+  one = number(1)
+  off = number(0)
+  __system(6, fd, 1, 2, one, 4, 0)
+  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
+  if bound < 0 {
+    __system(9, fd, 0, 0, 0, 0, 0)
+    return .err(failure("bind", bound))
+  }
+  listening = __system(2, fd, 128, 0, 0, 0, 0)
+  if listening < 0 {
+    __system(9, fd, 0, 0, 0, 0, 0)
+    return .err(failure("listen", listening))
+  }
+  .ok(Listener(handle: fd))
+}
+
+fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc {
+  loop attempt in 0..64 {
+    fd = __system(3, l.handle, 0, 0, 0, 0, 0)
+    if fd >= 0 { return .ok(Connection(handle: fd)) }
+    if fd != -4 { return .err(failure("accept", fd)) }
+  }
+  .err(.failed("accept: interrupted"))
+}
+
+fn system_stop(l: take Listener) {
+  h = l.handle
+  __consume(l)
+  __system(9, h, 0, 0, 0, 0, 0)
+}
+
+fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] ! alloc {
+  where = try place(host, port)
+  fd = __system(0, where.family, 1, 0, 0, 0, 0)
+  if fd < 0 { return .err(failure("socket", fd)) }
+  off = number(0)
+  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  connected = __system(4, fd, where.bytes, where.bytes.size, 0, 0, 0)
+  if connected < 0 {
+    __system(9, fd, 0, 0, 0, 0, 0)
+    return .err(failure("connect", connected))
+  }
+  .ok(Connection(handle: fd))
+}
+
+fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc {
+  if most == 0 { return .ok([]) }
+  buffer: List[Byte] = __reserve(most)
+  loop attempt in 0..64 {
+    got = __system(8, c.handle, buffer, most, 0, 0, 0)
+    if got >= 0 { return .ok(__sized(buffer, got)) }
+    if got != -4 { return .err(failure("read", got)) }
+  }
+  .err(.failed("read: interrupted"))
+}
+
+// A number of bytes the kernel gave, which is not negative.
+fn count(given: i64) -> Nat {
+  maybe: Option[Nat] = narrow(given)
+  match maybe {
+    .some(n) { n }
+    .none { 0 }
+  }
+}
+
+fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
+  var sent: Nat = 0
+  loop attempt in 0..bytes.size {
+    if sent < bytes.size {
+      rest = bytes[sent..]
+      given = __system(7, c.handle, rest, rest.size, 16384, 0, 0)
+      if given == -4 {
+      } else if given < 0 {
+        return .err(failure("write", given))
+      } else {
+        match checked_add(sent, count(given)) {
+          .some(n) { sent = n }
+          .none { return .err(.failed("write: too many bytes")) }
+        }
+      }
+    }
+  }
+  .ok(())
+}
+
+fn system_close(c: take Connection) {
+  h = c.handle
+  __consume(c)
+  __system(9, h, 0, 0, 0, 0, 0)
+}
+
+fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc {
+  where = try place(host, port)
+  fd = __system(0, where.family, 2, 0, 0, 0, 0)
+  if fd < 0 { return .err(failure("socket", fd)) }
+  off = number(0)
+  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
+  if bound < 0 {
+    __system(9, fd, 0, 0, 0, 0, 0)
+    return .err(failure("bind", bound))
+  }
+  .ok(Socket(handle: fd))
+}
+
+fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
+  where = try place(to.host, to.port)
+  loop attempt in 0..64 {
+    given = __system(7, s.handle, bytes, bytes.size, 16384, where.bytes, where.bytes.size)
+    if given >= 0 { return .ok(()) }
+    if given != -4 { return .err(failure("send", given)) }
+  }
+  .err(.failed("send: interrupted"))
+}
+
+fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc {
+  var buffer: List[Byte] = []
+  if most > 0 { buffer = __reserve(most) }
+  from = zeros(28)
+  length = number(28)
+  loop attempt in 0..64 {
+    got = __system(8, s.handle, buffer, most, 0, from, length)
+    if got >= 0 {
+      if from.size < 28 { return .err(.failed("receive: no address")) }
+      port: 0..65536 = from[2] * 256 + from[3]
+      return .ok((Address(host: host_text(from), port: port), __sized(buffer, got)))
+    }
+    if got != -4 { return .err(failure("receive", got)) }
+  }
+  .err(.failed("receive: interrupted"))
+}
+
+fn system_unbind(s: take Socket) {
+  h = s.handle
+  __consume(s)
+  __system(9, h, 0, 0, 0, 0, 0)
+}

@@ -1,0 +1,58 @@
+use std.bits (bit_and, shift_right, u64)
+use std.int (wrapping_add, wrapping_mul)
+use std.list (push)
+
+pub effect time {
+  pub fn now() -> u64
+  pub fn sleep(ms: u64)
+}
+
+// The eight bytes of a number, the low one first, as the kernel reads them.
+fn put(bytes: take List[Byte], n: u64) -> List[Byte] ! alloc {
+  var made = bytes
+  loop i in 0..8 {
+    made = push(made, bit_and(shift_right(n, 8 * i), 255))
+  }
+  made
+}
+
+// The number that the eight bytes from `at` are, the low one first.
+fn word(bytes: List[Byte], at: Nat) -> u64 {
+  var n: u64 = 0
+  var scale: u64 = 1
+  loop i in 0..bytes.size {
+    if i >= at and i < at + 8 {
+      wide: u64 = bytes[i]
+      n = wrapping_add(n, wrapping_mul(wide, scale))
+      scale = wrapping_mul(scale, 256)
+    }
+  }
+  n
+}
+
+fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
+  part: u64 = nanoseconds / 1000000
+  wrapping_add(wrapping_mul(seconds, 1000), part)
+}
+
+fn system_now() -> u64 ! alloc {
+  var stamp: List[Byte] = __reserve(16)
+  stamp = put(put(stamp, 0), 0)
+  __system(10, 0, stamp)
+  milliseconds(word(stamp, 0), word(stamp, 8))
+}
+
+fn system_sleep(ms: u64) ! alloc {
+  var left = ms
+  loop attempt in 0..64 {
+    seconds: u64 = left / 1000
+    nanoseconds: u64 = (left % 1000) * 1000000
+    var wait: List[Byte] = []
+    wait = put(put(wait, seconds), nanoseconds)
+    var rest: List[Byte] = __reserve(16)
+    rest = put(put(rest, 0), 0)
+    result = __system(11, wait, rest)
+    if result != -4 { break }
+    left = milliseconds(word(rest, 0), word(rest, 8))
+  }
+}

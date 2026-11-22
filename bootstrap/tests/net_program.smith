@@ -1,0 +1,160 @@
+use std.console (console, print)
+use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.list (append, freeze, push)
+use std.net (Address, Connection, NetError, accept, bind, close, connect, listen, net, read, receive, write)
+use std.time (now, sleep, time)
+use std.utf8 (utf8)
+
+fn name(e: NetError) -> str {
+  match e {
+    .unknown_host(host) { "unknown_host" }
+    .refused { "refused" }
+    .in_use { "in_use" }
+    .closed { "closed" }
+    .failed(why) { "failed" }
+  }
+}
+
+fn text(bytes: take List[Byte]) -> str {
+  match utf8(freeze(bytes)) {
+    .ok(s) { s }
+    .err(e) { "not text" }
+  }
+}
+
+// What `echo_once` of the library's page does, with a line to say that the
+// listener is open, so that a test connects after it and not before.
+fn once(port: 0..65536) -> Result[(), NetError] ! console, net, alloc {
+  with l = listen("127.0.0.1", port)
+  print("ready")
+  c = try accept(l)
+  result = turn(c)
+  close(c)
+  result
+}
+
+fn turn(c: Connection) -> Result[(), NetError] ! net, alloc {
+  bytes = try read(c, 4096)
+  write(c, freeze(bytes))
+}
+
+fn drain(c: Connection) -> Result[List[Byte], NetError] ! net, alloc {
+  var all: List[Byte] = []
+  loop round in 0..2000000 {
+    chunk = try read(c, 4096)
+    if chunk.size == 0 { return .ok(all) }
+    all = append(all, chunk)
+  }
+  .ok(all)
+}
+
+fn send_back(c: Connection) -> Result[Nat, NetError] ! net, alloc {
+  all = try drain(c)
+  size = all.size
+  try write(c, freeze(all))
+  .ok(size)
+}
+
+// Reads until the other side finishes sending, and then sends all of it back.
+fn everything(port: 0..65536) -> Result[Nat, NetError] ! console, net, alloc {
+  with l = listen("127.0.0.1", port)
+  print("ready")
+  c = try accept(l)
+  result = send_back(c)
+  close(c)
+  result
+}
+
+// What `ask` of the library's page does, at the port a test gives.
+fn ask(port: 0..65536, question: str) -> Result[List[Byte], NetError] ! net, alloc {
+  with c = connect("127.0.0.1", port)
+  try write(c, question.bytes)
+  read(c, 4096)
+}
+
+fn datagram(port: 0..65536) -> Result[(Address, List[Byte]), NetError] ! console, net, alloc {
+  with s = bind("127.0.0.1", port)
+  print("ready")
+  receive(s, 1024)
+}
+
+// Writes until the other side's close is told, which a write after it gives.
+fn writing(port: 0..65536) -> Result[(), NetError] ! net, alloc {
+  with c = connect("127.0.0.1", port)
+  var block: List[Byte] = []
+  loop k in 0..65536 { block = push(block, 7) }
+  sent = freeze(block)
+  loop round in 0..4000 {
+    try write(c, sent)
+  }
+  .ok(())
+}
+
+fn listening(port: 0..65536) -> Result[(), NetError] ! net {
+  with l = listen("127.0.0.1", port)
+  .ok(())
+}
+
+fn answer(what: Result[(), NetError]) ! console {
+  match what {
+    .ok(()) { print("ok") }
+    .err(e) { print(name(e)) }
+  }
+}
+
+fn at(port: str, then: fn(0..65536)) ! console {
+  number: Result[0..65536, ReadError] = from_text("port", port)
+  match number {
+    .ok(p) { then(p) }
+    .err(e) { print("bad port") }
+  }
+}
+
+fn main(args: List[str]) ! console, net, time, alloc {
+  if args.size == 0 {
+    print("usage")
+    return
+  }
+  mode = args[0]
+  if mode == "clock" {
+    before = now()
+    sleep(150)
+    after = now()
+    print("{before} {after}")
+    return
+  }
+  if args.size < 2 {
+    print("usage")
+    return
+  }
+  with p = at(args[1])
+  if mode == "once" {
+    answer(once(p))
+  } else if mode == "everything" {
+    match everything(p) {
+      .ok(n) { print("{n}") }
+      .err(e) { print(name(e)) }
+    }
+  } else if mode == "ask" {
+    if args.size < 3 { return }
+    match ask(p, args[2]) {
+      .ok(bytes) { print(text(bytes)) }
+      .err(e) { print(name(e)) }
+    }
+  } else if mode == "datagram" {
+    match datagram(p) {
+      .ok((from, bytes)) { print("{from.host} {from.port} {text(bytes)}") }
+      .err(e) { print(name(e)) }
+    }
+  } else if mode == "refused" {
+    match ask(p, "x") {
+      .ok(bytes) { print("ok") }
+      .err(e) { print(name(e)) }
+    }
+  } else if mode == "in_use" {
+    answer(listening(p))
+  } else if mode == "closed" {
+    answer(writing(p))
+  }
+}

@@ -224,14 +224,14 @@ fn calls_of_functions_with_effects(g: &mut Gen) -> File {
                 0 | 1 if built != "none" => built,
                 0 => "consol",
                 1 => "fs",
-                2 => "net",
+                2 => "ui",
                 _ => "consol",
             };
             if listed.contains(&effect) {
                 file.mistake(effect, format!("`{effect}` effect is already listed"));
             } else if effect == "consol" {
                 file.mistake(effect, "no effect named `consol`");
-            } else if effect == "fs" || effect == "net" {
+            } else if effect == "fs" || effect == "ui" {
                 file.mistake(effect, format!("the `{effect}` effect is not supported yet"));
             } else {
                 file.push(effect);

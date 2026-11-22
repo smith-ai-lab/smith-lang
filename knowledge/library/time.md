@@ -2,7 +2,11 @@
 type: specification
 title: Time
 description: The time effect, by which a program reads the clock and waits for a time, and how a wait is cancelled.
-status: planned
+status: partial
+built:
+  - "`std.time` declares `time`, with `now` and `sleep` as the page shows them"
+  - "on Linux on x86-64 and arm64 the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given; a handler answers both on every target"
+  - "not another target than Linux, a `sleep` that suspends its task, or one that a cancelled task ends"
 ---
 
 # Time
@@ -22,6 +26,7 @@ effect time {
 | `sleep` | Waits for `ms` milliseconds, and then returns |
 
 ```
+use std.bits (u64)
 use std.time (now, sleep, time)
 
 fn pause_and_read() -> u64 ! time {
