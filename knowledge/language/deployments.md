@@ -4,7 +4,7 @@ title: Deployments
 description: A deployment, a public function of project.smith that installs the handlers that answer a program's effects and calls main, which is run by name on this machine and is where a built executable starts.
 status: partial
 built:
-  - "a deployment that installs handlers and calls `main`, a `pub fn` of `project.smith` built by its name with `smith build local`, to an executable named after the package, and run by its name with `smith local`, with its parameters as flags; `main` is listed by `use main (main)` and so is written `pub` in `main.smith`, and `smith build` with no name still starts at `main`"
+  - "a deployment that installs handlers and calls `main`, a `pub fn` of `project.smith` built by its name with `smith build local`, to an executable named after the package, and run by its name with `smith local`, with its parameters as flags; `main` is listed by `use main (main)` and so is written `pub fn main` in `main.smith`, which `smith build` with no name accepts and still starts at"
   - "a deployment is refused for a native target when what it starts carries an effect no system provides, with an error that names the effect and says that nothing answers it"
   - "not `build(package, start: f, target: t)` of `std.project`, a target other than the machine's own for a task that is run, or a deployment to WebAssembly"
 ---

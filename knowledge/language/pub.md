@@ -8,7 +8,8 @@ built:
   - "a name that is not `pub` refused in a `use` with its own error, and a name written with no `use` refused as any name that is not there"
   - "`pub` before a field of a struct of a module of a project or of the library, and a field without it refused, at its place, in another module when it is read, assigned, or built by a call of the struct"
   - "`pub` before an operation of an effect of a module of a project or of the library, and an operation without it private to its module, which no other module imports, calls, or handles"
-  - "not `pub` before an `effect`, or in the file that is built"
+  - "`pub` before a `fn` in the file that is built, which `smith build` accepts and which lets `project.smith` list its `main`"
+  - "not `pub` before an `effect`, or before anything but a `fn` in the file that is built"
 ---
 
 # Public and private
