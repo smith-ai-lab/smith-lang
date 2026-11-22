@@ -372,7 +372,7 @@ fn a_types_own_impl_is_the_description_used_wherever_it_is_a_part() {
 
 /// The comments are read from the source only for a program that asks for a
 /// description, so a program that does not has the executable it had with no
-/// comment written, and one that does has a different one.
+/// comment written, and one that does has other bytes.
 fn a_program_that_describes_nothing_holds_no_comment() {
     let built = |comments: bool, describes: bool| {
         let (about, title) = if comments {
@@ -389,10 +389,9 @@ fn a_program_that_describes_nothing_holds_no_comment() {
             format!("{about}struct Note {{\n{title}  title: str\n}}\n\nfn main() ! console {{\n  print(\"x\")\n}}\n")
         };
         let source = with_import(&imports(), &rest);
-        // The constants of the program, which hold what a comment says, and not
-        // where the code is, which a comment moves.
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
-        format!("{:?}", program.data)
+        // The bytes of the executable, where a comment would be found.
+        targets::build(source.as_bytes(), targets::any())
+            .unwrap_or_else(|e| panic!("{e:?}\n{source}"))
     };
     assert_eq!(built(true, false), built(false, false));
     assert_ne!(built(true, true), built(false, true));
