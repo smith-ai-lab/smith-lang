@@ -423,6 +423,11 @@ impl<'a> Walk<'a> {
                     self.own_pattern(st, p, t);
                 }
             }
+            (Pattern::List { items, .. }, Ty::List(of)) => {
+                for p in items {
+                    self.own_pattern(st, p, &of[0]);
+                }
+            }
             _ => {}
         }
     }
@@ -825,7 +830,7 @@ impl<'a> Walk<'a> {
                     self.bind_pattern(st, inner, lent);
                 }
             }
-            Pattern::Tuple { items, .. } => {
+            Pattern::Tuple { items, .. } | Pattern::List { items, .. } => {
                 for item in items {
                     self.bind_pattern(st, item, lent);
                 }
@@ -853,6 +858,9 @@ impl<'a> Walk<'a> {
             },
             (Pattern::Tuple { items, .. }, Ty::Tuple(tys)) => {
                 items.iter().zip(tys).any(|(p, t)| self.binds_part(p, t))
+            }
+            (Pattern::List { items, .. }, Ty::List(of)) => {
+                items.iter().any(|p| self.binds_part(p, &of[0]))
             }
             _ => false,
         }

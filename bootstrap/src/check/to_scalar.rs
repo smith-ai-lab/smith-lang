@@ -1102,7 +1102,10 @@ impl<'a> Lowering<'a> {
                     self.bind(out, item, t, values);
                 }
             }
-            Pattern::Case { .. } | Pattern::Number { .. } | Pattern::Text { .. } => {
+            Pattern::Case { .. }
+            | Pattern::List { .. }
+            | Pattern::Number { .. }
+            | Pattern::Text { .. } => {
                 unreachable!("checked")
             }
         }
@@ -2292,6 +2295,49 @@ impl<'a> Lowering<'a> {
                         Some(_) => None,
                     });
                     out.current = *block;
+                    self.decide(out, arms, leaves, rows, &cols);
+                }
+            }
+            Ty::List(of) => {
+                // One block for each number of elements a pattern has, in the
+                // order they are written, and one for a list of any other.
+                let lengths = distinct(rows.iter().filter_map(|r| match r.patterns[c] {
+                    Some(Pattern::List { items, .. }) => Some(items.len()),
+                    _ => None,
+                }));
+                let count = lengths.len();
+                let blocks: Vec<usize> = (0..=count).map(|_| out.new_block()).collect();
+                let mut sorted: Vec<(i128, usize)> = lengths
+                    .iter()
+                    .map(|&n| n as i128)
+                    .zip(blocks.iter().copied())
+                    .collect();
+                sorted.sort();
+                out.pick(value[1], false, form::Bits::B64, &sorted, blocks[count]);
+                let scalars = self.element(ty);
+                let (places, stride) = form::element(&scalars);
+                let places: Vec<(form::Type, u64)> = scalars.into_iter().zip(places).collect();
+                for (j, block) in blocks.iter().enumerate() {
+                    out.current = *block;
+                    let n = lengths.get(j).copied().unwrap_or(0);
+                    let inner: Vec<(Ty, Vec<form::Value>)> = if j < count {
+                        (0..n as u64)
+                            .map(|k| {
+                                let by = out.int(form::Bits::B64, i128::from(k * stride));
+                                let address = out.binary(form::Binary::Add, value[0], by);
+                                (of[0].clone(), self.load(out, address, &places))
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    let (rows, cols) = around(inner, &|p| match p {
+                        None => Some(vec![None; if j < count { n } else { 0 }]),
+                        Some(Pattern::List { items, .. }) if j < count && items.len() == n => {
+                            Some(items.iter().map(Some).collect())
+                        }
+                        Some(_) => None,
+                    });
                     self.decide(out, arms, leaves, rows, &cols);
                 }
             }

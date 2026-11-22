@@ -90,7 +90,7 @@ fn patterns<'a>(pattern: &'a Pattern, into: &mut HashSet<&'a str>) {
                 patterns(inner, into);
             }
         }
-        Pattern::Tuple { items, .. } => {
+        Pattern::Tuple { items, .. } | Pattern::List { items, .. } => {
             for item in items {
                 patterns(item, into);
             }

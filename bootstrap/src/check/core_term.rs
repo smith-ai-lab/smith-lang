@@ -704,6 +704,7 @@ impl<'a> Typed<'a> {
                 };
                 CorePattern::Case(case, inner)
             }
+            P::List { .. } => return None,
             P::Tuple { items, .. } => {
                 let Ty::Tuple(tys) = ty else {
                     return None;

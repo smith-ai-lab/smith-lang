@@ -6,6 +6,7 @@ status: partial
 built:
   - "enums whose cases hold a type or nothing, with type parameters, and cases built with a leading dot or in full"
   - "a case that holds `()` built and matched without it, as `.more`, and `.more(())` in a pattern meaning the same"
+  - "a case, written as `.some(x)` or `.none`, as a part of a pattern in brackets that matches a `List`"
 ---
 
 # Enums
