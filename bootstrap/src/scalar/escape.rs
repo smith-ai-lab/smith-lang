@@ -18,7 +18,7 @@
 
 use super::common::dominated;
 use super::graph::jumps;
-use super::{Bits, Constant, End, Function, Instruction, Op, Type, Value};
+use super::{Bits, Constant, End, Function, Instruction, Op, System, Type, Value};
 
 /// For each value of the function, whether it is in a group that the function
 /// gives back through an address it returns.
@@ -32,9 +32,83 @@ pub fn given_back(f: &Function) -> Vec<bool> {
             }
         }
     }
+    // A value of an arena that is, or is held with, a value that is made
+    // outside it is read after it ends, so it is built in the memory outside.
+    let holds = |v: usize| f.types[v] == Type::Address || f.types[v] == Type::Int(Bits::B64);
+    for inside in arenas(f) {
+        let mut within = vec![false; f.types.len()];
+        let mut outside = vec![false; f.types.len()];
+        for v in (0..f.types.len()).filter(|v| holds(*v) && !constant[*v]) {
+            let group = groups.find(v);
+            if inside[v] {
+                within[group] = true;
+            } else {
+                outside[group] = true;
+            }
+        }
+        for g in 0..f.types.len() {
+            if within[g] && outside[g] {
+                back[g] = true;
+            }
+        }
+    }
     (0..f.types.len())
         .map(|v| !constant[v] && back[groups.find(v)])
         .collect()
+}
+
+/// For each arena the function opens, the values that are made between its
+/// opening and its closing: those of the instructions that can be reached from
+/// the opening without passing the closing that takes its token, and the
+/// parameters of the blocks entered on the way.
+fn arenas(f: &Function) -> Vec<Vec<bool>> {
+    let mut found = Vec::new();
+    for (b, block) in f.blocks.iter().enumerate() {
+        for (k, i) in block.instructions.iter().enumerate() {
+            if !matches!(
+                i.op,
+                Op::System {
+                    call: System::ArenaOpen,
+                    ..
+                }
+            ) {
+                continue;
+            }
+            let token = i.results[0];
+            let mut inside = vec![false; f.types.len()];
+            let mut entered = vec![false; f.blocks.len()];
+            let mut work = vec![(b, k + 1)];
+            while let Some((b, from)) = work.pop() {
+                if from == 0 {
+                    if entered[b] {
+                        continue;
+                    }
+                    entered[b] = true;
+                    for p in &f.blocks[b].params {
+                        inside[p.0] = true;
+                    }
+                }
+                let mut closed = false;
+                for i in &f.blocks[b].instructions[from..] {
+                    if matches!(&i.op, Op::System { call: System::ArenaClose, args } if args[0] == token)
+                    {
+                        closed = true;
+                        break;
+                    }
+                    for r in &i.results {
+                        inside[r.0] = true;
+                    }
+                }
+                if !closed {
+                    for jump in jumps(&f.blocks[b].end) {
+                        work.push((jump.block, 0));
+                    }
+                }
+            }
+            found.push(inside);
+        }
+    }
+    found
 }
 
 /// The groups of the function's values, and which values are constants.

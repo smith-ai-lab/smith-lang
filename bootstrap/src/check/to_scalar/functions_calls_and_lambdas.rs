@@ -576,6 +576,41 @@ impl<'a> Lowering<'a> {
         (gives, result)
     }
 
+    /// Lowers a call of `alloc`: the body runs in place, between the opening
+    /// and the closing of an arena, which holds what the body allocates and
+    /// does not hand out. A `return` in the body leaves the body, so it ends
+    /// at the closing, and a `break` is refused where the body is checked.
+    pub(super) fn arena(
+        &mut self,
+        out: &mut Out<'a>,
+        expr: &'a Expr,
+        call: &'a Call,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let param = (String::new(), Ty::Fn(Vec::new()));
+        let body = (self.argument(out, &call.args[0].value, &param, env).func).expect("a function");
+        let gives = self.typed.type_of(expr, env);
+        let token = out.emit(
+            form::Op::System {
+                call: form::System::ArenaOpen,
+                args: Vec::new(),
+            },
+            vec![form::Type::Int(form::Bits::B8)],
+        )[0];
+        let mut result = self.run_func(out, body, Vec::new(), &gives, false);
+        out.emit(
+            form::Op::System {
+                call: form::System::ArenaClose,
+                args: vec![token],
+            },
+            Vec::new(),
+        );
+        if gives == Ty::Nothing {
+            result.clear();
+        }
+        (gives, result)
+    }
+
     /// Lowers a call of an operation of an effect: the function the handler in
     /// force gives for it, run in place with the call's arguments, under the
     /// handlers that were in force outside that handler.

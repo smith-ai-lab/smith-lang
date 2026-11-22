@@ -1738,6 +1738,10 @@ impl<S: System> Writer<'_, S> {
                 self.run(asm, &moves);
             }
             Op::System {
+                call: Call::ArenaOpen | Call::ArenaClose,
+                ..
+            } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
+            Op::System {
                 call: Call::Write(stream),
                 args,
             } => {

@@ -576,6 +576,29 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
+                    call: System::ArenaOpen,
+                    args,
+                } => {
+                    let [result] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !args.is_empty() || f.types[result.0] != Type::Int(Bits::B8) {
+                        return Err(Why::WrongCount);
+                    }
+                }
+                Op::System {
+                    call: System::ArenaClose,
+                    args,
+                } => {
+                    let [token] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !instruction.results.is_empty() {
+                        return Err(Why::WrongCount);
+                    }
+                    used(token, i, Type::Int(Bits::B8))?;
+                }
+                Op::System {
                     call: System::Exit,
                     args,
                 } => {

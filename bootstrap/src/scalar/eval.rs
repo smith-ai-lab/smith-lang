@@ -1052,6 +1052,10 @@ impl Machine<'_> {
                         ..
                     } => panic!("the evaluator has no network and no clock of its own"),
                     Op::System {
+                        call: System::ArenaOpen | System::ArenaClose,
+                        ..
+                    } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
+                    Op::System {
                         call: System::Exit,
                         args,
                     } => {

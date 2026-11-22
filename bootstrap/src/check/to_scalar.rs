@@ -1525,6 +1525,7 @@ impl<'a> Lowering<'a> {
                 Callee::Float => self.float_call(out, expr, call, env),
                 Callee::Value => self.call_value(out, call, env),
                 Callee::Handle(effect) => self.handle(out, expr, call, effect, env),
+                Callee::Arena => self.arena(out, expr, call, env),
                 Callee::Intrinsic => self.intrinsic_call(out, expr, call, env),
                 Callee::Kernel => self.kernel_call(out, expr, call, env),
                 Callee::Run(instance, _)

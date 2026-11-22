@@ -129,6 +129,34 @@ pub(super) fn written_name(name: &str) -> &str {
     name.split('@').next().unwrap_or(name)
 }
 
+/// Whether a call is of `alloc`, the effect the compiler builds, which no file
+/// declares, so that its handler has the body to run and no operation.
+pub(super) fn is_arena_call(defs: &Defs, call: &Call) -> bool {
+    written_name(&call.callee) == "alloc"
+        && defs.effect_named(&call.callee).is_none()
+        && defs.function(call.name_pos, &call.callee).is_none()
+}
+
+/// The signature of a call of `alloc`: the body to run, which may carry
+/// `alloc`, and gives what the call gives.
+fn arena_signature() -> Signature {
+    Signature {
+        scope: Scope {
+            names: vec!["T".to_string()],
+            invalid: vec![false],
+            copy: vec![false],
+            discard: vec![false],
+            ..Scope::default()
+        },
+        defaults: vec![false],
+        params: vec![("body".to_string(), Ty::Fn(vec![Ty::Param(0)]))],
+        param_defaults: vec![None],
+        gives: Ty::Param(0),
+        effects: Vec::new(),
+        fn_effects: vec![vec!["alloc".to_string()]],
+    }
+}
+
 impl<'a> Defs<'a> {
     /// Whether the file declares an effect with the name.
     pub(super) fn declares(&self, effect: &str) -> bool {
@@ -328,6 +356,14 @@ impl<'a> Checker<'a> {
             self.errors.push(error);
             self.refusals += 1;
         }
+        signature.gives.solved(&sol)
+    }
+
+    /// Checks a call of `alloc`, which handles it with a fresh arena for the
+    /// body.
+    pub(super) fn arena_call(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
+        let signature = arena_signature();
+        let sol = self.arguments(body, call, &signature, false, None, None);
         signature.gives.solved(&sol)
     }
 
