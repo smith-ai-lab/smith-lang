@@ -18,6 +18,10 @@ pub const ONCE: &[Test] = &[
         a_task_built_with_its_name_answers_a_client_that_starts_it_and_a_build_with_no_name_is_as_it_was,
     ),
     (
+        "main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_without_a_name",
+        main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_without_a_name,
+    ),
+    (
         "each_flag_is_spelled_as_its_parameter_and_gives_it_its_value",
         each_flag_is_spelled_as_its_parameter_and_gives_it_its_value,
     ),
@@ -274,5 +278,22 @@ fn a_task_named_as_a_command_is_refused_where_it_is_written() {
         assert!(err.contains(&format!("`{name}`")), "{err}");
         let (line, col) = (text.lines().position(|l| l.contains("pub fn")).unwrap() + 1, "pub fn ".len() + 1);
         assert!(err.contains(&format!("project.smith:{line}:{col}")), "the place it is written: {err}");
+    }
+}
+
+fn main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_without_a_name() {
+    let project_text = "use main (main)\nuse std.console (console)\n\npub fn local() ! console {\n  main()\n}\n";
+    let private = project(
+        "main-private",
+        &[("main.smith", "use std.console (console, print)\n\nfn main() ! console {\n  print(\"main\")\n}\n"), ("project.smith", project_text)],
+    );
+    let refused = smith(&private, &["build", "local"]);
+    assert!(!refused.status.success());
+    assert!(stderr(&refused).contains("`main` is private to `main`"), "{}", stderr(&refused));
+
+    let public = project("main-public", &[("main.smith", TASKS_MAIN), ("project.smith", project_text)]);
+    for words in [&["build"][..], &["build", "local"]] {
+        let built = smith(&public, words);
+        assert!(built.status.success(), "{words:?}: {}", stderr(&built));
     }
 }

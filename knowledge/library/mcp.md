@@ -36,7 +36,7 @@ fn divide(
   }
 }
 
-fn main() ! messages, alloc {
+pub fn main() ! messages, alloc {
   with mcp(name: "calc", version: "1")
   tool(divide)
 }

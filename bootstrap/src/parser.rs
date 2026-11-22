@@ -797,7 +797,9 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
         p.skip_newlines();
         let start = p.at;
         let mut public = false;
-        if library && p.tok() == &Tok::Keyword("pub") {
+        // The file that is built may write `pub` before a function, which its
+        // `main` is written with where `project.smith` lists it.
+        if p.tok() == &Tok::Keyword("pub") && (library || p.peek(1) == &Tok::Keyword("fn")) {
             public = true;
             p.bump();
         }
