@@ -4,12 +4,12 @@
 
 use super::Part;
 use super::arm64::{
-    self, Asm, EQ, LE, LO, LT, NE, Place, System, X0, X1, X2, X3, X4, X5, X19, X20,
+    self, Asm, EQ, GE, LE, LO, LT, NE, Place, System, X0, X1, X2, X3, X4, X5, X19, X20,
 };
 use super::macho::{
     self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, READ, WRITE,
 };
-use crate::scalar::{Program, Stream};
+use crate::scalar::{Program, Raw, Stream};
 
 const MACHINE: Machine = Machine {
     cpu_type: 0x0100_000c, // arm64
@@ -26,6 +26,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.allocates(),
         program.asks_for_entropy(),
         program.reads(),
+        program.asks_the_kernel(),
     );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
@@ -150,6 +151,32 @@ impl System for Macos {
         asm.bind(end);
         asm.load(X19, 8, false, Place::Frame(0));
         asm.load(X20, 8, false, Place::Frame(8));
+    }
+
+    /// Calls the wrapper of `libSystem`, which gives -1 when the kernel refuses
+    /// it and leaves the error number where `__error` says, and gives, as the
+    /// kernel does on Linux, minus the error number. A wrapper that gives an
+    /// `int` leaves the high half of x0 as it likes, so the low half is made a
+    /// 64-bit number first.
+    fn raw(asm: &mut Asm, call: Raw) {
+        if call == Raw::Kind {
+            asm.mov_w(X0, 1);
+            return;
+        }
+        asm.call(macho::slot(call));
+        if macho::gives_int(call) {
+            // sxtw x0, w0
+            asm.word(0x9340_7c00 | X0 << 5 | X0);
+        }
+        let given = asm.label();
+        // cmp x0, #0; b.ge given
+        asm.word(0xf100_001f);
+        asm.cond(GE, given);
+        asm.call(ERROR);
+        // ldr w0, [x0]; neg x0, x0
+        asm.word(0xb940_0000 | X0 << 5 | X0);
+        asm.word(0xcb00_03e0 | X0 << 16);
+        asm.bind(given);
     }
 
     fn end(asm: &mut Asm) {

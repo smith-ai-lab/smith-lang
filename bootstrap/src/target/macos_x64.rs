@@ -7,9 +7,9 @@ use super::macho::{
     self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, READ, WRITE,
 };
 use super::x86_64::{
-    self, Asm, L, LE, NE, Place, R8, R9, R12, RAX, RBX, RCX, RDI, RDX, RSI, Reg, S, System, Z,
+    self, Asm, L, LE, NE, Place, R8, R9, R10, R12, RAX, RBX, RCX, RDI, RDX, RSI, Reg, S, System, Z,
 };
-use crate::scalar::{Program, Stream};
+use crate::scalar::{Program, Raw, Stream};
 
 const MACHINE: Machine = Machine {
     cpu_type: 0x0100_0007, // x86-64
@@ -26,6 +26,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.allocates(),
         program.asks_for_entropy(),
         program.reads(),
+        program.asks_the_kernel(),
     );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
@@ -143,6 +144,35 @@ impl System for Macos {
         asm.bind(end);
         asm.load(RBX, 8, false, Place::Frame(0));
         asm.load(R12, 8, false, Place::Frame(8));
+    }
+
+    /// Calls the wrapper of `libSystem`, which gives -1 when the kernel refuses
+    /// it and leaves the error number where `__error` says, and gives, as the
+    /// kernel does on Linux, minus the error number. The fourth word is in r10
+    /// for the kernel and is in rcx for a call of the library. A wrapper that
+    /// gives an `int` leaves the high half of rax as it likes, so the low half
+    /// is made a 64-bit number first.
+    fn raw(asm: &mut Asm, call: Raw) {
+        if call == Raw::Kind {
+            asm.mov32(RAX, 1);
+            return;
+        }
+        asm.mov(RCX, R10);
+        asm.call_slot(macho::slot(call));
+        if macho::gives_int(call) {
+            asm.sign_extend32(RAX, RAX);
+        }
+        let refused = asm.label();
+        let given = asm.label();
+        asm.test(RAX);
+        asm.jcc(S, refused);
+        asm.jmp(given);
+        asm.bind(refused);
+        asm.call_slot(ERROR);
+        asm.load(RCX, 4, false, Place::At(RAX));
+        asm.mov32(RAX, 0);
+        asm.sub(RAX, RCX);
+        asm.bind(given);
     }
 
     fn end(asm: &mut Asm) {

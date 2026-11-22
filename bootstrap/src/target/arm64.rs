@@ -92,7 +92,7 @@ pub const LT: u32 = 0xb;
 const MI: u32 = 0x4;
 /// Greater than, or greater than or the same, as signed numbers or floats.
 const GT: u32 = 0xc;
-const GE: u32 = 0xa;
+pub const GE: u32 = 0xa;
 /// Unsigned lower.
 pub const LO: u32 = 0x3;
 /// Unsigned lower or same.
@@ -796,7 +796,7 @@ pub trait System {
     /// refused. It may change what `write` may.
     fn entropy(asm: &mut Asm);
     /// Asks the kernel for the call, whose words are in x0 to x5, and leaves
-    /// what it gives in x0. Only Linux builds it, and the others are never
+    /// what it gives in x0. Linux and macOS build it, and the others are never
     /// asked, as `Target::emit_parts` refuses first. It may change x0 to x17.
     fn raw(_: &mut Asm, _: Raw) {
         unreachable!("a target that has no such call refuses the program before it is built")

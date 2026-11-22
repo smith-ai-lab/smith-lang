@@ -741,6 +741,12 @@ impl Asm {
         self.offset_to(Ref::Slot(slot));
     }
 
+    /// `movsxd rd, rs32`, which sets rd to the number the low half of rs is
+    /// as a signed number.
+    pub fn sign_extend32(&mut self, rd: Reg, rs: Reg) {
+        self.bytes(&[Self::rex_w(rd, rs), 0x63, Self::modrm(rd, rs)]);
+    }
+
     /// `syscall`.
     pub fn syscall(&mut self) {
         self.bytes(&[0x0f, 0x05]);
@@ -1071,7 +1077,7 @@ pub trait System {
     /// system refused. It may change what `write` may.
     fn entropy(asm: &mut Asm);
     /// Asks the kernel for the call, whose words are in rdi, rsi, rdx, r10,
-    /// r8, and r9, and leaves what it gives in rax. Only Linux builds it, and
+    /// r8, and r9, and leaves what it gives in rax. Linux and macOS build it, and
     /// the others are never asked, as `Target::emit_parts` refuses first. It
     /// may change what `write` may.
     fn raw(_: &mut Asm, _: Raw) {

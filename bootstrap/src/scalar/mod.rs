@@ -282,7 +282,8 @@ pub enum System {
     /// address or a 64-bit integer, and gives a 64-bit integer: what the kernel
     /// gives, which is minus its error number when it refuses. The call is
     /// asked for once, so a caller that retries a call that was interrupted
-    /// does it itself. Only the Linux targets build it.
+    /// does it itself. Only the Linux and macOS targets build it, and on macOS
+    /// it is the wrapper of `libSystem` that makes it.
     Raw(Raw),
 }
 
@@ -314,6 +315,10 @@ pub enum Raw {
     ClockGetTime,
     /// `nanosleep(time, left)`.
     NanoSleep,
+    /// Not a call: which kernel the program is built for, as the numbers its
+    /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
+    /// macOS.
+    Kind,
 }
 
 /// What an instruction does with two integers of the same size, except a
