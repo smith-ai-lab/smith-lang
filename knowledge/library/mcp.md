@@ -5,7 +5,10 @@ description: std.mcp, with which a program is a Model Context Protocol server wh
 status: partial
 built:
   - "`Incoming`, `Reply`, the effect `messages`, `Server` with `name`, `version`, `instructions`, `ttl`, and `origins`, and `reply_to(server, incoming)`, which answers one message of the protocol with one `Reply`: `server/discover`, the checks of the version, of `_meta`, of the headers, and of the origin, and the failures with the statuses the protocol gives them, and -32601 with 404 for every other method"
-  - "not `mcp`, `tool`, `resource`, `prompt`, `stdio`, or `at`, which wait on `Function`, `Describe`, `std.http`, and handlers whose body is a function that is passed by name; `reply_to` is what `mcp` will call for the message it answers"
+  - "`mcp(name, version, instructions, ttl, origins)`, written with `with`, which answers the one message `messages` gives with what the lines after it say, `tool(f)` of a function that has `Function`, with `Deserialize` and `Describe` of its `Args`, which lists it with its name, its comment, and the schema of `Args` that `std.jsonschema` gives, and calls it for a `tools/call` of its name with the arguments read from the message, giving a value or a `Result` whose `.err` is a result marked as an error, `-32602` for arguments that do not fit, with the path and the problem of the `ReadError`, and for a tool the server has not, and `server/discover` telling of `tools` when a line offers one, and `stdio()`, which runs the lines once for each line of the standard input, writes each answer as one line, none for a notification, answers `console` so that `print` goes to the standard error, and ends when input does"
+  - "the comment of a function given to `tool` and of the types it takes and gives reaches the executable, as `Describe` says of a type that is described, and no other does"
+  - "the executable is entered through a function of the program that installs `stdio` and calls the one that has `mcp`, as `main` of the example, and not through `project.smith`, which is not built; the effects of a tool are required of the function that names it"
+  - "not `resource`, `prompt`, or `at`, which wait on `std.http` and on handlers that are given more than a function that is passed by name"
 ---
 
 # MCP
@@ -13,6 +16,7 @@ built:
 `std.mcp` makes a program a server of the Model Context Protocol. A tool is a plain function. Its name is the function's name, its description is the comment on the function, and the schema of its input is made from its parameters.
 
 ```
+use std.int (checked_div)
 use std.mcp (mcp, tool)
 
 // Divides one whole number by another.
@@ -22,7 +26,14 @@ fn divide(
   // The number it is divided by.
   b: Int,
 ) -> Result[Int, str] {
-  if b == 0 { .err("b is zero") } else { .ok(a / b) }
+  if b == 0 {
+    .err("b is zero")
+  } else {
+    match checked_div(a, b) {
+      .some(q) { .ok(q) }
+      .none { .err("the quotient does not fit") }
+    }
+  }
 }
 
 fn main() ! messages, alloc {

@@ -1,6 +1,9 @@
 use std.base64
+use std.console (console, input, print)
+use std.describe (Describe)
 use std.deserialize (Deserialize, ReadError, Reader, fail)
-use std.json (RawJson, describe, from_json, raw_text, to_json)
+use std.json (Json, RawJson, describe, from_json, json_string, raw_text, to_json)
+use std.jsonschema (json_schema, schema_text)
 use std.jsonrpc
 use std.list (freeze, push)
 use std.serialize (Serialize, Writer)
@@ -230,7 +233,25 @@ impl Serialize[ResultMeta] {
   }
 }
 
-struct Capabilities { }
+struct Capabilities {
+  tools: bool
+}
+
+// What the lines of the server imply: an object with a member for each kind of
+// offer, which is empty for a server that offers none.
+impl Serialize[Capabilities] {
+  fn write[W: Writer](value: Capabilities, to: take W) -> W ! alloc {
+    var count: Nat = 0
+    if value.tools { count = 1 }
+    var w = Writer.structure(to, "Capabilities", count)
+    if value.tools {
+      w = Writer.field(w, "tools")
+      w = Writer.structure(w, "Tools", 0)
+      w = Writer.end_structure(w)
+    }
+    Writer.end_structure(w)
+  }
+}
 
 struct Discovered {
   supported_versions: List[str]
@@ -273,10 +294,10 @@ impl Serialize[Discovered] {
   }
 }
 
-fn discovered(server: Server) -> str ! alloc {
+fn discovered(server: Server, tools: bool) -> str ! alloc {
   to_json(Discovered(
     supported_versions: [spoken()],
-    capabilities: Capabilities(),
+    capabilities: Capabilities(tools: tools),
     instructions: server.instructions,
     ttl: server.ttl,
     meta: ResultMeta(server_info: ServerInfo(name: server.name, version: server.version)),
@@ -412,64 +433,320 @@ fn said_version(params: Option[RawJson]) -> str ! alloc {
   }
 }
 
-fn request_reply(server: Server, incoming: Incoming, id: str, method: str, params: Option[RawJson]) -> Reply ! alloc {
+fn request_route(server: Server, incoming: Incoming, id: str, method: str, params: Option[RawJson]) -> Routed ! alloc {
   if method == "initialize" {
-    return unsupported(id, said_version(params))
+    return Routed.done(unsupported(id, said_version(params)))
   }
   match params {
     .none { }
     .some(p) {
       if kind(p) != 123 {
-        return refusal(.some(id), -32600, "Invalid Request", .none, 200)
+        return Routed.done(refusal(.some(id), -32600, "Invalid Request", .none, 200))
       }
     }
   }
   match seen_of(params) {
-    .err(why) { refusal(.some(id), -32602, why, .none, 400) }
+    .err(why) { Routed.done(refusal(.some(id), -32602, why, .none, 400)) }
     .ok(seen) {
       match header_fault(incoming.headers, method, seen) {
         .some(fault) {
           (code, why) = fault
-          return refusal(.some(id), code, why, .none, 400)
+          return Routed.done(refusal(.some(id), code, why, .none, 400))
         }
         .none { }
       }
       if seen.version != spoken() {
-        unsupported(id, seen.version)
-      } else if method == "server/discover" {
-        Reply(text: .some(success_text(id, discovered(server))), status: 200)
+        Routed.done(unsupported(id, seen.version))
+      } else if method == "server/discover" or method == "tools/list" or method == "tools/call" {
+        Routed.lines(call_of(id, method, params))
       } else {
-        refusal(.some(id), -32601, "Method not found: {method}", .none, 404)
+        Routed.done(refusal(.some(id), -32601, "Method not found: {method}", .none, 404))
       }
     }
   }
 }
 
-// What the server answers to one message. A message of a page that the server
-// does not list is refused before it is read, and one that needs no answer, a
-// notification, is answered by none.
+
+// What a message asks of the lines of the server: the request, and for a call
+// the name of the tool and the text of its arguments.
+struct Call {
+  id: str
+  method: str
+  name: Option[str]
+  arguments: str
+}
+
+enum Routed {
+  done: Reply
+  lines: Call
+}
+
+fn call_of(id: str, method: str, params: Option[RawJson]) -> Call ! alloc {
+  var name: Option[str] = .none
+  var arguments = "\{\}"
+  match params {
+    .none { }
+    .some(p) {
+      got: Result[Members, ReadError] = from_json(raw_text(p))
+      match got {
+        .err(e) { }
+        .ok(members) {
+          name = member_text(members.named, "name")
+          match find(members.named, "arguments") {
+            .some(a) { arguments = raw_text(a) }
+            .none { }
+          }
+        }
+      }
+    }
+  }
+  Call(id: id, method: method, name: name, arguments: arguments)
+}
+
+fn meta_text(server: Server) -> str ! alloc {
+  to_json(ResultMeta(server_info: ServerInfo(name: server.name, version: server.version)))
+}
+
+fn list_text(server: Server, entries: List[str]) -> str ! alloc {
+  var b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"tools\":[")
+  loop i in 0..entries.size {
+    if i > 0 { b = texts.append(b, ",") }
+    b = texts.append(b, entries[i])
+  }
+  b = texts.append(b, "],\"ttlMs\":")
+  b = texts.append(b, to_json(server.ttl))
+  b = texts.append(b, ",\"cacheScope\":\"private\",\"_meta\":")
+  b = texts.append(b, meta_text(server))
+  texts.finish(texts.append(b, "\}"))
+}
+
+// The result of a call: what the tool gave, as text and as structured content,
+// marked as an error when it failed.
+fn call_text(server: Server, failed: bool, value: str) -> str ! alloc {
+  var b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"content\":[\{\"type\":\"text\",\"text\":")
+  b = texts.append(b, json_string(value))
+  b = texts.append(b, "\}],\"structuredContent\":")
+  b = texts.append(b, value)
+  if failed { b = texts.append(b, ",\"isError\":true") }
+  b = texts.append(b, ",\"_meta\":")
+  b = texts.append(b, meta_text(server))
+  texts.finish(texts.append(b, "\}"))
+}
+
+// What the server answers to a message of its lines, from what the lines gave:
+// whether any line asked, the entries of the tools, the result of the one tool
+// that was called, and the failure of reading its arguments.
+fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result: Option[str], failure: Option[(Int, str)]) -> Reply ! alloc {
+  if call.method == "server/discover" {
+    return Reply(text: .some(success_text(call.id, discovered(server, asked))), status: 200)
+  }
+  if asked == false {
+    return refusal(.some(call.id), -32601, "Method not found: {call.method}", .none, 404)
+  }
+  if call.method == "tools/list" {
+    return Reply(text: .some(success_text(call.id, list_text(server, entries))), status: 200)
+  }
+  match failure {
+    .some(f) {
+      (code, why) = f
+      refusal(.some(call.id), code, why, .none, 200)
+    }
+    .none {
+      match result {
+        .some(r) { Reply(text: .some(success_text(call.id, r)), status: 200) }
+        .none {
+          label = match call.name {
+            .some(n) { n }
+            .none { "" }
+          }
+          refusal(.some(call.id), -32602, "Unknown tool: {label}", .none, 200)
+        }
+      }
+    }
+  }
+}
+
+// What the server answers to one message when no line answers it, so that it
+// offers nothing.
 pub fn reply_to(server: Server, incoming: Incoming) -> Reply ! alloc {
+  match route(server, incoming) {
+    .done(reply) { reply }
+    .lines(call) { conclude(server, call, false, [], .none, .none) }
+  }
+}
+
+// What the lines of a server ask of the message they are run for, and what they
+// say of it.
+effect lines {
+  fn asked() -> Call
+  fn listed(entry: str)
+  fn answered(failed: bool, value: str)
+  fn refused(code: Int, message: str)
+}
+
+// `mcp` answers the message `messages` gives with what the lines after it say,
+// and the lines are run for that one message.
+pub fn mcp(
+  name: str,
+  version: str,
+  instructions: Option[str] = .none,
+  ttl: Nat = 0,
+  origins: take List[str] = [],
+  body: fn() ! lines, alloc
+) ! messages, alloc {
+  server = Server(name: name, version: version, instructions: instructions, ttl: ttl, origins: origins)
+  match route(server, message()) {
+    .done(reply) { answer(reply) }
+    .lines(call) {
+      var any = false
+      var entries: List[str] = []
+      var result: Option[str] = .none
+      var failure: Option[(Int, str)] = .none
+      lines(
+        asked: {
+          any = true
+          call
+        },
+        listed: fn(entry) { entries = push(entries, entry) },
+        answered: fn(failed, value) { result = .some(call_text(server, failed, value)) },
+        refused: fn(code, why) { failure = .some((code, why)) },
+        body: body,
+      )
+      answer(conclude(server, call, any, entries, result, failure))
+    }
+  }
+}
+
+// What the server does with one message: it is answered, or it is one that the
+// lines of the server answer. A message of a page that the server does not list
+// is refused before it is read, and one that needs no answer, a notification, is
+// answered by none.
+fn route(server: Server, incoming: Incoming) -> Routed ! alloc {
   if from_another_origin(server.origins, incoming.headers) {
-    return Reply(text: .none, status: 403)
+    return Routed.done(Reply(text: .none, status: 403))
   }
   match jsonrpc.read(incoming.text) {
-    .err(f) { refusal(.none, f.code, f.message, .none, 200) }
+    .err(f) { Routed.done(refusal(.none, f.code, f.message, .none, 200)) }
     .ok(received) {
       match received {
-        .many(ms) { refusal(.none, -32600, "Invalid Request", .none, 200) }
+        .many(ms) { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
         .one(m) {
           match m {
-            .response(r) { refusal(.none, -32600, "Invalid Request", .none, 200) }
-            .notification(n) { Reply(text: .none, status: 202) }
+            .response(r) { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
+            .notification(n) { Routed.done(Reply(text: .none, status: 202)) }
             .request(r) {
               match r.id {
-                .null { refusal(.none, -32600, "Invalid Request", .none, 200) }
-                .number(n) { request_reply(server, incoming, to_json(n), r.method, r.params) }
-                .text(t) { request_reply(server, incoming, to_json(t), r.method, r.params) }
+                .null { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
+                .number(n) { request_route(server, incoming, to_json(n), r.method, r.params) }
+                .text(t) { request_route(server, incoming, to_json(t), r.method, r.params) }
               }
             }
           }
         }
+      }
+    }
+  }
+}
+
+// What a tool gave, as the text of its value and whether it is a failure: a
+// tool gives a value, or a `Result` of one whose `.err` is a failure.
+trait Gave[R] {
+  fn gave(r: take R) -> (bool, str) ! alloc
+}
+
+impl[T] Gave[T]
+  requires Serialize[T]
+  requires Discard[T]
+{
+  fn gave(r: take T) -> (bool, str) ! alloc { (false, to_json(r)) }
+}
+
+impl[T, E] Gave[Result[T, E]]
+  requires Serialize[T]
+  requires Serialize[E]
+  requires Discard[T]
+  requires Discard[E]
+{
+  fn gave(r: take Result[T, E]) -> (bool, str) ! alloc {
+    match r {
+      .ok(v) { (false, to_json(v)) }
+      .err(e) { (true, to_json(e)) }
+    }
+  }
+}
+
+// The entry of a tool in the list of the tools: its name, its comment, and the
+// schema of what it takes, with a description for each parameter.
+fn entry_of[F, A, R](f: F) -> str ! alloc
+  requires Function[F, A, R]
+  requires Describe[A]
+{
+  schema = schema_text(Describe[A].describe(json_schema(Json(cases: .key, names: .written))))
+  var b = texts.append(texts.text(), "\{\"name\":")
+  b = texts.append(b, json_string(Function.name(f)))
+  b = texts.append(b, ",\"description\":")
+  b = texts.append(b, json_string(Function.about(f)))
+  b = texts.append(b, ",\"inputSchema\":")
+  b = texts.append(b, schema)
+  texts.finish(texts.append(b, "\}"))
+}
+
+// The function `f` offered as a tool. It is listed when the message lists the
+// tools, and it is called, with its arguments read from the message, when the
+// message calls it by its name. For any other message it does nothing.
+pub fn tool[F, A, R](f: F) ! lines, alloc
+  requires Function[F, A, R]
+  requires Deserialize[A]
+  requires Discard[A]
+  requires Describe[A]
+  requires Gave[R]
+{
+  c = asked()
+  if c.method == "tools/list" {
+    listed(entry_of(f))
+  } else if c.method == "tools/call" {
+    wanted = match c.name {
+      .some(n) { n == Function.name(f) }
+      .none { false }
+    }
+    if wanted {
+      got: Result[A, ReadError] = from_json(c.arguments)
+      match got {
+        .err(e) { refused(-32602, describe(e)) }
+        .ok(args) {
+          (failed, value) = Gave.gave(Function.call(f, args))
+          answered(failed, value)
+        }
+      }
+    }
+  }
+}
+
+// The messages of a client that is started on the same machine: each line of
+// the standard input is one message, the lines under `stdio` are run for each,
+// and each answer is written as one line of the standard output. What the lines
+// print goes to the standard error. It ends when the input does.
+pub fn stdio(body: fn() ! messages, console, alloc) ! console, alloc {
+  loop round in 0..4294967296 {
+    match input() {
+      .none { break }
+      .some(line) {
+        messages(
+          message: { Incoming(text: line, headers: []) },
+          answer: fn(reply) {
+            match reply.text {
+              .some(t) { print(t) }
+              .none { }
+            }
+          },
+          body: {
+            console(
+              print: fn(text, end, to) { print(text, end: end, to: .stderr) },
+              input: fn(prompt) { input(prompt) },
+              body: body,
+            )
+          },
+        )
       }
     }
   }
