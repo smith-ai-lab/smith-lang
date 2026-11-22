@@ -30,6 +30,7 @@ mod remove;
 pub mod runtime;
 mod ryu;
 mod sink;
+mod suspend;
 mod tail;
 mod thread;
 mod trig;
@@ -43,9 +44,9 @@ mod words;
 pub use build::Builder;
 pub use common::common;
 pub use eval::{
-    Outcome, call, run, run_copying, run_counting, run_measured, run_taking, run_with_command_line,
-    run_with_command_line_and_errors, run_with_input, run_with_limit, run_with_words,
-    run_with_words_and_errors,
+    Outcome, Waited, call, call_waiting, poll_to_end, run, run_copying, run_counting, run_measured,
+    run_taking, run_with_command_line, run_with_command_line_and_errors, run_with_input,
+    run_with_limit, run_with_words, run_with_words_and_errors,
 };
 pub use exp_fast::table as exp_table;
 pub use fold::fold;
@@ -55,6 +56,7 @@ pub use recur::recur;
 pub use remat::rematerialized;
 pub use remove::{WALKS, remove, remove_counting};
 pub use ryu::tables as ryu_tables;
+pub use suspend::{Suspended, Task, suspend};
 pub use tail::tail;
 pub use thread::thread;
 pub use trim::trim;
@@ -293,6 +295,13 @@ pub enum System {
     /// does it itself. Only the Linux and macOS targets build it, and on macOS
     /// it is the wrapper of `libSystem` that makes it.
     Raw(Raw),
+    /// Waits for what the two 64-bit integers it takes say: the kind of the
+    /// wait and the handle it is on, which the library gives their meaning. It
+    /// gives nothing. A task that runs it suspends and is resumed after the
+    /// wait is over, with every value it held. It is made by the lowering of a
+    /// function that suspends and is gone once `suspend` has made that function
+    /// a state machine, so no target builds it.
+    Suspend,
 }
 
 /// The calls of the kernel that a program asks for with `System::Raw`, each

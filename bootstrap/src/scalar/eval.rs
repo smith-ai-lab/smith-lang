@@ -73,6 +73,19 @@ struct Machine<'a> {
     ran: u64,
     /// How many calls are open.
     depth: usize,
+    /// What says whether a wait is over at once, and each wait so far.
+    ready: Option<&'a mut (dyn FnMut(u64, u64) -> bool + 'a)>,
+    waited: Vec<Waited>,
+}
+
+/// A wait a program made: its kind and handle, and whether what it waited for
+/// was there at once, so that the task went on, or it was not, so that the
+/// task was suspended and resumed once it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Waited {
+    pub kind: u64,
+    pub handle: u64,
+    pub ready: bool,
 }
 
 /// The program ends, with the status.
@@ -203,6 +216,8 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         blocks: BLOCKS,
         ran: 0,
         depth: 0,
+        ready: None,
+        waited: Vec::new(),
     };
     let status = match machine.call(program.main, args) {
         Ok(_) => 0,
@@ -278,19 +293,110 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         blocks: BLOCKS,
         ran: 0,
         depth: 0,
+        ready: None,
+        waited: Vec::new(),
     };
     let words = args.iter().map(|n| Word::Int(*n)).collect();
-    (machine
-        .call(function, words)
-        .ok()
-        .expect("memory")
-        .into_iter())
-    .map(|w| match w {
-        Word::Int(n) => n,
-        Word::Address(_) => panic!("a function that gives an address"),
-        Word::Vector(_) => panic!("a function that gives a vector"),
-    })
-    .collect()
+    integers(machine.call(function, words).ok().expect("memory"))
+}
+
+fn integers(words: Vec<Word>) -> Vec<u64> {
+    words
+        .into_iter()
+        .map(|w| match w {
+            Word::Int(n) => n,
+            Word::Address(_) => panic!("a function that gives an address"),
+            Word::Vector(_) => panic!("a function that gives a vector"),
+        })
+        .collect()
+}
+
+/// A machine with no texts and no input, for a function that is run alone.
+fn alone<'a>(
+    program: &'a Program,
+    ready: &'a mut (dyn FnMut(u64, u64) -> bool + 'a),
+) -> Machine<'a> {
+    Machine {
+        program,
+        memory: Vec::new(),
+        starts: Vec::new(),
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+        stdin: Vec::new(),
+        read: 0,
+        left: usize::MAX,
+        requests: Vec::new(),
+        taking: None,
+        taken: Vec::new(),
+        copying: None,
+        copied: Vec::new(),
+        blocks: BLOCKS,
+        ran: 0,
+        depth: 0,
+        ready: Some(ready),
+        waited: Vec::new(),
+    }
+}
+
+/// Runs one function on integers as `call` does, where each wait it makes is
+/// answered by `ready`, which is given its kind and handle, and gives the
+/// integers it returns and each wait in order.
+pub fn call_waiting(
+    program: &Program,
+    function: usize,
+    args: &[u64],
+    ready: &mut dyn FnMut(u64, u64) -> bool,
+) -> (Vec<u64>, Vec<Waited>) {
+    let mut machine = alone(program, ready);
+    let words = args.iter().map(|n| Word::Int(*n)).collect();
+    let given = machine.call(function, words).ok().expect("memory");
+    (integers(given), machine.waited)
+}
+
+/// Runs a function that `suspend` made a state machine, as a scheduler of one
+/// task does: it makes a frame of `bytes`, starts the task with `args`, and
+/// polls it until it is done, and each time it is not, it asks `ready` whether
+/// the wait it gives is over, as `call_waiting` does of the same function
+/// before it was split, and polls again. It gives what the function returns,
+/// each wait in order, and how many times the poll said the task was waiting.
+pub fn poll_to_end(
+    program: &Program,
+    start: usize,
+    poll: usize,
+    bytes: u64,
+    args: &[u64],
+    ready: &mut dyn FnMut(u64, u64) -> bool,
+) -> (Vec<u64>, Vec<Waited>, usize) {
+    let mut machine = alone(program, ready);
+    machine.memory.resize(16, 0);
+    let frame = BASE + machine.memory.len();
+    machine
+        .memory
+        .resize(machine.memory.len() + bytes as usize, 0);
+    // A frame that held the last task's values is not what a new task starts
+    // with: the start gives the frame what it needs.
+    machine.memory[16..].fill(0xA5);
+    let mut words = vec![Word::Address(frame)];
+    words.extend(args.iter().map(|n| Word::Int(*n)));
+    machine.call(start, words).ok().expect("memory");
+    let mut waiting = 0;
+    loop {
+        let given = machine
+            .call(poll, vec![Word::Address(frame)])
+            .ok()
+            .expect("memory");
+        let mut given = integers(given).into_iter();
+        let status = given.next().expect("a status");
+        let (kind, handle) = (
+            given.next().expect("a kind"),
+            given.next().expect("a handle"),
+        );
+        if status == 0 {
+            return (given.collect(), machine.waited, waiting);
+        }
+        waiting += 1;
+        machine.wait(kind, handle);
+    }
 }
 
 /// The bits of an integer of the size, in a word.
@@ -643,6 +749,20 @@ impl Machine<'_> {
                 },
             }
         }
+    }
+
+    /// Notes a wait, and whether it is over, as the one who runs the program
+    /// says.
+    fn wait(&mut self, kind: u64, handle: u64) {
+        let ready = match self.ready.as_mut() {
+            Some(ready) => ready(kind, handle),
+            None => true,
+        };
+        self.waited.push(Waited {
+            kind,
+            handle,
+            ready,
+        });
     }
 
     /// A frame for a call of the function that is about to begin.
@@ -1051,6 +1171,21 @@ impl Machine<'_> {
                         call: System::Raw(_),
                         ..
                     } => panic!("the evaluator has no network and no clock of its own"),
+                    // A wait is answered by what the test says is ready, and is
+                    // noted. Whether it is ready at once or the task is
+                    // suspended and resumed, the program goes on after it with
+                    // every value it held, so the run is the same.
+                    Op::System {
+                        call: System::Suspend,
+                        args,
+                    } => {
+                        let (Word::Int(kind), Word::Int(handle)) = (get(&args[0]), get(&args[1]))
+                        else {
+                            panic!("a wait that is not of two numbers")
+                        };
+                        self.wait(kind, handle);
+                        Vec::new()
+                    }
                     Op::System {
                         call: System::ArenaOpen | System::ArenaClose,
                         ..

@@ -2295,6 +2295,10 @@ impl<S: System> Writer<'_, S> {
                 ..
             } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
             Op::System {
+                call: Call::Suspend,
+                ..
+            } => unreachable!("a suspension is gone once the state machines are made"),
+            Op::System {
                 call: Call::Write(stream),
                 args,
             } => {
