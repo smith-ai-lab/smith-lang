@@ -7,7 +7,7 @@
 //! text is checked and built as any program is, so nothing here knows what a
 //! function is called with beyond the flags' types.
 
-use crate::diag::Error;
+use crate::diag::{Error, Pos};
 use crate::lexer;
 use crate::parser::{self, Bound, Type};
 
@@ -38,6 +38,8 @@ pub struct Flag {
 /// A public function of `project.smith`.
 pub struct Task {
     pub name: String,
+    /// Where the task's name is written in `project.smith`.
+    pos: Pos,
     flags: Vec<Flag>,
     /// The `use` lines of the effects the task lists, as they are written.
     imports: Vec<String>,
@@ -152,6 +154,7 @@ pub fn read(source: &str) -> Result<Read, Vec<Error>> {
         }
         tasks.push(Task {
             name: f.name.clone(),
+            pos: f.pos,
             flags,
             imports,
             effects,
@@ -209,6 +212,24 @@ impl Read {
 }
 
 impl Task {
+    /// The errors with the ones in the text the compiler writes for the task
+    /// given the place of the task's name, which is in `project.smith`, so that
+    /// every error shows a line the programmer wrote.
+    pub fn placed(&self, errors: Vec<Error>) -> Vec<Error> {
+        let mut placed: Vec<Error> = Vec::new();
+        for mut e in errors {
+            if e.module.is_none() {
+                e.pos = self.pos;
+                e.module = Some(FILE.to_string());
+                e.fix = None;
+            }
+            if !placed.contains(&e) {
+                placed.push(e);
+            }
+        }
+        placed
+    }
+
     /// The program that starts at the task, as the text of a file with a
     /// `main`. It reads the flags from the words it is started with, says the
     /// first thing that is wrong with them and ends with a status that is not
