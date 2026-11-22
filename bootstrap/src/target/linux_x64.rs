@@ -122,6 +122,9 @@ impl System for Linux {
             Raw::Close => 3,
             Raw::NanoSleep => 35,
             Raw::ClockGetTime => 228,
+            Raw::EpollCreate1 => 291,
+            Raw::EpollCtl => 233,
+            Raw::EpollWait => 281,
         };
         asm.mov32(RAX, number);
         asm.syscall();

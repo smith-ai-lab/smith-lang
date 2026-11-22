@@ -163,6 +163,11 @@ impl System for Macos {
             asm.mov_w(X0, 1);
             return;
         }
+        // macOS has no `epoll`, and what is built for it is never run there.
+        if matches!(call, Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait) {
+            asm.mov64(X0, -38i64 as u64);
+            return;
+        }
         asm.call(macho::slot(call));
         if macho::gives_int(call) {
             // sxtw x0, w0

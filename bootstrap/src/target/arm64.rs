@@ -798,8 +798,12 @@ pub trait System {
     /// Asks the kernel for the call, whose words are in x0 to x5, and leaves
     /// what it gives in x0. Linux and macOS build it, and the others are never
     /// asked, as `Target::emit_parts` refuses first. It may change x0 to x17.
-    fn raw(_: &mut Asm, _: Raw) {
-        unreachable!("a target that has no such call refuses the program before it is built")
+    fn raw(asm: &mut Asm, call: Raw) {
+        assert!(
+            matches!(call, Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait),
+            "a target that has no such call refuses the program before it is built"
+        );
+        asm.mov64(X0, -38i64 as u64);
     }
     /// Ends the program with the status in x0.
     fn end(asm: &mut Asm);

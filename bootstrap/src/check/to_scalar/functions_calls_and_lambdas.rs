@@ -113,6 +113,15 @@ pub(super) fn stops(body: &[Stmt], breaks: bool, returns: bool) -> bool {
     values(body).any(|e| one(e, breaks, returns))
 }
 
+/// Whether an effect is one that waits for the system: `net` and `time` of the
+/// library.
+fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
+    defs.effect_named(effect).is_some_and(|at| {
+        let e = &defs.file.effects[at];
+        crate::check::of_std(e.pos) && matches!(crate::check::written_name(&e.name), "net" | "time")
+    })
+}
+
 impl<'a> Lowering<'a> {
     pub(super) fn function(&mut self, instance: &Instance) -> form::Function {
         self.function_with(instance, &[])
@@ -171,13 +180,14 @@ impl<'a> Lowering<'a> {
         }
         let gives = view.gives.subst(&instance.args);
         let code = Code::Stmts(&view.f.body);
-        if !slots.is_empty() && has_return(&view.f.body) {
-            self.errors.push(Error::unsupported(
-                view.f.pos,
-                "a `return` in a function that runs under a handler whose functions assign a name,",
-            ));
-        }
-        let mut result = self.leaving(&mut out, code, &instance.args, (&gives, true), Vec::new());
+        out.give_back = slots.clone();
+        // A `return` gives back the names the function gives back as they are
+        // where it leaves, so the frames they are in are noted there.
+        let limits: Vec<usize> = match slots.is_empty() {
+            true => Vec::new(),
+            false => out.frames.iter().map(Vec::len).collect(),
+        };
+        let mut result = self.leaving(&mut out, code, &instance.args, (&gives, true), limits);
         if view.gives == Ty::Nothing {
             result.clear();
         }
@@ -346,7 +356,16 @@ impl<'a> Lowering<'a> {
             // it is reached by nothing and the end of a function takes some.
             let last = ends.last().map(|end| end.args.clone());
             for end in ends {
-                out.blocks[end.block].end = form::End::Return(end.args);
+                // The names the function gives back are given as they are where
+                // the `return` leaves.
+                let mut args = end.args;
+                for slot in &out.give_back {
+                    let at = (out.frames[slot.frame].iter())
+                        .rposition(|b| b.name == slot.name)
+                        .expect("a name the function gives back");
+                    args.extend(end.names[slot.frame][at].iter().copied());
+                }
+                out.blocks[end.block].end = form::End::Return(args);
             }
             return if reached {
                 result
@@ -967,6 +986,10 @@ impl<'a> Lowering<'a> {
         for g in &named {
             effects.extend(defs.signatures[*g].effects.iter());
         }
+        // The network and the clock suspend a task, and a copy that calls them
+        // under a scheduler is given the scheduler's state, as one that calls
+        // `spawn` is.
+        let suspends = effects.iter().any(|e| of_a_waiting_effect(defs, e));
         let mut handled: Vec<usize> = effects
             .into_iter()
             .filter_map(|e| {
@@ -976,6 +999,13 @@ impl<'a> Lowering<'a> {
                 (defs.handled(e) || out.handlers.iter().any(|h| h.effect == at)).then_some(at)
             })
             .collect();
+        if suspends
+            && let Some(scheduler) = (out.handlers.iter().rev())
+                .find(|h| defs.is_scheduler(h.effect))
+                .map(|h| h.effect)
+        {
+            handled.push(scheduler);
+        }
         handled.sort_unstable();
         handled.dedup();
         if handled.is_empty() {

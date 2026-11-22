@@ -72,7 +72,9 @@ pub fn slot(call: Raw) -> usize {
         Raw::Close => 15,
         Raw::ClockGetTime => 16,
         Raw::NanoSleep => 17,
-        Raw::Kind => unreachable!("which kernel it is calls nothing"),
+        Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait => {
+            unreachable!("which kernel it is, and what only Linux has, call nothing")
+        }
     }
 }
 

@@ -7486,6 +7486,11 @@ impl<'a> Checker<'a> {
                     .collect();
                 let fix = written(f, &kept);
                 for (effect, at) in unused {
+                    // A function of the library lists `task` to be built for the
+                    // scheduler it runs under, though it asks nothing of it.
+                    if written_name(effect) == "task" && of_std(f.pos) {
+                        continue;
+                    }
                     let known =
                         (self.unused_effects.iter()).any(|(_, _, e, p, _)| e == effect && p == at);
                     if !known {

@@ -6,10 +6,11 @@ status: partial
 built:
   - "`std.net` declares `net`, with the operations, `Address`, and `NetError` as the page shows them, and `Listener`, `Connection`, and `Socket`, each a struct with one private field, the system's handle, and neither `Copy` nor `Discard`"
   - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
-  - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is `failed` with the one message that looking up a name is not built"
+  - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is `failed` with the one message that looking up a name is not built"
   - "`failed` holds the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
   - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing; a handler that gives a `Listener`, a `Connection`, or a `Socket` is not built, as its handle is private to `std.net`"
-  - "not Windows, a call that suspends its task, or a name looked up"
+  - "on Linux a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` for the connection while other tasks run, and a call with no group blocks, as it did; macOS blocks until #967"
+  - "not Windows, or a name looked up"
 ---
 
 # The network

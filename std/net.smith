@@ -1,6 +1,7 @@
-use std.bits (bit_and, i64, shift_right, u16)
-use std.int (checked_add, checked_mul, narrow, saturating_add, saturating_sub)
+use std.bits (bit_and, i64, shift_right, u16, u64)
+use std.int (checked_add, checked_mul, narrow, saturating_add, saturating_sub, wrapping_narrow)
 use std.list (push)
+use std.task (Handle, task)
 use std.text (Text, append_ascii, finish, text)
 
 pub struct Listener {
@@ -346,6 +347,11 @@ fn no_signal() -> i64 {
   if on_macos() { 524288 } else { 16384 }
 }
 
+// The same flag with the one that says the call must not wait.
+fn no_signal_wait() -> i64 {
+  if on_macos() { 524416 } else { 16448 }
+}
+
 fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! alloc {
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
@@ -372,7 +378,38 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
   .ok(Listener(handle: fd))
 }
 
-fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc {
+// Waits until the descriptor can be read, as a task that a scheduler runs does,
+// which is known where the copy is built.
+fn wait_to_read(fd: i64) ! task {
+  number: u64 = wrapping_narrow(fd)
+  __wait(.read(Handle(number: number)))
+}
+
+fn wait_to_write(fd: i64) ! task {
+  number: u64 = wrapping_narrow(fd)
+  __wait(.write(Handle(number: number)))
+}
+
+fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
+  if __scheduled() {
+    var fd: i64 = -1
+    var failed: i64 = 0
+    loop attempt in 0..1000000 {
+      wait_to_read(l.handle)
+      got = __system(3, l.handle, 0, 0, 0, 0, 0)
+      if got >= 0 {
+        fd = got
+        break
+      }
+      if got != -4 and got != -11 {
+        failed = got
+        break
+      }
+    }
+    if failed != 0 { return .err(failure("accept", failed)) }
+    if fd < 0 { return .err(.failed("accept: interrupted")) }
+    return .ok(Connection(handle: fd))
+  }
   loop attempt in 0..64 {
     fd = __system(3, l.handle, 0, 0, 0, 0, 0)
     if fd >= 0 { return .ok(Connection(handle: fd)) }
@@ -400,9 +437,24 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
   .ok(Connection(handle: fd))
 }
 
-fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc {
+fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc, task {
   if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
+  if __scheduled() {
+    var got: i64 = -11
+    loop attempt in 0..1000000 {
+      // The call that does not wait is asked first, and the task waits for the
+      // connection only when it would have blocked.
+      got = __system(8, c.handle, buffer, most, 64, 0, 0)
+      if got == -11 {
+        wait_to_read(c.handle)
+      } else if got != -4 {
+        break
+      }
+    }
+    if got >= 0 { return .ok(__sized(buffer, got)) }
+    return .err(failure("read", got))
+  }
   loop attempt in 0..64 {
     got = __system(8, c.handle, buffer, most, 0, 0, 0)
     if got >= 0 { return .ok(__sized(buffer, got)) }
@@ -420,20 +472,25 @@ fn count(given: i64) -> Nat {
   }
 }
 
-fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
+fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc, task {
   var sent: Nat = 0
-  loop attempt in 0..bytes.size {
-    if sent < bytes.size {
-      rest = bytes[sent..]
-      given = __system(7, c.handle, rest, rest.size, no_signal(), 0, 0)
-      if given == -4 {
-      } else if given < 0 {
-        return .err(failure("write", given))
-      } else {
-        match checked_add(sent, count(given)) {
-          .some(n) { sent = n }
-          .none { return .err(.failed("write: too many bytes")) }
-        }
+  var flags: i64 = no_signal()
+  // A task that a scheduler runs does not block: the call that does not wait is
+  // asked, and the task waits for the connection when it would have blocked.
+  if __scheduled() { flags = no_signal_wait() }
+  loop attempt in 0..1000000 {
+    if sent >= bytes.size { break }
+    rest = bytes[sent..]
+    given = __system(7, c.handle, rest, rest.size, flags, 0, 0)
+    if given == -4 {
+    } else if given == -11 {
+      if __scheduled() { wait_to_write(c.handle) }
+    } else if given < 0 {
+      return .err(failure("write", given))
+    } else {
+      match checked_add(sent, count(given)) {
+        .some(n) { sent = n }
+        .none { return .err(.failed("write: too many bytes")) }
       }
     }
   }

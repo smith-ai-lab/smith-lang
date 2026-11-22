@@ -159,6 +159,9 @@ enum Kept {
     /// It lends the function, so the function may be called any number of
     /// times.
     Lent,
+    /// It is the body of a handler, or the work of a child, which runs exactly
+    /// once, so what it gives away is given and not dropped.
+    Called,
 }
 
 /// What lends a value, if it is lent: the function, or the lambda, whose
@@ -1039,6 +1042,9 @@ impl<'a> Walk<'a> {
         // A function that is taken is called at most once, so it may not call
         // the lambda, and what the lambda gives away is dropped.
         let lacks = frame.gives.iter().find_map(|(name, _, ty)| {
+            if kept == Kept::Called {
+                return None;
+            }
             let ty = ty.as_ref()?;
             let cause = undiscardable(self.defs, self.scope, ty)?;
             Some((name.clone(), ty.clone(), cause))
@@ -1112,7 +1118,13 @@ impl<'a> Walk<'a> {
         let handler_body = call.qualifier.is_none()
             && (super::effects_with_and_try::is_arena_call(defs, call)
                 || defs.effect_named(&call.callee).is_some()
-                || super::frames::is_frame_call(call));
+                || super::frames::is_frame_call(call)
+                // The work of a child runs once, after the call has moved on,
+                // and the body of a group runs once, in its scheduler.
+                || (matches!(call.callee.as_str(), "spawn" | "tasks")
+                    && defs
+                        .function(call.name_pos, &call.callee)
+                        .is_some_and(|f| super::of_std(defs.file.functions[f].pos))));
         let mut position = 0;
         let mut given: Vec<(usize, &Expr)> = Vec::new();
         for arg in &call.args {
@@ -1177,7 +1189,9 @@ impl<'a> Walk<'a> {
             match &arg.value {
                 Expr::Lambda(l) => {
                     let takes = param.map(|p| p.takes.as_slice()).unwrap_or(&[]);
-                    let kept = if handler_body || param.is_some_and(|p| p.take) {
+                    let kept = if handler_body {
+                        Kept::Called
+                    } else if param.is_some_and(|p| p.take) {
                         Kept::Taken
                     } else {
                         Kept::Lent

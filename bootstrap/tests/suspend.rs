@@ -26,6 +26,10 @@ pub const ONCE: &[Test] = &[
         the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it,
     ),
     (
+        "a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave",
+        a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave,
+    ),
+    (
         "a_program_with_no_wait_is_not_changed",
         a_program_with_no_wait_is_not_changed,
     ),
@@ -641,4 +645,85 @@ fn the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it() {
     assert_eq!(waiting, 3);
     let kinds: Vec<(u64, u64)> = waited.iter().map(|w| (w.kind, w.handle)).collect();
     assert_eq!(kinds, vec![(7, 2), (8, 2), (9, 2005)]);
+}
+
+/// A function that waits only for an odd number, and adds to the state either way.
+fn sometimes() -> Function {
+    let mut b = Builder::new();
+    let [x, state, other] = b.params(&[LONG, LONG, LONG])[..] else {
+        unreachable!()
+    };
+    let one = b.int(Bits::B64, 1);
+    let low = b.binary(Binary::And, x, one);
+    let zero = b.int(Bits::B64, 0);
+    let even = b.compare(Compare::Equal, low, zero);
+    let (waits, _) = b.block(&[]);
+    let (joined, params) = b.block(&[LONG, LONG]);
+    b.switch(even, vec![(waits, vec![]), (joined, vec![state, other])]);
+    b.at(waits);
+    let kind = b.int(Bits::B64, 5);
+    let after = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, x, state, other],
+        },
+        &[LONG, LONG],
+    );
+    b.jump(joined, after);
+    b.at(joined);
+    let more = b.binary(Binary::Add, params[0], x);
+    b.ret(vec![x, more, params[1]]);
+    b.finish(&[LONG, LONG, LONG])
+}
+
+/// A function that calls it and gives what it gave and the state.
+fn calls_sometimes() -> Function {
+    let mut b = Builder::new();
+    let [x, state, other] = b.params(&[LONG, LONG, LONG])[..] else {
+        unreachable!()
+    };
+    let made = b.call(0, vec![x, state, other], &[LONG, LONG, LONG]);
+    let sum = b.binary(Binary::Add, made[0], x);
+    b.ret(vec![sum, made[1], made[2]]);
+    b.finish(&[LONG, LONG, LONG])
+}
+
+/// A task that calls one that is over at its first poll goes on with the state
+/// that one gave, which is what the call gave of it.
+fn a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave() {
+    let mut main = Builder::new();
+    main.ret(vec![]);
+    let program = Program {
+        data: Vec::new(),
+        functions: vec![sometimes(), calls_sometimes(), main.finish(&[])],
+        main: 2,
+    };
+    assert_eq!(scalar::check(&program), Ok(()));
+    let frames = scalar::Frames {
+        poll_any: None,
+        starters: Vec::new(),
+        through: vec![LONG, LONG],
+    };
+    let made = scalar::suspend_frames(program, &frames).expect("no call reaches itself");
+    assert_eq!(scalar::check(&made.program), Ok(()));
+    let poll_any = made.poll_any.expect("a function waits");
+    let outer = made.tasks.iter().find(|t| t.start == 1).expect("a task");
+    for (x, waits) in [(4u64, 0usize), (6, 0), (3, 1), (9, 1)] {
+        let mut state = vec![100u64, 7];
+        let (got, waited, waiting) = scalar::poll_through(
+            &made.program,
+            poll_any,
+            outer,
+            &[x],
+            &mut state,
+            &mut |state| state[0] += 1000,
+            &mut |_, _| false,
+        );
+        // The state is 100, and 1000 more for each wait, and x is added to it.
+        let expected_state = 100 + 1000 * waits as u64 + x;
+        assert_eq!(state, vec![expected_state, 7], "x {x}");
+        assert_eq!(got, vec![x + x], "x {x}");
+        assert_eq!(waited.len(), waits, "x {x}");
+        assert_eq!(waiting, waits, "x {x}");
+    }
 }

@@ -147,6 +147,9 @@ impl System for Linux {
             Raw::Close => 57,
             Raw::NanoSleep => 101,
             Raw::ClockGetTime => 113,
+            Raw::EpollCreate1 => 20,
+            Raw::EpollCtl => 21,
+            Raw::EpollWait => 22,
         };
         asm.mov_w(X8, number);
         asm.svc();
