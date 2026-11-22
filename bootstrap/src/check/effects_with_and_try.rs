@@ -354,6 +354,21 @@ impl<'a> Checker<'a> {
     /// Checks a call of the name of an effect, which handles it: the lambdas
     /// for the operations and the body, which gives what the call gives.
     pub(super) fn handler_call(&mut self, body: &mut Body<'a>, call: &Call, effect: usize) -> Ty {
+        // A handler of `task` is written in `std/`: one that a program writes
+        // could give `finish` a number that no `start` gave, drop a frame, or
+        // give one child's frame for another's number.
+        let def = &self.defs.file.effects[effect];
+        if of_std(def.pos) && written_name(&def.name) == "task" && !of_std(call.pos) {
+            self.errors.push(
+                Error::new(
+                    call.name_pos,
+                    "`task` is handled only by the schedulers of `std.task`, since a handler that is not one of them could give a frame for the wrong number",
+                )
+                .with_fix("write `with tasks()`, which `std.task` has"),
+            );
+            self.refusals += 1;
+            return self.unknown_call(body, call);
+        }
         let signature = self.defs.handler_signature(effect);
         let before = self.errors.len();
         let private = self.defs.private_operations(effect, call.name_pos);

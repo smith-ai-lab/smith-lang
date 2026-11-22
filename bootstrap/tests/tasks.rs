@@ -41,6 +41,10 @@ pub const ONCE: &[Test] = &[
         a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_starts,
     ),
     (
+        "a_handler_of_task_written_in_a_program_is_refused",
+        a_handler_of_task_written_in_a_program_is_refused,
+    ),
+    (
         "a_child_that_assigns_a_var_is_refused",
         a_child_that_assigns_a_var_is_refused,
     ),
@@ -214,6 +218,16 @@ fn a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_sta
     let source = program("fn main() ! console, alloc, task {\n  a = spawn {\n    print(\"a\")\n    v: u64 = 1\n    v\n  }\n  b = spawn {\n    print(\"b\")\n    v: u64 = 2\n    v\n  }\n  y: u64 = join(b)\n  x: u64 = join(a)\n  print(\"{x} {y}\")\n}\n")
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task)");
     assert_eq!(run(&source), "a\nb\n1 2\n");
+}
+
+/// A handler of `task` that a program writes could give `finish` a number that
+/// no `start` gave, so that `join` reads memory that holds no frame: this program
+/// built and ended with status 1 and nothing printed before it was refused.
+fn a_handler_of_task_written_in_a_program_is_refused() {
+    let source = program("fn shift[T](body: fn() -> T ! task) -> T ! task {\n  task(\n    start: fn(work: Frame) -> u64 { 4096 },\n    finish: fn(child: u64) -> Frame { finish(child) },\n    body: body,\n  )\n}\n\nfn main() ! console, alloc {\n  with tasks()\n  with shift()\n  b = spawn { \"seven\" }\n  s: str = join(b)\n  print(s)\n}\n")
+        .replace("use std.task (join, spawn, tasks)", "use std.task (Frame, finish, join, spawn, task, tasks)");
+    let errors = refused(&source);
+    assert!(errors.contains("`task` is handled only by the schedulers of `std.task`"), "{errors}");
 }
 
 fn a_child_that_assigns_a_var_is_refused() {
