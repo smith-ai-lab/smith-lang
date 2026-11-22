@@ -2990,6 +2990,15 @@ fn reach(
                         continue;
                     }
                     type_name(name, call.name_pos, found);
+                    // A handler of an effect is given values of the types its
+                    // operations write, which no name in the program may say.
+                    if let Some(effect) = file.effects.iter().find(|e| e.name == name) {
+                        for f in file.functions.iter().filter(|f| {
+                            crate::parser::is_operation(f) && effect.operations.contains(&f.name)
+                        }) {
+                            types_named(f, &mut |name, pos| type_name(name, pos, found));
+                        }
+                    }
                     for &(k, _) in names.trait_fns.get(name).into_iter().flatten() {
                         found.push(Item::Trait(k));
                     }

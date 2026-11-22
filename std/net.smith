@@ -76,22 +76,32 @@ pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError
 // Ends a value without a system call and gives the handle it held, so a handler
 // that a test writes knows which one it was given. What the system opened is not
 // closed.
-pub fn release_listener(x: take Listener) -> Nat {
-  h = x.handle
-  __consume(x)
-  count(h)
+pub trait Release[T] {
+  fn release(x: take T) -> Nat
 }
 
-pub fn release_connection(x: take Connection) -> Nat {
-  h = x.handle
-  __consume(x)
-  count(h)
+impl Release[Listener] {
+  fn release(x: take Listener) -> Nat {
+    h = x.handle
+    __consume(x)
+    count(h)
+  }
 }
 
-pub fn release_socket(x: take Socket) -> Nat {
-  h = x.handle
-  __consume(x)
-  count(h)
+impl Release[Connection] {
+  fn release(x: take Connection) -> Nat {
+    h = x.handle
+    __consume(x)
+    count(h)
+  }
+}
+
+impl Release[Socket] {
+  fn release(x: take Socket) -> Nat {
+    h = x.handle
+    __consume(x)
+    count(h)
+  }
 }
 
 // The numbers of the kernel's calls, in the order the compiler gives them to
