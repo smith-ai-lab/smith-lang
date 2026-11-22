@@ -1670,7 +1670,7 @@ fn effects(b: &mut Builder, func: &Func, no_console: bool, main: bool) {
         let extra = match b.kind {
             Some(Kind::EffectNotBuilt) => {
                 let name =
-                    *b.g.pick(&["fs", "net", "time", "ui", "spawn", "gpu", "exec"]);
+                    *b.g.pick(&["fs", "ui", "spawn", "gpu", "exec"]);
                 Some((name, NOT_BUILT.to_string()))
             }
             Some(Kind::UnknownEffect) => {

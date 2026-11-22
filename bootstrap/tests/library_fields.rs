@@ -30,6 +30,10 @@ pub const ONCE: &[Test] = &[
         library_fields_the_fix_for_a_private_field_names_what_the_module_gives_in_its_place,
     ),
     (
+        "library_fields_the_handle_of_a_connection_is_private_and_no_program_makes_one",
+        library_fields_the_handle_of_a_connection_is_private_and_no_program_makes_one,
+    ),
+    (
         "library_fields_no_program_makes_a_rawjson_from_text_that_is_not_json",
         library_fields_no_program_makes_a_rawjson_from_text_that_is_not_json,
     ),
@@ -59,6 +63,12 @@ fn hidden() -> &'static [Hidden] {
         for file in files {
             let module = file.file_stem().unwrap().to_str().unwrap().to_string();
             let text = std::fs::read_to_string(&file).unwrap();
+            // A resource has no `Discard`, so a program that holds it and does
+            // nothing with it is refused, which is not what is checked here.
+            let resources: Vec<&str> = text
+                .lines()
+                .filter_map(|l| l.strip_prefix("without Discard for "))
+                .collect();
             let mut lines = text.lines();
             while let Some(line) = lines.next() {
                 let Some(head) = line.strip_prefix("pub struct ") else {
@@ -68,6 +78,7 @@ fn hidden() -> &'static [Hidden] {
                     .chars()
                     .take_while(|c| c.is_alphanumeric() || *c == '_')
                     .collect();
+                let kept = !resources.contains(&name.as_str());
                 let mut fields = Vec::new();
                 for line in lines.by_ref().take_while(|l| !l.starts_with('}')) {
                     let line = line.trim();
@@ -79,7 +90,7 @@ fn hidden() -> &'static [Hidden] {
                         fields.push((public, field.to_string(), ty.trim().to_string()));
                     }
                 }
-                if fields.iter().any(|(public, ..)| !public) {
+                if kept && fields.iter().any(|(public, ..)| !public) {
                     found.push(Hidden {
                         module: module.clone(),
                         name,
@@ -263,6 +274,24 @@ fn library_fields_a_program_that_only_holds_the_struct_is_accepted(part: u64) {
             panic!("{errors:?} for\n{source}");
         }
     });
+}
+
+/// A `Connection` is given by `connect_to` and by nothing else, so a program
+/// neither reads the system's handle it holds nor makes one from a number.
+fn library_fields_the_handle_of_a_connection_is_private_and_no_program_makes_one() {
+    let read = "use std.bits (i64)\nuse std.net (Connection, close, connect_to, net)\n\nfn f(c: take Connection) -> i64 {\n  h = c.handle\n  close(c)\n  h\n}\n\nfn main() ! net {\n  match connect_to(\"127.0.0.1\", 1) {\n    .ok(c) { f(c) }\n    .err(e) { 0 }\n  }\n}\n";
+    let make = "use std.net (Connection)\n\nfn f() -> Connection {\n  Connection(handle: 3)\n}\n\nfn main() {\n  c = f()\n}\n";
+    for source in [read, make] {
+        let Err(errors) = check(source.as_bytes()) else {
+            panic!("accepted:\n{source}");
+        };
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message.contains("Connection") && e.message.contains("private")),
+            "{errors:?} for\n{source}"
+        );
+    }
 }
 
 /// A `RawJson` holds one whole JSON value. A program cannot build one from a

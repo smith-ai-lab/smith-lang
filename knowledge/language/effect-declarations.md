@@ -9,6 +9,7 @@ built:
   - "`pub` before an operation of an effect, which another module imports by its own name and calls, and an operation without it, refused in another module's `use` as any private name is, and refused in a handler written there with one error at the effect's name that lists the private operations"
   - "`console` is declared by `std/console.smith` and `print` is its operation, built from its declaration with its defaults, which a program that reaches `main` with no handler has answered by the target and which a handler replaces"
   - "the effect's name is a function that takes a lambda for each operation, each taking every parameter of the operation, and the body to run, and gives what the body gives"
+  - "`net` and `time` are declared by `std/net.smith` and `std/time.smith`, and a program that reaches `main` on Linux with no handler has each of their operations answered by the system, by a function of the module that asks the kernel for plain numbers and builds the `Result` or the handle from them, which a handler replaces"
   - "an effect that the program declares and lists in `main`, which the target does not provide and no handler answers, is one error at its name in the list that names the effect"
 ---
 
