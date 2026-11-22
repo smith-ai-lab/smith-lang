@@ -8,7 +8,7 @@ use super::indexed::{self, Folded};
 use super::moves::{self, Move, Step};
 use crate::scalar::{
     Binary, Compare, Constant, End, FloatBinary, FloatCompare, Function, Fused, Jump, Op,
-    Place as Written, Program, Stream, System as Call, Type, Value,
+    Place as Written, Program, Raw, Stream, System as Call, Type, Value,
 };
 
 mod vector;
@@ -795,6 +795,12 @@ pub trait System {
     /// and leaves 0 in x0 when it did and another number when the system
     /// refused. It may change what `write` may.
     fn entropy(asm: &mut Asm);
+    /// Asks the kernel for the call, whose words are in x0 to x5, and leaves
+    /// what it gives in x0. Only Linux builds it, and the others are never
+    /// asked, as `Target::emit_parts` refuses first. It may change x0 to x17.
+    fn raw(_: &mut Asm, _: Raw) {
+        unreachable!("a target that has no such call refuses the program before it is built")
+    }
     /// Ends the program with the status in x0.
     fn end(asm: &mut Asm);
     /// Ends the program with the status.
@@ -1773,6 +1779,22 @@ impl<S: System> Writer<'_, S> {
                     .collect();
                 self.run(asm, &moves);
                 S::entropy(asm);
+                self.finish(asm, results[0], X0, true);
+            }
+            Op::System {
+                call: Call::Raw(call),
+                args,
+            } => {
+                let words = [X0, X1, X2, X3, X4, X5];
+                let moves: Vec<Move<Loc>> = (args.iter().zip(words))
+                    .map(|(arg, to)| Move {
+                        to: Loc::Register(to),
+                        from: self.at[arg.0],
+                        width: self.width(*arg),
+                    })
+                    .collect();
+                self.run(asm, &moves);
+                S::raw(asm, *call);
                 self.finish(asm, results[0], X0, true);
             }
             Op::System {

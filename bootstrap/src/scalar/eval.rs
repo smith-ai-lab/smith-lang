@@ -1048,6 +1048,10 @@ impl Machine<'_> {
                         vec![Word::Int(n as u64)]
                     }
                     Op::System {
+                        call: System::Raw(_),
+                        ..
+                    } => panic!("the evaluator has no network and no clock of its own"),
+                    Op::System {
                         call: System::Exit,
                         args,
                     } => {

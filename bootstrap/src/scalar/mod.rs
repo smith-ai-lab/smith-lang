@@ -278,6 +278,42 @@ pub enum System {
     /// it read, which is 0 only when standard input has ended. A read the
     /// system refuses ends the program with a failing status.
     Read,
+    /// Asks the kernel for the call, which takes at most six words, each an
+    /// address or a 64-bit integer, and gives a 64-bit integer: what the kernel
+    /// gives, which is minus its error number when it refuses. The call is
+    /// asked for once, so a caller that retries a call that was interrupted
+    /// does it itself. Only the Linux targets build it.
+    Raw(Raw),
+}
+
+/// The calls of the kernel that a program asks for with `System::Raw`, each
+/// named for the call as the kernel's documentation names it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Raw {
+    /// `socket(domain, type, protocol)`.
+    Socket,
+    /// `bind(socket, address, length)`.
+    Bind,
+    /// `listen(socket, backlog)`.
+    Listen,
+    /// `accept(socket, address, length)`.
+    Accept,
+    /// `connect(socket, address, length)`.
+    Connect,
+    /// `getsockname(socket, address, length)`.
+    GetSockName,
+    /// `setsockopt(socket, level, name, value, length)`.
+    SetSockOpt,
+    /// `sendto(socket, bytes, count, flags, address, length)`.
+    SendTo,
+    /// `recvfrom(socket, bytes, count, flags, address, length)`.
+    RecvFrom,
+    /// `close(descriptor)`.
+    Close,
+    /// `clock_gettime(clock, time)`.
+    ClockGetTime,
+    /// `nanosleep(time, left)`.
+    NanoSleep,
 }
 
 /// What an instruction does with two integers of the same size, except a
@@ -1048,6 +1084,21 @@ impl Program {
                 i.op,
                 Op::System {
                     call: System::Read,
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Whether the program asks the kernel for a call of its own, as a program
+    /// that uses the network or the clock does.
+    pub fn asks_the_kernel(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(_),
                     ..
                 }
             )
