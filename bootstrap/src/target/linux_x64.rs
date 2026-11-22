@@ -5,7 +5,7 @@
 use super::Part;
 use super::elf::{self, Machine};
 use super::x86_64::{self, Asm, LE, Place, R8, R9, R10, RAX, RDI, RDX, RSI, Reg, S, System, Z};
-use crate::scalar::{Program, Stream};
+use crate::scalar::{Program, Raw, Stream};
 
 const SYS_READ: u32 = 0;
 const SYS_WRITE: u32 = 1;
@@ -102,6 +102,25 @@ impl System for Linux {
         asm.bind(filled);
         asm.mov32(RAX, 0);
         asm.bind(end);
+    }
+
+    fn raw(asm: &mut Asm, call: Raw) {
+        let number = match call {
+            Raw::Socket => 41,
+            Raw::Connect => 42,
+            Raw::Accept => 43,
+            Raw::SendTo => 44,
+            Raw::RecvFrom => 45,
+            Raw::Bind => 49,
+            Raw::Listen => 50,
+            Raw::GetSockName => 51,
+            Raw::SetSockOpt => 54,
+            Raw::Close => 3,
+            Raw::NanoSleep => 35,
+            Raw::ClockGetTime => 228,
+        };
+        asm.mov32(RAX, number);
+        asm.syscall();
     }
 
     fn end(asm: &mut Asm) {

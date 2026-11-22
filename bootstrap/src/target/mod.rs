@@ -309,6 +309,12 @@ impl Target {
         if self == Target::Wasm && program.reads() {
             panic!("wasm does not read standard input yet: the program calls input");
         }
+        if !matches!(self, Target::LinuxX64 | Target::LinuxArm64) && program.asks_the_kernel() {
+            panic!(
+                "{} does not build the network or the clock yet: the program carries net or time",
+                self.name()
+            );
+        }
         match self {
             Target::LinuxX64 => linux_x64::emit(program),
             Target::MacosX64 => macos_x64::emit(program),

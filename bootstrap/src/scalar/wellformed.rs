@@ -565,6 +565,17 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     used(count, i, Type::Int(Bits::B64))?;
                 }
                 Op::System {
+                    call: System::Raw(_),
+                    args,
+                } => {
+                    let [result] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if args.len() > 6 || f.types[result.0] != Type::Int(Bits::B64) {
+                        return Err(Why::WrongCount);
+                    }
+                }
+                Op::System {
                     call: System::Exit,
                     args,
                 } => {

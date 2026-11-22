@@ -6,7 +6,7 @@
 use super::Part;
 use super::arm64::{self, Asm, EQ, LE, LT, Place, System, X0, X1, X2, X3, X4, X5, X8, X19, X20};
 use super::elf::{self, CODE_ADDRESS, Machine};
-use crate::scalar::{Program, Stream};
+use crate::scalar::{Program, Raw, Stream};
 
 const SYS_READ: u16 = 63;
 const SYS_WRITE: u16 = 64;
@@ -127,6 +127,25 @@ impl System for Linux {
         asm.bind(end);
         asm.load(X19, 8, false, Place::Frame(0));
         asm.load(X20, 8, false, Place::Frame(8));
+    }
+
+    fn raw(asm: &mut Asm, call: Raw) {
+        let number = match call {
+            Raw::Socket => 198,
+            Raw::Bind => 200,
+            Raw::Listen => 201,
+            Raw::Accept => 202,
+            Raw::Connect => 203,
+            Raw::GetSockName => 204,
+            Raw::SendTo => 206,
+            Raw::RecvFrom => 207,
+            Raw::SetSockOpt => 208,
+            Raw::Close => 57,
+            Raw::NanoSleep => 101,
+            Raw::ClockGetTime => 113,
+        };
+        asm.mov_w(X8, number);
+        asm.svc();
     }
 
     fn end(asm: &mut Asm) {
