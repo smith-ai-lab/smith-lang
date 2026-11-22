@@ -129,7 +129,7 @@ fn main() ! console {
 
 ## What a handler's lambda takes
 
-The lambda for an operation takes what the operation takes, as a function takes what its parameters mark `take`: it uses the value or gives it away, exactly once, and a value without [`Discard`](resources.md) that it drops is refused at the parameter. A parameter the operation does not mark `take` is lent. This holds for every effect but `task`, whose handlers are the library's: the `start` lambdas of `tasks` and of `test_scheduler` in `std/task.smith` lend a `Frame` that they do not end.
+The lambda for an operation takes what the operation takes, as a function takes what its parameters mark `take`: it uses the value or gives it away, exactly once, and a value without [`Discard`](resources.md) that it drops is refused at the parameter. A parameter the operation does not mark `take` is lent. This holds for every effect but `task`, whose handlers are the library's: the `start` lambdas of `tasks`, `group`, and `test_scheduler_with_io` in `std/task.smith` lend a `Frame` that they do not end.
 
 ```
 use std.bits (u64)
