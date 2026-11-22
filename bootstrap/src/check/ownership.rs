@@ -1101,6 +1101,9 @@ impl<'a> Walk<'a> {
         if let Some(f) = value_fn.filter(|f| f.take) {
             self.spend(st, &f.name, call.pos);
         }
+        let handler_body = call.qualifier.is_none()
+            && (super::effects_with_and_try::is_arena_call(defs, call)
+                || super::effects_with_and_try::is_group_call(call));
         let mut position = 0;
         let mut given: Vec<(usize, &Expr)> = Vec::new();
         for arg in &call.args {
@@ -1136,6 +1139,14 @@ impl<'a> Walk<'a> {
             }
             let flow = match (param, value_fn) {
                 _ if constructs => Flow::Stored,
+                // The body of a handler the compiler builds runs once, so a
+                // function that is called once is given to it as it is.
+                _ if handler_body
+                    && matches!(&arg.value, Expr::Name { name: n, .. }
+                        if self.f.params.iter().any(|p| p.name == *n && p.ty.function && p.take)) =>
+                {
+                    Flow::Taken(name)
+                }
                 // `push` takes its list and its item, `append` its list.
                 _ if super::lists_and_text::gives_away(defs, call, arg) => Flow::Taken(name),
                 (Some(p), _) if p.take => Flow::Taken(name),
@@ -1157,7 +1168,7 @@ impl<'a> Walk<'a> {
             match &arg.value {
                 Expr::Lambda(l) => {
                     let takes = param.map(|p| p.takes.as_slice()).unwrap_or(&[]);
-                    let kept = if param.is_some_and(|p| p.take) {
+                    let kept = if handler_body || param.is_some_and(|p| p.take) {
                         Kept::Taken
                     } else {
                         Kept::Lent

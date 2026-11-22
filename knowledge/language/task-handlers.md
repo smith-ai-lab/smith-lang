@@ -2,7 +2,10 @@
 type: specification
 title: Handlers and tasks
 description: A child runs under the handlers in force where it was spawned, and several tasks may call one handler, whose operations run one at a time.
-status: planned
+status: partial
+built:
+  - "a child runs under the handlers in force where it was spawned, so `two_readings` and `two_pairs` read the one `fake_clock` the children are spawned under, and no two readings are the same tick"
+  - "the operations of a handler run one at a time, as each child runs in place where it is spawned, so its order is the order of the spawns"
 ---
 
 # Handlers and tasks
@@ -11,6 +14,7 @@ A child runs under the [handlers](handlers.md) in force where it was spawned, wi
 
 ```
 use std.bits (u64)
+use std.task (join, spawn, tasks)
 
 fn two_readings() -> (u64, u64) {
   with fake_clock()
@@ -33,6 +37,7 @@ The order in which tasks reach a handler is not fixed, so a sequence of operatio
 
 ```
 use std.bits (u64)
+use std.task (join, spawn, tasks)
 
 fn two_pairs() -> ((u64, u64), (u64, u64)) {
   with fake_clock()
