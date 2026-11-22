@@ -354,16 +354,17 @@ pub fn call_waiting(
 }
 
 /// Runs a function that `suspend` made a state machine, as a scheduler of one
-/// task does: it makes a frame of `bytes`, starts the task with `args`, and
-/// polls it until it is done, and each time it is not, it asks `ready` whether
-/// the wait it gives is over, as `call_waiting` does of the same function
-/// before it was split, and polls again. It gives what the function returns,
-/// each wait in order, and how many times the poll said the task was waiting.
+/// task does: it makes a frame of the task's bytes, starts the task with
+/// `args`, and polls it through `poll_any`, which finds the poll from the
+/// frame, until it is done. Each time it is not, it asks `ready` whether the
+/// wait it gives is over, as `call_waiting` does of the same function before it
+/// was split, and polls again. It gives what the function returns, which is in
+/// the frame once the task is done, each wait in order, and how many times the
+/// poll said the task was waiting.
 pub fn poll_to_end(
     program: &Program,
-    start: usize,
-    poll: usize,
-    bytes: u64,
+    poll_any: usize,
+    task: &super::Task,
     args: &[u64],
     ready: &mut dyn FnMut(u64, u64) -> bool,
 ) -> (Vec<u64>, Vec<Waited>, usize) {
@@ -372,17 +373,17 @@ pub fn poll_to_end(
     let frame = BASE + machine.memory.len();
     machine
         .memory
-        .resize(machine.memory.len() + bytes as usize, 0);
+        .resize(machine.memory.len() + task.bytes as usize, 0);
     // A frame that held the last task's values is not what a new task starts
     // with: the start gives the frame what it needs.
     machine.memory[16..].fill(0xA5);
     let mut words = vec![Word::Address(frame)];
     words.extend(args.iter().map(|n| Word::Int(*n)));
-    machine.call(start, words).ok().expect("memory");
+    machine.call(task.start, words).ok().expect("memory");
     let mut waiting = 0;
     loop {
         let given = machine
-            .call(poll, vec![Word::Address(frame)])
+            .call(poll_any, vec![Word::Address(frame)])
             .ok()
             .expect("memory");
         let mut given = integers(given).into_iter();
@@ -392,7 +393,16 @@ pub fn poll_to_end(
             given.next().expect("a handle"),
         );
         if status == 0 {
-            return (given.collect(), machine.waited, waiting);
+            let results = (task.result_at.iter().zip(&task.results))
+                .map(|(at, ty)| {
+                    let from = frame - BASE + *at as usize;
+                    let mut bytes = [0u8; 8];
+                    bytes[..ty.bytes() as usize]
+                        .copy_from_slice(&machine.memory[from..from + ty.bytes() as usize]);
+                    u64::from_le_bytes(bytes)
+                })
+                .collect();
+            return (results, machine.waited, waiting);
         }
         waiting += 1;
         machine.wait(kind, handle);
