@@ -78,7 +78,7 @@ pub enum Frame {
   unknown: Nat
 }
 
-fn nat(b: Byte) -> Nat { convert(b) }
+fn nat(b: Byte) -> Nat { b }
 
 // The byte at `i`, which is 0 beyond the end.
 fn at(b: Slice[Byte], i: Nat) -> Byte {

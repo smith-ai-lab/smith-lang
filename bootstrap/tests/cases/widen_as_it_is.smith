@@ -1,0 +1,11 @@
+use std.bits (i8, u32)
+use std.console (console, print)
+
+fn widen(small: Byte) -> u32 { small }
+
+fn sign(small: i8) -> Int { small }
+
+fn main() ! console, alloc {
+  print("{widen(200)}")
+  print("{sign(-5)}")
+}

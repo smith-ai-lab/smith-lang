@@ -408,7 +408,7 @@ use std.list (freeze)
 
 fn pad(p: Option[Byte]) -> Int {
   match p {
-    .some(x) { convert(x) }
+    .some(x) { x }
     .none { -1 }
   }
 }

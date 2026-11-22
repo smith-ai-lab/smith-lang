@@ -715,9 +715,6 @@ impl<'a> Checker<'a> {
             self.arguments(body, call, &end, true, None, None);
             return Ty::Nothing;
         }
-        if is_prelude_call(call, "__convert") {
-            return self.convert_intrinsic(body, call, want);
-        }
         if is_kernel(call) {
             return self.kernel(body, call);
         }

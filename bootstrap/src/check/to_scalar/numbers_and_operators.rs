@@ -719,10 +719,7 @@ impl<'a> Lowering<'a> {
             return (typed.type_of(expr, env), values);
         }
         let int = int.expect("checked");
-        let values = match typed.type_of(expr, env) {
-            Ty::Int(to) if call.callee == "__convert" => self.widening(out, int, to, args[0]),
-            _ => self.intrinsic(out, &call.callee, int, &args),
-        };
+        let values = self.intrinsic(out, &call.callee, int, &args);
         (typed.type_of(expr, env), values)
     }
 
@@ -1235,18 +1232,6 @@ impl<'a> Lowering<'a> {
             values.push(out.choose(wrong, zero, word));
         }
         values
-    }
-
-    /// The number `value` of type `from` as a number of type `to`, which
-    /// holds every value of `from`.
-    pub(super) fn widening(
-        &mut self,
-        out: &mut Out<'a>,
-        from: Int,
-        to: Int,
-        value: form::Value,
-    ) -> Vec<form::Value> {
-        vec![out.resize(from.signed(), value, bits_of(to))]
     }
 }
 

@@ -34,8 +34,8 @@ pub const ONCE: &[Test] = &[
         what_arith_knows_of_a_value_that_goes_to_a_narrower_type_and_of_no_narrowing,
     ),
     (
-        "narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_convert",
-        narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_convert,
+        "narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_write_it_as_it_is",
+        narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_write_it_as_it_is,
     ),
     (
         "arith_knows_the_range_of_a_bit_operation_and_no_more_than_is_true",
@@ -319,9 +319,9 @@ fn a_value_goes_to_a_narrower_type_exactly_when_it_is_proven_to_fit() {
 }
 
 /// `narrow` and each relative between two types where the second holds every
-/// value of the first is an error that says to use `convert`, except from a
-/// type to itself, which no type converts to.
-fn narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_convert() {
+/// value of the first is an error that says to write the value as it is, except
+/// from a type to itself, which has nothing to write.
+fn narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_write_it_as_it_is() {
     for from in INTS {
         for to in INTS.iter().filter(|t| t.holds_all(*from)) {
             for function in ["narrow", "wrapping_narrow", "clamp"] {
@@ -349,7 +349,7 @@ fn narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_convert() {
                     errors[0]
                         .fix
                         .as_deref()
-                        .is_some_and(|f| f.contains("convert")),
+                        .is_some_and(|f| f.contains("as it is")),
                     from != to,
                     "{function} from {} to {}",
                     from.name,

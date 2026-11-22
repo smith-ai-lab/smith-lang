@@ -2036,6 +2036,25 @@ impl<'a> Checker<'a> {
         types: &[Ty],
     ) -> Error {
         let defs = self.defs;
+        // A whole number goes to a range that holds every value of it as it is.
+        if k == defs.convert()
+            && let [Ty::Int(from), Ty::Int(to)] = types
+            && from != to
+            && to.min() <= from.min()
+            && from.max() <= to.max()
+        {
+            return Error::new(
+                call.pos,
+                format!(
+                    "a wider range takes a narrower one with nothing written, so `{}` is taken \
+                     where `{}` is needed as it is, and there is no `convert` between whole \
+                     numbers",
+                    defs.spelling(*from),
+                    defs.spelling(*to)
+                ),
+            )
+            .with_fix("write the value as it is");
+        }
         // Only a trait of one type is given automatically, so only then
         // is a part to blame.
         let because = match types {
