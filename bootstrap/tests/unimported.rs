@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 use smith::diag::{Error, Pos};
 
 use crate::Test;
+use crate::cli::{folder, smith, stderr};
 use crate::programs::pos_after;
 
 pub const ONCE: &[Test] = &[
@@ -51,6 +52,18 @@ pub const ONCE: &[Test] = &[
     (
         "each_name_of_the_library_that_the_file_imports_is_not_refused_part_8_of_8",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(7),
+    ),
+    (
+        "an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import",
+        an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import,
+    ),
+    (
+        "a_caller_of_a_function_whose_effect_is_not_imported_is_told_to_list_the_effect_once",
+        a_caller_of_a_function_whose_effect_is_not_imported_is_told_to_list_the_effect_once,
+    ),
+    (
+        "a_listed_effect_satisfies_a_needed_one_only_when_they_are_the_same_effect",
+        a_listed_effect_satisfies_a_needed_one_only_when_they_are_the_same_effect,
     ),
     (
         "importing_an_effect_brings_its_name_alone",
@@ -214,6 +227,69 @@ fn each_name_of_the_library_that_the_file_imports_is_not_refused(part: usize) {
         let said: Vec<Error> = missing(&source);
         assert!(said.is_empty(), "{name}: {said:?}\n{source}");
     }
+}
+
+/// Every error of a program, as the compiler says them.
+fn errors_of(source: &str) -> Vec<Error> {
+    smith::check(source.as_bytes()).err().unwrap_or_default()
+}
+
+/// A function that lists `console` and calls what it needs, with the effect not
+/// imported, is one error: the missing import, at `console` in the signature.
+/// No error says the listed effect is undeclared or lists an effect twice.
+fn an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import() {
+    let bodies = ["print(\"hi\")", "print(\"a\")\n  print(\"b\")", "x = \"{1}\"\n  print(x)"];
+    let signatures = ["fn hi() ! console ", "pub fn hi() ! console "];
+    for signature in signatures {
+        for body in bodies {
+            let source = format!("use std.console (print)\n\n{signature}{{\n  {body}\n}}\n\nfn main() {{ }}\n");
+            let said = errors_of(&source);
+            assert_eq!(said.len(), 1, "{said:?}\n{source}");
+            let before = &source[..source.find("console {").unwrap()];
+            assert_eq!(said[0].pos, pos_after(before), "{source}");
+            assert!(mentions(&said[0], "console", "console"), "{:?}", said[0]);
+            for e in &said {
+                assert!(!e.message.contains("does not declare"), "{e:?}");
+                assert!(!e.fix.as_deref().unwrap_or("").contains("console, console"), "{e:?}");
+            }
+        }
+    }
+}
+
+/// The caller of such a function is still told that it does not declare the
+/// effect, and the fix lists the effect once.
+fn a_caller_of_a_function_whose_effect_is_not_imported_is_told_to_list_the_effect_once() {
+    let source = "use std.console (print)\n\nfn hi() ! console { print(\"hi\") }\n\nfn main() { hi() }\n";
+    let said = errors_of(source);
+    let undeclared: Vec<&Error> = said.iter().filter(|e| e.message.contains("does not declare")).collect();
+    assert_eq!(undeclared.len(), 1, "{said:?}");
+    assert!(undeclared[0].message.contains("`hi`"), "{:?}", undeclared[0]);
+    let fix = undeclared[0].fix.as_deref().unwrap();
+    assert_eq!(fix.matches("console").count(), 1, "{fix}");
+}
+
+/// Two modules that each declare an effect of one name have two effects. A
+/// function that lists one of them does not carry the other, so the call of a
+/// function that needs the other is refused, at the call, as it is when the
+/// effect is imported by its name.
+fn a_listed_effect_satisfies_a_needed_one_only_when_they_are_the_same_effect() {
+    let dir = folder("two-effects-one-name");
+    let effect = "pub effect log {\n  pub fn note(n: Int)\n}\n";
+    let files = [
+        ("a.smith", effect.to_string()),
+        ("b.smith", format!("{effect}\npub fn shout() ! log {{ note(1) }}\n")),
+        (
+            "main.smith",
+            "use a (log)\nuse b (shout)\n\nfn go() ! log {\n  shout()\n}\n\nfn main() ! log { go() }\n".to_string(),
+        ),
+    ];
+    for (file, text) in &files {
+        std::fs::write(dir.join(file), text).unwrap();
+    }
+    let checked = smith(&dir, &["check", "main.smith"]);
+    let err = stderr(&checked);
+    assert!(!checked.status.success(), "{err}");
+    assert!(err.contains("`shout` needs the `log` effect, which `go` does not declare"), "{err}");
 }
 
 /// Importing `console` brings the effect and not `print`, and importing
