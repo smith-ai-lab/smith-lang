@@ -699,12 +699,18 @@ impl<'a> Checker<'a> {
         if let Some(s) = defs.struct_at(call.name_pos, name) {
             return self.construction(body, call, s, want);
         }
-        if is_prelude_call(call, "__eprint") {
-            let print = Signature::print();
+        if is_ending_call(call, "__eprint") {
+            let mut print = Signature::print();
+            // A server of the library that cannot listen says why to standard
+            // error and ends the program, as a console that refuses a write
+            // does, so the function that does it carries no `console`.
+            if of_std(call.pos) {
+                print.effects.clear();
+            }
             self.arguments(body, call, &print, true, None, None);
             return Ty::Nothing;
         }
-        if is_prelude_call(call, "__end") {
+        if is_ending_call(call, "__end") {
             let end = Signature::end();
             self.arguments(body, call, &end, true, None, None);
             return Ty::Nothing;
