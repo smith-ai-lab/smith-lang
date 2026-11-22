@@ -667,6 +667,10 @@ impl<'a> Lowering<'a> {
                 }
             }
         }
+        if defs.provided(f).is_some_and(|p| p.operation == "input") {
+            let prompt = args[0].take().expect("given");
+            return (gives.clone(), self.input_line(out, &gives, &prompt));
+        }
         let text = args[0].take().expect("given");
         let end = args[1].take().expect("given");
         let write = |out: &mut Out<'a>, stream: form::Stream| {
@@ -694,6 +698,47 @@ impl<'a> Lowering<'a> {
             }
         }
         (Ty::Nothing, Vec::new())
+    }
+
+    /// The `Option` that `input` of `console` gives: the runtime writes the
+    /// prompt and reads a line, and says whether there was one.
+    fn input_line(
+        &mut self,
+        out: &mut Out<'a>,
+        ty: &Ty,
+        prompt: &[form::Value],
+    ) -> Vec<form::Value> {
+        let defs = self.typed.defs;
+        let Ty::Enum(e, args) = ty else {
+            unreachable!("checked")
+        };
+        let types = [
+            form::Type::Int(form::Bits::B8),
+            form::Type::Address,
+            form::Type::Int(form::Bits::B64),
+        ];
+        let line = self.call_runtime(
+            out,
+            Runtime::Input,
+            vec![prompt[0], prompt[1]],
+            types.to_vec(),
+        );
+        let layout = self.layout(*e, args);
+        let some = defs.case_of(defs.option, "some").expect("a case");
+        let none = defs.case_of(defs.option, "none").expect("a case");
+        let (some_tag, none_tag) = (
+            out.int(form::Bits::B8, some as i128),
+            out.int(form::Bits::B8, none as i128),
+        );
+        let mut values = vec![out.choose(line[0], some_tag, none_tag)];
+        for (k, ty) in layout.places.iter().enumerate() {
+            let held = layout.cases[some].iter().position(|place| *place == k);
+            values.push(match held {
+                Some(i) => line[1 + i],
+                None => out.zero(*ty),
+            });
+        }
+        values
     }
 
     /// The number of the handler a call of an effect's name installs, which is

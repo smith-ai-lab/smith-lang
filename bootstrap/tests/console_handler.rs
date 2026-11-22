@@ -82,7 +82,7 @@ fn is_stderr(p: &Print) -> bool {
     p.to == Some(true)
 }
 
-const USES: &str = "use std.console (console, print)\nuse std.list (push)\n\n";
+const USES: &str = "use std.console (console, input, print)\nuse std.list (push)\n\n";
 
 /// A function that writes the calls, which carries `console`.
 fn body(all: &[Print]) -> String {
@@ -96,7 +96,7 @@ fn body(all: &[Print]) -> String {
 fn a_handler_of_console_receives_the_text_the_end_and_the_stream_as_written_and_as_defaulted() {
     generate::check(8901, 6, prints, |all| {
         let source = format!(
-            "{USES}{}fn capture[T](body: fn() -> T ! console) -> (T, List[str]) ! alloc {{\n  var seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {{\n      which = match to {{\n        .stdout {{ \"o\" }}\n        .stderr {{ \"e\" }}\n      }}\n      seen = push(seen, \"{{which}}|{{text}}|{{end}}\")\n    }},\n    body: body,\n  )\n  (r, seen)\n}}\n\nfn main() ! console, alloc {{\n  (u, lines) = capture(writes)\n  loop i in 0..lines.size {{\n    print(lines[i], end: \"#\")\n  }}\n}}\n",
+            "{USES}{}fn capture[T](body: fn() -> T ! console) -> (T, List[str]) ! console, alloc {{\n  var seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {{\n      which = match to {{\n        .stdout {{ \"o\" }}\n        .stderr {{ \"e\" }}\n      }}\n      seen = push(seen, \"{{which}}|{{text}}|{{end}}\")\n    }},\n    input: fn(prompt) {{ input(prompt) }},\n    body: body,\n  )\n  (r, seen)\n}}\n\nfn main() ! console, alloc {{\n  (u, lines) = capture(writes)\n  loop i in 0..lines.size {{\n    print(lines[i], end: \"#\")\n  }}\n}}\n",
             body(all)
         );
         let mut expected = String::new();
@@ -129,7 +129,7 @@ fn with_no_handler_print_writes_the_text_and_the_end_to_the_stream_it_is_given()
 fn a_handler_that_sends_everything_to_standard_error_leaves_standard_output_empty() {
     generate::check(8903, 4, prints, |all| {
         let source = format!(
-            "{USES}{}fn to_stderr[T](body: fn() -> T ! console) -> T ! console {{\n  console(\n    print: fn(text, end, to) {{ print(text, end: end, to: .stderr) }},\n    body: body,\n  )\n}}\n\nfn main() ! console {{\n  to_stderr(writes)\n  print(\"done\")\n}}\n",
+            "{USES}{}fn to_stderr[T](body: fn() -> T ! console) -> T ! console, alloc {{\n  console(\n    print: fn(text, end, to) {{ print(text, end: end, to: .stderr) }},\n    input: fn(prompt) {{ input(prompt) }},\n    body: body,\n  )\n}}\n\nfn main() ! console, alloc {{\n  to_stderr(writes)\n  print(\"done\")\n}}\n",
             body(all)
         );
         let said = String::from_utf8(run(&source).stdout).unwrap();
@@ -146,7 +146,7 @@ fn every_executable_answers_print_as_the_evaluator_does_with_and_without_a_handl
     ];
     let plain = format!("{USES}{}fn main() ! console {{\n  writes()\n}}\n", body(&all));
     let handled = format!(
-        "{USES}{}fn to_stderr[T](body: fn() -> T ! console) -> T ! console {{\n  console(\n    print: fn(text, end, to) {{ print(text, end: end, to: .stdout) }},\n    body: body,\n  )\n}}\n\nfn main() ! console {{\n  to_stderr(writes)\n}}\n",
+        "{USES}{}fn to_stderr[T](body: fn() -> T ! console) -> T ! console, alloc {{\n  console(\n    print: fn(text, end, to) {{ print(text, end: end, to: .stdout) }},\n    input: fn(prompt) {{ input(prompt) }},\n    body: body,\n  )\n}}\n\nfn main() ! console, alloc {{\n  to_stderr(writes)\n}}\n",
         body(&all)
     );
     // What goes to standard error is not seen, unless the handler sends it to

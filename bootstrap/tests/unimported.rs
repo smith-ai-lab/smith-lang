@@ -116,6 +116,9 @@ fn names() -> &'static [Held] {
             }
         }
         found.push(("console".to_string(), "console"));
+        // An operation of an effect, which the lines above do not read, and
+        // which `std.html` has a function of the name of too.
+        found.push(("input".to_string(), "console"));
         for size in ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"] {
             found.push((size.to_string(), "bits"));
         }

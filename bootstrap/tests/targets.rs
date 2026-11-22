@@ -430,13 +430,32 @@ pub fn not_run() -> Vec<String> {
 
 /// Runs an executable for this machine and gives what it did.
 pub fn run(bytes: &[u8]) -> Outcome {
-    run_with(bytes, |path| std::process::Command::new(path))
+    run_with(bytes, None, |path| std::process::Command::new(path))
+}
+
+/// Builds `source` once for `target` and checks that its executable, given
+/// each input to read as its standard input, does what `said` says of that
+/// input, or, for a fingerprint, notes each with its input.
+pub fn runs_as_each_given(source: &[u8], target: Target, cases: &[(&[u8], Outcome)]) {
+    let bytes = build(source, target).unwrap_or_else(|e| panic!("{e:?}"));
+    for (input, said) in cases {
+        record(
+            target,
+            &[&bytes, input, &said.stdout, &said.status.to_le_bytes()],
+        );
+        if !fingerprinting() {
+            let ran = run_with(&bytes, Some(input), |path| {
+                std::process::Command::new(path)
+            });
+            assert_eq!(ran, *said, "{}", target.name());
+        }
+    }
 }
 
 /// Runs an executable for this machine, started with the words, and gives
 /// what it did.
 pub fn run_with_words(bytes: &[u8], words: &[String]) -> Outcome {
-    run_with(bytes, |path| {
+    run_with(bytes, None, |path| {
         let mut command = std::process::Command::new(path);
         command.args(words);
         command
@@ -445,7 +464,11 @@ pub fn run_with_words(bytes: &[u8], words: &[String]) -> Outcome {
 
 /// Runs an executable for this machine with the command `command` makes of
 /// its path, and gives what it did.
-fn run_with(bytes: &[u8], command: impl Fn(&Path) -> std::process::Command) -> Outcome {
+fn run_with(
+    bytes: &[u8],
+    input: Option<&[u8]>,
+    command: impl Fn(&Path) -> std::process::Command,
+) -> Outcome {
     assert!(
         crate::in_a_machine_test(),
         "a test that is not of the group that depends on the machine ran an executable, so a change to what a target writes for it runs on no machine; make it one of that group, which declares `pub const MACHINE`"
@@ -458,7 +481,11 @@ fn run_with(bytes: &[u8], command: impl Fn(&Path) -> std::process::Command) -> O
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("program");
     crate::executable::write(&path, bytes);
-    let output = crate::clock::output_within(&mut command(&path), false).unwrap();
+    let output = match input {
+        Some(input) => crate::clock::output_within_given(&mut command(&path), input, false),
+        None => crate::clock::output_within(&mut command(&path), false),
+    }
+    .unwrap();
     std::fs::remove_dir_all(&dir).unwrap();
     Outcome {
         stdout: output.stdout,
@@ -907,7 +934,7 @@ fn a_program_the_system_refuses_memory_ends_with_a_failing_status_and_does_nothi
             if fingerprinting() {
                 continue;
             }
-            let ran = run_with(&executable, |path| limited(path).expect("a limit"));
+            let ran = run_with(&executable, None, |path| limited(path).expect("a limit"));
             // A status of its own, not the end a signal gives.
             assert!(ran.status > 0, "{}: {}", target.name(), ran.status);
             assert_eq!(
@@ -1056,6 +1083,7 @@ const KERNEL32_THIN_WRAPPERS: &[&str] = &[
     "VirtualAlloc",
     "VirtualFree",
     "GetCommandLineW",
+    "ReadFile",
 ];
 
 fn u16_at(bytes: &[u8], at: usize) -> usize {

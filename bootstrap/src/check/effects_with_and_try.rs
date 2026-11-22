@@ -29,6 +29,10 @@ pub(super) const PROVIDED: &[Provided] = &[
         operation: "print",
     },
     Provided {
+        effect: "console",
+        operation: "input",
+    },
+    Provided {
         effect: "entropy",
         operation: "fill",
     },

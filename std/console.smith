@@ -5,4 +5,5 @@ pub enum Stream {
 
 pub effect console {
   pub fn print(text: str, end: str = "\n", to: Stream = .stdout)
+  pub fn input(prompt: str = "") -> Option[str] ! alloc
 }

@@ -62,6 +62,9 @@ struct Machine {
     v: bool,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
+    /// What standard input holds, and how much of it has been read.
+    stdin: Vec<u8>,
+    read: usize,
     next_heap: u64,
     /// How the kernel answers `getrandom`, and what it has been asked.
     entropy: Entropy,
@@ -90,6 +93,15 @@ pub fn run(bytes: &[u8]) -> Ran {
 
 /// Runs the executable, with the kernel answering random bytes as said.
 pub fn run_with(bytes: &[u8], entropy: Entropy) -> Ran {
+    run_given(bytes, entropy, &[])
+}
+
+/// Runs the executable, with `input` as what standard input holds.
+pub fn run_with_input(bytes: &[u8], input: &[u8]) -> Ran {
+    run_given(bytes, Entropy::Fresh, input)
+}
+
+fn run_given(bytes: &[u8], entropy: Entropy, input: &[u8]) -> Ran {
     assert!(is_executable(bytes), "not an arm64 executable");
     let mut m = Machine {
         regions: Vec::new(),
@@ -103,6 +115,8 @@ pub fn run_with(bytes: &[u8], entropy: Entropy) -> Ran {
         v: false,
         stdout: Vec::new(),
         stderr: Vec::new(),
+        stdin: input.to_vec(),
+        read: 0,
         next_heap: HEAP_BASE,
         entropy,
         asked: 0,
@@ -851,6 +865,20 @@ impl Machine {
     /// A call to the kernel, which is told the number in x8.
     fn system_call(&mut self) -> Option<i32> {
         match self.x[8] {
+            // `read(fd, buffer, count)`: gives the number of bytes it read,
+            // which is the fewer of what is asked and what is left.
+            63 => {
+                let (fd, address, len) = (self.x[0], self.x[1], self.x[2]);
+                assert_eq!(fd, 0, "a read of a file that is not standard input");
+                let count = (len as usize).min(self.stdin.len() - self.read);
+                for k in 0..count {
+                    let byte = u64::from(self.stdin[self.read + k]);
+                    self.write(address + k as u64, 1, byte);
+                }
+                self.read += count;
+                self.x[0] = count as u64;
+                None
+            }
             64 => {
                 let (fd, address, len) = (self.x[0], self.x[1], self.x[2]);
                 let bytes = self.region(address, len).to_vec();
