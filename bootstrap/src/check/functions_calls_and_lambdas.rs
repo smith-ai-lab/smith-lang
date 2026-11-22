@@ -401,22 +401,79 @@ impl<'a> Checker<'a> {
             self.types.insert(addr(&l.params[i]), ty.clone());
             body.names.push((name.clone(), ty.clone()));
         }
-        let want = match result {
-            Ty::Nothing => Want::Unused,
-            Ty::Unknown if quiet => Want::Ty(Ty::Unknown),
-            t if t.unknown() => Want::Any,
-            t => Want::Ty(t.clone()),
+        // A block whose type is not settled by the call it is passed to is
+        // checked once to find what it gives, and again with that settled, so
+        // that a `try` in it knows what the block leaves with.
+        let (names_in, vars_in) = (body.names.len(), body.vars.len());
+        let mut settled = result.clone();
+        // Only a block with a `try` in it needs the second look, and one that
+        // is looked at to find what it gives is not looked at twice inside.
+        let has_try = exprs(values(&l.body))
+            .into_iter()
+            .any(|e| matches!(e, Expr::Match(m) if matches!(m.form, Form::Try)));
+        let mut again =
+            !quiet && has_try && !self.discovering && settled.unknown() && settled != Ty::Unknown;
+        // A block that was looked at already, to find what it gives, is not
+        // looked at again for that.
+        if again && let Some(found) = self.found.get(&addr(l)) {
+            settled = found.clone();
+            again = false;
+        }
+        let (end, returned) = loop {
+            let want = match &settled {
+                Ty::Nothing => Want::Unused,
+                Ty::Unknown if quiet => Want::Ty(Ty::Unknown),
+                // An enum whose type arguments are partly known is wanted as
+                // it is, so that `.ok(())` finds the error type the signature
+                // gives.
+                t @ Ty::Enum(..) if t.unknown() => Want::Ty(t.clone()),
+                t if t.unknown() => Want::Any,
+                t => Want::Ty(t.clone()),
+            };
+            // What the first look at the block leaves with has a hole where
+            // the call has not said, which is filled so that a `try` in the
+            // block still gives what it holds.
+            let returns = if again || (self.discovering && has_try) {
+                filled(&settled)
+            } else {
+                settled.clone()
+            };
+            let outer_returns = std::mem::replace(&mut body.returns, returns);
+            let outer_returned = body.returned.take();
+            body.lambdas += 1;
+            let before = self.errors.len();
+            let outer_discovering = self.discovering;
+            self.discovering = outer_discovering || again;
+            let end = self.block(body, &l.body, &want);
+            self.discovering = outer_discovering;
+            body.lambdas -= 1;
+            body.returns = outer_returns;
+            let returned = std::mem::replace(&mut body.returned, outer_returned);
+            if again
+                && let End::Value(gives, _) = &end
+                && !gives.unknown()
+            {
+                again = false;
+                self.errors.truncate(before);
+                body.names.truncate(names_in);
+                body.vars.truncate(vars_in);
+                body.facts.reset(&known);
+                settled = gives.clone();
+                continue;
+            }
+            if self.discovering
+                && has_try
+                && settled.unknown()
+                && let End::Value(gives, _) = &end
+                && !gives.unknown()
+            {
+                self.found.insert(addr(l), gives.clone());
+            }
+            break (end, returned);
         };
-        let outer_returns = std::mem::replace(&mut body.returns, result.clone());
-        let outer_returned = body.returned.take();
-        body.lambdas += 1;
-        let end = self.block(body, &l.body, &want);
-        body.lambdas -= 1;
-        body.returns = outer_returns;
-        let returned = std::mem::replace(&mut body.returned, outer_returned);
         let result = match returned {
-            Some(t) if result.unknown() => &t.clone(),
-            _ => result,
+            Some(t) if settled.unknown() => &t.clone(),
+            _ => &settled,
         };
         let gives = match (end, result) {
             _ if proof::ends_in_exit(&l.body) => result.clone(),
@@ -655,6 +712,9 @@ impl<'a> Checker<'a> {
         if is_prelude_call(call, "__convert") {
             return self.convert_intrinsic(body, call, want);
         }
+        if is_kernel(call) {
+            return self.kernel(body, call);
+        }
         if is_intrinsic(call) {
             return self.intrinsic(body, call);
         }
@@ -709,7 +769,7 @@ impl<'a> Checker<'a> {
                 Want::Ty(t) => Some(t),
                 _ => None,
             };
-            let is_print = defs.provided(f).is_some();
+            let is_print = defs.provided(f).is_some_and(|p| p.through.is_none());
             let mut sol = self.arguments(body, call, sig, is_print, None, placed);
             defs.complete_outs(&sig.scope.requires, &mut sol, body.scope);
             for (i, d) in sig.param_defaults.iter().enumerate() {
@@ -1406,5 +1466,14 @@ fn listed(names: &[String]) -> String {
         [one] => one.clone(),
         [a, b] => format!("{a} and {b}"),
         [rest @ .., last] => format!("{}, and {last}", rest.join(", ")),
+    }
+}
+
+/// The type with each argument of an enum that is not known made `()`.
+fn filled(ty: &Ty) -> Ty {
+    match ty {
+        Ty::Unknown => Ty::Nothing,
+        Ty::Enum(e, args) => Ty::Enum(*e, args.iter().map(filled).collect()),
+        other => other.clone(),
     }
 }

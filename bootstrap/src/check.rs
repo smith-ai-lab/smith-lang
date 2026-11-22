@@ -54,7 +54,7 @@ use crate::parser::{
     Arg, ArithOp, Arm, Bound, Call, Enum, Expr, File, Form, Function, Generic, Impl, Lambda, Loop,
     Match, Over, Part, Pattern, Qualified, Range, Stmt, Struct, Trait, Type, Use,
 };
-use effects_with_and_try::{BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations};
+use effects_with_and_try::{BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, provided_by};
 use lists_and_text::{as_read, is_freeze, is_push, is_utf8};
 use names::{Naming, Resolution, own_final, renamed_tokens};
 use numbers_and_operators::{
@@ -2476,6 +2476,8 @@ fn check_file(
         types: HashMap::new(),
         widened: HashMap::new(),
         comparing: false,
+        discovering: false,
+        found: HashMap::new(),
         settled: false,
         value_calls: Set::default(),
         fn_values: Map::default(),
@@ -2969,6 +2971,11 @@ fn reach(
         match queue[i] {
             Item::Fn(f) => {
                 function(&file.functions[f], &mut found);
+                if let Some(through) = provided_by(&file.functions[f]).and_then(|p| p.through)
+                    && let Some(g) = names.function_at(resolution, file.functions[f].pos, through)
+                {
+                    found.push(Item::Fn(g));
+                }
                 // The struct of its arguments is reached with a function
                 // that has one, which `Function` is given to.
                 let pos = file.functions[f].pos;
@@ -4998,6 +5005,11 @@ fn names_in_items(file: &File, impls: &[Arc<Impl>], out: &mut dyn FnMut(&str, Po
 
 /// Every name a function looks up, as `reach` does.
 fn names_in_function(f: &Function, out: &mut dyn FnMut(&str, Pos, Ask)) {
+    // An operation the target answers through a function of the library calls
+    // for it, though no line writes its name.
+    if let Some(through) = provided_by(f).and_then(|p| p.through) {
+        out(through, f.pos, Ask::Any);
+    }
     types_named(f, &mut |n, pos| out(n, pos, Ask::Type));
     let defaults = f.params.iter().filter_map(|p| p.default.as_ref());
     let statement = f.result.as_ref().and_then(|t| t.statement.as_deref());
@@ -5796,6 +5808,9 @@ enum Callee {
     Value,
     /// A function the compiler builds, which only the prelude calls.
     Intrinsic,
+    /// `__system`, `__reserve`, or `__sized`, which the library's `std.net` and
+    /// `std.time` call to ask the kernel and to make the list it fills.
+    Kernel,
     /// `push`, which gives a list with one more element.
     Push,
     /// `freeze`, which gives the memory of a list as a slice.
@@ -5989,6 +6004,20 @@ impl<'a> Defs<'a> {
 /// The address of a node of the syntax tree, by which its type is recorded.
 /// Whether a call is of a function the compiler builds, whose name starts
 /// with two underscores and which only the prelude calls.
+/// Whether a call is of a function the compiler builds for the library's
+/// modules that reach the kernel: `__system`, which asks it for a call,
+/// `__reserve`, which makes a list that has room and no elements, `__sized`,
+/// which says how many of the elements the kernel filled, and `__consume`,
+/// which takes a value that cannot be dropped and has nothing to give.
+fn is_kernel(call: &Call) -> bool {
+    call.qualifier.is_none()
+        && matches!(
+            call.callee.as_str(),
+            "__system" | "__reserve" | "__sized" | "__consume"
+        )
+        && of_std(call.pos)
+}
+
 fn is_intrinsic(call: &Call) -> bool {
     call.qualifier.is_none()
         && call.callee.starts_with("__")
@@ -6096,6 +6125,9 @@ impl<'a> Typed<'a> {
                 if name == "__end" {
                     return Callee::End;
                 }
+                if is_kernel(call) {
+                    return Callee::Kernel;
+                }
                 if is_intrinsic(call) {
                     return Callee::Intrinsic;
                 }
@@ -6194,6 +6226,7 @@ impl<'a> Typed<'a> {
             | Callee::Case(_)
             | Callee::Value
             | Callee::Intrinsic
+            | Callee::Kernel
             | Callee::Push
             | Callee::Freeze
             | Callee::Utf8
@@ -6362,6 +6395,13 @@ struct Checker<'a> {
     /// Whether the arguments being fitted are those of a comparison, whose
     /// two sides are taken as the smallest range that holds both.
     comparing: bool,
+    /// Whether a block is being looked at once to find what it gives, in which
+    /// the blocks inside it are looked at once and not twice.
+    discovering: bool,
+    /// What a block that was looked at to find what it gives gave, by the
+    /// address of its lambda, so that the block is not looked at twice again
+    /// where it is checked for good.
+    found: HashMap<usize, Ty>,
     /// Whether the type a part of a case is fitted to was settled by the type
     /// that was asked for, which a range that is narrower is taken to.
     settled: bool,
@@ -7856,7 +7896,13 @@ impl<'a> Checker<'a> {
         let before = self.errors.len();
         match (&defs.cases[e][k], payload) {
             (Some(pattern), Some(p)) => {
-                let gives = self.expr(body, p, &Want::Ty(pattern.partial(&sol)));
+                // A payload whose type nothing has settled yet is found from
+                // the payload itself.
+                let wanted = match pattern.partial(&sol) {
+                    Ty::Unknown => Want::Any,
+                    t => Want::Ty(t),
+                };
+                let gives = self.expr(body, p, &wanted);
                 if gives.unknown() {
                     return Ty::Unknown;
                 }

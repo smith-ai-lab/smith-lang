@@ -599,6 +599,9 @@ impl<'a> Lowering<'a> {
                 defs.provided(f).is_some(),
                 "an effect that is handled where it is asked of"
             );
+            if let Some(through) = defs.provided(f).and_then(|p| p.through) {
+                return self.answered_through(out, call, f, through, gives, env);
+            }
             return self.provided_answer(out, call, instance, gives, env);
         };
         let func = out.handlers[handler].operations[at].clone();
@@ -618,6 +621,45 @@ impl<'a> Lowering<'a> {
         let outside = out.handlers.split_off(out.handlers[handler].below);
         let mut result = self.run_func(out, func, args, &gives, false);
         out.handlers.extend(outside);
+        if gives == Ty::Nothing {
+            result.clear();
+        }
+        (gives, result)
+    }
+
+    /// Lowers a call of an operation that no handler answers and that the
+    /// library answers in Smith, with the function of its module that is
+    /// named `through`, which asks the kernel for plain numbers and builds
+    /// what the operation gives. The function runs in place of the operation,
+    /// with the call's arguments, under the handlers in force.
+    fn answered_through(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        f: usize,
+        through: &str,
+        gives: Ty,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let defs = self.typed.defs;
+        let g = defs
+            .function(defs.file.functions[f].pos, through)
+            .expect("the module of the effect has the function that answers it");
+        let instance = Instance {
+            template: Template::Free(g),
+            args: Vec::new(),
+        };
+        let params = defs.params(instance.template);
+        let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
+        for (arg, at) in call
+            .args
+            .iter()
+            .zip(params_of(&params, &call.args).expect("checked"))
+        {
+            args[at] = Some(self.argument(out, &arg.value, &params[at], env));
+        }
+        let args = args.into_iter().map(|a| a.expect("given")).collect();
+        let mut result = self.run_func(out, Func::Named(instance), args, &gives, false);
         if gives == Ty::Nothing {
             result.clear();
         }

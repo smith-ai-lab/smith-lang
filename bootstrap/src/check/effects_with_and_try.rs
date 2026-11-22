@@ -20,6 +20,11 @@ pub(super) const BUILT_IN_EFFECTS: &[&str] =
 pub(super) struct Provided {
     pub(super) effect: &'static str,
     pub(super) operation: &'static str,
+    /// The function of the same module, written in Smith, that answers the
+    /// operation by asking the kernel, when the target does not build the
+    /// operation itself. The target gives it plain numbers, and it builds the
+    /// `Result` or the handle that the operation gives from them.
+    pub(super) through: Option<&'static str>,
 }
 
 /// The operations the target provides, which a handler will replace.
@@ -27,16 +32,96 @@ pub(super) const PROVIDED: &[Provided] = &[
     Provided {
         effect: "console",
         operation: "print",
+        through: None,
     },
     Provided {
         effect: "console",
         operation: "input",
+        through: None,
     },
     Provided {
         effect: "entropy",
         operation: "fill",
+        through: None,
+    },
+    Provided {
+        effect: "net",
+        operation: "listen_on",
+        through: Some("system_listen_on"),
+    },
+    Provided {
+        effect: "net",
+        operation: "accept",
+        through: Some("system_accept"),
+    },
+    Provided {
+        effect: "net",
+        operation: "stop",
+        through: Some("system_stop"),
+    },
+    Provided {
+        effect: "net",
+        operation: "connect_to",
+        through: Some("system_connect_to"),
+    },
+    Provided {
+        effect: "net",
+        operation: "read",
+        through: Some("system_read"),
+    },
+    Provided {
+        effect: "net",
+        operation: "write",
+        through: Some("system_write"),
+    },
+    Provided {
+        effect: "net",
+        operation: "close",
+        through: Some("system_close"),
+    },
+    Provided {
+        effect: "net",
+        operation: "bind_to",
+        through: Some("system_bind_to"),
+    },
+    Provided {
+        effect: "net",
+        operation: "send",
+        through: Some("system_send"),
+    },
+    Provided {
+        effect: "net",
+        operation: "receive",
+        through: Some("system_receive"),
+    },
+    Provided {
+        effect: "net",
+        operation: "unbind",
+        through: Some("system_unbind"),
+    },
+    Provided {
+        effect: "time",
+        operation: "now",
+        through: Some("system_now"),
+    },
+    Provided {
+        effect: "time",
+        operation: "sleep",
+        through: Some("system_sleep"),
     },
 ];
+
+/// What the target provides for a function, when it is the operation of an
+/// effect of the library that the target provides.
+pub(super) fn provided_by(f: &crate::parser::Function) -> Option<&'static Provided> {
+    if !is_operation(f) || !of_std(f.pos) {
+        return None;
+    }
+    let effect = written_name(&f.effects.first()?.0);
+    PROVIDED
+        .iter()
+        .find(|p| p.effect == effect && p.operation == written_name(&f.name))
+}
 
 /// A name as the program writes it: without the module that a name which is
 /// not listed is written with after it.
@@ -164,14 +249,7 @@ impl<'a> Defs<'a> {
     /// What the target provides for a function of the file, when it is the
     /// operation of an effect of the library that the target provides.
     pub(super) fn provided(&self, f: usize) -> Option<&'static Provided> {
-        let f = &self.file.functions[f];
-        if !is_operation(f) || !of_std(f.pos) {
-            return None;
-        }
-        let effect = written_name(&f.effects.first()?.0);
-        PROVIDED
-            .iter()
-            .find(|p| p.effect == effect && p.operation == written_name(&f.name))
+        provided_by(&self.file.functions[f])
     }
 }
 
