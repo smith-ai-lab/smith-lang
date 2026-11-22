@@ -24,6 +24,8 @@
 //! through stays for the jumps that could not be sent past it, and `remove`
 //! takes it away when none is left.
 
+use crate::target::is_structured;
+
 use super::eval::{binary, bits_of, compare, mask, narrow, widen};
 use super::{Constant, End, Function, Instruction, Jump, Op, Place, Program, Type, Value};
 
@@ -32,8 +34,25 @@ use super::{Constant, End, Function, Instruction, Jump, Op, Place, Program, Type
 pub fn thread(program: Program) -> Program {
     Program {
         data: program.data,
-        functions: program.functions.into_iter().map(threaded).collect(),
+        functions: program.functions.into_iter().map(settled).collect(),
         main: program.main,
+    }
+}
+
+/// The function with its jumps sent on. A function whose blocks are written as
+/// loops and branches stays one: a jump sent past the header of a loop to a
+/// block in the loop is a way in that does not pass the header, and when the
+/// jumps sent on make that of a function that had none, they are sent on again
+/// with the headers of loops left as they are.
+fn settled(f: Function) -> Function {
+    if !is_structured(&f) {
+        return threaded(f, false);
+    }
+    let sent = threaded(f.clone(), false);
+    if is_structured(&sent) {
+        sent
+    } else {
+        threaded(f, true)
     }
 }
 
@@ -75,11 +94,11 @@ struct Facts {
     scratch: std::cell::RefCell<Env>,
 }
 
-fn threaded(mut f: Function) -> Function {
+fn threaded(mut f: Function, keep_headers: bool) -> Function {
     let n = f.blocks.len();
     let reached = reached_by(&f);
     localize(&mut f, &reached);
-    let mut facts = facts(&f, &reached);
+    let mut facts = facts(&f, &reached, keep_headers);
 
     for a in (0..n).rev() {
         let mut extra: Vec<Instruction> = Vec::new();
@@ -107,6 +126,28 @@ fn threaded(mut f: Function) -> Function {
         f.blocks[a].end = new;
     }
     f
+}
+
+/// Whether a block dominates another, for the blocks of `f` that are reached.
+fn dominance(f: &Function) -> impl Fn(usize, usize) -> bool {
+    let children = super::common::dominated(f);
+    let n = children.len();
+    let (mut start, mut end) = (vec![0; n], vec![0; n]);
+    let mut clock = 0;
+    let mut walk = vec![(0, 0)];
+    while let Some((b, next)) = walk.last_mut() {
+        let b = *b;
+        if let Some(&c) = children[b].get(*next) {
+            *next += 1;
+            clock += 1;
+            start[c] = clock;
+            walk.push((c, 0));
+        } else {
+            end[b] = clock;
+            walk.pop();
+        }
+    }
+    move |a, b| start[a] <= start[b] && start[b] <= end[a]
 }
 
 /// What a block defines and only the block it alone jumps to reads is given to
@@ -436,7 +477,7 @@ fn empty_block() -> super::Block {
     }
 }
 
-fn facts(f: &Function, reached: &[bool]) -> Facts {
+fn facts(f: &Function, reached: &[bool], keep_headers: bool) -> Facts {
     let values = f.types.len();
     let mut constant = vec![None; values];
     let mut compared = vec![false; values];
@@ -476,6 +517,29 @@ fn facts(f: &Function, reached: &[bool]) -> Facts {
                     through[b] = false;
                 }
                 _ => {}
+            }
+        }
+    }
+    // The header of a loop is not gone through: a jump sent past it would be a
+    // way into the loop that does not pass its header, and a loop with two ways
+    // in is not written as WebAssembly's own loops. A jump back to a block that
+    // does not dominate the jump is not a loop of that kind, and going through
+    // the block can take away the second way in.
+    let order = super::graph::reverse_postorder(f);
+    let mut place = vec![usize::MAX; f.blocks.len()];
+    for (at, &b) in order.iter().enumerate() {
+        place[b] = at;
+    }
+    let back: Vec<(usize, usize)> = order
+        .iter()
+        .flat_map(|&b| f.blocks[b].end.successors().map(move |s| (b, s)))
+        .filter(|&(b, s)| place[s] <= place[b])
+        .collect();
+    if keep_headers && !back.is_empty() {
+        let dominates = dominance(f);
+        for (b, s) in back {
+            if dominates(s, b) {
+                through[s] = false;
             }
         }
     }

@@ -24,6 +24,12 @@
 //! that is the last thing it does is then a jump, as `tail` makes it. A
 //! function that does not call itself, or only calls itself as the last thing
 //! it does, which `tail` has made a jump, is not changed.
+//!
+//! A pop that went to the piece after a call, wherever it is, would enter a
+//! loop of the function in its middle, and a loop with a way in that does not
+//! pass its header is not written as WebAssembly's own loops. So in a function
+//! that has a loop, the pop goes to the start and from there through the
+//! header of each loop the piece is in, as `Routes` says.
 
 use std::collections::HashMap;
 
@@ -144,6 +150,17 @@ impl Emit<'_> {
         result
     }
 
+    /// A value of type `ty` that nothing reads.
+    fn dummy(&mut self, ty: Type) -> Value {
+        let constant = match ty {
+            Type::Int(_) => Constant::Int(0),
+            Type::Float(_) => Constant::Float(0),
+            Type::Vector(_) => Constant::Vector(0, 0),
+            Type::Address => Constant::Null,
+        };
+        self.op(Op::Constant(constant), ty)
+    }
+
     /// The 64-bit number `n`.
     fn int(&mut self, n: u64) -> Value {
         self.op(Op::Constant(Constant::Int(n)), Type::Int(Bits::B64))
@@ -194,6 +211,136 @@ fn slot(ty: Type) -> i64 {
     match ty {
         Type::Vector(_) => 16,
         _ => 8,
+    }
+}
+
+/// The pieces that are in a loop of the function, as it was written: for each
+/// header, the pieces of its loop. A call returns to the piece after it, so
+/// that piece is in the loop its call is in.
+fn loops(next_of: &[Vec<usize>], entry: usize) -> Vec<(usize, Vec<bool>)> {
+    let n = next_of.len();
+    let mut reached = vec![false; n];
+    let mut stack = vec![entry];
+    reached[entry] = true;
+    while let Some(b) = stack.pop() {
+        for &s in &next_of[b] {
+            if !reached[s] {
+                reached[s] = true;
+                stack.push(s);
+            }
+        }
+    }
+    let mut before: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for b in (0..n).filter(|&b| reached[b]) {
+        for &s in &next_of[b] {
+            before[s].push(b);
+        }
+    }
+    // The pieces that dominate each, as sets.
+    let mut dom: Vec<Vec<bool>> = (0..n)
+        .map(|b| {
+            if b == entry {
+                (0..n).map(|d| d == entry).collect()
+            } else {
+                reached.clone()
+            }
+        })
+        .collect();
+    loop {
+        let mut changed = false;
+        for b in (0..n).filter(|&b| reached[b] && b != entry) {
+            let mut now = reached.clone();
+            for &p in &before[b] {
+                for d in 0..n {
+                    now[d] = now[d] && dom[p][d];
+                }
+            }
+            now[b] = true;
+            if now != dom[b] {
+                dom[b] = now;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let mut found: Vec<(usize, Vec<bool>)> = Vec::new();
+    for h in (0..n).filter(|&h| reached[h]) {
+        let latches: Vec<usize> = before[h].iter().copied().filter(|&u| dom[u][h]).collect();
+        if latches.is_empty() {
+            continue;
+        }
+        let mut body = vec![false; n];
+        body[h] = true;
+        let mut work = Vec::new();
+        for u in latches {
+            if !body[u] {
+                body[u] = true;
+                work.push(u);
+            }
+        }
+        while let Some(b) = work.pop() {
+            for &p in &before[b] {
+                if !body[p] {
+                    body[p] = true;
+                    work.push(p);
+                }
+            }
+        }
+        found.push((h, body));
+    }
+    found
+}
+
+/// How the piece after a call is entered when it is in a loop. The pop reaches
+/// it from outside the loop, and a loop that is entered anywhere but at its
+/// header cannot be written as WebAssembly's own loops. So the pop goes to the
+/// header of each loop the piece is in, outermost first, with the number of the
+/// call and what the piece takes, and the header goes on to the next loop or to
+/// the piece. A header is a block of its own, `dispatch`, that every other
+/// jump to the piece enters with 0 and values that nothing reads.
+struct Routes {
+    /// The piece of each header.
+    headers: Vec<usize>,
+    /// The place among the headers of the piece that is one.
+    at: HashMap<usize, usize>,
+    /// The headers each call goes through, by their place, outermost first.
+    chain: Vec<Vec<usize>>,
+    /// The calls that go through each header.
+    via: Vec<Vec<usize>>,
+    /// What the piece after each call takes, but for the two values of the
+    /// stack.
+    resume: Vec<Vec<Type>>,
+    /// What each header's piece takes, but for the two values of the stack.
+    own: Vec<Vec<Type>>,
+    /// The first block of the dispatchers.
+    dispatch: usize,
+}
+
+impl Routes {
+    /// The jump that enters `piece` with `args`, which end with the two values
+    /// of the stack, as the piece takes them.
+    fn enter(&self, e: &mut Emit, piece: usize, args: Vec<Value>) -> Jump {
+        let Some(&r) = self.at.get(&piece) else {
+            return Jump {
+                block: 1 + piece,
+                args,
+            };
+        };
+        let mut args = args;
+        let state = args.split_off(args.len() - 2);
+        args.push(e.int(0));
+        for i in 0..self.via[r].len() {
+            for ty in &self.resume[self.via[r][i]] {
+                args.push(e.dummy(*ty));
+            }
+        }
+        args.extend(state);
+        Jump {
+            block: self.dispatch + r,
+            args,
+        }
     }
 }
 
@@ -337,6 +484,62 @@ fn explicit(index: usize, f: Function) -> Function {
         })
         .collect();
 
+    // The calls whose piece after is in a loop of the function, and the
+    // headers they are entered through.
+    let routes = {
+        let found = loops(&next_of, first[0]);
+        let mut chains: Vec<Vec<usize>> = Vec::new();
+        for &next in &nexts {
+            let mut inside: Vec<&(usize, Vec<bool>)> =
+                found.iter().filter(|(_, body)| body[next]).collect();
+            inside.sort_by_key(|(h, body)| {
+                (std::cmp::Reverse(body.iter().filter(|&&x| x).count()), *h)
+            });
+            let mut chain: Vec<usize> = inside
+                .iter()
+                .map(|(h, _)| *h)
+                .filter(|&h| h != first[0])
+                .collect();
+            // A function with a loop is entered at its start by every pop, as
+            // a loop is at its header, so that no cycle through the pop has
+            // two ways in.
+            if !found.is_empty() {
+                chain.insert(0, first[0]);
+            }
+            chains.push(chain);
+        }
+        let mut headers: Vec<usize> = chains.iter().flatten().copied().collect();
+        headers.sort_unstable();
+        headers.dedup();
+        let at: HashMap<usize, usize> = headers.iter().enumerate().map(|(r, &h)| (h, r)).collect();
+        let chain: Vec<Vec<usize>> = chains
+            .iter()
+            .map(|c| c.iter().map(|h| at[h]).collect())
+            .collect();
+        let via: Vec<Vec<usize>> = (0..headers.len())
+            .map(|r| {
+                (0..sites.len())
+                    .filter(|&k| chain[k].contains(&r))
+                    .collect()
+            })
+            .collect();
+        let taken = |b: usize| -> Vec<Type> {
+            let mut all: Vec<Type> = pieces[b].params.iter().map(|v| types[v.0]).collect();
+            all.extend(alive[b].iter().map(|v| types[v.0]));
+            all
+        };
+        let own: Vec<Vec<Type>> = headers.iter().map(|&h| taken(h)).collect();
+        Routes {
+            headers,
+            at,
+            chain,
+            via,
+            resume: nexts.iter().map(|&b| taken(b)).collect(),
+            own,
+            dispatch: pop + 3 + 3 * sites.len(),
+        }
+    };
+
     // What each call keeps: the values alive when it returns, where each is in
     // the frame, and the size of the frame, which ends with the number of the call.
     struct Site {
@@ -367,7 +570,7 @@ fn explicit(index: usize, f: Function) -> Function {
 
     let long = Type::Int(Bits::B64);
     let params_of_start: Vec<Type> = pieces[first[0]].params.iter().map(|p| types[p.0]).collect();
-    let mut out: Vec<Block> = Vec::with_capacity(pop + 3 + 3 * sites.len());
+    let mut out: Vec<Block> = Vec::with_capacity(pop + 3 + 3 * sites.len() + routes.via.len());
 
     // The start: the first chunk, with the frame that says where to return.
     {
@@ -389,13 +592,11 @@ fn explicit(index: usize, f: Function) -> Function {
         let left = e.int(chunk - 8);
         let mut args = params.clone();
         args.extend([sp, left]);
+        let jump = routes.enter(&mut e, first[0], args);
         out.push(Block {
             params,
             instructions: e.out,
-            end: End::Jump(Jump {
-                block: piece_at(first[0]),
-                args,
-            }),
+            end: End::Jump(jump),
         });
     }
 
@@ -428,14 +629,11 @@ fn explicit(index: usize, f: Function) -> Function {
         for i in &mut instructions {
             i.op.rename(&by);
         }
-        let jump = |j: &Jump| {
+        let jump = |e: &mut Emit, j: &Jump| {
             let mut args: Vec<Value> = j.args.iter().map(|&v| by(v)).collect();
             args.extend(alive[j.block].iter().map(|&v| by(v)));
             args.extend([sp, left]);
-            Jump {
-                block: piece_at(j.block),
-                args,
-            }
+            routes.enter(e, j.block, args)
         };
         let end = match piece.ending {
             Ending::Plain(End::Return(vals)) => {
@@ -443,11 +641,27 @@ fn explicit(index: usize, f: Function) -> Function {
                 args.extend([sp, left]);
                 End::Jump(Jump { block: pop, args })
             }
-            Ending::Plain(End::Jump(j)) => End::Jump(jump(&j)),
-            Ending::Plain(End::Switch { on, jumps }) => End::Switch {
-                on: by(on),
-                jumps: jumps.iter().map(jump).collect(),
-            },
+            Ending::Plain(End::Jump(j)) => {
+                let mut e = Emit {
+                    types: &mut types,
+                    out: instructions,
+                };
+                let go = jump(&mut e, &j);
+                instructions = e.out;
+                End::Jump(go)
+            }
+            Ending::Plain(End::Switch { on, jumps }) => {
+                let mut e = Emit {
+                    types: &mut types,
+                    out: instructions,
+                };
+                let go: Vec<Jump> = jumps.iter().map(|j| jump(&mut e, j)).collect();
+                instructions = e.out;
+                End::Switch {
+                    on: by(on),
+                    jumps: go,
+                }
+            }
             Ending::Call { args, .. } => {
                 let k = site_of[&b];
                 let site = &kept[k];
@@ -618,13 +832,11 @@ fn explicit(index: usize, f: Function) -> Function {
             );
             let mut go = args;
             go.extend([sp2, left2]);
+            let jump = routes.enter(&mut e, first[0], go);
             out.push(Block {
                 params,
                 instructions: e.out,
-                end: End::Jump(Jump {
-                    block: piece_at(first[0]),
-                    args: go,
-                }),
+                end: End::Jump(jump),
             });
         }
         // A new chunk: its first frame says where the chunk before ended.
@@ -684,15 +896,109 @@ fn explicit(index: usize, f: Function) -> Function {
                 long,
             );
             go.extend([base, left2]);
+            let jump = match routes.chain[k].first() {
+                None => Jump {
+                    block: piece_at(next),
+                    args: go,
+                },
+                Some(&r) => {
+                    // Into the loop it is in, at its header.
+                    let state = go.split_off(go.len() - 2);
+                    let mut args: Vec<Value> =
+                        routes.own[r].iter().map(|&ty| e.dummy(ty)).collect();
+                    args.push(
+                        e.int(1 + routes.via[r].iter().position(|&s| s == k).unwrap() as u64),
+                    );
+                    for &s in &routes.via[r] {
+                        if s == k {
+                            args.extend(go.iter().copied());
+                        } else {
+                            args.extend(routes.resume[s].iter().map(|&ty| e.dummy(ty)));
+                        }
+                    }
+                    args.extend(state);
+                    Jump {
+                        block: routes.dispatch + r,
+                        args,
+                    }
+                }
+            };
             out.push(Block {
                 params,
                 instructions: e.out,
-                end: End::Jump(Jump {
-                    block: piece_at(next),
-                    args: go,
-                }),
+                end: End::Jump(jump),
             });
         }
+    }
+    // The header of each loop that is entered after a call: it takes what its
+    // piece takes, the number of the call that is going on in the loop, or 0 for
+    // no call, and what the piece after each such call takes.
+    for r in 0..routes.via.len() {
+        let header = routes.headers[r];
+        let fresh = |ty: Type, types: &mut Vec<Type>| {
+            types.push(ty);
+            Value(types.len() - 1)
+        };
+        let own: Vec<Value> = routes.own[r]
+            .iter()
+            .map(|&ty| fresh(ty, &mut types))
+            .collect();
+        let tag = fresh(long, &mut types);
+        let parts: Vec<Vec<Value>> = routes.via[r]
+            .iter()
+            .map(|&k| {
+                routes.resume[k]
+                    .iter()
+                    .map(|&ty| fresh(ty, &mut types))
+                    .collect()
+            })
+            .collect();
+        let (sp, left) = state(&mut types);
+        let mut params = own.clone();
+        params.push(tag);
+        params.extend(parts.iter().flatten().copied());
+        params.extend([sp, left]);
+        let mut e = Emit {
+            types: &mut types,
+            out: Vec::new(),
+        };
+        let mut stay = own;
+        stay.extend([sp, left]);
+        let mut jumps = vec![Jump {
+            block: piece_at(header),
+            args: stay,
+        }];
+        for (i, &k) in routes.via[r].iter().enumerate() {
+            let mut args = Vec::new();
+            let block = match routes.chain[k].iter().position(|&x| x == r) {
+                Some(place) if place + 1 < routes.chain[k].len() => {
+                    // On, into the loop inside this one.
+                    let inner = routes.chain[k][place + 1];
+                    args.extend(routes.own[inner].iter().map(|&ty| e.dummy(ty)));
+                    let number = routes.via[inner].iter().position(|&s| s == k).unwrap();
+                    args.push(e.int(1 + number as u64));
+                    for &s in &routes.via[inner] {
+                        if s == k {
+                            args.extend(parts[i].iter().copied());
+                        } else {
+                            args.extend(routes.resume[s].iter().map(|&ty| e.dummy(ty)));
+                        }
+                    }
+                    routes.dispatch + inner
+                }
+                _ => {
+                    args.extend(parts[i].iter().copied());
+                    piece_at(nexts[k])
+                }
+            };
+            args.extend([sp, left]);
+            jumps.push(Jump { block, args });
+        }
+        out.push(Block {
+            params,
+            instructions: e.out,
+            end: End::Switch { on: tag, jumps },
+        });
     }
     Function {
         types,
