@@ -1721,7 +1721,7 @@ impl<'a> Checker<'a> {
                         self.defs.spelling(from)
                     ),
                 )
-                .with_fix("use `convert`")
+                .with_fix("write the value as it is")
             };
             self.errors.push(error);
             return Ty::Unknown;
@@ -1761,21 +1761,6 @@ impl<'a> Checker<'a> {
         match name {
             "narrow" => "an `Option` of a whole number",
             _ => "a whole number",
-        }
-    }
-
-    /// Checks `__convert(a)`, which the prelude's conversions between whole
-    /// numbers call, and which gives the type that is expected.
-    pub(super) fn convert_intrinsic(
-        &mut self,
-        body: &mut Body<'a>,
-        call: &Call,
-        want: &Want,
-    ) -> Ty {
-        self.expr(body, &call.args[0].value, &Want::Any);
-        match want {
-            Want::Ty(t) => t.clone(),
-            _ => Ty::Unknown,
         }
     }
 }

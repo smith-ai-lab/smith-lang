@@ -15,7 +15,7 @@ fn main() ! console, alloc {
   r: Shape = convert(Rect(w: 1))
   print("{r}")
   n: Byte = 4
-  wide: u32 = convert(n)
+  wide: u32 = n
   c: Shape = convert(wide)
   print("{c}")
 }

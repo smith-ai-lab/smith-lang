@@ -9,8 +9,8 @@ use crate::numbers::{INTS, header_for};
 
 pub const ONCE: &[Test] = &[
     (
-        "convert_between_integer_types_compiles_exactly_when_the_second_holds_every_value_of_the_first",
-        convert_between_integer_types_compiles_exactly_when_the_second_holds_every_value_of_the_first,
+        "convert_between_whole_numbers_is_refused_and_a_wider_range_takes_a_narrower_one_as_it_is",
+        convert_between_whole_numbers_is_refused_and_a_wider_range_takes_a_narrower_one_as_it_is,
     ),
     (
         "a_conversion_of_a_conversion_is_refused_for_every_type",
@@ -27,16 +27,30 @@ fn program(from: &str, to: &str, body: &str) -> String {
     header_for(&program) + &program
 }
 
-/// `convert` from one integer type to another compiles when the second holds
-/// every value of the first and the two differ, and not otherwise.
-fn convert_between_integer_types_compiles_exactly_when_the_second_holds_every_value_of_the_first() {
+/// `convert` from one whole number type to another is refused for every pair,
+/// and where the second holds every value of the first, the error says that a
+/// wider range takes a narrower one with nothing written. The function that
+/// returns the value as it is compiles for exactly those pairs.
+fn convert_between_whole_numbers_is_refused_and_a_wider_range_takes_a_narrower_one_as_it_is() {
     for from in INTS {
         for to in INTS {
             let source = program(from.name, to.name, "convert(x)");
+            let errors = check(source.as_bytes()).expect_err("refused");
+            let says = errors
+                .iter()
+                .any(|e| e.message.contains("nothing written"));
             assert_eq!(
-                check(source.as_bytes()).is_ok(),
+                says,
                 from != to && to.holds_all(*from),
-                "convert from {} to {}",
+                "convert from {} to {}: {errors:?}",
+                from.name,
+                to.name
+            );
+            let plain = program(from.name, to.name, "x");
+            assert_eq!(
+                check(plain.as_bytes()).is_ok(),
+                to.holds_all(*from),
+                "{} as {}",
                 from.name,
                 to.name
             );

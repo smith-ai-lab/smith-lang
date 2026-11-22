@@ -599,7 +599,8 @@ fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
     loop j in i..b.size {
       d = b[j]
       if is_digit(d) {
-        size = wrapping_add(wrapping_mul(size, 10), convert(wrapping_sub(d, '0')))
+        digit: Nat = wrapping_sub(d, '0')
+        size = wrapping_add(wrapping_mul(size, 10), digit)
       } else {
         stop = j
         break
@@ -636,7 +637,7 @@ fn magnitude(b: Slice[Byte], from: Nat, end: Nat) -> Option[u64] {
   var m: u64 = 0
   loop i in from..end {
     if i < b.size {
-      d: u64 = convert(wrapping_sub(b[i], '0'))
+      d: u64 = wrapping_sub(b[i], '0')
       match checked_mul(m, 10) {
         .some(t) {
           match checked_add(t, d) {
@@ -652,7 +653,7 @@ fn magnitude(b: Slice[Byte], from: Nat, end: Nat) -> Option[u64] {
 }
 
 fn hex_value(c: Byte) -> Option[u32] {
-  if is_digit(c) { Option.some(convert(wrapping_sub(c, '0'))) } else if c >= 'a' and c <= 'f' { Option.some(convert(wrapping_sub(c, 87))) } else if c >= 'A' and c <= 'F' { Option.some(convert(wrapping_sub(c, 55))) } else { Option.none }
+  if is_digit(c) { Option.some(wrapping_sub(c, '0')) } else if c >= 'a' and c <= 'f' { Option.some(wrapping_sub(c, 87)) } else if c >= 'A' and c <= 'F' { Option.some(wrapping_sub(c, 55)) } else { Option.none }
 }
 
 // The four hexadecimal digits at `at`.

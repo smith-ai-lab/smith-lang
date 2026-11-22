@@ -1,0 +1,8 @@
+convert_widens.smith:4:32: a wider range takes a narrower one with nothing written, so `Byte` is taken where `u32` is needed as it is, and there is no `convert` between whole numbers
+  4 | fn widen(small: Byte) -> u32 { convert(small) }
+    |                                ^
+  fix: write the value as it is
+convert_widens.smith:6:29: a wider range takes a narrower one with nothing written, so `i8` is taken where `Int` is needed as it is, and there is no `convert` between whole numbers
+  6 | fn sign(small: i8) -> Int { convert(small) }
+    |                             ^
+  fix: write the value as it is

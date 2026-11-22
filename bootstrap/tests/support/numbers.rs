@@ -519,13 +519,13 @@ fn line(g: &mut Gen, vars: &[Var], at: usize) -> Line {
             );
         }
         8 if g.one_in(3) && INTS.iter().any(|t| *t != first.ty && t.holds_all(first.ty)) => {
-            // A type that holds every value of its own, which `convert` goes to.
+            // A type that holds every value of its own, which the value goes to as it is.
             let wider: Vec<Int> = (INTS.iter())
                 .filter(|t| **t != first.ty && t.holds_all(first.ty))
                 .copied()
                 .collect();
             let to = *g.pick(&wider);
-            line.before = format!("  t{at}: {} = convert({})\n", to.name, first.name);
+            line.before = format!("  t{at}: {} = {}\n", to.name, first.name);
             line.braced(&format!("t{at}"), &first.value.to_string());
         }
         8 => {
@@ -813,8 +813,8 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
                 .filter(|(f, t)| t.holds_all(*f))
                 .collect();
             let (from, to) = *g.pick(&pairs);
-            // A type is not converted to itself.
-            fix = (from != to).then(|| "convert".to_string());
+            // A type has nothing to write to itself.
+            fix = (from != to).then(|| "as it is".to_string());
             (
                 format!("x: {} = 1\n  y: {} = ", from.name, to.name),
                 "clamp(x)\n  print(\"{y}\")".into(),

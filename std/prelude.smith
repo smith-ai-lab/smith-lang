@@ -231,18 +231,6 @@ impl Checked[i8] {
   }
 }
 
-impl Convert[i8, i16] {
-  fn convert(a: i8) -> i16 { __convert(a) }
-}
-
-impl Convert[i8, i32] {
-  fn convert(a: i8) -> i32 { __convert(a) }
-}
-
-impl Convert[i8, i64] {
-  fn convert(a: i8) -> i64 { __convert(a) }
-}
-
 impl Bits[i8] {
   fn bit_and(a: i8, b: i8) -> i8 { __bit_and(a, b) }
   fn bit_or(a: i8, b: i8) -> i8 { __bit_or(a, b) }
@@ -295,14 +283,6 @@ impl Checked[i16] {
   }
 }
 
-impl Convert[i16, i32] {
-  fn convert(a: i16) -> i32 { __convert(a) }
-}
-
-impl Convert[i16, i64] {
-  fn convert(a: i16) -> i64 { __convert(a) }
-}
-
 impl Bits[i16] {
   fn bit_and(a: i16, b: i16) -> i16 { __bit_and(a, b) }
   fn bit_or(a: i16, b: i16) -> i16 { __bit_or(a, b) }
@@ -353,10 +333,6 @@ impl Checked[i32] {
   fn checked_rem(a: i32, b: i32) -> Option[i32] {
     if b == 0 { .none } else if b == -1 { .some(0) } else { .some(a % b) }
   }
-}
-
-impl Convert[i32, i64] {
-  fn convert(a: i32) -> i64 { __convert(a) }
 }
 
 impl Bits[i32] {
@@ -463,30 +439,6 @@ impl Checked[u8] {
   }
 }
 
-impl Convert[u8, i16] {
-  fn convert(a: u8) -> i16 { __convert(a) }
-}
-
-impl Convert[u8, i32] {
-  fn convert(a: u8) -> i32 { __convert(a) }
-}
-
-impl Convert[u8, i64] {
-  fn convert(a: u8) -> i64 { __convert(a) }
-}
-
-impl Convert[u8, u16] {
-  fn convert(a: u8) -> u16 { __convert(a) }
-}
-
-impl Convert[u8, u32] {
-  fn convert(a: u8) -> u32 { __convert(a) }
-}
-
-impl Convert[u8, u64] {
-  fn convert(a: u8) -> u64 { __convert(a) }
-}
-
 impl Bits[u8] {
   fn bit_and(a: u8, b: u8) -> u8 { __bit_and(a, b) }
   fn bit_or(a: u8, b: u8) -> u8 { __bit_or(a, b) }
@@ -539,22 +491,6 @@ impl Checked[u16] {
   }
 }
 
-impl Convert[u16, i32] {
-  fn convert(a: u16) -> i32 { __convert(a) }
-}
-
-impl Convert[u16, i64] {
-  fn convert(a: u16) -> i64 { __convert(a) }
-}
-
-impl Convert[u16, u32] {
-  fn convert(a: u16) -> u32 { __convert(a) }
-}
-
-impl Convert[u16, u64] {
-  fn convert(a: u16) -> u64 { __convert(a) }
-}
-
 impl Bits[u16] {
   fn bit_and(a: u16, b: u16) -> u16 { __bit_and(a, b) }
   fn bit_or(a: u16, b: u16) -> u16 { __bit_or(a, b) }
@@ -605,14 +541,6 @@ impl Checked[u32] {
   fn checked_rem(a: u32, b: u32) -> Option[u32] {
     if b == 0 { .none } else { .some(a % b) }
   }
-}
-
-impl Convert[u32, i64] {
-  fn convert(a: u32) -> i64 { __convert(a) }
-}
-
-impl Convert[u32, u64] {
-  fn convert(a: u32) -> u64 { __convert(a) }
 }
 
 impl Bits[u32] {

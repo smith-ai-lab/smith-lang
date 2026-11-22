@@ -198,7 +198,7 @@ fn index_of(text: List[Byte], target: Byte) -> Option[Nat] {
 
 fn number_at(b: List[Byte], i: Nat) -> u64 {
   match byte_at(b, i) {
-    .some(x) { convert(x) }
+    .some(x) { x }
     .none { 0 }
   }
 }

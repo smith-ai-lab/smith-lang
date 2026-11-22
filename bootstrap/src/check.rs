@@ -6061,12 +6061,6 @@ fn is_intrinsic(call: &Call) -> bool {
         && (of_prelude(call.pos) || of_std(call.pos))
 }
 
-/// Whether a call is of the function `name`, which the compiler builds for
-/// the prelude and no other file may call.
-fn is_prelude_call(call: &Call, name: &str) -> bool {
-    call.qualifier.is_none() && call.callee == name && of_prelude(call.pos)
-}
-
 /// Whether a call is of `__eprint` or `__end`, which the prelude calls for
 /// `main` and the library calls for a server that cannot listen.
 fn is_ending_call(call: &Call, name: &str) -> bool {
