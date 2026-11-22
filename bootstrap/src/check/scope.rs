@@ -62,19 +62,8 @@ pub(super) fn used_names(file: &File) -> Vec<(String, Pos)> {
             }
         }
     }
-    // The effect `spawn` is built in, and a list that names it asks for no
-    // import, though the function `spawn` of the library is written as it is.
-    let mut listed: HashSet<Pos> = HashSet::new();
-    for f in &functions {
-        listed.extend(f.effects.iter().map(|(_, at)| *at));
-        for p in &f.params {
-            listed.extend(p.effects.iter().map(|(_, at)| *at));
-        }
-    }
     (file.idents.iter())
-        .filter(|(name, at)| {
-            !bound.contains(name.as_str()) && !(name == "spawn" && listed.contains(at))
-        })
+        .filter(|(name, _)| !bound.contains(name.as_str()))
         .cloned()
         .collect()
 }

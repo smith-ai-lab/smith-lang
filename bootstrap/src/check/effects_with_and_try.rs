@@ -5,10 +5,10 @@ use super::*;
 use crate::parser::{EffectDef, is_operation};
 
 /// The effects the standard library declares, other than `console`.
-pub(super) const LIBRARY_EFFECTS: &[&str] = &["fs", "net", "time", "ui"];
+pub(super) const LIBRARY_EFFECTS: &[&str] = &["fs", "net", "task", "time", "ui"];
 
 /// The effects the compiler builds.
-pub(super) const BUILT: &[&str] = &["console", "alloc", "diverge", "spawn"];
+pub(super) const BUILT: &[&str] = &["console", "alloc", "diverge"];
 
 /// The effects built into the compiler.
 pub(super) const BUILT_IN_EFFECTS: &[&str] = &["alloc", "gpu", "diverge", "foreign", "exec"];
@@ -99,6 +99,16 @@ pub(super) const PROVIDED: &[Provided] = &[
         through: Some("system_unbind"),
     },
     Provided {
+        effect: "task",
+        operation: "start",
+        through: Some("system_start"),
+    },
+    Provided {
+        effect: "task",
+        operation: "finish",
+        through: Some("system_finish"),
+    },
+    Provided {
         effect: "time",
         operation: "now",
         through: Some("system_now"),
@@ -134,23 +144,6 @@ pub(super) fn is_arena_call(defs: &Defs, call: &Call) -> bool {
     written_name(&call.callee) == "alloc"
         && defs.effect_named(&call.callee).is_none()
         && defs.function(call.name_pos, &call.callee).is_none()
-}
-
-/// Whether a call is of `spawn` with the body to run, which opens a task group
-/// for it, and not of the function `spawn`, whose one argument is the work of
-/// the child and is never labelled `body`.
-pub(super) fn is_group_call(call: &Call) -> bool {
-    written_name(&call.callee) == "spawn"
-        && matches!(&call.args[..], [arg] if arg.name.as_ref().is_some_and(|(n, _)| n == "body"))
-}
-
-/// The signature of a call of `spawn` with a body: the body to run, which may
-/// carry `spawn`, and gives what the call gives.
-fn group_signature() -> Signature {
-    Signature {
-        fn_effects: vec![vec!["spawn".to_string()]],
-        ..arena_signature()
-    }
 }
 
 /// The signature of a call of `alloc`: the body to run, which may carry
@@ -379,13 +372,6 @@ impl<'a> Checker<'a> {
     /// body.
     pub(super) fn arena_call(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
         let signature = arena_signature();
-        let sol = self.arguments(body, call, &signature, false, None, None);
-        signature.gives.solved(&sol)
-    }
-
-    /// Checks a call of `spawn` with a body, which opens a task group for it.
-    pub(super) fn group_call(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
-        let signature = group_signature();
         let sol = self.arguments(body, call, &signature, false, None, None);
         signature.gives.solved(&sol)
     }

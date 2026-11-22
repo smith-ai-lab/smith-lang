@@ -1,13 +1,14 @@
 ---
 type: specification
 title: Tasks
-description: A task group opened with tasks(), children started with spawn and waited for with join, and the spawn effect.
+description: A task group opened with tasks(), children started with spawn and waited for with join, and the task effect.
 status: partial
 built:
   - "`with tasks()`, `spawn`, and `join`, imported from `std.task`, with `fetch_one` and `fetch_both` as the page writes them, under a handler of `fetch` that a test writes: `join(t)` is what the child's lambda gave"
   - "a child's lambda runs exactly once if it is joined, a child that is not joined is cancelled when the block ends, and nothing of a child runs after its group's block has ended"
-  - "a function that spawns with no group of its own carries `spawn`, and its caller that opens the group does not; leaving `spawn` out is refused: \"`spawn` needs the `spawn` effect, which `start` does not declare\""
-  - "not built: `first`, and a child that runs at the same time as its parent, so a child runs in place where it is spawned, to its end, and is never found still running when the block ends"
+  - "a function that spawns with no group of its own carries `task`, and its caller that opens the group does not; leaving `task` out is refused: \"`spawn` needs the `task` effect, which `start` does not declare\""
+  - "`task` is declared by `std.task` and is imported as `net` is, `use std.task (task, join, spawn, tasks)`; the system's scheduler, which a program that reaches `main` with no group has, and `with tasks()` both run a child to its end in `start`, so a child is never found still running when the block ends"
+  - "not built: `first`, and a child that runs at the same time as its parent, and a child that runs under a handler that holds state, which is refused as not built yet, as [Handlers and tasks](task-handlers.md) says"
 ---
 
 # Tasks
@@ -89,13 +90,13 @@ fn warm(url: str) ! net, alloc {
 
 ## A function that spawns without a group
 
-A function that spawns without opening its own group spawns into its caller's, and it carries the `spawn` effect. The caller that opens the group does not carry it.
+A function that spawns without opening its own group spawns into its caller's, and it carries the `task` effect, which `std.task` declares. The caller that opens the group does not carry it.
 
 ```
 use std.bits (i32)
-use std.task (spawn, tasks)
+use std.task (spawn, task, tasks)
 
-fn start(n: i32) ! spawn {
+fn start(n: i32) ! task {
   spawn { n * 2 }
   ()
 }
@@ -107,17 +108,17 @@ fn start_two() {
 }
 ```
 
-Leaving `spawn` out of `start` is refused, as is any effect left out of a signature: "`spawn` needs the `spawn` effect, which `start` does not declare", with the fix "write `fn start(n: i32) ! spawn`".
+Leaving `task` out of `start` is refused, as is any effect left out of a signature: "`spawn` needs the `task` effect, which `start` does not declare", with the fix "write `fn start(n: i32) ! task`".
 
 ## The forms
 
 | Written | Is |
 | --- | --- |
-| `use std.task (join, spawn, tasks)` | Brings in the three functions, which a group needs; the effect `spawn` needs no import |
+| `use std.task (join, spawn, tasks)` | Brings in the three functions, which a group needs; a function that carries the effect imports `task` too |
 | `with tasks()` | A task group for the rest of the block |
 | `spawn { e }` | A child that runs `e`, in the nearest group |
 | `join(t)` | The value of the child `t`, after waiting for it |
 | `first(t, rest)` | The value of the first of `t` and the children in `rest` to finish |
-| `! spawn` | A function that spawns into its caller's group |
+| `! task` | A function that spawns into its caller's group |
 
 Next: [What a spawned task may use](task-sharing.md)

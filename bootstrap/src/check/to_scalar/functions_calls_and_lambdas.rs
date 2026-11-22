@@ -591,25 +591,6 @@ impl<'a> Lowering<'a> {
         (gives, result)
     }
 
-    /// Lowers a call of `spawn` with a body: the body runs in place, as every
-    /// child of the group does, so a group holds nothing to wait for.
-    pub(super) fn group(
-        &mut self,
-        out: &mut Out<'a>,
-        expr: &'a Expr,
-        call: &'a Call,
-        env: &[Ty],
-    ) -> (Ty, Vec<form::Value>) {
-        let param = (String::new(), Ty::Fn(Vec::new()));
-        let body = (self.argument(out, &call.args[0].value, &param, env).func).expect("a function");
-        let gives = self.typed.type_of(expr, env);
-        let mut result = self.run_func(out, body, Vec::new(), &gives, false);
-        if gives == Ty::Nothing {
-            result.clear();
-        }
-        (gives, result)
-    }
-
     /// Lowers a call of `alloc`: the body runs in place, between the opening
     /// and the closing of an arena, which holds what the body allocates and
     /// does not hand out. A `return` in the body leaves the body, so it ends
