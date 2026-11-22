@@ -52,6 +52,9 @@ struct Machine<'a> {
     starts: Vec<usize>,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
+    /// What standard input holds, and how much of it has been read.
+    stdin: Vec<u8>,
+    read: usize,
     /// How many bytes the system will still give.
     left: usize,
     /// How many bytes each request to the system for memory has asked for.
@@ -131,6 +134,11 @@ pub fn run_measured(program: &Program) -> (Outcome, u64) {
     (outcome, ran)
 }
 
+/// Runs the program as `run` does, with the bytes as what standard input holds.
+pub fn run_with_input(program: &Program, input: &[u8]) -> Outcome {
+    start_with(program, usize::MAX, Given::Words(&[]), input).0
+}
+
 /// Runs a program that takes the words it was started with, as Linux and
 /// macOS give them: its name, which is not one of them, and then the words.
 pub fn run_with_words(program: &Program, words: &[Vec<u8>]) -> Outcome {
@@ -163,6 +171,10 @@ pub fn run_with_command_line_and_errors(program: &Program, line: &[u16]) -> (Out
 type Run = (Outcome, Vec<u8>, Vec<usize>, Vec<usize>, u64, Vec<usize>);
 
 fn start(program: &Program, limit: usize, given: Given) -> Run {
+    start_with(program, limit, given, &[])
+}
+
+fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Run {
     let mut memory = Vec::new();
     let mut starts = Vec::new();
     for text in &program.data {
@@ -180,6 +192,8 @@ fn start(program: &Program, limit: usize, given: Given) -> Run {
         starts,
         stdout: Vec::new(),
         stderr: Vec::new(),
+        stdin: input.to_vec(),
+        read: 0,
         left: limit,
         requests: Vec::new(),
         taking: (program.functions.iter()).position(|f| *f == super::handler::take()),
@@ -253,6 +267,8 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         starts: Vec::new(),
         stdout: Vec::new(),
         stderr: Vec::new(),
+        stdin: Vec::new(),
+        read: 0,
         left: usize::MAX,
         requests: Vec::new(),
         taking: None,
@@ -1013,6 +1029,23 @@ impl Machine<'_> {
                             self.memory[from + k] = k as u8;
                         }
                         vec![Word::Int(0)]
+                    }
+                    // Only the bytes asked for are taken, so what a program
+                    // has not asked for is left for its next read.
+                    Op::System {
+                        call: System::Read,
+                        args,
+                    } => {
+                        let (Word::Address(at), Word::Int(count)) = (get(&args[0]), get(&args[1]))
+                        else {
+                            panic!("a read that is not of an address and a count")
+                        };
+                        let n = (count as usize).min(self.stdin.len() - self.read);
+                        let from = at - BASE;
+                        self.memory[from..from + n]
+                            .copy_from_slice(&self.stdin[self.read..self.read + n]);
+                        self.read += n;
+                        vec![Word::Int(n as u64)]
                     }
                     Op::System {
                         call: System::Exit,

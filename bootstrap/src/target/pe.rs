@@ -3,7 +3,8 @@
 //! system's loader links.
 //!
 //! From `KERNEL32.dll` the program uses only thin wrappers over the kernel:
-//! `GetStdHandle`, `WriteFile`, `ExitProcess`, and, in a program that asks
+//! `GetStdHandle`, `WriteFile`, `ExitProcess`, and, in a program that reads
+//! standard input, `ReadFile`, and, in a program that asks
 //! for memory, `VirtualAlloc`, and, in a program that takes the words it was
 //! started with, `GetCommandLineW`. In a program that asks for random bytes it
 //! uses `ProcessPrng` of `bcryptprimitives.dll`, the system's generator of
@@ -36,26 +37,35 @@ const DLL: &[u8] = b"KERNEL32.dll";
 /// import address table. A program that never asks for memory imports only
 /// the first three, and one that asks for memory and takes no words imports
 /// the first four.
-const IMPORTS: [&str; 5] = [
+const IMPORTS: [&str; 6] = [
     "GetStdHandle",
     "WriteFile",
     "ExitProcess",
     "VirtualAlloc",
     "GetCommandLineW",
+    "ReadFile",
 ];
 pub const GET_STD_HANDLE: usize = 0;
 pub const WRITE_FILE: usize = 1;
 pub const EXIT_PROCESS: usize = 2;
 pub const VIRTUAL_ALLOC: usize = 3;
 pub const GET_COMMAND_LINE: usize = 4;
+pub const READ_FILE: usize = 5;
 /// The library of `ProcessPrng`, which fills bytes with bytes nobody can
 /// predict and always succeeds.
 const PRNG_DLL: &[u8] = b"bcryptprimitives.dll";
 const PRNG: &str = "ProcessPrng";
 /// `ProcessPrng`'s slot in the import address table, which follows the slots
 /// of `KERNEL32.dll` and the one that ends them. A program that asks for it
-/// imports every symbol of `KERNEL32.dll`, so it is always this one.
-pub const PROCESS_PRNG: usize = IMPORTS.len() + 1;
+/// imports the first five symbols of `KERNEL32.dll`, and `ReadFile` too when
+/// it reads standard input.
+pub const fn process_prng(reads: bool) -> usize {
+    if reads {
+        IMPORTS.len() + 1
+    } else {
+        IMPORTS.len()
+    }
+}
 
 /// What a program imports.
 pub struct Needs {
@@ -69,10 +79,13 @@ pub struct Needs {
 /// and `GetCommandLineW` only if it takes the words it was started with,
 /// which asks for memory too, and `ProcessPrng` only if it asks for random
 /// bytes, which asks for memory to say that it could not get them, and so
-/// imports the rest.
-pub fn imports(allocates: bool, takes_arguments: bool, entropy: bool) -> Needs {
-    let kernel: &'static [&'static str] = if takes_arguments || entropy {
+/// imports the first five, and `ReadFile` only if it reads standard input,
+/// which asks for memory to hold what it reads, and so imports all.
+pub fn imports(allocates: bool, takes_arguments: bool, entropy: bool, reads: bool) -> Needs {
+    let kernel: &'static [&'static str] = if reads {
         &IMPORTS
+    } else if takes_arguments || entropy {
+        &IMPORTS[..5]
     } else if allocates {
         &IMPORTS[..4]
     } else {
@@ -89,7 +102,9 @@ pub fn imports(allocates: bool, takes_arguments: bool, entropy: bool) -> Needs {
 pub const MEM_COMMIT_RESERVE: u32 = 0x1000 | 0x2000;
 pub const PAGE_READWRITE: u32 = 0x04;
 
-/// `GetStdHandle`'s names for standard output and standard error.
+/// `GetStdHandle`'s names for standard input, standard output, and standard
+/// error.
+pub const STD_INPUT_HANDLE: u32 = -10i32 as u32;
 pub const STD_OUTPUT_HANDLE: u32 = -11i32 as u32;
 pub const STD_ERROR_HANDLE: u32 = -12i32 as u32;
 /// The most one `WriteFile` is asked to write.

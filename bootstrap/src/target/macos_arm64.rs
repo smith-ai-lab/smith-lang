@@ -6,7 +6,9 @@ use super::Part;
 use super::arm64::{
     self, Asm, EQ, LE, LO, LT, NE, Place, System, X0, X1, X2, X3, X4, X5, X19, X20,
 };
-use super::macho::{self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, WRITE};
+use super::macho::{
+    self, EINTR, ERROR, EXIT, GETENTROPY, MMAP, MMAP_REQUEST, Machine, READ, WRITE,
+};
 use crate::scalar::{Program, Stream};
 
 const MACHINE: Machine = Machine {
@@ -20,7 +22,11 @@ const MACHINE: Machine = Machine {
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let (asm, data, parts) = arm64::code::<Macos>(program);
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
-    let imports = macho::imports(program.allocates(), program.asks_for_entropy());
+    let imports = macho::imports(
+        program.allocates(),
+        program.asks_for_entropy(),
+        program.reads(),
+    );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
         at = code;
@@ -67,6 +73,38 @@ impl System for Macos {
         asm.cond(LT, interrupted);
         asm.branch(fail);
         asm.bind(interrupted);
+        asm.call(ERROR);
+        // ldr w0, [x0]; cmp w0, #EINTR; b.eq again; b fail
+        asm.word(0xb940_0000 | X0 << 5 | X0);
+        asm.word(0x7100_001f | EINTR << 10 | X0 << 5);
+        asm.cond(EQ, again);
+        asm.branch(fail);
+        asm.bind(done);
+        asm.load(X19, 8, false, Place::Frame(0));
+        asm.load(X20, 8, false, Place::Frame(8));
+    }
+
+    /// Reads from file 0, retrying a read that is interrupted, and branches to
+    /// `fail` if the system refuses it. The place and the count stay in x19 and
+    /// x20, which calls keep, as `write` keeps them.
+    fn read(asm: &mut Asm, fail: usize) {
+        asm.store(Place::Frame(0), X19, 8);
+        asm.store(Place::Frame(8), X20, 8);
+        asm.mov(X19, X1);
+        asm.mov(X20, X2);
+        let again = asm.label();
+        let done = asm.label();
+        let refused = asm.label();
+        asm.bind(again);
+        asm.mov_w(X0, 0);
+        asm.mov(X1, X19);
+        asm.mov(X2, X20);
+        asm.call(READ);
+        // cmp x0, #0; b.lt refused; b done
+        asm.word(0xf100_001f);
+        asm.cond(LT, refused);
+        asm.branch(done);
+        asm.bind(refused);
         asm.call(ERROR);
         // ldr w0, [x0]; cmp w0, #EINTR; b.eq again; b fail
         asm.word(0xb940_0000 | X0 << 5 | X0);

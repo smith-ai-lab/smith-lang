@@ -7,6 +7,7 @@ use super::elf::{self, Machine};
 use super::x86_64::{self, Asm, LE, Place, R8, R9, R10, RAX, RDI, RDX, RSI, Reg, S, System, Z};
 use crate::scalar::{Program, Stream};
 
+const SYS_READ: u32 = 0;
 const SYS_WRITE: u32 = 1;
 const SYS_MMAP: u32 = 9;
 const SYS_GETRANDOM: u32 = 318;
@@ -46,6 +47,27 @@ impl System for Linux {
         asm.add(RSI, RAX);
         asm.sub(RDX, RAX);
         asm.jmp(again);
+        asm.bind(refused);
+        asm.cmp_imm8(RAX, -EINTR);
+        asm.jcc(Z, again);
+        asm.jmp(fail);
+        asm.bind(done);
+    }
+
+    /// Reads from file 0, retrying a read that is interrupted, and jumps to
+    /// `fail` if the kernel refuses it. The kernel gives a failure as minus
+    /// its error number.
+    fn read(asm: &mut Asm, fail: usize) {
+        let again = asm.label();
+        let done = asm.label();
+        let refused = asm.label();
+        asm.bind(again);
+        asm.mov32(RAX, SYS_READ);
+        asm.mov32(RDI, 0);
+        asm.syscall();
+        asm.test(RAX);
+        asm.jcc(S, refused);
+        asm.jmp(done);
         asm.bind(refused);
         asm.cmp_imm8(RAX, -EINTR);
         asm.jcc(Z, again);

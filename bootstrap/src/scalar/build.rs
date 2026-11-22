@@ -317,6 +317,31 @@ impl Builder {
         )[0]
     }
 
+    /// Reads at most as many bytes as the 64-bit integer says from standard
+    /// input to the address, and gives how many it read, which is 0 at the end.
+    pub fn read(&mut self, address: Value, count: Value) -> Value {
+        self.emit(
+            Op::System {
+                call: System::Read,
+                args: vec![address, count],
+            },
+            &[Type::Int(Bits::B64)],
+        )[0]
+    }
+
+    /// Writes the bytes from the address, as many as the 64-bit integer
+    /// says, to standard output.
+    pub fn write_output(&mut self, address: Value, count: Value) {
+        let call = System::Write(super::Stream::Stdout);
+        self.emit(
+            Op::System {
+                call,
+                args: vec![address, count],
+            },
+            &[],
+        );
+    }
+
     /// Writes the bytes from the address, as many as the 64-bit integer
     /// says, to standard error.
     pub fn write_error(&mut self, address: Value, count: Value) {

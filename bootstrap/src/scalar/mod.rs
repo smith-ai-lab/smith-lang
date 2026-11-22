@@ -44,7 +44,8 @@ pub use build::Builder;
 pub use common::common;
 pub use eval::{
     Outcome, call, run, run_copying, run_counting, run_measured, run_taking, run_with_command_line,
-    run_with_command_line_and_errors, run_with_limit, run_with_words, run_with_words_and_errors,
+    run_with_command_line_and_errors, run_with_input, run_with_limit, run_with_words,
+    run_with_words_and_errors,
 };
 pub use exp_fast::table as exp_table;
 pub use fold::fold;
@@ -271,6 +272,12 @@ pub enum System {
     /// filled, which it asks the system again for until they are, and
     /// another when the system refused, with some bytes perhaps filled.
     Entropy,
+    /// Reads at most as many bytes as a 64-bit integer says, which is not 0,
+    /// from standard input into the bytes from an address. It takes the
+    /// address and then the count, and gives a 64-bit integer: how many bytes
+    /// it read, which is 0 only when standard input has ended. A read the
+    /// system refuses ends the program with a failing status.
+    Read,
 }
 
 /// What an instruction does with two integers of the same size, except a
@@ -1027,6 +1034,20 @@ impl Program {
                 i.op,
                 Op::System {
                     call: System::Entropy,
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Whether the program reads standard input.
+    pub fn reads(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Read,
                     ..
                 }
             )
