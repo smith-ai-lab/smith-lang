@@ -3,9 +3,11 @@ use std.deserialize (Deserialize, Problem, ReadError, Reader)
 use std.describe (Describe, Describer)
 use std.fromtext (from_text)
 use std.html (Html)
-use std.int (saturating_add, saturating_sub)
+use std.http1 (RequestHead, body_of, chunk, request_head)
+use std.int (narrow, saturating_add, saturating_sub)
 use std.json (In, json_ended, json_in, to_json)
-use std.list (push)
+use std.list (append, copy, freeze, push)
+use std.net (Connection, Listener, NetError, accept, close, listen_on, net, read, stop, write)
 use std.serialize (Serialize)
 use std.utf8 (utf8)
 
@@ -740,4 +742,427 @@ fn copy_of(r: Request) -> Request ! alloc {
     headers = push(headers, r.headers[i])
   }
   Request(method: r.method, path: r.path, query: r.query, headers: headers, body: r.body)
+}
+
+// What `listen` reads of a connection, at most, in one call of `read`.
+fn most_read() -> Nat { 65536 }
+
+// The most bytes of a body that `listen` reads, which a request with more is
+// refused for.
+fn most_body() -> Nat { 1048576 }
+
+// Why a request is not served: the connection ended or failed, which is
+// closed with nothing said, or what was read is refused, which is answered
+// 400 before the connection is closed.
+enum Fault {
+  ended
+  refused
+}
+
+// The bytes read so far with what the connection has sent since.
+fn fill(c: Connection, held: Slice[Byte]) -> Result[Slice[Byte], Fault] ! net, alloc {
+  match read(c, most_read()) {
+    .ok(bytes) {
+      if bytes.size == 0 {
+        Result.err(Fault.ended)
+      } else {
+        Result.ok(freeze(append(copy(held), bytes)))
+      }
+    }
+    .err(e) { Result.err(Fault.ended) }
+  }
+}
+
+// What follows the first `used` bytes.
+fn after(bytes: Slice[Byte], used: Nat) -> Slice[Byte] {
+  if used <= bytes.size { bytes[used..bytes.size] } else { [] }
+}
+
+// The head of the next request, and the bytes that follow it. A head is at
+// most 16384 bytes, and each round of the loop has one more byte of it.
+fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byte]), Fault] ! net, alloc {
+  var bytes = held
+  loop round in 0..16400 {
+    if bytes.size > 0 {
+      match request_head(bytes) {
+        .complete((head, used)) { return Result.ok((head, after(bytes, used))) }
+        .incomplete { }
+        .refused(why) { return Result.err(Fault.refused) }
+      }
+    }
+    match fill(c, bytes) {
+      .ok(more) { bytes = more }
+      .err(fault) { return Result.err(fault) }
+    }
+  }
+  Result.err(Fault.refused)
+}
+
+// The bytes of a body that the head says has `size` of them, and the bytes
+// that follow it.
+fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+  if size > most_body() { return Result.err(Fault.refused) }
+  var bytes = held
+  loop round in 0..most_body() {
+    if bytes.size >= size {
+      if size <= bytes.size {
+        return Result.ok((bytes[0..size], after(bytes, size)))
+      }
+    }
+    match fill(c, bytes) {
+      .ok(more) { bytes = more }
+      .err(fault) { return Result.err(fault) }
+    }
+  }
+  Result.err(Fault.refused)
+}
+
+// The bytes of a body in chunks, whole, and the bytes that follow it.
+fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+  var bytes = held
+  var body: List[Byte] = []
+  loop round in 0..2097154 {
+    if bytes.size > 0 {
+      match chunk(bytes) {
+        .complete((piece, used)) {
+          if piece.size == 0 {
+            return Result.ok((freeze(body), after(bytes, used)))
+          }
+          if body.size + piece.size > most_body() { return Result.err(Fault.refused) }
+          body = append(body, piece)
+          bytes = after(bytes, used)
+        }
+        .incomplete {
+          match fill(c, bytes) {
+            .ok(more) { bytes = more }
+            .err(fault) { return Result.err(fault) }
+          }
+        }
+        .refused(why) { return Result.err(Fault.refused) }
+      }
+    } else {
+      match fill(c, bytes) {
+        .ok(more) { bytes = more }
+        .err(fault) { return Result.err(fault) }
+      }
+    }
+  }
+  Result.err(Fault.refused)
+}
+
+fn read_body(c: Connection, head: RequestHead, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+  match body_of(head.headers) {
+    .ok(framing) {
+      match framing {
+        .none { Result.ok(([], held)) }
+        .length(size) { read_sized(c, held, size) }
+        .chunked { read_chunks(c, held) }
+      }
+    }
+    .err(why) { Result.err(Fault.refused) }
+  }
+}
+
+// The value of the header that has the name, which is in small letters, as
+// `request_head` gives it.
+fn header_of(headers: List[(str, str)], name: str) -> Option[str] {
+  var found: Option[str] = Option.none
+  loop i in 0..headers.size {
+    (n, v) = headers[i]
+    if n == name {
+      match found {
+        .some(t) { }
+        .none { found = Option.some(v) }
+      }
+    }
+  }
+  found
+}
+
+fn lowered(b: Byte) -> Byte {
+  if b >= 'A' and b <= 'Z' { b + 32 } else { b }
+}
+
+// Whether the value of a header that is a list of tokens, as `connection` is,
+// has the token, whatever the case of its letters. A token is read a byte at
+// a time: how many of its bytes the one being read has matched, and whether
+// it has matched them all so far.
+fn has_token(value: str, token: str) -> bool {
+  var found = false
+  var matched: Nat = 0
+  var fits = true
+  loop i in 0..value.size {
+    b = value[i]
+    if b == ',' {
+      if fits and matched == token.size { found = true }
+      matched = 0
+      fits = true
+    } else if b != ' ' {
+      if matched < token.size {
+        if lowered(b) != token[matched] { fits = false }
+        matched = saturating_add(matched, 1)
+      } else {
+        fits = false
+      }
+    }
+  }
+  if fits and matched == token.size { found = true }
+  found
+}
+
+// Whether the connection is kept for another request once this one is
+// answered: `HTTP/1.1` keeps it unless the request says `close`, and
+// `HTTP/1.0` closes it unless the request says `keep-alive`.
+fn keeps(head: RequestHead) -> bool {
+  said = match header_of(head.headers, "connection") {
+    .some(v) { v }
+    .none { "" }
+  }
+  match head.version {
+    .http11 { not has_token(said, "close") }
+    .http10 { has_token(said, "keep-alive") }
+  }
+}
+
+fn target_path(target: str) -> str {
+  var end = target.size
+  loop i in 0..target.size {
+    if end == target.size and target[i] == '?' { end = i }
+  }
+  piece(target, 0, end)
+}
+
+fn target_query(target: str) -> str {
+  var at = target.size
+  loop i in 0..target.size {
+    if at == target.size and target[i] == '?' { at = i }
+  }
+  piece(target, saturating_add(at, 1), target.size)
+}
+
+// The request a head and a body make.
+fn request_of(head: take RequestHead, body: str) -> Request {
+  Request(method: head.method, path: target_path(head.target), query: target_query(head.target), headers: head.headers, body: body)
+}
+
+// What the routes answer for the request, which is nothing but 500 for a
+// block that gives no response.
+fn answer_with[T](request: Request, body: fn() -> T ! http) -> Response ! alloc
+  requires Discard[T]
+{
+  var response = Response(status: 500, headers: [], body: "")
+  http(
+    request: { copy_of(request) },
+    send: fn(r) { response = r },
+    body: body,
+  )
+  copy_response(response)
+}
+
+// The response again, with its own list of headers.
+fn copy_response(r: Response) -> Response ! alloc {
+  var headers: List[(str, str)] = []
+  loop i in 0..r.headers.size {
+    headers = push(headers, r.headers[i])
+  }
+  Response(status: r.status, headers: headers, body: r.body)
+}
+
+fn reason(status: u16) -> str {
+  if status == 200 {
+    "OK"
+  } else if status == 201 {
+    "Created"
+  } else if status == 204 {
+    "No Content"
+  } else if status == 302 {
+    "Found"
+  } else if status == 400 {
+    "Bad Request"
+  } else if status == 401 {
+    "Unauthorized"
+  } else if status == 403 {
+    "Forbidden"
+  } else if status == 404 {
+    "Not Found"
+  } else if status == 405 {
+    "Method Not Allowed"
+  } else if status == 409 {
+    "Conflict"
+  } else if status == 500 {
+    "Internal Server Error"
+  } else {
+    "Status"
+  }
+}
+
+// Whether a text holds no line break, so that a header made of it cannot add
+// a line of its own.
+fn one_line(s: str) -> bool {
+  var yes = true
+  loop i in 0..s.size {
+    if s[i] == 13 or s[i] == 10 { yes = false }
+  }
+  yes
+}
+
+// The line break that ends a line of a head.
+fn ended(line: take List[Byte]) -> List[Byte] ! alloc {
+  push(push(line, 13), 10)
+}
+
+// The bytes of a response: its status line, its headers but those the length
+// and the connection are told by, and the body with its length.
+fn response_bytes(r: Response, keep: bool) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  made = ended(append(made, "HTTP/1.1 {r.status} {reason(r.status)}".bytes))
+  loop i in 0..r.headers.size {
+    (n, v) = r.headers[i]
+    if n != "content-length" and n != "connection" and n != "transfer-encoding" and one_line(n) and one_line(v) {
+      made = ended(append(made, "{n}: {v}".bytes))
+    }
+  }
+  made = ended(append(made, "content-length: {r.body.size}".bytes))
+  if not keep { made = ended(append(made, "connection: close".bytes)) }
+  made = ended(made)
+  append(made, r.body.bytes)
+}
+
+// What is answered to a request that is refused.
+fn refusal() -> Response {
+  Response(status: 400, headers: [], body: "")
+}
+
+// Sends the bytes, and whether they all went.
+fn sent(c: Connection, bytes: take List[Byte]) -> bool ! net {
+  match write(c, freeze(bytes)) {
+    .ok(done) { true }
+    .err(e) { false }
+  }
+}
+
+// Reads one request of the connection and answers it, and gives whether the
+// connection is kept. A client that sent the next request before it had the
+// response to this one has it answered by a response that says the connection
+// is closed, and the connection is closed, as the client of RFC 9112 is ready
+// for. So nothing read is carried from one request to the next, and the
+// memory of a request is released with it.
+fn serve_one[T](c: Connection, body: fn() -> T ! http) -> bool ! net, alloc
+  requires Discard[T]
+{
+  match read_head(c, []) {
+    .err(fault) {
+      match fault {
+        .ended { }
+        .refused { sent(c, response_bytes(refusal(), false)) }
+      }
+      return false
+    }
+    .ok((head, after_head)) {
+      match read_body(c, head, after_head) {
+        .err(fault) {
+          match fault {
+            .ended { }
+            .refused { sent(c, response_bytes(refusal(), false)) }
+          }
+          return false
+        }
+        .ok((payload, after_body)) {
+          match utf8(payload) {
+            .err(e) {
+              sent(c, response_bytes(refusal(), false))
+              return false
+            }
+            .ok(text) {
+              keep = keeps(head) and after_body.size == 0
+              response = answer_with(request_of(head, text), body)
+              written = sent(c, response_bytes(response, keep))
+              return keep and written
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Serves the requests of a connection, one after another, until it is ended.
+fn serve_connection[T](c: Connection, body: fn() -> T ! http) ! net, alloc, diverge
+  requires Discard[T]
+{
+  loop {
+    if not serve_one(c, body) { break }
+  }
+}
+
+// Ends the program with a failing status, after saying why on standard error.
+fn cannot(why: str) {
+  __eprint(why)
+  __end(1)
+}
+
+fn why(e: NetError) -> str ! alloc {
+  match e {
+    .unknown_host(host) { "listen: unknown host {host}" }
+    .refused { "listen: refused" }
+    .in_use { "listen: the port is in use" }
+    .closed { "listen: closed" }
+    .failed(what) { what }
+  }
+}
+
+// A listener on the port, on every address of this machine.
+fn open(port: 0..65536) -> Result[Listener, NetError] ! net {
+  match listen_on("::", port) {
+    .ok(l) { Result.ok(l) }
+    .err(e) { listen_on("0.0.0.0", port) }
+  }
+}
+
+fn serve_listener[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+  requires Discard[T]
+{
+  loop {
+    match accept(l) {
+      .ok(c) {
+        serve_connection(c, body)
+        close(c)
+      }
+      .err(e) { }
+    }
+  }
+}
+
+// What the routes answer when nothing asks them, which `listen` never needs:
+// it ends only with the program.
+fn unasked[T](body: fn() -> T ! http) -> T {
+  http(
+    request: { Request(method: "GET", path: "/", query: "", headers: [], body: "") },
+    send: fn(r) { },
+    body: body,
+  )
+}
+
+// The handler of a native executable: it answers `http` for the block by
+// listening on the port, one connection at a time, and one request after
+// another on each. It ends only with the program: a port that cannot be
+// listened on ends the program with a failing status, and the error on
+// standard error.
+pub fn listen[T](port: Nat, body: fn() -> T ! http) -> T ! net, alloc, diverge
+  requires Discard[T]
+{
+  number: Option[0..65536] = narrow(port)
+  match number {
+    .none { cannot("listen: the port {port} is not one") }
+    .some(p) {
+      match open(p) {
+        .ok(l) {
+          serve_listener(l, body)
+          stop(l)
+        }
+        .err(e) { cannot(why(e)) }
+      }
+    }
+  }
+  unasked(body)
 }

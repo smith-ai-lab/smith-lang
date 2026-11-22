@@ -5,6 +5,7 @@ description: A deployment, a public function of project.smith that installs the 
 status: partial
 built:
   - "a deployment that installs handlers and calls `main`, a `pub fn` of `project.smith` built by its name with `smith build local`, to an executable named after the package, and run by its name with `smith local`, with its parameters as flags; `main` is listed by `use main (main)` and so is written `pub fn main` in `main.smith`, which `smith build` with no name accepts and still starts at"
+  - "`listen` of `std.http` in a deployment of `project.smith`, which `smith build` builds by its name for Linux and macOS and answers HTTP/1.1 on the port the executable is started with as its flag, as [HTTP server](../library/http.md#where-the-requests-come-from) says"
   - "a deployment is refused for a native target when what it starts carries an effect no system provides, with an error that names the effect and says that nothing answers it"
   - "not `build(package, start: f, target: t)` of `std.project`, a target other than the machine's own for a task that is run, or a deployment to WebAssembly"
 ---
@@ -21,14 +22,14 @@ use std.store (files)
 
 package = Package(name: "notes")
 
-pub fn serve(port: Nat = 8080) ! net, fs, alloc {
+pub fn serve(port: Nat = 8080) ! net, fs, alloc, diverge {
   with listen(port: port)
   with files(folder: "data")
   main()
 }
 ```
 
-Here `main` carries `http`, `store`, and `alloc`. `listen` answers `http` from a socket, through `net`, and `files` answers `store` from a folder, through `fs`. So `serve` carries only `net`, `fs`, and `alloc`, which the system provides.
+Here `main` carries `http`, `store`, and `alloc`. `listen` answers `http` from a socket, through `net`, and `files` answers `store` from a folder, through `fs`. So `serve` carries only `net`, `fs`, `alloc`, and `diverge`, which the system provides, as a server serves until it is stopped.
 
 Nothing here is new. A deployment is a [task](project-tasks.md), its settings are its parameters, a handler is installed with [`with`](with.md), and what a handler needs told, as a port, is an argument.
 
@@ -74,7 +75,7 @@ An executable is built only when everything its start carries has an answer on i
 - On WebAssembly, each effect the start carries is an import of the module, as [The host of a WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) says.
 
 ```
-pub fn forgot(port: Nat = 8080) ! net, alloc {
+pub fn forgot(port: Nat = 8080) ! net, alloc, diverge {
   with listen(port: port)
   main()
 }
