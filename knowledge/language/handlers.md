@@ -13,6 +13,7 @@ built:
   - "a `return` in a function that carries the effect and runs under a handler whose functions assign a name is refused as not built yet"
   - "a lambda given to a task is lowered as a function of its own, built for the handlers in force where it is written, with the names it reads, and what a handler that holds no state reads, kept in its frame; one under a handler that holds state is refused as not built yet"
   - "an effect that the target answers, as `console` is, is handled by the same mechanism: a handler of it answers the operations where it is in force, and the target answers them where none is"
+  - "a handler's lambda for an operation owns each parameter that the operation marks `take`, and is refused where it drops one that has no `Discard`, for every effect but `task`"
 ---
 
 # Handlers
@@ -125,6 +126,30 @@ fn main() ! console {
 ```
 
 `main` carries `console` for the `print` that `loud_clock` does, and the code after `with` needs only `time`. Without `! console` on `loud_clock` it is refused: "`print` needs the `console` effect, which `loud_clock` does not declare".
+
+## What a handler's lambda takes
+
+The lambda for an operation takes what the operation takes, as a function takes what its parameters mark `take`: it uses the value or gives it away, exactly once, and a value without [`Discard`](resources.md) that it drops is refused at the parameter. A parameter the operation does not mark `take` is lent. This holds for every effect but `task`, whose handlers are the library's: the `start` lambdas of `tasks` and of `test_scheduler` in `std/task.smith` lend a `Frame` that they do not end.
+
+```
+use std.bits (u64)
+
+struct Token {
+  n: u64
+}
+
+without Discard for Token
+
+effect gate {
+  fn pass(t: take Token)
+}
+
+fn closed[T](body: fn() -> T ! gate) -> T {
+  gate(pass: fn(t) { }, body: body)
+}
+```
+
+This is refused at `t`: "`t` is dropped here, as nothing takes it, and a `Token` cannot be dropped, as it has no `Discard`".
 
 ## How a handler is chosen
 

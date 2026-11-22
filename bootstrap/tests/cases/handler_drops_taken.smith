@@ -1,0 +1,22 @@
+use std.bits (u64)
+use std.console (console, print)
+
+struct Token {
+  n: u64
+}
+
+without Discard for Token
+
+effect gate {
+  fn pass(t: take Token)
+}
+
+fn closed[T](body: fn() -> T ! gate) -> T {
+  gate(pass: fn(t) { }, body: body)
+}
+
+fn main() ! console {
+  with closed()
+  pass(Token(n: 1))
+  print("x")
+}

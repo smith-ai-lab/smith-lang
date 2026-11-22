@@ -12,7 +12,7 @@
 //! now.
 
 use super::*;
-use crate::parser::Param;
+use crate::parser::{Param, is_operation};
 
 /// Stands for `Copy` in `Defs::withouts`, where each trait is named by its
 /// place among the file's traits and `Copy`, which the prelude does not
@@ -1176,7 +1176,24 @@ impl<'a> Walk<'a> {
             };
             match &arg.value {
                 Expr::Lambda(l) => {
-                    let takes = param.map(|p| p.takes.as_slice()).unwrap_or(&[]);
+                    // A handler's lambda for an operation owns what the
+                    // operation takes, as a function owns what it takes. The
+                    // schedulers of `task` are left as they were.
+                    let effect = defs
+                        .effect_named(&call.callee)
+                        .filter(|e| !defs.is_scheduler(*e));
+                    let operation: Vec<bool> = match (&arg.name, effect) {
+                        (Some((op, _)), Some(_)) => (defs.file.functions.iter())
+                            .find(|f| {
+                                f.name == *op
+                                    && is_operation(f)
+                                    && f.effects.first().is_some_and(|e| e.0 == call.callee)
+                            })
+                            .map(|f| f.params.iter().map(|p| p.take).collect())
+                            .unwrap_or_default(),
+                        _ => Vec::new(),
+                    };
+                    let takes = param.map(|p| p.takes.as_slice()).unwrap_or(&operation);
                     let kept = if handler_body || param.is_some_and(|p| p.take) {
                         Kept::Taken
                     } else {

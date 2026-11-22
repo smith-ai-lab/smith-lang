@@ -1,0 +1,4 @@
+handler_drops_taken.smith:15:17: `t` is dropped here, as nothing takes it, and a `Token` cannot be dropped, as it has no `Discard`
+  15 |   gate(pass: fn(t) { }, body: body)
+     |                 ^
+  fix: give it to a function that takes it, or return it
