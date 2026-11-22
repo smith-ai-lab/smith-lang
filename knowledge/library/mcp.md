@@ -17,7 +17,7 @@ built:
 
 ```
 use std.int (checked_div)
-use std.mcp (mcp, tool)
+use std.mcp (mcp, messages, tool)
 
 // Divides one whole number by another.
 fn divide(
@@ -178,6 +178,7 @@ The source is the same for all three.
 
 ```
 use main (main)
+use std.console (console)
 use std.mcp (stdio)
 use std.project (Package)
 

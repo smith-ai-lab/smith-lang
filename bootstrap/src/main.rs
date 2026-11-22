@@ -474,7 +474,7 @@ fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<Pa
         timings,
     )
     .map_err(|errors| {
-        let errors = project::explain(errors);
+        let errors = found.placed(project::explain(errors));
         let text = files.render("project.smith", program.as_bytes(), &errors);
         text.strip_suffix('\n').unwrap_or(&text).to_string()
     })?;

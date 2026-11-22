@@ -22,6 +22,10 @@ pub const ONCE: &[Test] = &[
         main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_without_a_name,
     ),
     (
+        "an_error_of_a_task_is_at_a_line_of_project_smith",
+        an_error_of_a_task_is_at_a_line_of_project_smith,
+    ),
+    (
         "each_flag_is_spelled_as_its_parameter_and_gives_it_its_value",
         each_flag_is_spelled_as_its_parameter_and_gives_it_its_value,
     ),
@@ -43,11 +47,18 @@ pub const ONCE: &[Test] = &[
     ),
 ];
 
-/// The server of the page of `std.mcp`, with `main` public so that
-/// `project.smith` lists it.
-const CALC_MAIN: &str = "use std.int (checked_div)\nuse std.mcp (mcp, messages, tool)\n\n// Divides one whole number by another.\nfn divide(\n  // The number that is divided.\n  a: Int,\n  // The number it is divided by.\n  b: Int,\n) -> Result[Int, str] {\n  if b == 0 {\n    .err(\"b is zero\")\n  } else {\n    match checked_div(a, b) {\n      .some(q) { .ok(q) }\n      .none { .err(\"the quotient does not fit\") }\n    }\n  }\n}\n\npub fn main() ! messages, alloc {\n  with mcp(name: \"calc\", version: \"1\")\n  tool(divide)\n}\n";
-
-const CALC_PROJECT: &str = "use main (main)\nuse std.console (console)\nuse std.mcp (stdio)\nuse std.project (Package)\n\npackage = Package(name: \"calc\")\n\npub fn local() ! console, alloc {\n  with stdio()\n  main()\n}\n";
+/// The first block of the page of `std.mcp` that holds the text, so that the
+/// page cannot drift from what builds.
+fn from_the_page(holds: &str) -> String {
+    let page = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../knowledge/library/mcp.md")).unwrap();
+    page.split("```")
+        .skip(1)
+        .step_by(2)
+        .find(|block| block.contains(holds))
+        .unwrap_or_else(|| panic!("no block of the page holds {holds}"))
+        .trim_start_matches('\n')
+        .to_string()
+}
 
 const META: &str = "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}";
 
@@ -70,7 +81,8 @@ fn run(executable: &Path, words: &[String], input: &[u8]) -> Output {
 }
 
 fn a_task_built_with_its_name_answers_a_client_that_starts_it_and_a_build_with_no_name_is_as_it_was() {
-    let dir = project("calc", &[("main.smith", CALC_MAIN), ("project.smith", CALC_PROJECT)]);
+    let (main, project_text) = (from_the_page("pub fn main"), from_the_page("pub fn local"));
+    let dir = project("calc", &[("main.smith", &main), ("project.smith", &project_text)]);
     let built = smith(&dir, &["build", "local"]);
     assert!(built.status.success(), "{}", stderr(&built));
     let target = Target::host();
@@ -296,4 +308,25 @@ fn main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_w
         let built = smith(&public, words);
         assert!(built.status.success(), "{words:?}: {}", stderr(&built));
     }
+}
+
+fn an_error_of_a_task_is_at_a_line_of_project_smith() {
+    // `console` is listed by the task and not imported.
+    let text = "use main (main)\n\npub fn hi() ! console {\n  main()\n}\n";
+    let dir = project("unimported", &[("main.smith", TASKS_MAIN), ("project.smith", text)]);
+    let built = smith(&dir, &["build", "hi"]);
+    assert!(!built.status.success());
+    let err = stderr(&built);
+    let mut shown = 0;
+    for line in err.lines() {
+        if let Some((number, code)) = line.trim_start().split_once(" | ")
+            && number.chars().all(|c| c.is_ascii_digit())
+        {
+            shown += 1;
+            assert!(text.lines().any(|l| l == code), "`{code}` is not a line of project.smith: {err}");
+        } else if line.contains(".smith:") {
+            assert!(line.starts_with("project.smith:"), "{line}");
+        }
+    }
+    assert!(shown > 0, "{err}");
 }
