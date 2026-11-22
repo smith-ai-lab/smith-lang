@@ -2450,9 +2450,8 @@ fn check_file(
     for k in 0..file.traits.len() {
         for (at, &j) in defs.impls_of[k].iter().enumerate() {
             let covered = defs.impls_of[k][..at].iter().any(|&i| {
-                let (Some(a), Some(b)) = (&defs.impls[i], &defs.impls[j]) else {
-                    return false;
-                };
+                let a = defs.impls[i].as_ref().expect("listed");
+                let b = defs.impls[j].as_ref().expect("listed");
                 // An implementation that requires something stands for fewer
                 // types than it is written for, so a use decides.
                 a.chosen
