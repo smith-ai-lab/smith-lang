@@ -1,18 +1,19 @@
 ---
 type: specification
 title: The effects Smith provides
-description: The six effects the standard library declares, the six the compiler gives, and where an effect that nothing handles ends.
+description: The seven effects the standard library declares, the five the compiler gives, and where an effect that nothing handles ends.
 status: partial
 built:
   - "`entropy` in a signature, required by `fill`, which the system answers on every target, and a handler answers on any"
   - "`net` and `time` in a signature, required by the operations of `std.net` and `std.time`, which the system answers on Linux and macOS, on x86-64 and arm64, with a call that waits blocking, which a handler answers on any target with no system call, though a handler of `net` cannot give a `Listener`, a `Connection`, or a `Socket`, and which a program that carries them is refused for Windows and WebAssembly with one message that names the target"
+  - "`task` in a signature, required by `spawn` and `join` of `std.task`, which `with tasks()` handles and which the system answers for a program that reaches `main` with no group, by running the child to its end"
   - "`console`, `alloc`, and `diverge` in a signature, `console` required by `print`, `alloc` by a string that holds an expression, and `diverge` by an open-ended `loop` with no `decreases`"
   - "an operation that the target answers, `print` of `console` and `fill` of `entropy`, is called as any operation of an effect is, and is answered by a handler where one is in force and by the target where none is"
 ---
 
 # The effects Smith provides
 
-Smith provides twelve effects, which a signature lists by name like any other. Six are declared by the standard library, and a program can handle them. Six are given by the compiler.
+Smith provides twelve effects, which a signature lists by name like any other. Seven are declared by the standard library, and a program can handle them. Five are given by the compiler.
 
 ```
 use std.console (console, print)
@@ -24,7 +25,7 @@ fn main() ! console {
 
 ## Declared by the standard library
 
-The standard library declares six effects. Each has operations, and a program can handle it. Each is imported by name, as any effect is: none is in [the prelude](prelude.md).
+The standard library declares seven effects. Each has operations, and a program can handle it. Each is imported by name, as any effect is: none is in [the prelude](prelude.md).
 
 | Effect | Allows |
 | --- | --- |
@@ -34,17 +35,17 @@ The standard library declares six effects. Each has operations, and a program ca
 | [`time`](../library/time.md) | The clock, and waiting for a time |
 | [`entropy`](../library/entropy.md) | Bytes nobody can predict |
 | `ui` | Windows and events |
+| [`task`](../library/task.md) | Starting a task, and waiting for it, which a [task group](tasks.md) and the system's scheduler answer |
 
 `console` is needed by `print`, and a program imports both with `use std.console (console, print)`. A function that calls it lists `console`, as `main` does above.
 
 ## Built in
 
-Six more are built in, because the compiler itself gives them their meaning. They have no operations to replace.
+Five more are built in, because the compiler itself gives them their meaning. They have no operations to replace.
 
 | Effect | Allows | Ends at |
 | --- | --- | --- |
 | `alloc` | Memory whose size is known only at run time | An [arena](arenas.md) |
-| `spawn` | Starting a task | A [task group](tasks.md) |
 | `gpu` | Opening a [device](devices.md) to run on a GPU | Nothing |
 | `diverge` | Not terminating | Nothing |
 | `foreign` | Calling a [foreign function](foreign.md) | Nothing |

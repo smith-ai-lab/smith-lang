@@ -724,9 +724,6 @@ impl<'a> Checker<'a> {
         if is_intrinsic(call) {
             return self.intrinsic(body, call);
         }
-        if is_group_call(call) {
-            return self.group_call(body, call);
-        }
         if is_push(defs, call) {
             return self.push(body, call, want);
         }

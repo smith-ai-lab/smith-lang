@@ -26,6 +26,10 @@ pub const ONCE: &[Test] = &[
         a_frame_read_at_a_type_its_lambda_does_not_give_is_refused,
     ),
     (
+        "a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused",
+        a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused,
+    ),
+    (
         "a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused",
         a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused,
     ),
@@ -397,6 +401,16 @@ fn a_frame_read_at_a_type_its_lambda_does_not_give_is_refused() {
     let module = "use std.bits (u64)\nuse std.task (Frame)\n\nfn seven() -> u64 { 7 }\n\npub fn right() -> u64 {\n  f = __frame({ seven() })\n  r: u64 = __result(f)\n  r\n}\n";
     let main = "use std.frames (right)\n\nfn main() {\n  a = right()\n}\n";
     lowered(main, module).expect("a frame read at the type it gives");
+}
+
+/// `join` reads the frame that `finish` gives for the number of a `Task[T]` at
+/// `T`, and no other frame is read where its lambda is not seen: a number that
+/// is not read from a `Task` is refused.
+fn a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused() {
+    let module = "use std.bits (u64)\nuse std.task (finish, task)\n\npub fn unseen(n: u64) -> u64 ! task {\n  r: u64 = __result(finish(n))\n  r\n}\n";
+    let main = "use std.frames (unseen)\nuse std.task (task)\n\nfn main() ! task {\n  a = unseen(1)\n}\n";
+    let error = lowered(main, module).expect_err("a frame of a number nothing says is a task's");
+    assert!(error.contains("what this frame gives is not known here"), "{error}");
 }
 
 fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {

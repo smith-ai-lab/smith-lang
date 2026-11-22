@@ -33,6 +33,14 @@ pub const ONCE: &[Test] = &[
         the_programs_of_the_pages_build_as_the_pages_write_them_and_give_what_they_say,
     ),
     (
+        "two_children_of_different_result_types_joined_in_either_order_give_their_own_values",
+        two_children_of_different_result_types_joined_in_either_order_give_their_own_values,
+    ),
+    (
+        "a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_starts",
+        a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_starts,
+    ),
+    (
         "a_child_that_assigns_a_var_is_refused",
         a_child_that_assigns_a_var_is_refused,
     ),
@@ -41,12 +49,16 @@ pub const ONCE: &[Test] = &[
         a_value_used_once_moves_into_the_child_and_a_second_use_is_refused,
     ),
     (
-        "a_function_that_spawns_with_no_group_carries_spawn_and_its_caller_that_opens_one_does_not",
-        a_function_that_spawns_with_no_group_carries_spawn_and_its_caller_that_opens_one_does_not,
+        "a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not",
+        a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not,
     ),
     (
-        "a_child_runs_under_the_handlers_in_force_where_it_was_spawned_and_its_operations_run_one_at_a_time",
-        a_child_runs_under_the_handlers_in_force_where_it_was_spawned_and_its_operations_run_one_at_a_time,
+        "a_child_runs_under_the_handlers_in_force_where_it_was_spawned",
+        a_child_runs_under_the_handlers_in_force_where_it_was_spawned,
+    ),
+    (
+        "a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet",
+        a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet,
     ),
     (
         "a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents",
@@ -93,46 +105,44 @@ fn fetch_one_and_fetch_both_give_what_the_page_says_under_a_handler_of_fetch() {
     assert_eq!(said, "one 2\nboth 2 2\nsecond failed\n");
 }
 
-/// A program that spawns `spawned` children in a loop of calls, each of which
-/// asks a counter, joins the first `joined` of them, and says what the
-/// counter held when the block ended and after it.
+/// A program that spawns `spawned` children, each of which says its number and
+/// gives a different value, joins the first `joined` of them, and says that the
+/// block ended and what the joined ones gave.
 fn counting(spawned: usize, joined: usize) -> String {
-    let mut s = String::from("effect count {\n  fn tick() -> u64\n}\n\nfn counter[T](body: fn() -> T ! count) -> T {\n  var n: u64 = 0\n  count(\n    tick: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\nfn group() -> u64 ! count {\n  with tasks()\n");
+    let mut s = String::from("fn group() -> u64 ! console, alloc {\n  with tasks()\n");
     for k in 0..spawned {
-        s += &format!("  t{k} = spawn {{ tick() }}\n");
+        s += &format!("  t{k} = spawn {{\n    print(\"c{k}\")\n    v: u64 = {}\n    v\n  }}\n", k + 1);
     }
     s += "  var total: u64 = 0\n";
     for k in 0..joined {
         s += &format!("  total = wrapping_add(total, wrapping_mul(join(t{k}), {}))\n", 1000u64.pow(k as u32 % 3));
     }
-    s += "  total\n}\n\nfn main() ! console, alloc {\n  with counter()\n  total = group()\n  after = tick()\n  print(\"{total} {after}\")\n}\n";
+    s += "  total\n}\n\nfn main() ! console, alloc {\n  total = group()\n  print(\"end {total}\")\n}\n";
     program(&s)
 }
 
-/// A child that is joined runs exactly once, so the counter has at least one
-/// tick for each of them and at most one for each child, and nothing runs
-/// after the block, so the first tick the program asks for itself comes right
-/// after the ticks of the children.
+/// A child that is joined runs exactly once, no child runs twice, and nothing
+/// runs after the block, so the last line is the one the program says after it.
 fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
     generate::check(330, 24, |g| {
         let spawned = 1 + g.below(5);
         (spawned, g.below(spawned + 1))
     }, |&(spawned, joined)| {
         let said = run(&counting(spawned, joined));
-        let (total, after) = said.trim().split_once(' ').expect("two numbers");
-        let (total, after): (u64, u64) = (total.parse().unwrap(), after.parse().unwrap());
-        // `after` is one more than the number of children that ran, which is
-        // every child that was joined, and no more than every child.
-        assert!(after > joined as u64 && after <= spawned as u64 + 1, "{said} for {spawned} {joined}");
-        // The values the joined children gave are each a different tick.
-        let mut ticks: Vec<u64> = (0..joined as u32)
-            .map(|k| (total / 1000u64.pow(k % 3)) % 1000)
-            .collect();
-        if joined <= 3 {
-            ticks.sort();
-            ticks.dedup();
-            assert_eq!(ticks.len(), joined, "{said} for {spawned} {joined}");
+        let lines: Vec<&str> = said.lines().collect();
+        let (last, children) = lines.split_last().expect("lines");
+        assert!(last.starts_with("end "), "{said} for {spawned} {joined}");
+        for k in 0..spawned {
+            let ran = children.iter().filter(|l| **l == format!("c{k}")).count();
+            assert!(ran <= 1, "{said} for {spawned} {joined}");
+            if k < joined {
+                assert_eq!(ran, 1, "{said} for {spawned} {joined}");
+            }
         }
+        assert!(children.iter().all(|l| l.starts_with('c')), "{said}");
+        let total: u64 = last["end ".len()..].parse().unwrap();
+        let expected: u64 = (0..joined as u32).map(|k| (k as u64 + 1) * 1000u64.pow(k % 3)).sum();
+        assert_eq!(total, expected, "{said} for {spawned} {joined}");
     });
 }
 
@@ -179,9 +189,31 @@ fn the_programs_of_the_pages_build_as_the_pages_write_them_and_give_what_they_sa
 
 /// A program cannot read the value of a child without joining it.
 fn a_task_holds_its_value_where_only_join_reads_it() {
-    let source = program("fn peek() -> u64 {\n  with tasks()\n  t = spawn { 1 }\n  t.value\n}\n\nfn main() ! console, alloc {\n  print(\"{peek()}\")\n}\n");
+    let source = program("fn peek() -> u64 {\n  with tasks()\n  t = spawn { 1 }\n  t.number\n}\n\nfn main() ! console, alloc {\n  print(\"{peek()}\")\n}\n");
     let errors = refused(&source);
     assert!(errors.contains("private"), "{errors}");
+}
+
+/// A `Task[T]` is read at its own `T`, however the children are joined.
+fn two_children_of_different_result_types_joined_in_either_order_give_their_own_values() {
+    generate::check(334, 16, |g| (g.below(1000) as u64, g.below(2) == 0), |&(n, first)| {
+        let (a, b) = if first { ("ta", "tb") } else { ("tb", "ta") };
+        let source = program(&format!(
+            "fn both(n: u64) -> str ! alloc {{\n  with tasks()\n  ta = spawn {{ wrapping_add(n, 1) }}\n  tb = spawn {{ \"word\" }}\n  x = join({a})\n  y = join({b})\n  \"{{x}} {{y}}\"\n}}\n\nfn main() ! console, alloc {{\n  print(both({n}))\n}}\n"
+        ));
+        let said = run(&source);
+        let (number, word) = (n + 1, "word");
+        let expected = if first { format!("{number} {word}\n") } else { format!("{word} {number}\n") };
+        assert_eq!(said, expected, "for {n}");
+    });
+}
+
+/// A program that opens no group has `main` carry `task`, and the system's
+/// scheduler runs each child to its end where it starts.
+fn a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_starts() {
+    let source = program("fn main() ! console, alloc, task {\n  a = spawn {\n    print(\"a\")\n    v: u64 = 1\n    v\n  }\n  b = spawn {\n    print(\"b\")\n    v: u64 = 2\n    v\n  }\n  y: u64 = join(b)\n  x: u64 = join(a)\n  print(\"{x} {y}\")\n}\n")
+        .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task)");
+    assert_eq!(run(&source), "a\nb\n1 2\n");
 }
 
 fn a_child_that_assigns_a_var_is_refused() {
@@ -206,44 +238,53 @@ fn a_value_used_once_moves_into_the_child_and_a_second_use_is_refused() {
     assert!(errors.contains("`key` is used here, after it was given away"), "{errors}");
 }
 
-fn a_function_that_spawns_with_no_group_carries_spawn_and_its_caller_that_opens_one_does_not() {
+fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not() {
     let source = |effect: &str| {
         program(&format!(
             "fn start(n: u64){effect} {{\n  spawn {{ wrapping_mul(n, 2) }}\n  ()\n}}\n\nfn start_two() {{\n  with tasks()\n  start(1)\n  start(2)\n}}\n\nfn main() ! console, alloc {{\n  start_two()\n  print(\"done\")\n}}\n"
         ))
+        .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)")
     };
-    assert_eq!(run(&source(" ! spawn")), "done\n");
+    assert_eq!(run(&source(" ! task")), "done\n");
     let errors = refused(&source(""));
-    assert!(errors.contains("`spawn` needs the `spawn` effect, which `start` does not declare"), "{errors}");
+    assert!(errors.contains("`spawn` needs the `task` effect, which `start` does not declare"), "{errors}");
     // A caller with no group of its own carries it too.
-    let caller = program("fn start(n: u64) ! spawn {\n  spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() ! console, alloc {\n  start_two()\n}\n");
+    let caller = program("fn start(n: u64) ! task {\n  spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() ! console, alloc {\n  start_two()\n}\n")
+        .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)");
     let errors = refused(&caller);
-    assert!(errors.contains("`start` needs the `spawn` effect"), "{errors}");
+    assert!(errors.contains("`start` needs the `task` effect"), "{errors}");
 }
 
-const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T ! clock) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\n";
+const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T ! clock) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T ! clock) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
 
-/// A child reads the clock that was in force where it was spawned, and no
-/// two children read the same tick, whatever the order they read in.
-fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned_and_its_operations_run_one_at_a_time()
- {
-    generate::check(332, 20, |g| (1 + g.below(4), 1 + g.below(4)), |&(children, reads)| {
-        let mut s = format!("{CLOCK}fn readings() -> List[u64] ! alloc {{\n  with fake_clock()\n  with tasks()\n");
-        let pushes = "    l = push(l, now())\n".repeat(reads);
+/// A child reads the clock that was in force where it was spawned, which a
+/// handler that holds no state gives it.
+fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
+    generate::check(332, 20, |g| (1 + g.below(4), g.below(1000) as u64), |&(children, tick)| {
+        let mut s = format!("{CLOCK}fn readings() -> List[u64] ! alloc {{\n  with fixed({tick})\n  with tasks()\n");
         for k in 0..children {
-            s += &format!("  t{k} = spawn {{\n    var l: List[u64] = []\n{pushes}    l\n  }}\n");
+            s += &format!("  t{k} = spawn {{ now() }}\n");
         }
         s += "  var all: List[u64] = []\n";
         for k in 0..children {
-            s += &format!("  r{k} = join(t{k})\n  loop i in 0..r{k}.size {{ all = push(all, r{k}[i]) }}\n");
+            s += &format!("  all = push(all, join(t{k}))\n");
         }
         s += "  all\n}\n\nfn main() ! console, alloc {\n  xs = readings()\n  loop i in 0..xs.size { print(\"{xs[i]}\") }\n}\n";
         let said = run(&program(&s));
-        let mut ticks: Vec<u64> = said.lines().map(|l| l.parse().unwrap()).collect();
-        ticks.sort();
-        let expected: Vec<u64> = (1..=(children * reads) as u64).collect();
-        assert_eq!(ticks, expected, "for {children} children reading {reads}");
+        let ticks: Vec<u64> = said.lines().map(|l| l.parse().unwrap()).collect();
+        assert_eq!(ticks, vec![tick; children], "for {children} children");
     });
+}
+
+/// A child under a handler that holds state is refused until the exclusion is
+/// built, and is never accepted with the state copied.
+fn a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet() {
+    let source = program(&format!(
+        "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  join(t)\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{readings()}}\")\n}}\n"
+    ));
+    let errors = refused(&source);
+    assert!(errors.contains("under a handler that holds state"), "{errors}");
+    assert!(errors.contains("unbuilt: true"), "{errors}");
 }
 
 /// The system is asked for the same memory however many children a program
@@ -274,7 +315,7 @@ fn a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_par
 fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
     let targets = runnable();
     generate::check(333, 6, |g: &mut Gen| (1 + g.below(5), 1 + g.below(5)), |&(children, reads)| {
-        let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] ! alloc {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn readings() -> u64 ! alloc {{\n  with fake_clock()\n  with tasks()\n  var sum: u64 = 0\n");
+        let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] ! alloc {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn readings() -> u64 ! alloc {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ wrapping_add(now(), total(build({}))) }}\n", reads + k);
         }

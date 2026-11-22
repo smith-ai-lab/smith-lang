@@ -390,7 +390,7 @@ fn fail_with(message: &str) -> String {
 
 /// The effects a system answers, as `provided-effects.md` lists them.
 const PROVIDED: &[&str] = &[
-    "console", "fs", "net", "time", "entropy", "ui", "alloc", "spawn", "gpu", "diverge", "foreign",
+    "console", "fs", "net", "time", "entropy", "ui", "alloc", "task", "gpu", "diverge", "foreign",
     "exec",
 ];
 

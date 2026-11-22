@@ -4,8 +4,8 @@ title: Handlers and tasks
 description: A child runs under the handlers in force where it was spawned, and several tasks may call one handler, whose operations run one at a time.
 status: partial
 built:
-  - "a child runs under the handlers in force where it was spawned, so `two_readings` and `two_pairs` read the one `fake_clock` the children are spawned under, and no two readings are the same tick"
-  - "the operations of a handler run one at a time, as each child runs in place where it is spawned, so its order is the order of the spawns"
+  - "a child runs under the handlers in force where it was spawned when a handler holds no state, as `fixed` of [Handlers](handlers.md) holds a value it only reads, so every child reads the one value"
+  - "not built: a child under a handler that holds state, as `two_readings` and `two_pairs` of this page are under `fake_clock`, which is refused as not built yet until the exclusion of [the compiler](../compiler.md#effects) is, and the operations of a handler that run one at a time"
 ---
 
 # Handlers and tasks

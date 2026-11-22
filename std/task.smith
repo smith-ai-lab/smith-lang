@@ -35,18 +35,62 @@ pub enum Poll {
   waiting: Wait
 }
 
+// A child, by the number the scheduler gave it. Only `spawn` makes one, from a
+// frame of a lambda that gives `T`, so what `join` reads at `T` is a `T`.
 pub struct Task[T] {
-  value: T
+  number: u64
+  gives: [0]T
 }
 
-pub fn tasks[T](body: take fn() -> T ! spawn) -> T {
-  spawn(body: body)
+// What a scheduler answers: `start` takes a child's frame and gives its number,
+// and `finish` waits until that child has ended and gives its frame back, once.
+pub effect task {
+  pub fn start(work: take Frame) -> u64
+  pub fn finish(child: u64) -> Frame
 }
 
-pub fn spawn[T](work: take fn() -> T) -> Task[T] ! spawn {
-  Task(value: alloc(body: work))
+// Runs a frame to its end. The system's scheduler waits for nothing yet, so a
+// frame that waits ends the program.
+fn run(frame: Frame) {
+  match __poll(frame) {
+    .done { }
+    .waiting(w) {
+      __eprint("a task waits, and the system's scheduler does not wait yet")
+      __end(1)
+    }
+  }
 }
 
-pub fn join[T](task: take Task[T]) -> T {
-  task.value
+// The number of a child is where its frame's bytes are, and the frame is found
+// again by `finish`, so a scheduler lends the frame and keeps nothing.
+fn started(work: Frame) -> u64 {
+  run(work)
+  __address(work)
+}
+
+fn system_start(work: Frame) -> u64 {
+  started(work)
+}
+
+fn system_finish(number: u64) -> Frame {
+  at = __frame_at(number)
+  at
+}
+
+// A group: a scheduler of its own that holds no state, so a child runs to its
+// end where it is started.
+pub fn tasks[T](body: take fn() -> T ! task) -> T {
+  task(
+    start: fn(work) { started(work) },
+    finish: fn(child) { system_finish(child) },
+    body: body,
+  )
+}
+
+pub fn spawn[T](work: take fn() -> T) -> Task[T] ! task {
+  Task(number: start(__frame(work)), gives: [])
+}
+
+pub fn join[T](child: take Task[T]) -> T ! task {
+  __result(finish(child.number))
 }
