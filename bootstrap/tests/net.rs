@@ -21,6 +21,7 @@ use smith::{lower, scalar};
 
 use crate::Test;
 use crate::generate::{self, Gen};
+use crate::ports;
 use crate::targets;
 
 pub const ONCE: &[Test] = &[
@@ -39,6 +40,10 @@ pub const ONCE: &[Test] = &[
 ];
 
 pub const MACHINE: &[Test] = &[
+    (
+        "a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_listens",
+        a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_listens,
+    ),
     (
         "echo_once_takes_a_connection_and_sends_back_what_it_was_sent",
         echo_once_takes_a_connection_and_sends_back_what_it_was_sent,
@@ -113,11 +118,37 @@ impl Started {
         let mut child = Command::new(&path)
             .args(words)
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
         let lines = BufReader::new(child.stdout.take().unwrap());
         std::fs::remove_dir_all(&dir).ok();
         Started { child, lines }
+    }
+
+    /// Starts the program for `target` in `mode`, which listens at the port it
+    /// is given, on the first of `candidates` it can bind, and waits for the
+    /// line that says it listens, as `ports.rs` says.
+    fn serving(
+        target: Target,
+        mode: &str,
+        candidates: impl IntoIterator<Item = u16>,
+    ) -> (Started, u16) {
+        ports::serve(candidates, |port| {
+            let mut run = Started::new(target, &[mode, &port.to_string()]);
+            match run.line().as_deref() {
+                Some("ready") => ports::Start::Up((run, port)),
+                Some("in_use") => ports::Start::Taken,
+                other => {
+                    let _ = run.child.kill();
+                    let status = run.child.wait().unwrap();
+                    ports::Start::Failed(format!(
+                        "the program ended with {status} before it listened, and wrote {other:?} to standard output and {:?} to standard error",
+                        ports::said(&mut run.child)
+                    ))
+                }
+            }
+        })
     }
 
     /// The next line the program writes, and none when it has ended.
@@ -128,21 +159,6 @@ impl Started {
             _ => Some(line.trim_end().to_string()),
         }
     }
-
-    /// Waits for the line that says the program is ready for the test.
-    fn ready(&mut self) {
-        assert_eq!(self.line().as_deref(), Some("ready"));
-    }
-}
-
-/// A port that nothing listens at, for the moment: the system gave it to a
-/// socket that has been closed since.
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
 }
 
 /// Notes the program for each target a fingerprint is made for, and says
@@ -157,14 +173,31 @@ fn echo_once_takes_a_connection_and_sends_back_what_it_was_sent() {
         if !runs(target) {
             continue;
         }
-        let port = free_port();
-        let mut run = Started::new(target, &["once", &port.to_string()]);
-        run.ready();
+        let (mut run, port) = Started::serving(target, "once", ports::all());
         let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
         stream.write_all(b"hello over the network").unwrap();
         let mut back = [0u8; 22];
         stream.read_exact(&mut back).unwrap();
         assert_eq!(&back, b"hello over the network", "{}", target.name());
+        assert_eq!(run.line().as_deref(), Some("ok"));
+    }
+}
+
+fn a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_listens() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let held = TcpListener::bind("127.0.0.1:0").unwrap();
+        let taken = held.local_addr().unwrap().port();
+        let (mut run, port) =
+            Started::serving(target, "once", std::iter::once(taken).chain(ports::all()));
+        assert_ne!(port, taken, "{}", target.name());
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream.write_all(b"hello").unwrap();
+        let mut back = [0u8; 5];
+        stream.read_exact(&mut back).unwrap();
+        assert_eq!(&back, b"hello", "{}", target.name());
         assert_eq!(run.line().as_deref(), Some("ok"));
     }
 }
@@ -213,9 +246,7 @@ fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_
             |lengths| {
                 for &length in lengths {
                     let bytes: Vec<u8> = (0..length).map(|i| (i * 31 + i / 251) as u8).collect();
-                    let port = free_port();
-                    let mut run = Started::new(target, &["everything", &port.to_string()]);
-                    run.ready();
+                    let (mut run, port) = Started::serving(target, "everything", ports::all());
                     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
                     // The program reads until the end of what is sent, which
                     // is a read that gives no bytes, so it needs the close.
@@ -237,9 +268,7 @@ fn a_datagram_sent_to_a_bound_socket_is_received_with_the_address_it_came_from()
             continue;
         }
         let from = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let port = free_port();
-        let mut run = Started::new(target, &["datagram", &port.to_string()]);
-        run.ready();
+        let (mut run, port) = Started::serving(target, "datagram", ports::all());
         from.send_to(b"a datagram", ("127.0.0.1", port)).unwrap();
         let said = format!("127.0.0.1 {} a datagram", from.local_addr().unwrap().port());
         assert_eq!(run.line(), Some(said), "{}", target.name());
@@ -251,7 +280,7 @@ fn a_port_nothing_listens_at_a_port_in_use_and_a_write_after_the_close_are_each_
         if !runs(target) {
             continue;
         }
-        let nothing = free_port();
+        let nothing = ports::next();
         let mut run = Started::new(target, &["refused", &nothing.to_string()]);
         assert_eq!(run.line().as_deref(), Some("refused"), "{}", target.name());
 

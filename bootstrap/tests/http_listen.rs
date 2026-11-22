@@ -20,6 +20,7 @@ use smith::lower;
 use crate::Test;
 use crate::cli::{folder, smith, stderr};
 use crate::generate::{self, Gen};
+use crate::ports;
 use crate::targets;
 
 pub const ONCE: &[Test] = &[
@@ -34,6 +35,10 @@ pub const ONCE: &[Test] = &[
 ];
 
 pub const MACHINE: &[Test] = &[
+    (
+        "a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_serves",
+        a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_serves,
+    ),
     (
         "a_server_answers_json_a_404_and_a_400_each_with_its_length_and_a_second_request_on_the_connection",
         a_server_answers_json_a_404_and_a_400_each_with_its_length_and_a_second_request_on_the_connection,
@@ -105,11 +110,6 @@ fn runs(target: Target) -> bool {
     !targets::fingerprinting()
 }
 
-/// A port that nothing listens at, for the moment.
-fn free_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
-}
-
 /// A program that has been started, which is killed when the test ends,
 /// however it ends.
 struct Started {
@@ -125,37 +125,65 @@ impl Drop for Started {
 }
 
 impl Started {
-    /// Starts the server for `target` on a free port, and waits until it takes
-    /// a connection. The program says nothing when it is listening, so the
-    /// wait is the system's refusal of a connection until it is.
+    /// Starts the server for `target` on a port of `ports.rs`, and waits until
+    /// it takes a connection.
     fn new(target: Target) -> Started {
+        Started::on(target, ports::all())
+    }
+
+    /// Starts the server for `target` on the first of `candidates` it can bind,
+    /// as `ports.rs` says.
+    fn on(target: Target, candidates: impl IntoIterator<Item = u16>) -> Started {
         let dir = crate::scratch::path("http_listen");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("program");
         crate::executable::write(&path, program(target));
-        let port = free_port();
-        let child = Command::new(&path)
-            .arg(port.to_string())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap();
+        let server = ports::serve(candidates, |port| {
+            Started::at(Command::new(&path).arg(port.to_string()), port)
+        });
         std::fs::remove_dir_all(&dir).ok();
-        let mut server = Started { child, port };
-        server.wait_for_it();
         server
     }
 
-    fn wait_for_it(&mut self) {
+    /// Starts `command`, which serves at `port`, and says how it came out.
+    fn at(command: &mut Command, port: u16) -> ports::Start<Started> {
+        let child = command.stdout(Stdio::null()).stderr(Stdio::piped()).spawn().unwrap();
+        let mut server = Started { child, port };
+        match server.wait_for_it() {
+            Ok(()) => ports::Start::Up(server),
+            Err((_, said)) if said.contains("in use") => ports::Start::Taken,
+            Err((status, said)) => ports::Start::Failed(format!(
+                "the server ended with {status} before it listened, and wrote {said:?} to standard error"
+            )),
+        }
+    }
+
+    /// Waits until the program answers a request, and gives how it ended and
+    /// what it wrote to standard error if it ends first. The program says
+    /// nothing when it is listening, and a connection is taken by the system
+    /// for whatever holds the port, so only an answer is the program's own.
+    fn wait_for_it(&mut self) -> Result<(), (std::process::ExitStatus, String)> {
         let end = std::time::Instant::now() + Duration::from_secs(8);
+        let mut asked: Option<TcpStream> = None;
         loop {
-            if TcpStream::connect(("127.0.0.1", self.port)).is_ok() {
-                return;
-            }
             if let Some(status) = self.child.try_wait().unwrap() {
-                panic!("the server ended with {status} before it listened");
+                return Err((status, ports::said(&mut self.child)));
             }
             assert!(std::time::Instant::now() < end, "the server never listened");
+            match &mut asked {
+                None => {
+                    if let Ok(mut stream) = TcpStream::connect(("127.0.0.1", self.port)) {
+                        stream.set_read_timeout(Some(Duration::from_millis(20))).unwrap();
+                        stream.write_all(get("/users/1").as_bytes()).unwrap();
+                        asked = Some(stream);
+                    }
+                }
+                Some(stream) => match stream.read(&mut [0u8; 1]) {
+                    Ok(0) => asked = None,
+                    Ok(_) => return Ok(()),
+                    Err(_) => {}
+                },
+            }
             std::thread::yield_now();
         }
     }
@@ -444,6 +472,21 @@ fn a_second_server_on_a_port_in_use_ends_with_a_failing_status_and_the_error_on_
     }
 }
 
+fn a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_another_and_serves() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let held = TcpListener::bind("127.0.0.1:0").unwrap();
+        let taken = held.local_addr().unwrap().port();
+        let server = Started::on(target, std::iter::once(taken).chain(ports::all()));
+        assert_ne!(server.port, taken, "{}", target.name());
+        let mut client = server.connect();
+        client.send(get("/users/1").as_bytes());
+        assert_eq!(client.reply().status, 200, "{}", target.name());
+    }
+}
+
 fn a_connection_that_ends_before_a_request_does_not_stop_the_server() {
     for target in kernel() {
         if !runs(target) {
@@ -532,15 +575,10 @@ fn the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given(
     std::fs::write(dir.join("project.smith"), project).unwrap();
     let built = smith(&dir, &["build", "serve"]);
     assert!(built.status.success(), "{}", stderr(&built));
-    let port = free_port();
     let executable: PathBuf = dir.join("users");
-    let child = Command::new(&executable)
-        .args(["--port", &port.to_string()])
-        .stdout(Stdio::null())
-        .spawn()
-        .unwrap();
-    let mut server = Started { child, port };
-    server.wait_for_it();
+    let server = ports::serve(ports::all(), |port| {
+        Started::at(Command::new(&executable).args(["--port", &port.to_string()]), port)
+    });
     let mut client = server.connect();
     client.send(get("/users/7").as_bytes());
     let reply = client.reply();
