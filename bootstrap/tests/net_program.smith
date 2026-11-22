@@ -16,6 +16,17 @@ fn name(e: NetError) -> str {
   }
 }
 
+// What the error says, with the call and the number a `failed` holds.
+fn said(e: NetError) -> str {
+  match e {
+    .unknown_host(host) { host }
+    .refused { "refused" }
+    .in_use { "in_use" }
+    .closed { "closed" }
+    .failed(why) { why }
+  }
+}
+
 fn text(bytes: take List[Byte]) -> str {
   match utf8(freeze(bytes)) {
     .ok(s) { s }
@@ -96,6 +107,12 @@ fn listening(port: 0..65536) -> Result[(), NetError] ! net {
   .ok(())
 }
 
+// An address that no interface of the machine holds, which the system refuses.
+fn elsewhere(port: 0..65536) -> Result[(), NetError] ! net {
+  with l = listen("192.0.2.7", port)
+  .ok(())
+}
+
 fn answer(what: Result[(), NetError]) ! console {
   match what {
     .ok(()) { print("ok") }
@@ -154,6 +171,11 @@ fn main(args: List[str]) ! console, net, time, alloc {
     }
   } else if mode == "in_use" {
     answer(listening(p))
+  } else if mode == "elsewhere" {
+    match elsewhere(p) {
+      .ok(()) { print("ok") }
+      .err(e) { print(said(e)) }
+    }
   } else if mode == "closed" {
     answer(writing(p))
   }

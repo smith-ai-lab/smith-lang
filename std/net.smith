@@ -74,16 +74,22 @@ pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError
 
 // The numbers of the kernel's calls, in the order the compiler gives them to
 // `__system`: socket, bind, listen, accept, connect, getsockname, setsockopt,
-// sendto, recvfrom, close.
+// sendto, recvfrom, close. The number 12 is not a call: it is 1 when the kernel
+// is macOS's, and 0 when it is Linux's, whose numbers for a family, an option,
+// an error, and the layout of an address differ.
+fn on_macos() -> bool {
+  __system(12) == 1
+}
 
 // What the kernel gave, when it refused: minus its error number.
 fn failure(call: str, given: i64) -> NetError ! alloc {
   code = 0 - given
-  if code == 111 {
+  mac = on_macos()
+  if (not mac and code == 111) or (mac and code == 61) {
     .refused
-  } else if code == 98 {
+  } else if (not mac and code == 98) or (mac and code == 48) {
     .in_use
-  } else if code == 32 or code == 104 {
+  } else if code == 32 or (not mac and code == 104) or (mac and code == 54) {
     .closed
   } else {
     .failed("{call}: error {code}")
@@ -194,7 +200,8 @@ fn ipv6(host: str) -> Option[List[Byte]] ! alloc {
 // Where a socket is: the kernel's name for the family of its address, and the
 // address as the kernel reads it, which is a `sockaddr_in` of sixteen bytes for
 // a number written with dots and a `sockaddr_in6` of twenty-eight bytes for
-// one written with colons.
+// one written with colons. Linux starts it with the family in two bytes, and
+// macOS with its length in one byte and the family in one.
 struct Place {
   family: Byte
   bytes: List[Byte]
@@ -209,7 +216,11 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
   match ipv4(host) {
     .some(four) {
       var made: List[Byte] = []
-      made = push(push(made, 2), 0)
+      if on_macos() {
+        made = push(push(made, 16), 2)
+      } else {
+        made = push(push(made, 2), 0)
+      }
       made = push(push(made, high), low)
       loop k in 0..four.size { made = push(made, four[k]) }
       loop k in 0..8 { made = push(made, 0) }
@@ -220,12 +231,18 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
   match ipv6(host) {
     .some(sixteen) {
       var made: List[Byte] = []
-      made = push(push(made, 10), 0)
+      var family: Byte = 10
+      if on_macos() {
+        family = 30
+        made = push(push(made, 28), 30)
+      } else {
+        made = push(push(made, 10), 0)
+      }
       made = push(push(made, high), low)
       loop k in 0..4 { made = push(made, 0) }
       loop k in 0..sixteen.size { made = push(made, sixteen[k]) }
       loop k in 0..4 { made = push(made, 0) }
-      .ok(Place(family: 10, bytes: made))
+      .ok(Place(family: family, bytes: made))
     }
     .none { .err(.failed("looking up a host name is not built")) }
   }
@@ -263,7 +280,9 @@ fn hex(t: take Text, n: Nat) -> Text ! alloc {
 // address is in the bytes.
 fn host_text(bytes: List[Byte]) -> str ! alloc {
   if bytes.size < 24 { return "" }
-  if bytes[0] == 2 {
+  var family = bytes[0]
+  if on_macos() { family = bytes[1] }
+  if family == 2 {
     return "{bytes[4]}.{bytes[5]}.{bytes[6]}.{bytes[7]}"
   }
   var mapped = true
@@ -312,14 +331,34 @@ fn host_text(bytes: List[Byte]) -> str ! alloc {
   finish(t)
 }
 
+// Lets a socket of the family of colons take the numbers written with dots
+// too, which Linux does and macOS asks for.
+fn dual_stack(fd: i64) ! alloc {
+  off = number(0)
+  var name: i64 = 26
+  if on_macos() { name = 27 }
+  __system(6, fd, 41, name, off, 4, 0)
+}
+
+// The flag that says a write to a connection the other side closed is an error
+// to give back and no signal to end the program with.
+fn no_signal() -> i64 {
+  if on_macos() { 524288 } else { 16384 }
+}
+
 fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! alloc {
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
   one = number(1)
-  off = number(0)
-  __system(6, fd, 1, 2, one, 4, 0)
-  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  var level: i64 = 1
+  var name: i64 = 2
+  if on_macos() {
+    level = 65535
+    name = 4
+  }
+  __system(6, fd, level, name, one, 4, 0)
+  if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
@@ -352,8 +391,7 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
-  off = number(0)
-  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  if where.family != 2 { dual_stack(fd) }
   connected = __system(4, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if connected < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
@@ -387,7 +425,7 @@ fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! all
   loop attempt in 0..bytes.size {
     if sent < bytes.size {
       rest = bytes[sent..]
-      given = __system(7, c.handle, rest, rest.size, 16384, 0, 0)
+      given = __system(7, c.handle, rest, rest.size, no_signal(), 0, 0)
       if given == -4 {
       } else if given < 0 {
         return .err(failure("write", given))
@@ -412,8 +450,7 @@ fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc
   where = try place(host, port)
   fd = __system(0, where.family, 2, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
-  off = number(0)
-  if where.family == 10 { __system(6, fd, 41, 26, off, 4, 0) }
+  if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
@@ -425,7 +462,7 @@ fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc
 fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
   where = try place(to.host, to.port)
   loop attempt in 0..64 {
-    given = __system(7, s.handle, bytes, bytes.size, 16384, where.bytes, where.bytes.size)
+    given = __system(7, s.handle, bytes, bytes.size, no_signal(), where.bytes, where.bytes.size)
     if given >= 0 { return .ok(()) }
     if given != -4 { return .err(failure("send", given)) }
   }
