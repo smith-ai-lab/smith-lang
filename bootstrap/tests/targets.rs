@@ -76,6 +76,10 @@ pub const ONCE: &[Test] = &[
         "every_executable_uses_only_thin_wrappers_over_the_kernel",
         every_executable_uses_only_thin_wrappers_over_the_kernel,
     ),
+    (
+        "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
+        a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -1073,7 +1077,33 @@ fn no_test_names_a_target() {
 /// The functions of a system library that are thin wrappers over the
 /// kernel, as "Standing alone" in `knowledge/compiler.md` allows, by the
 /// names a Mach-O file gives them.
-const THIN_WRAPPERS: &[&str] = &["_write", "__exit", "___error", "_mmap", "_munmap", "_getentropy"];
+const THIN_WRAPPERS: &[&str] = &[
+    "_write",
+    "__exit",
+    "___error",
+    "_mmap",
+    "_munmap",
+    "_getentropy",
+    "_read",
+];
+
+/// The wrappers a program that uses the network or the clock adds, which are
+/// the kernel's calls by the names `libSystem` gives them, and none of the
+/// C library's.
+const NET_AND_TIME_WRAPPERS: &[&str] = &[
+    "_socket",
+    "_bind",
+    "_listen",
+    "_accept",
+    "_connect",
+    "_getsockname",
+    "_setsockopt",
+    "_sendto",
+    "_recvfrom",
+    "_close",
+    "_clock_gettime",
+    "_nanosleep",
+];
 
 /// The same, by the names `KERNEL32.dll` gives them.
 const KERNEL32_THIN_WRAPPERS: &[&str] = &[
@@ -1247,6 +1277,30 @@ fn every_executable_uses_only_thin_wrappers_over_the_kernel() {
             }
         } else {
             panic!("{name} writes an executable in a form this test does not read");
+        }
+    }
+}
+
+fn a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls() {
+    let source = include_str!("net_program.smith");
+    let macos: Vec<Target> = buildable()
+        .into_iter()
+        .filter(|t| t.name().starts_with("macos"))
+        .collect();
+    for target in macos {
+        let bytes = compile(source.as_bytes(), target).unwrap();
+        let name = target.name();
+        let (libraries, symbols) = mach_o_imports(&bytes);
+        assert_eq!(libraries, ["/usr/lib/libSystem.B.dylib"], "{name} links only libSystem");
+        for wrapper in NET_AND_TIME_WRAPPERS {
+            assert!(symbols.iter().any(|s| s == wrapper), "{name} does not import {wrapper}");
+        }
+        for symbol in symbols {
+            assert!(
+                THIN_WRAPPERS.contains(&symbol.as_str())
+                    || NET_AND_TIME_WRAPPERS.contains(&symbol.as_str()),
+                "{name} imports {symbol}, which is not a thin wrapper over the kernel"
+            );
         }
     }
 }

@@ -5,11 +5,16 @@
 //!
 //! From `libSystem` the program uses only thin wrappers over the kernel:
 //! `write`, `_exit`, `__error`, which gives the thread's error number, and,
-//! in a program that asks for memory, `mmap`, and in one that asks for random
-//! bytes, `getentropy`.
+//! in a program that asks for memory, `mmap`, in one that asks for random
+//! bytes, `getentropy`, and in one that uses the network or the clock,
+//! `socket`, `bind`, `listen`, `accept`, `connect`, `getsockname`,
+//! `setsockopt`, `sendto`, `recvfrom`, `close`, `clock_gettime`, and
+//! `nanosleep`.
 //! Nothing from the system is needed to build: the load commands that ask
 //! the loader for the library and its symbols, and the signature, are
 //! written here.
+
+use crate::scalar::Raw;
 
 /// Where `__TEXT` is loaded, above the 4 GiB `__PAGEZERO`.
 const BASE: u64 = 0x1_0000_0000;
@@ -19,13 +24,25 @@ const SIGNATURE_PAGE: usize = 0x1000;
 /// The symbols a program may import from `libSystem`, in the order of their
 /// slots in `__got`. A program that never asks for memory imports only the
 /// first three.
-const IMPORTS: [&str; 6] = [
+const IMPORTS: [&str; 18] = [
     "_write",
     "___error",
     "__exit",
     "_mmap",
     "_getentropy",
     "_read",
+    "_socket",
+    "_bind",
+    "_listen",
+    "_accept",
+    "_connect",
+    "_getsockname",
+    "_setsockopt",
+    "_sendto",
+    "_recvfrom",
+    "_close",
+    "_clock_gettime",
+    "_nanosleep",
 ];
 /// `write`, which writes bytes to a file.
 pub const WRITE: usize = 0;
@@ -39,16 +56,49 @@ pub const MMAP: usize = 3;
 pub const GETENTROPY: usize = 4;
 /// `read`, which reads bytes from a file.
 pub const READ: usize = 5;
+/// The slot of the wrapper of the call `Raw` names, which a program that uses
+/// the network or the clock imports with all the others.
+pub fn slot(call: Raw) -> usize {
+    match call {
+        Raw::Socket => 6,
+        Raw::Bind => 7,
+        Raw::Listen => 8,
+        Raw::Accept => 9,
+        Raw::Connect => 10,
+        Raw::GetSockName => 11,
+        Raw::SetSockOpt => 12,
+        Raw::SendTo => 13,
+        Raw::RecvFrom => 14,
+        Raw::Close => 15,
+        Raw::ClockGetTime => 16,
+        Raw::NanoSleep => 17,
+        Raw::Kind => unreachable!("which kernel it is calls nothing"),
+    }
+}
+
+/// Whether the wrapper gives a C `int`, of which only the low 32 bits are
+/// what it gave, and not an `ssize_t`.
+pub fn gives_int(call: Raw) -> bool {
+    !matches!(call, Raw::SendTo | Raw::RecvFrom)
+}
 
 /// The symbols a program imports: `mmap` only if it asks for memory, and
 /// `getentropy` only if it asks for random bytes, which it says it could not
 /// get in a text it asks for memory to write, so it asks for memory too.
 ///
-/// A program that reads standard input imports every one, which costs it
-/// nothing it needs, as it asks for memory to hold what it reads.
-pub fn imports(allocates: bool, entropy: bool, reads: bool) -> &'static [&'static str] {
-    if reads {
+/// A program that reads standard input or uses the network or the clock
+/// imports every one, which costs it nothing it needs, as it asks for memory
+/// to hold what it reads.
+pub fn imports(
+    allocates: bool,
+    entropy: bool,
+    reads: bool,
+    kernel: bool,
+) -> &'static [&'static str] {
+    if kernel {
         &IMPORTS
+    } else if reads {
+        &IMPORTS[..6]
     } else if entropy {
         &IMPORTS[..5]
     } else if allocates {
@@ -414,6 +464,20 @@ fn put32(out: &mut Vec<u8>, value: u32) {
 
 /// The loader's instructions for filling `__got`: each slot gets its
 /// symbol's address in `libSystem`, the first library loaded.
+/// Writes the number as a ULEB128: seven bits at a time, the low ones first,
+/// each byte but the last with its high bit set.
+fn uleb128(out: &mut Vec<u8>, mut n: u64) {
+    loop {
+        let low = (n & 0x7f) as u8;
+        n >>= 7;
+        if n == 0 {
+            out.push(low);
+            return;
+        }
+        out.push(low | 0x80);
+    }
+}
+
 fn bind_info(imports: &[&str]) -> Vec<u8> {
     const SET_DYLIB_ORDINAL: u8 = 0x10;
     const SET_SYMBOL: u8 = 0x40;
@@ -428,7 +492,7 @@ fn bind_info(imports: &[&str]) -> Vec<u8> {
         out.extend_from_slice(name.as_bytes());
         out.push(0);
         out.push(SET_SEGMENT_AND_OFFSET | DATA_SEGMENT);
-        out.push((8 * i) as u8); // as a ULEB128, which is one byte here
+        uleb128(&mut out, 8 * i as u64);
         out.push(DO_BIND);
     }
     out.push(0); // done

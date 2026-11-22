@@ -595,6 +595,7 @@ impl<'a> Lowering<'a> {
                     Close,
                     ClockGetTime,
                     NanoSleep,
+                    Kind,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);

@@ -106,6 +106,10 @@ impl System for Linux {
 
     fn raw(asm: &mut Asm, call: Raw) {
         let number = match call {
+            Raw::Kind => {
+                asm.mov32(RAX, 0);
+                return;
+            }
             Raw::Socket => 41,
             Raw::Connect => 42,
             Raw::Accept => 43,

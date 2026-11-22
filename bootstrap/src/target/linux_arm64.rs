@@ -131,6 +131,10 @@ impl System for Linux {
 
     fn raw(asm: &mut Asm, call: Raw) {
         let number = match call {
+            Raw::Kind => {
+                asm.mov_w(X0, 0);
+                return;
+            }
             Raw::Socket => 198,
             Raw::Bind => 200,
             Raw::Listen => 201,
