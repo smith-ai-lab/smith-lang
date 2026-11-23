@@ -5,6 +5,7 @@ description: Lexical rules, operator precedence, the EBNF grammar, and the prope
 status: partial
 built:
   - "`effect_def`: `effect IDENT { fn_sig }`, with `pub` in a module, whose operations are signatures with no body"
+  - "`value_def`: a value at the top level states its type, `IDENT \":\" type \"=\" expr`, and one that does not is refused at its name; the form with a type is not built yet"
 ---
 
 # Smith grammar
@@ -52,11 +53,12 @@ Items inside braces are separated by newlines under the lexical rules above.
 
 ```
 file       = { item } ;
-item       = use | [ "pub" ] ( fn_def | struct_def | enum_def | trait_def | effect_def | define )
+item       = use | [ "pub" ] ( fn_def | struct_def | enum_def | trait_def | effect_def | value_def )
            | impl_def
            | derive | without | foreign ;
 
 fn_def     = fn_sig block ;
+value_def  = IDENT ":" type "=" expr ;
 fn_sig     = "fn" IDENT [ generics ] "(" [ params ] ")" [ "->" result ]
              [ effects ] { contract } ;
 result     = [ IDENT ":" ] type | statement ;

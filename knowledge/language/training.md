@@ -25,10 +25,10 @@ fn loss[b: Pos, i: Nat, h: Nat, o: Pos](m: Mlp[i, h, o], xs: [b, i]f32, ys: [b, 
 
 ## Its gradient
 
-The weights `m` are the first parameter of `loss`, so `grad(loss)` is the gradient with respect to them, an `Mlp`.
+The weights `m` are the first parameter of `loss`, so `grad(loss)` is the gradient with respect to them, an `Mlp`. A top-level value has one type and is not generic, so the gradient is of the loss at the sizes that `train` below uses, a batch of 64 rows of the MLP of 784, 256, and 10.
 
 ```
-loss_grad = grad(loss)
+loss_grad: fn(Mlp[784, 256, 10], [64, 784]f32, [64, 10]f32) -> Mlp[784, 256, 10] = grad(loss)
 ```
 
 ## One step
@@ -36,12 +36,12 @@ loss_grad = grad(loss)
 A step subtracts the gradient, scaled by a learning rate, from the weights.
 
 ```
-fn sgd_step[b: Pos, i: Nat, h: Nat, o: Pos](
-  m: Mlp[i, h, o],
-  xs: [b, i]f32,
-  ys: [b, o]f32,
+fn sgd_step(
+  m: Mlp[784, 256, 10],
+  xs: [64, 784]f32,
+  ys: [64, 10]f32,
   lr: f32,
-) -> Mlp[i, h, o] {
+) -> Mlp[784, 256, 10] {
   g = loss_grad(m, xs, ys)
   m - lr * g
 }
@@ -73,7 +73,7 @@ fn train[n: Nat](data: Dataset[n, 784, 10], steps: Nat, key: take Key) -> Mlp[78
 
 | Written | Is |
 | --- | --- |
-| `loss_grad = grad(loss)` | The gradient of the loss with respect to the weights |
+| `loss_grad: fn(Mlp[784, 256, 10], [64, 784]f32, [64, 10]f32) -> Mlp[784, 256, 10] = grad(loss)` | The gradient of the loss with respect to the weights |
 | `m - lr * g` | One step of gradient descent |
 | `loop step in 0..steps { m = sgd_step(...) }` | The steps, one batch each |
 

@@ -132,7 +132,7 @@ This is `.err(Clash(of: "Shape", case: "circle", member: "type"))`: the struct's
 ```
 use std.json (Json, to_json_as)
 
-mcp = Json(cases: .tag("type"), names: .camel)
+mcp: Json = Json(cases: .tag("type"), names: .camel)
 
 fn reply(c: Content) -> Result[str, Clash] ! alloc { to_json_as(c, mcp) }
 ```
@@ -191,7 +191,7 @@ A text that has no escape is a piece of the input, and nothing is copied for it.
 With `Cases.key`, `"empty"` is a case that holds nothing, and `{"square":4}` is a case that holds a value. With `Cases.tag`, the case is read from the member of that name, wherever it is in the object, and the other members are read in their order with the tag passed over.
 
 ```
-mcp = Json(cases: .tag("type"), names: .camel)
+mcp: Json = Json(cases: .tag("type"), names: .camel)
 ```
 
 With that setting `{"type":"circle","radius":2}` and `{"radius":2,"type":"circle"}` are `Shape.circle(Circle(radius: 2))`, `{"type":"square","value":4}` and `{"value":4,"type":"square"}` are `Shape.square(4)`, and `{"type":"empty"}` is `Shape.empty`. An object that has no tag is the error `missing` with the tag, at its `}`. The members besides the tag are the members of a struct that the case holds, with the rules above, or the one member `value` of any other value, and an object that holds a case that is not a struct has no other member. A name that is no case is the error `case`. When the tag is not the first member, the reader walks the bytes of the object once more to find it, and nothing is copied. Cases are read to any depth, and a case written with a tag asks for memory in proportion to the number of cases that are open round it.
@@ -224,7 +224,7 @@ A tuple of two that is an array of three is `shape`, `the end of the list` wante
 use std.deserialize (ReadError, Problem)
 use std.json (from_json_as, Json, describe)
 
-refuse = Json(cases: .key, names: .written, unknown: .refuse)
+refuse: Json = Json(cases: .key, names: .written, unknown: .refuse)
 ```
 
 With `refuse`, `{"x":1,"y":3,"z":0}` read as a `Point` is ``1:15: z: unknown `z` ``.

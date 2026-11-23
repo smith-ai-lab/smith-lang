@@ -22,7 +22,7 @@ The body is `put(put(w, '\\'), 'n')`, written from the inside out. `|>` is anoth
 A chain is read from the left, so `x |> f() |> g()` is `g(f(x))`. A line that starts with `|>` goes on from the line before it.
 
 ```
-server = Server(name: "calc", version: "1")
+server: Server = Server(name: "calc", version: "1")
   |> tool(add)
   |> tool(divide)
 ```

@@ -182,7 +182,7 @@ use std.console (console)
 use std.mcp (stdio)
 use std.project (Package)
 
-package = Package(name: "calc")
+package: Package = Package(name: "calc")
 
 pub fn local() ! console, alloc {
   with stdio()
