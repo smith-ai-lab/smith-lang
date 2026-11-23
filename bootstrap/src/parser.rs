@@ -1421,6 +1421,14 @@ impl Parser<'_> {
             Tok::Keyword("effect") => "declaring an effect",
             Tok::Keyword("derive") => "`derive`",
             Tok::Keyword("foreign") => "a foreign function",
+            Tok::Ident(name) if self.peek(1) == &Tok::Punct("=") => {
+                let mut error = Error::new(
+                    pos,
+                    format!("a value at the top level states its type, and `{name}` does not"),
+                );
+                error.fix = Some(format!("write its type after the name: `{name}: T = ...`"));
+                return error;
+            }
             Tok::Ident(_) => "a definition other than a function",
             tok => return self.expected("a definition", tok),
         };

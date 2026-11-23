@@ -14,7 +14,7 @@ Outside code is vendored: it is copied into the project as ordinary modules and 
 ```
 use std.project (Package, Vendored)
 
-package = Package(
+package: Package = Package(
   name: "site",
   vendored: [
     Vendored(path: "vendor/toml", source: "https://example.com/toml", hash: "b3:9f2c"),

@@ -12,7 +12,7 @@ status: planned
 ```
 fn square(x: f32) -> f32 { x * x }
 
-square_grad = grad(square)
+square_grad: fn(f32) -> f32 = grad(square)
 
 fn slope() -> f32 { square_grad(3.0) }
 ```
@@ -31,7 +31,7 @@ struct Point {
 
 fn norm_squared(p: Point) -> f32 { p.x * p.x + p.y * p.y }
 
-point_grad = grad(norm_squared)
+point_grad: fn(Point) -> Point = grad(norm_squared)
 ```
 
 `point_grad(Point(x: 3.0, y: 4.0))` is `Point(x: 6.0, y: 8.0)`.
@@ -49,7 +49,7 @@ To differentiate with respect to something else, `f` is wrapped in a lambda that
 ```
 fn sum_squares(v: [3]f32) -> f32 { sum(for k { v[k] ^ 2 }) }
 
-sum_squares_grad = grad(sum_squares)
+sum_squares_grad: fn([3]f32) -> [3]f32 = grad(sum_squares)
 ```
 
 `sum_squares_grad([1.0, 2.0, 3.0])` is `[2.0, 4.0, 6.0]`.

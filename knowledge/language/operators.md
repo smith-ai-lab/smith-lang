@@ -76,7 +76,7 @@ fn twice[T: Add](x: T) -> T
   x + x
 }
 
-big = twice(unit)
+big: Rect = twice(unit)
 ```
 
 A type with no `impl` of `Add` has no `+`. `x + x` in `twice` is allowed only because `T` is bound by `Add`, as [Bounds and `requires`](bounds.md) says.

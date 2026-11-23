@@ -12,7 +12,7 @@ A build step is a function listed under `generate` in `project.smith`. The build
 ```
 use std.project (Generate, Package)
 
-package = Package(
+package: Package = Package(
   name: "site",
   generate: [
     Generate(run: route_table, inputs: "routes/", output: "generated/routes.smith"),

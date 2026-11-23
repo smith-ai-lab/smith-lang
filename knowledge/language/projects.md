@@ -6,7 +6,7 @@ status: partial
 built:
   - "the entry, `main.smith` or a named file, and the name of the executable"
   - "the folder the command ran in as the root, whose files are the modules, named by their paths; not a `project.smith` above it, which only a task finds"
-  - "`project.smith` with `package = Package(name: \"calc\")`, whose name the executable of a task takes, and whose public functions are the tasks"
+  - "`project.smith` with `package: Package = Package(name: \"calc\")`, whose name the executable of a task takes, and whose public functions are the tasks"
 ---
 
 # Projects
@@ -75,7 +75,7 @@ The executable is named after the entry file without `.smith`, so `hello.smith` 
 ```
 use std.project (Package)
 
-package = Package(name: "serving")
+package: Package = Package(name: "serving")
 ```
 
 A loose file or folder needs no `project.smith`, which suits a small program written to try something, like `hello.smith` above. The file is needed once the project has a dependency, a build step, or a task, as [Dependencies](dependencies.md), [Build steps](build-steps.md), and [Project tasks](project-tasks.md) describe. `smith vendor add` creates it when it is missing.

@@ -20,7 +20,7 @@ use std.http (listen)
 use std.project (Package)
 use std.store (files)
 
-package = Package(name: "notes")
+package: Package = Package(name: "notes")
 
 pub fn serve(port: Nat = 8080) ! net, fs, alloc, diverge {
   with listen(port: port)
@@ -52,7 +52,7 @@ use main (main)
 use std.cloudflare (durable, worker)
 use std.project (Package, build)
 
-package = Package(name: "notes")
+package: Package = Package(name: "notes")
 
 pub fn cloud() ! http, alloc {
   with durable()
