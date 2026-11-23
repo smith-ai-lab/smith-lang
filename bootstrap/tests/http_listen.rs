@@ -143,7 +143,7 @@ fn runs(target: Target) -> bool {
 /// gives, and a fingerprint is made of the one `targets::build` gives, so they
 /// are one.
 fn the_server_the_compiler_builds_is_the_one_the_tests_that_depend_on_the_machine_note() {
-    let target = Target::LinuxX64;
+    let target = Target::ALL.iter().copied().find(|t| t.name().starts_with("linux")).expect("a target of Linux");
     let direct = targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
     assert!(direct == built_by_the_compiler(target), "the two executables are not the same bytes");
 }
