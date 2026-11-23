@@ -41,7 +41,7 @@ pub fn given_back(f: &Function, regions: bool) -> Vec<bool> {
                 args,
             } = &i.op
             {
-                for v in args[1..].iter().filter(|v| f.types[v.0] == Type::Address) {
+                for v in args[2..].iter().filter(|v| f.types[v.0] == Type::Address) {
                     back[groups.find(v.0)] = true;
                 }
             }
@@ -72,34 +72,122 @@ pub fn given_back(f: &Function, regions: bool) -> Vec<bool> {
         .collect()
 }
 
-/// For each value of the function, the frame of the region its memory is built in:
-/// the value is an address that is in a group with a value that a `RegionKeep`
-/// keeps, so that it is read after the function, and the child that runs it, has
-/// ended. The first region that keeps a value of the group is the one.
-pub fn regioned(f: &Function) -> Vec<Option<Value>> {
+/// Which memory of a function is kept in the region of a handler's state, and where
+/// the frame of that region is at each place of the function.
+pub struct Regioned {
+    /// For each value, the region it is built in, by how many handlers that have a
+    /// region it is inside, when it is an address that is in a group with a value
+    /// that a `RegionKeep` keeps, so that it is read after the function, and the
+    /// child that runs it, has ended. A group that is kept in two regions is built
+    /// in the outer, which is given back last.
+    of: Vec<Option<u64>>,
+    /// For each region, the names of its frame that the function has, as the places
+    /// they are made: the block and how many instructions come before them in it.
+    frames: std::collections::HashMap<u64, Vec<(Value, usize, usize)>>,
+    /// The block that immediately dominates each block.
+    idom: Vec<usize>,
+}
+
+impl Regioned {
+    /// Whether the value is built in a region.
+    pub fn holds(&self, v: Value) -> bool {
+        self.of[v.0].is_some()
+    }
+
+    /// The frame of the region the value is built in, as a name that is made before
+    /// the place, which is the instruction `at` of the block.
+    pub fn frame_at(&self, v: Value, block: usize, at: usize) -> Value {
+        let depth = self.of[v.0].expect("a value built in a region");
+        let dominates = |db: usize, di: usize| {
+            if db == block {
+                return di <= at;
+            }
+            let mut b = block;
+            while b != 0 && self.idom[b] != usize::MAX {
+                b = self.idom[b];
+                if b == db {
+                    return true;
+                }
+            }
+            false
+        };
+        self.frames[&depth]
+            .iter()
+            .find(|(_, db, di)| dominates(*db, *di))
+            .map(|(frame, _, _)| *frame)
+            .expect("a name of the frame of the region that is made before")
+    }
+}
+
+/// `regioned`, where the program starts tasks, and none of it is in a region where
+/// it does not.
+pub fn regioned_if(f: &Function, tasks: bool) -> Regioned {
+    if tasks {
+        regioned(f)
+    } else {
+        Regioned {
+            of: vec![None; f.types.len()],
+            frames: Default::default(),
+            idom: Vec::new(),
+        }
+    }
+}
+
+/// For each value of the function, whether its memory is built in the region of a
+/// handler's state: it is in a group with a value that a `RegionKeep` keeps.
+pub fn regioned(f: &Function) -> Regioned {
     let (mut groups, constant) = grouped(f);
-    let mut of_group: std::collections::HashMap<usize, Value> = std::collections::HashMap::new();
+    let n = f.types.len();
+    let mut numbers: std::collections::HashMap<usize, u64> = std::collections::HashMap::new();
+    let mut at_of: Vec<Option<(usize, usize)>> = vec![None; n];
+    for (b, block) in f.blocks.iter().enumerate() {
+        for p in &block.params {
+            at_of[p.0] = Some((b, 0));
+        }
+        for (k, i) in block.instructions.iter().enumerate() {
+            for r in &i.results {
+                at_of[r.0] = Some((b, k + 1));
+            }
+            if let Op::Constant(Constant::Int(c)) = &i.op {
+                numbers.insert(i.results[0].0, *c);
+            }
+        }
+    }
+    let mut frames: std::collections::HashMap<u64, Vec<(Value, usize, usize)>> = Default::default();
+    let mut kept_in: std::collections::HashMap<usize, u64> = std::collections::HashMap::new();
     for i in f.blocks.iter().flat_map(|b| &b.instructions) {
         if let Op::System {
             call: System::RegionKeep,
             args,
         } = &i.op
         {
-            for v in args[1..]
+            let depth = numbers[&args[1].0];
+            let (b, k) = at_of[args[0].0].expect("a frame that is made");
+            frames.entry(depth).or_default().push((args[0], b, k));
+            for v in args[2..]
                 .iter()
                 .filter(|v| f.types[v.0] == Type::Address && !constant[v.0])
             {
-                of_group.entry(groups.find(v.0)).or_insert(args[0]);
+                let g = groups.find(v.0);
+                let now = kept_in.entry(g).or_insert(depth);
+                *now = (*now).min(depth);
             }
         }
     }
-    (0..f.types.len())
+    let of = (0..n)
         .map(|v| {
             (f.types[v] == Type::Address && !constant[v])
-                .then(|| of_group.get(&groups.find(v)).copied())
+                .then(|| kept_in.get(&groups.find(v)).copied())
                 .flatten()
         })
-        .collect()
+        .collect();
+    let mut idom = vec![usize::MAX; f.blocks.len()];
+    for (b, children) in dominated(f).iter().enumerate() {
+        for &c in children {
+            idom[c] = b;
+        }
+    }
+    Regioned { of, frames, idom }
 }
 
 /// For each arena the function opens, the values that are made between its

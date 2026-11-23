@@ -652,13 +652,14 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     call: System::RegionKeep,
                     args,
                 } => {
-                    let [frame, kept @ ..] = &args[..] else {
+                    let [frame, depth, kept @ ..] = &args[..] else {
                         return Err(Why::WrongCount);
                     };
                     if !instruction.results.is_empty() {
                         return Err(Why::WrongCount);
                     }
                     used(frame, i, Type::Address)?;
+                    used(depth, i, Type::Int(Bits::B64))?;
                     for v in kept {
                         used(v, i, f.types[v.0])?;
                     }

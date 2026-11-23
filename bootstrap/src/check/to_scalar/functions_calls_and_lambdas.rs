@@ -123,11 +123,19 @@ fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
     })
 }
 
+/// The names that were put in their frames without parameters: the frame, the
+/// place in it, the scalars, and the depth of the region if the name is one.
+pub(super) type Later = Vec<(usize, usize, Vec<form::Type>, Option<usize>)>;
+
 /// Makes the parameters of the names that were put in their frames without any,
 /// in the order they were put.
-pub(super) fn finish_params<'a>(out: &mut Out<'a>, later: Vec<(usize, usize, Vec<form::Type>)>) {
-    for (frame, at, types) in later {
+pub(super) fn finish_params<'a>(lowering: &mut Lowering<'a>, out: &mut Out<'a>, later: Later) {
+    for (frame, at, types, region) in later {
         out.frames[frame][at].values = out.params(&types);
+        if let Some(depth) = region {
+            let address = out.frames[frame][at].values[0];
+            lowering.name_region(out, address, depth);
+        }
     }
 }
 
@@ -176,7 +184,7 @@ impl<'a> Lowering<'a> {
         for i in order {
             maps[i] = self.push_frames(&mut out, &context[i].1, &mut made[i], Some(&mut later));
         }
-        finish_params(&mut out, later);
+        finish_params(self, &mut out, later);
         // What it gives back is in the order it takes what it is given.
         let order = self.state_last(
             context
@@ -241,7 +249,7 @@ impl<'a> Lowering<'a> {
         out: &mut Out<'a>,
         def: &HandlerDef<'a>,
         slots: &mut Vec<Slot>,
-        mut later: Option<&mut Vec<(usize, usize, Vec<form::Type>)>>,
+        mut later: Option<&mut Later>,
     ) -> Vec<(usize, usize)> {
         let mut map: Vec<(usize, usize)> = Vec::new();
         for (orig, _) in &def.frames {
@@ -258,11 +266,22 @@ impl<'a> Lowering<'a> {
                     Some(func) => (Vec::new(), Some(moved(func, &map))),
                     None if defer => {
                         if let Some(later) = later.as_deref_mut() {
-                            later.push((*frame, out.frames[*frame].len(), c.scalars.clone()));
+                            later.push((
+                                *frame,
+                                out.frames[*frame].len(),
+                                c.scalars.clone(),
+                                (c.name == REGION).then_some(c.depth),
+                            ));
                         }
                         (Vec::new(), None)
                     }
-                    None => (out.params(&c.scalars), None),
+                    None => {
+                        let values = out.params(&c.scalars);
+                        if c.name == REGION {
+                            self.name_region(out, values[0], c.depth);
+                        }
+                        (values, None)
+                    }
                 };
                 if c.assigned {
                     slots.push(Slot {
@@ -691,6 +710,8 @@ impl<'a> Lowering<'a> {
             },
             vec![form::Type::Address],
         )[0];
+        let depth = out.handlers.len();
+        self.name_region(out, address, depth);
         let frame = def.frames[at].0;
         out.frames[frame].push(Bound {
             name: REGION.to_string(),
@@ -705,13 +726,28 @@ impl<'a> Lowering<'a> {
             assigned: true,
             scalars: vec![form::Type::Address],
             func: None,
+            depth,
         });
         (Some(Rc::new(def)), Some(frame))
     }
 
+    /// Says that the address is a name of the frame of a region that is `depth`
+    /// handlers that have a region inside the outermost, so that the memory that a
+    /// region keeps is built in a frame that is made where it is asked for.
+    pub(super) fn name_region(&mut self, out: &mut Out<'a>, frame: form::Value, depth: usize) {
+        let depth = out.int(form::Bits::B64, depth as i128);
+        out.emit(
+            form::Op::System {
+                call: form::System::RegionKeep,
+                args: vec![frame, depth],
+            },
+            Vec::new(),
+        );
+    }
+
     /// The region of the state of the handler whose operation is being lowered,
     /// when it has one and `name` is a name of its state that holds memory.
-    pub(super) fn region_for(&self, out: &Out<'a>, name: &str) -> Option<form::Value> {
+    pub(super) fn region_for(&self, out: &Out<'a>, name: &str) -> Option<(form::Value, usize)> {
         let operating = out.operating.last()?;
         let (i, _) = operating
             .def
@@ -724,10 +760,10 @@ impl<'a> Lowering<'a> {
                 })
             })?;
         let (orig, names) = &operating.def.frames[i];
-        names.iter().find(|c| c.name == REGION)?;
+        let region = names.iter().find(|c| c.name == REGION)?;
         let frame = operating.frames.get(i).copied().unwrap_or(*orig);
         let at = out.frames[frame].iter().rposition(|b| b.name == REGION)?;
-        Some(out.frames[frame][at].values[0])
+        Some((out.frames[frame][at].values[0], region.depth))
     }
 
     /// Lowers a call of `alloc`: the body runs in place, between the opening
@@ -1069,6 +1105,7 @@ impl<'a> Lowering<'a> {
                     assigned: writes && bound.func.is_none() && !bound.values.is_empty(),
                     scalars,
                     func: bound.func.clone(),
+                    depth: 0,
                 });
                 let held = bound.func.clone();
                 if let Some(func) = held {

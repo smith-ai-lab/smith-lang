@@ -318,8 +318,10 @@ pub enum System {
     /// task, where what the handler's block gave holds an address into them. It
     /// gives nothing.
     RegionMove,
-    /// Says that the values after the first argument, the address of the frame of a
-    /// region, are kept in that region: the state of a handler is assigned them. The
+    /// Says that the values after the first two arguments, the address of the frame
+    /// of a region and how many handlers that have a region it is inside, are kept
+    /// in that region: the state of a handler is assigned them. With none after,
+    /// it says that the first is a name of the frame of that region. The
     /// memory that is, or is held with, an address among them is built in the
     /// region, wherever in the function it is asked for, as the memory of a value
     /// the function returns is built where its caller keeps it. It gives nothing.
