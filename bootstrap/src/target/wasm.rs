@@ -90,6 +90,20 @@ fn needs_high(f: &Function, i: &Instruction) -> bool {
     }
 }
 
+/// A check of a module, which a host that has a validator may give once, and
+/// which each module is made to pass before `emit` gives it back. The compiler
+/// has none of its own, so its tests give it the validator of an engine.
+static VALID: std::sync::OnceLock<Check> = std::sync::OnceLock::new();
+
+/// What says whether a module is valid, or why it is not.
+type Check = fn(&[u8]) -> Result<(), String>;
+
+/// Gives the check that every module `emit` writes passes before it is given
+/// back, which ends the build with the reason when it is not valid.
+pub fn check_modules_with(check: Check) {
+    let _ = VALID.set(check);
+}
+
 /// The module for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let imports = imports_of(program);
@@ -143,7 +157,17 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
 
     let first = u32::from(imports.print) + u32::from(imports.entropy);
     let ends = first + functions.len() as u32;
+    let signatures: Vec<(Vec<Kind>, Vec<Kind>)> = (functions.iter())
+        .map(|f| {
+            let params = f.blocks[0].params.iter().map(|p| kind(f.types[p.0]));
+            (
+                params.collect(),
+                f.results.iter().map(|t| kind(*t)).collect(),
+            )
+        })
+        .collect();
     let context = Context {
+        signatures: &signatures,
         starts: &image.starts,
         print,
         entropy,
@@ -230,6 +254,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
             ),
         })
         .collect();
+    if let Some(check) = VALID.get()
+        && let Err(why) = check(&bytes)
+    {
+        panic!("the module is not valid: {why}");
+    }
     (bytes, parts)
 }
 
@@ -280,6 +309,9 @@ fn image(program: &Program, frames: bool) -> Image {
 }
 
 struct Context<'a> {
+    /// The kinds a function takes and gives, in the order of the functions of
+    /// the program and then the helpers of the module, which a call is made to.
+    signatures: &'a [(Vec<Kind>, Vec<Kind>)],
     starts: &'a [u32],
     print: Option<u32>,
     entropy: Option<u32>,
@@ -498,7 +530,9 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
         for b in blocks {
             if let (Some(jump), 1, false) = (entering[b], shape.entries[b], shape.header[b]) {
                 for (p, a) in f.blocks[b].params.iter().zip(&jump.args) {
-                    same[p.0] = same[a.0];
+                    if kind(f.types[p.0]) == kind(f.types[a.0]) {
+                        same[p.0] = same[a.0];
+                    }
                 }
             }
         }
@@ -718,8 +752,8 @@ impl Lowering<'_> {
             End::Return(values) => {
                 // What ends the function is its own, named for it, and no line wrote it.
                 self.note_place(Place::of(&f.name));
-                for v in values {
-                    self.get(*v);
+                for (v, ty) in values.iter().zip(&f.results) {
+                    self.get_as(*v, kind(*ty));
                 }
                 self.give_back();
                 self.code.op(RETURN);
@@ -814,8 +848,8 @@ impl Lowering<'_> {
     /// were copied at once.
     fn give(&mut self, jump: &Jump) {
         let given = self.given(jump);
-        for (_, a) in &given {
-            self.get(*a);
+        for (p, a) in &given {
+            self.get_as(*a, self.kind(*p));
         }
         for (p, _) in given.iter().rev() {
             self.set(*p);
@@ -856,8 +890,8 @@ impl Lowering<'_> {
             End::Return(values) => {
                 // What ends the function is its own, named for it, and no line wrote it.
                 self.note_place(Place::of(&f.name));
-                for v in values {
-                    self.get(*v);
+                for (v, ty) in values.iter().zip(&f.results) {
+                    self.get_as(*v, kind(*ty));
                 }
                 self.give_back();
                 self.code.op(RETURN);
@@ -934,6 +968,27 @@ impl Lowering<'_> {
             Type::Vector(_) => unreachable!("Target::emit refuses a function with a vector"),
             Type::Address => panic!("an address where an integer is needed"),
         }
+    }
+
+    /// Makes the number on the stack, which is of kind `from`, one of kind `to`:
+    /// a number of 64 bits is cut to 32, and a number of 32 is given zeros
+    /// above it, as the bits above the size of a number are always zero.
+    fn convert(&mut self, from: Kind, to: Kind) {
+        match (from, to) {
+            (Kind::I64, Kind::I32) => self.code.op(I32_WRAP_I64),
+            (Kind::I32, Kind::I64) => self.code.op(I64_EXTEND_I32_U),
+            _ => debug_assert_eq!(from, to, "a value is held as another kind of number"),
+        }
+    }
+
+    /// Puts a value on the stack as a number of kind `to`. A call is given
+    /// what its function takes, and a function gives what it is declared to,
+    /// though a value may be held at another width than the one the type of the
+    /// function names: the width of a whole number is that of its range where
+    /// it is made, and of the type where it is taken.
+    fn get_as(&mut self, v: Value, to: Kind) {
+        self.get(v);
+        self.convert(self.kind(v), to);
     }
 
     /// Gives a number of 64 bits, or an address, a place in 32.
@@ -1300,11 +1355,13 @@ impl Lowering<'_> {
                 }
             }
             Op::Call { function, args } => {
-                for a in args {
-                    self.get(*a);
+                let (takes, gives) = &self.context.signatures[*function];
+                for (a, want) in args.iter().zip(takes) {
+                    self.get_as(*a, *want);
                 }
                 self.code.call(self.context.first + *function as u32);
-                for r in results.iter().rev() {
+                for (r, have) in results.iter().zip(gives).rev() {
+                    self.convert(*have, self.kind(*r));
                     self.set(*r);
                 }
             }

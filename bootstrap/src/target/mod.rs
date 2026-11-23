@@ -15,6 +15,7 @@ mod macos_x64;
 pub mod moves;
 mod pe;
 mod wasm;
+pub use wasm::check_modules_with;
 mod wasm_code;
 mod wasm_host;
 mod wasm_module;

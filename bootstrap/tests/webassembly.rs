@@ -21,7 +21,7 @@ use crate::cli::{folder, smith, stderr};
 use crate::generate::{self, Gen};
 use crate::targets::{case_files, updating};
 use crate::float_form::{self as ff, canonical_program};
-use crate::{choices, enums, lambdas, numbers, programs, repeat, text, tuples};
+use crate::{choices, enums, lambdas, numbers, programs, repeat, text, tuples, valid_modules};
 
 pub const ONCE: &[Test] = &[
     (
@@ -63,6 +63,18 @@ pub const ONCE: &[Test] = &[
     (
         "a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints",
         a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints,
+    ),
+    (
+        "a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not",
+        a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not,
+    ),
+    (
+        "a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width",
+        a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width,
+    ),
+    (
+        "a_module_of_generated_programs_with_whole_numbers_of_every_width_prints_what_the_evaluator_prints",
+        a_module_of_generated_programs_with_whole_numbers_of_every_width_prints_what_the_evaluator_prints,
     ),
     (
         "every_module_gives_what_the_evaluator_gives_for_each_instruction_of_floats",
@@ -969,4 +981,96 @@ fn functions_that_call_one_another_are_written_as_loops_and_branches_and_print_w
         let said = scalar::run(&program);
         assert_eq!(String::from_utf8(said.stdout).unwrap(), *printed, "{source}");
     }
+}
+
+/// Every module a test builds for WebAssembly is checked by `node` before it is
+/// given back, as `valid_modules` says, so this is the check that does it: a
+/// module that the engine takes for invalid is refused with its reason, and one
+/// that it takes is not. The tests that run each module under `node` load it too,
+/// and the tests that only build one are held to this.
+fn a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not() {
+    if !node() {
+        return;
+    }
+    // A module with a function that takes an i32 and is called with an i64.
+    let wrong: &[u8] = &[
+        0, 0x61, 0x73, 0x6D, 1, 0, 0, 0, // the header
+        1, 9, 2, 0x60, 1, 0x7F, 0, 0x60, 1, 0x7E, 0, // two types: (i32) and (i64)
+        3, 3, 2, 0, 1, // two functions
+        10, 11, 2, 2, 0, 0x0B, 6, 0, 0x20, 0, 0x10, 0, 0x0B, // the second calls the first
+    ];
+    let reason = valid_modules::check(wrong).expect_err("a module of wrong types is refused");
+    assert!(reason.contains("expected type i32"), "{reason}");
+    let empty: &[u8] = &[0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
+    assert_eq!(valid_modules::check(empty), Ok(()));
+}
+
+/// A whole number is held as 32 bits or as 64 by the range of its type where it
+/// is made, and a call took it so, where the function it calls takes it as the
+/// type of its own: an element of `[1, 2, 3]` is a number of 64 bits, and
+/// `repr` of it is `repr[u8]`, which takes 8. A module of such a call did not
+/// load: `call[2] expected type i32, found local.get of type i64`.
+fn a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width() {
+    if !node() {
+        return;
+    }
+    for source in [
+        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
+        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
+    ] {
+        let program = after_the_pass(source.as_bytes());
+        assert!(!scalar::run(&program).stdout.is_empty(), "{source}");
+        agree(&program);
+    }
+}
+
+/// An array of three whole numbers of a range, whose literals have it.
+const RANGES: [(i128, i128); 8] = [
+    (0, 255),
+    (0, 65535),
+    (0, 4294967295),
+    (0, 9223372036854775807),
+    (-128, 127),
+    (-32768, 32767),
+    (-2147483648, 2147483647),
+    (-9223372036854775807, 9223372036854775807),
+];
+
+#[derive(Debug)]
+struct Widths {
+    source: String,
+}
+
+/// A program that makes arrays of literals of ranges of every width and sign,
+/// and gives their elements to generic functions, as a result and an argument,
+/// and prints them as text and as their own `repr`.
+fn whole_numbers_of_every_width(g: &mut Gen) -> Widths {
+    let mut arrays = Vec::new();
+    for _ in 0..2 + g.below(2) {
+        let (low, high) = *g.pick(&RANGES);
+        let options = [low, high, 0.clamp(low, high), (low + 1).min(high), (high - 1).max(low)];
+        let values: Vec<i128> = (0..3).map(|_| *g.pick(&options)).collect();
+        arrays.push(values);
+    }
+    let mut body = String::new();
+    for (i, values) in arrays.iter().enumerate() {
+        let list: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+        body += &format!("  a{i} = [{}]\n  print(\"{{a{i}}}\")\n", list.join(", "));
+    }
+    for i in 0..arrays.len() {
+        let at = g.below(3);
+        body += &format!("  print(repr(keep(a{i}[{at}])))\n");
+        let j = g.below(arrays.len());
+        let other = g.below(3);
+        body += &format!("  print(repr(second(a{i}[{at}], a{j}[{other}])))\n");
+    }
+    Widths {
+        source: format!(
+            "use std.console (console, print)\n\nfn keep[T](x: take T) -> T {{ x }}\n\nfn second[A, B](a: A, b: take B) -> B {{ b }}\n\nfn main() ! console, alloc {{\n{body}}}\n"
+        ),
+    }
+}
+
+fn a_module_of_generated_programs_with_whole_numbers_of_every_width_prints_what_the_evaluator_prints() {
+    every_module_agrees(106, 10, whole_numbers_of_every_width, |case| case.source.as_bytes());
 }

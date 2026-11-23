@@ -102,6 +102,7 @@ fn main() -> ExitCode {
         }
         return ExitCode::SUCCESS;
     }
+    valid_modules::install();
     let filters: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
     let once = once_tests();
     let machine = machine_tests();
