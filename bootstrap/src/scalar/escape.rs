@@ -32,16 +32,16 @@ pub fn given_back(f: &Function, regions: bool) -> Vec<bool> {
             }
         }
     }
-    // What a window of a region keeps is built in the region, which is where a
-    // function builds what it returns, so it is given back as that is.
+    // What a region keeps is built in the region, which is where a function
+    // builds what it returns, so it is given back as that is.
     if regions {
         for i in f.blocks.iter().flat_map(|b| &b.instructions) {
             if let Op::System {
-                call: System::RegionClose,
+                call: System::RegionKeep,
                 args,
             } = &i.op
             {
-                for v in args[2..].iter().filter(|v| f.types[v.0] == Type::Address) {
+                for v in args[1..].iter().filter(|v| f.types[v.0] == Type::Address) {
                     back[groups.find(v.0)] = true;
                 }
             }
@@ -69,6 +69,36 @@ pub fn given_back(f: &Function, regions: bool) -> Vec<bool> {
     }
     (0..f.types.len())
         .map(|v| !constant[v] && back[groups.find(v)])
+        .collect()
+}
+
+/// For each value of the function, the frame of the region its memory is built in:
+/// the value is an address that is in a group with a value that a `RegionKeep`
+/// keeps, so that it is read after the function, and the child that runs it, has
+/// ended. The first region that keeps a value of the group is the one.
+pub fn regioned(f: &Function) -> Vec<Option<Value>> {
+    let (mut groups, constant) = grouped(f);
+    let mut of_group: std::collections::HashMap<usize, Value> = std::collections::HashMap::new();
+    for i in f.blocks.iter().flat_map(|b| &b.instructions) {
+        if let Op::System {
+            call: System::RegionKeep,
+            args,
+        } = &i.op
+        {
+            for v in args[1..]
+                .iter()
+                .filter(|v| f.types[v.0] == Type::Address && !constant[v.0])
+            {
+                of_group.entry(groups.find(v.0)).or_insert(args[0]);
+            }
+        }
+    }
+    (0..f.types.len())
+        .map(|v| {
+            (f.types[v] == Type::Address && !constant[v])
+                .then(|| of_group.get(&groups.find(v)).copied())
+                .flatten()
+        })
         .collect()
 }
 

@@ -1647,40 +1647,22 @@ impl<'a> Lowering<'a> {
         );
     }
 
-    /// Opens the window in which what is built for the state of the handler whose
-    /// operation is being lowered is built in the region of that state, where
-    /// `name` is a name of that state that holds memory.
-    fn open_region(&mut self, out: &mut Out<'a>, name: &str) -> Option<(form::Value, form::Value)> {
-        let region = self.region_for(out, name)?;
-        let token = out.emit(
+    /// Says that what the assignment of `name` gives is kept in the region of the
+    /// state of the handler whose operation is being lowered, where `name` is a
+    /// name of that state that holds memory.
+    fn keep_in_region(&mut self, out: &mut Out<'a>, name: &str, kept: &[form::Value]) {
+        let Some(region) = self.region_for(out, name) else {
+            return;
+        };
+        let mut args = vec![region];
+        args.extend(kept.iter().copied());
+        out.emit(
             form::Op::System {
-                call: form::System::RegionOpen,
-                args: vec![region],
+                call: form::System::RegionKeep,
+                args,
             },
-            vec![form::Type::Int(form::Bits::B8)],
-        )[0];
-        Some((region, token))
-    }
-
-    /// Ends a window that `open_region` opened, which keeps the values that were
-    /// built in it.
-    fn close_region(
-        &mut self,
-        out: &mut Out<'a>,
-        window: Option<(form::Value, form::Value)>,
-        kept: &[form::Value],
-    ) {
-        if let Some((region, token)) = window {
-            let mut args = vec![token, region];
-            args.extend(kept.iter().copied());
-            out.emit(
-                form::Op::System {
-                    call: form::System::RegionClose,
-                    args,
-                },
-                Vec::new(),
-            );
-        }
+            Vec::new(),
+        );
     }
 
     /// Lowers the statements of a block, and gives the values of the last
@@ -1707,10 +1689,9 @@ impl<'a> Lowering<'a> {
                     // on, and a name bound to the old ones keeps them.
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
-                    let window = self.open_region(out, name);
                     let (ty, value) = self.expr(out, value, env);
                     self.defining_frame = false;
-                    self.close_region(out, window, &value);
+                    self.keep_in_region(out, name, &value);
                     // A `var` that is bound again drops the value it held.
                     self.drop_at(out, Site::Replace(addr(stmt)));
                     let made = self.made_frame.take();
@@ -1732,9 +1713,8 @@ impl<'a> Lowering<'a> {
                 } => {
                     // What is built to be kept in the state of a handler is built
                     // in the region of that state.
-                    let window = self.open_region(out, name);
                     let (_, value) = self.expr(out, value, env);
-                    self.close_region(out, window, &value);
+                    self.keep_in_region(out, name, &value);
                     // The value the name held is dropped where another takes
                     // its place.
                     self.drop_at(out, Site::Replace(addr(stmt)));
