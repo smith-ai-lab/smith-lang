@@ -73,6 +73,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         lambdas: Vec::new(),
         starters: Vec::new(),
         poll_any: None,
+        polling: HashMap::new(),
         detaches: Vec::new(),
         defining_frame: false,
         made_frame: None,
@@ -182,6 +183,9 @@ struct Lowering<'a> {
     starters: Vec<form::Starter>,
     /// The function that polls any frame, when the program polls one.
     poll_any: Option<usize>,
+    /// Whether each function, by its place, polls a frame, itself or by a
+    /// function it calls.
+    polling: HashMap<usize, bool>,
     /// Whether the value being lowered is the one a name is defined as, which a
     /// call of `__frame` may be, and the lambda it made a frame of when it was.
     defining_frame: bool,

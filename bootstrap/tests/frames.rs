@@ -34,8 +34,8 @@ pub const ONCE: &[Test] = &[
         a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused,
     ),
     (
-        "a_frame_under_a_handler_that_holds_state_is_refused_as_not_built_yet",
-        a_frame_under_a_handler_that_holds_state_is_refused_as_not_built_yet,
+        "a_frame_under_a_handler_that_holds_state_reads_and_changes_it",
+        a_frame_under_a_handler_that_holds_state_reads_and_changes_it,
     ),
     (
         "a_frame_under_a_handler_without_state_reads_what_the_handler_holds",
@@ -425,10 +425,10 @@ fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
 /// A handler of `count` that keeps state, and one that does not.
 const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T ! sense) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T ! sense) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 ! sense {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
 
-fn a_frame_under_a_handler_that_holds_state_is_refused_as_not_built_yet() {
-    let main = "use std.frames (counting, read)\n\nfn main() {\n  with counting()\n  r = read()\n}\n";
-    let error = lowered(main, HANDLERS).expect_err("a handler that holds state");
-    assert!(error.contains("not supported yet") || error.contains("not built"), "{error}");
+fn a_frame_under_a_handler_that_holds_state_reads_and_changes_it() {
+    let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() ! console, alloc {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";
+    let program = lowered(main, HANDLERS).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(String::from_utf8(run(&program).stdout).unwrap(), "1 2\n");
 }
 
 fn a_frame_under_a_handler_without_state_reads_what_the_handler_holds() {
