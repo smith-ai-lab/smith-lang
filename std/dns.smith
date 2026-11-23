@@ -1,0 +1,493 @@
+use std.bits (bit_and, shift_right, u16)
+use std.int (checked_add, checked_mul, narrow, saturating_add)
+use std.list (append, copy, push)
+
+// The messages of the domain name system, as RFC 1035 writes them, and the
+// lookup of a name that `std.net` makes with them.
+
+// An ASCII letter in lower case, which is how two names are compared: a name
+// has no case.
+fn lower(b: Byte) -> Byte {
+  if b >= 'A' and b <= 'Z' { b + 32 } else { b }
+}
+
+// The two bytes of a number, the high one first.
+fn put16(bytes: take List[Byte], n: u16) -> List[Byte] ! alloc {
+  high = bit_and(shift_right(n, 8), 255)
+  low = bit_and(n, 255)
+  push(push(bytes, high), low)
+}
+
+// The question of the name, as a message that asks for the records of a kind,
+// `1` for an address of four bytes and `28` for one of sixteen, of the class of
+// the internet, with the bit that asks the nameserver to look further for us.
+// A name is a list of labels of one to 63 bytes, with at most 253 bytes in all
+// and no empty label, and with one dot at its end that is left off; any other is
+// not asked.
+pub fn query(id: u16, name: List[Byte], kind: u16) -> Option[List[Byte]] ! alloc {
+  var size = name.size
+  if size > 0 and name[size - 1] == '.' { size = size - 1 }
+  if size == 0 or size > 253 { return .none }
+  var made: List[Byte] = []
+  made = put16(made, id)
+  made = put16(made, 256)
+  made = put16(made, 1)
+  made = put16(made, 0)
+  made = put16(made, 0)
+  made = put16(made, 0)
+  var label: List[Byte] = []
+  loop i in 0..size + 1 {
+    if i == size or name[i] == '.' {
+      if label.size == 0 or label.size > 63 { return .none }
+      made = push(made, label.size)
+      made = append(made, label)
+      label = []
+    } else {
+      label = push(label, name[i])
+    }
+  }
+  made = push(made, 0)
+  made = put16(made, kind)
+  made = put16(made, 1)
+  .some(made)
+}
+
+// The number that the two bytes at `at` are, the high one first, when both are
+// in the message.
+fn word(msg: List[Byte], at: 0..70000) -> Option[u16]
+  requires msg.size <= 60000
+{
+  if at + 1 >= msg.size { return .none }
+  .some(msg[at] * 256 + msg[at + 1])
+}
+
+// The name that starts at `at`, written with dots and in lower case, and the
+// place just after it in the message, where a pointer ends a name and the name
+// goes on elsewhere. A pointer goes only to a place before itself, a label stays
+// in the message, and a name is at most 253 bytes, so no name is read past what
+// was given, and none loops: the loop is also bounded by the size of the message.
+fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] ! alloc
+  requires msg.size <= 60000
+{
+  var pos: 0..65536 = at
+  var end: 0..65536 = 0
+  var jumped = false
+  var made: List[Byte] = []
+  loop step in 0..msg.size + 1 {
+    if pos >= msg.size { return .none }
+    n = msg[pos]
+    if n == 0 {
+      if not jumped { end = pos + 1 }
+      return .some((made, end))
+    }
+    if n >= 192 {
+      if pos + 1 >= msg.size { return .none }
+      target = bit_and(n, 63) * 256 + msg[pos + 1]
+      if target >= pos { return .none }
+      if not jumped { end = pos + 2 }
+      jumped = true
+      pos = target
+    } else if n > 63 {
+      return .none
+    } else {
+      if pos + 1 + n > msg.size { return .none }
+      if made.size > 0 { made = push(made, '.') }
+      loop k in 0..n { made = push(made, lower(msg[pos + 1 + k])) }
+      if made.size > 253 { return .none }
+      pos = pos + 1 + n
+    }
+  }
+  .none
+}
+
+// Whether the list of names holds the name.
+fn has(names: List[List[Byte]], name: List[Byte]) -> bool {
+  var found = false
+  loop i in 0..names.size { if names[i] == name { found = true } }
+  found
+}
+
+// What a nameserver answered, when the answer is believed: the code it gave,
+// whether it did not fit and was cut short, and the addresses of the kind that
+// was asked, each as four bytes or sixteen, in the order of the answer.
+pub struct Reply {
+  pub code: Byte
+  pub truncated: bool
+  pub addresses: List[List[Byte]]
+}
+
+// A record of an answer that is of the class of the internet: the name that owns
+// it, its kind, the name a `CNAME` gives, and the bytes of its data.
+struct Record {
+  owner: List[Byte]
+  kind: u16
+  target: List[Byte]
+  data: List[Byte]
+}
+
+// The name as it is compared, in lower case and with no dot at its end.
+fn compared(name: List[Byte]) -> List[Byte] ! alloc {
+  var size = name.size
+  if size > 0 and name[size - 1] == '.' { size = size - 1 }
+  var made: List[Byte] = []
+  loop i in 0..size { made = push(made, lower(name[i])) }
+  made
+}
+
+// What the message holds, when it is the answer to the question that `query`
+// made for the id, the name, and the kind: a message of at least twelve bytes,
+// that has the id and the bit that says it is an answer, to a standard query,
+// that repeats the one question, which was asked for that name and kind of the
+// internet. Any other message is none. An address is kept when the record that
+// holds it is of the kind asked and its owner is the name, or a name that a
+// `CNAME` of the answer, whatever the order of the records, gives from the name,
+// and any record that runs past the end of the message makes the whole message
+// none. A message that is cut short holds no address, since it is asked again.
+pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Option[Reply] ! alloc {
+  if msg.size < 12 or msg.size > 60000 { return .none }
+  if msg[0] * 256 + msg[1] != id { return .none }
+  if bit_and(msg[2], 128) == 0 { return .none }
+  if bit_and(msg[2], 120) != 0 { return .none }
+  code = bit_and(msg[3], 15)
+  truncated = bit_and(msg[2], 2) != 0
+  if msg[4] * 256 + msg[5] != 1 { return .none }
+  asked = compared(name)
+  (qname, after) = try name_at(msg, 12)
+  if qname != asked { return .none }
+  if try word(msg, after) != kind { return .none }
+  if try word(msg, after + 2) != 1 { return .none }
+  var addresses: List[List[Byte]] = []
+  if truncated or code != 0 { return .some(Reply(code: code, truncated: truncated, addresses: addresses)) }
+  count = msg[6] * 256 + msg[7]
+  if after + 4 > msg.size { return .none }
+  var at: 0..65536 = after + 4
+  var records: List[Record] = []
+  loop r in 0..count {
+    (owner, next) = try name_at(msg, at)
+    rtype = try word(msg, next)
+    rclass = try word(msg, next + 2)
+    length = try word(msg, next + 8)
+    start = next + 10
+    if start + length > msg.size { return .none }
+    var target: List[Byte] = []
+    if rtype == 5 {
+      (text, past) = try name_at(msg, start)
+      target = text
+    }
+    if rclass == 1 {
+      var data: List[Byte] = []
+      if length <= 16 {
+        loop k in 0..length { data = push(data, msg[start + k]) }
+      }
+      records = push(records, Record(owner: owner, kind: rtype, target: target, data: data))
+    }
+    at = start + length
+  }
+  var known: List[List[Byte]] = []
+  known = push(known, asked)
+  loop round in 0..records.size {
+    loop i in 0..records.size {
+      if records[i].kind == 5 and has(known, records[i].owner) and not has(known, records[i].target) {
+        known = push(known, copy(records[i].target))
+      }
+    }
+  }
+  var wanted: Nat = 4
+  if kind == 28 { wanted = 16 }
+  loop i in 0..records.size {
+    if records[i].kind == kind and has(known, records[i].owner) and records[i].data.size == wanted {
+      addresses = push(addresses, copy(records[i].data))
+    }
+  }
+  .some(Reply(code: code, truncated: false, addresses: addresses))
+}
+
+// The number that the bytes of the text are, written in decimal, or none.
+
+fn hex_digit(b: Byte) -> Option[Byte] {
+  if b >= 48 and b <= 57 {
+    .some(b - 48)
+  } else if b >= 97 and b <= 102 {
+    .some(b - 87)
+  } else if b >= 65 and b <= 70 {
+    .some(b - 55)
+  } else {
+    .none
+  }
+}
+
+// The four bytes of an address written as numbers with dots.
+pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] ! alloc {
+  var parts: List[Byte] = []
+  var current: Nat = 0
+  var digits: Nat = 0
+  loop i in 0..host.size {
+    c = host[i]
+    if c >= 48 and c <= 57 {
+      wide: Nat = c - 48
+      current = try checked_add(try checked_mul(current, 10), wide)
+      digits = try checked_add(digits, 1)
+      if current > 255 { return .none }
+    } else if c == 46 {
+      if digits == 0 { return .none }
+      part: Option[Byte] = narrow(current)
+      parts = push(parts, try part)
+      current = 0
+      digits = 0
+    } else {
+      return .none
+    }
+  }
+  if digits == 0 { return .none }
+  last: Option[Byte] = narrow(current)
+  parts = push(parts, try last)
+  if parts.size != 4 { return .none }
+  .some(parts)
+}
+
+// The sixteen bytes of an address written with colons, as `::1` is.
+pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] ! alloc {
+  var before: List[Byte] = []
+  var after: List[Byte] = []
+  var gap = false
+  var current: Nat = 0
+  var digits: Nat = 0
+  loop i in 0..host.size {
+    c = host[i]
+    if c == 58 {
+      if i == 0 {
+        if host.size < 2 { return .none }
+        if host[1] != 58 { return .none }
+      } else if host[i - 1] == 58 {
+        if gap { return .none }
+        gap = true
+      } else {
+        if digits == 0 { return .none }
+        maybe: Option[u16] = narrow(current)
+        group = try maybe
+        if gap {
+          after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+        } else {
+          before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+        }
+        current = 0
+        digits = 0
+      }
+    } else {
+      d = try hex_digit(c)
+      if digits == 4 { return .none }
+      wide: Nat = d
+      current = try checked_add(try checked_mul(current, 16), wide)
+      digits = try checked_add(digits, 1)
+    }
+  }
+  if digits > 0 {
+    maybe: Option[u16] = narrow(current)
+    group = try maybe
+    if gap {
+      after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+    } else {
+      before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+    }
+  } else if host.size > 0 and host[host.size - 1] == 58 {
+    if host.size < 2 { return .none }
+    if host[host.size - 2] != 58 { return .none }
+  }
+  var made = before
+  if gap {
+    if made.size + after.size > 14 { return .none }
+    missing: Nat = 16 - made.size - after.size
+    loop k in 0..missing { made = push(made, 0) }
+    loop k in 0..after.size { made = push(made, after[k]) }
+  } else {
+    if made.size != 16 { return .none }
+  }
+  .some(made)
+}
+
+// The lines of a file, each as the words of it that are not after a `#`, which
+// are the runs of bytes between spaces, tabs, and the end of a line; a line with
+// no word is left out.
+fn lines(text: List[Byte]) -> List[List[List[Byte]]] ! alloc {
+  var made: List[List[List[Byte]]] = []
+  var words: List[List[Byte]] = []
+  var word: List[Byte] = []
+  var comment = false
+  if text.size > 1000000 { return made }
+  loop i in 0..text.size + 1 {
+    var c: Byte = 10
+    if i < text.size { c = text[i] }
+    if c == 10 {
+      if word.size > 0 { words = push(words, word) }
+      word = []
+      if words.size > 0 { made = push(made, words) }
+      words = []
+      comment = false
+    } else if comment {
+    } else if c == '#' {
+      comment = true
+    } else if c == ' ' or c == 9 or c == 13 {
+      if word.size > 0 { words = push(words, word) }
+      word = []
+    } else {
+      word = push(word, c)
+    }
+  }
+  made
+}
+
+// The address that a word is, as four bytes or sixteen.
+fn address(word: List[Byte]) -> Option[List[Byte]] ! alloc {
+  match ipv4(word) {
+    .some(four) { .some(four) }
+    .none { ipv6(word) }
+  }
+}
+
+// The addresses that the text of `/etc/hosts` gives the name, in the order of
+// its lines: each line holds an address and then names, and a name is the one
+// asked when it is the same with no regard for case.
+pub fn hosts(text: List[Byte], name: List[Byte]) -> List[List[Byte]] ! alloc {
+  asked = compared(name)
+  var found: List[List[Byte]] = []
+  rows = lines(text)
+  loop r in 0..rows.size {
+    row = rows[r]
+    if row.size > 0 {
+      match address(row[0]) {
+        .some(a) {
+          loop w in 1..row.size {
+            if compared(row[w]) == asked { found = push(found, copy(a)) }
+          }
+        }
+        .none { }
+      }
+    }
+  }
+  found
+}
+
+// What `/etc/resolv.conf` says: the nameservers, as four bytes or sixteen, the
+// domains that are added to a name, how many dots a name has to have to be
+// asked as it is before any domain is added, the seconds that the whole lookup
+// of a name may wait, and how many times the question is sent in that time.
+pub struct Config {
+  pub servers: List[List[Byte]]
+  pub domains: List[List[Byte]]
+  pub dots: 0..16
+  pub seconds: 1..31
+  pub tries: 1..6
+}
+
+// The number that the digits after `from` in the word are, which ends the word,
+// or none when it has none.
+fn number_after(word: List[Byte], from: Nat) -> Option[Nat] {
+  if word.size <= from { return .none }
+  var n: Nat = 0
+  loop i in from..word.size {
+    c = word[i]
+    if c < '0' or c > '9' { return .none }
+    wide: Nat = c - 48
+    n = try checked_add(try checked_mul(n, 10), wide)
+  }
+  .some(n)
+}
+
+// Whether the word starts with the letters, which are in lower case.
+fn begins(word: List[Byte], letters: List[Byte]) -> bool {
+  if word.size < letters.size { return false }
+  var same = true
+  loop i in 0..letters.size { if word[i] != letters[i] { same = false } }
+  same
+}
+
+// Whether the word is the letters, which are in lower case.
+fn says(word: List[Byte], letters: List[Byte]) -> bool {
+  word.size == letters.size and begins(word, letters)
+}
+
+// The configuration that the text of `/etc/resolv.conf` gives: the first three
+// lines of `nameserver` that hold an address, the domains of the last `search` or
+// `domain` line, at most six, and in the lines of `options` the numbers of
+// `ndots:`, `timeout:`, and `attempts:`, at most 15, 30, and 5. A number of
+// attempts that is none is one. What is not said is the default: a nameserver
+// at 127.0.0.1, no domain, one dot, five seconds, and two tries.
+pub fn config(text: List[Byte]) -> Config ! alloc {
+  var servers: List[List[Byte]] = []
+  var domains: List[List[Byte]] = []
+  var dots: 0..16 = 1
+  var seconds: 1..31 = 5
+  var tries: 1..6 = 2
+  rows = lines(text)
+  loop r in 0..rows.size {
+    row = rows[r]
+    if row.size >= 2 {
+      key = row[0]
+      if says(key, "nameserver") and servers.size < 3 {
+        match address(row[1]) {
+          .some(a) { servers = push(servers, a) }
+          .none { }
+        }
+      } else if says(key, "domain") {
+        domains = [copy(row[1])]
+      } else if says(key, "search") {
+        var listed: List[List[Byte]] = []
+        loop w in 1..row.size {
+          if listed.size < 6 { listed = push(listed, copy(row[w])) }
+        }
+        domains = listed
+      } else if says(key, "options") {
+        loop w in 1..row.size {
+          option = row[w]
+          if begins(option, "ndots:") {
+            match number_after(option, 6) {
+              .some(n) { dots = if n > 15 { 15 } else { n } }
+              .none { }
+            }
+          } else if begins(option, "timeout:") {
+            match number_after(option, 8) {
+              .some(n) { seconds = if n > 30 { 30 } else if n == 0 { 1 } else { n } }
+              .none { }
+            }
+          } else if begins(option, "attempts:") {
+            match number_after(option, 9) {
+              .some(n) { tries = if n > 5 { 5 } else if n == 0 { 1 } else { n } }
+              .none { }
+            }
+          }
+        }
+      }
+    }
+  }
+  if servers.size == 0 { servers = push(servers, [127, 0, 0, 1]) }
+  Config(servers: servers, domains: domains, dots: dots, seconds: seconds, tries: tries)
+}
+
+// The names that are asked for the name, in order, when the configuration is
+// the one given: a name that ends in a dot is asked as it is, and no other; a name
+// with as many dots as the configuration says, or more, is asked as it is and then
+// with each domain added; any other is asked with each domain added and then as it
+// is. Each is as `query` takes it.
+pub fn candidates(name: List[Byte], conf: Config) -> List[List[Byte]] ! alloc {
+  var dots: Nat = 0
+  loop i in 0..name.size { if name[i] == '.' { dots = saturating_add(dots, 1) } }
+  var made: List[List[Byte]] = []
+  if name.size > 0 and name[name.size - 1] == '.' {
+    return [copy(name)]
+  }
+  var added: List[List[Byte]] = []
+  loop d in 0..conf.domains.size {
+    var joined = copy(name)
+    joined = push(joined, '.')
+    joined = append(joined, conf.domains[d])
+    added = push(added, joined)
+  }
+  if dots >= conf.dots {
+    made = push(made, copy(name))
+    loop d in 0..added.size { made = push(made, copy(added[d])) }
+  } else {
+    loop d in 0..added.size { made = push(made, copy(added[d])) }
+    made = push(made, copy(name))
+  }
+  made
+}

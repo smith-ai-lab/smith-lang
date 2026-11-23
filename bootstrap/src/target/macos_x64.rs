@@ -158,7 +158,10 @@ impl System for Macos {
             return;
         }
         // macOS has no `epoll`, and what is built for it is never run there.
-        if matches!(call, Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait) {
+        if matches!(
+            call,
+            Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::OpenAt | Raw::Read
+        ) {
             asm.mov64(RAX, -38i64 as u64);
             return;
         }

@@ -1,7 +1,9 @@
-use std.bits (bit_and, i64, shift_right, u16, u64)
-use std.int (checked_add, checked_mul, narrow, saturating_add, saturating_sub, wrapping_narrow)
-use std.list (push)
-use std.task (Handle, task)
+use std.bits (bit_and, bit_xor, i64, shift_right, u16, u64)
+use std.dns (Config, candidates, config, hosts, ipv4, ipv6, query, read_reply)
+use std.entropy (entropy, fill)
+use std.int (checked_add, narrow, saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
+use std.list (append, copy, freeze, push)
+use std.task (Handle, task, wait_to_read_by)
 use std.text (Text, append_ascii, finish, text)
 
 pub struct Listener {
@@ -191,107 +193,6 @@ fn failure(call: str, given: i64) -> NetError ! alloc {
   }
 }
 
-fn hex_digit(b: Byte) -> Option[Byte] {
-  if b >= 48 and b <= 57 {
-    .some(b - 48)
-  } else if b >= 97 and b <= 102 {
-    .some(b - 87)
-  } else if b >= 65 and b <= 70 {
-    .some(b - 55)
-  } else {
-    .none
-  }
-}
-
-// The four bytes of an address written as numbers with dots.
-fn ipv4(host: str) -> Option[List[Byte]] ! alloc {
-  var parts: List[Byte] = []
-  var current: Nat = 0
-  var digits: Nat = 0
-  loop i in 0..host.size {
-    c = host[i]
-    if c >= 48 and c <= 57 {
-      wide: Nat = c - 48
-      current = try checked_add(try checked_mul(current, 10), wide)
-      digits = try checked_add(digits, 1)
-      if current > 255 { return .none }
-    } else if c == 46 {
-      if digits == 0 { return .none }
-      part: Option[Byte] = narrow(current)
-      parts = push(parts, try part)
-      current = 0
-      digits = 0
-    } else {
-      return .none
-    }
-  }
-  if digits == 0 { return .none }
-  last: Option[Byte] = narrow(current)
-  parts = push(parts, try last)
-  if parts.size != 4 { return .none }
-  .some(parts)
-}
-
-// The sixteen bytes of an address written with colons, as `::1` is.
-fn ipv6(host: str) -> Option[List[Byte]] ! alloc {
-  var before: List[Byte] = []
-  var after: List[Byte] = []
-  var gap = false
-  var current: Nat = 0
-  var digits: Nat = 0
-  loop i in 0..host.size {
-    c = host[i]
-    if c == 58 {
-      if i == 0 {
-        if host.size < 2 { return .none }
-        if host[1] != 58 { return .none }
-      } else if host[i - 1] == 58 {
-        if gap { return .none }
-        gap = true
-      } else {
-        if digits == 0 { return .none }
-        maybe: Option[u16] = narrow(current)
-        group = try maybe
-        if gap {
-          after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
-        } else {
-          before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
-        }
-        current = 0
-        digits = 0
-      }
-    } else {
-      d = try hex_digit(c)
-      if digits == 4 { return .none }
-      wide: Nat = d
-      current = try checked_add(try checked_mul(current, 16), wide)
-      digits = try checked_add(digits, 1)
-    }
-  }
-  if digits > 0 {
-    maybe: Option[u16] = narrow(current)
-    group = try maybe
-    if gap {
-      after = push(push(after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
-    } else {
-      before = push(push(before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
-    }
-  } else if host.size > 0 and host[host.size - 1] == 58 {
-    if host.size < 2 { return .none }
-    if host[host.size - 2] != 58 { return .none }
-  }
-  var made = before
-  if gap {
-    if made.size + after.size > 14 { return .none }
-    missing: Nat = 16 - made.size - after.size
-    loop k in 0..missing { made = push(made, 0) }
-    loop k in 0..after.size { made = push(made, after[k]) }
-  } else {
-    if made.size != 16 { return .none }
-  }
-  .some(made)
-}
-
 // Where a socket is: the kernel's name for the family of its address, and the
 // address as the kernel reads it, which is a `sockaddr_in` of sixteen bytes for
 // a number written with dots and a `sockaddr_in6` of twenty-eight bytes for
@@ -302,46 +203,50 @@ struct Place {
   bytes: List[Byte]
 }
 
+// The address as the kernel reads it, from the bytes of an address of four or
+// of sixteen.
+fn sockaddr(address: List[Byte], port: 0..65536) -> Place ! alloc {
+  high = bit_and(shift_right(port, 8), 255)
+  low = bit_and(port, 255)
+  var made: List[Byte] = []
+  if address.size == 4 {
+    if on_macos() {
+      made = push(push(made, 16), 2)
+    } else {
+      made = push(push(made, 2), 0)
+    }
+    made = push(push(made, high), low)
+    loop k in 0..address.size { made = push(made, address[k]) }
+    loop k in 0..8 { made = push(made, 0) }
+    return Place(family: 2, bytes: made)
+  }
+  var family: Byte = 10
+  if on_macos() {
+    family = 30
+    made = push(push(made, 28), 30)
+  } else if on_windows() {
+    family = 23
+    made = push(push(made, 23), 0)
+  } else {
+    made = push(push(made, 10), 0)
+  }
+  made = push(push(made, high), low)
+  loop k in 0..4 { made = push(made, 0) }
+  loop k in 0..address.size { made = push(made, address[k]) }
+  loop k in 0..4 { made = push(made, 0) }
+  Place(family: family, bytes: made)
+}
+
 fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
   if host == "localhost" {
     return place("127.0.0.1", port)
   }
-  high = bit_and(shift_right(port, 8), 255)
-  low = bit_and(port, 255)
   match ipv4(host) {
-    .some(four) {
-      var made: List[Byte] = []
-      if on_macos() {
-        made = push(push(made, 16), 2)
-      } else {
-        made = push(push(made, 2), 0)
-      }
-      made = push(push(made, high), low)
-      loop k in 0..four.size { made = push(made, four[k]) }
-      loop k in 0..8 { made = push(made, 0) }
-      return .ok(Place(family: 2, bytes: made))
-    }
+    .some(four) { return .ok(sockaddr(four, port)) }
     .none { }
   }
   match ipv6(host) {
-    .some(sixteen) {
-      var made: List[Byte] = []
-      var family: Byte = 10
-      if on_macos() {
-        family = 30
-        made = push(push(made, 28), 30)
-      } else if on_windows() {
-        family = 23
-        made = push(push(made, 23), 0)
-      } else {
-        made = push(push(made, 10), 0)
-      }
-      made = push(push(made, high), low)
-      loop k in 0..4 { made = push(made, 0) }
-      loop k in 0..sixteen.size { made = push(made, sixteen[k]) }
-      loop k in 0..4 { made = push(made, 0) }
-      .ok(Place(family: family, bytes: made))
-    }
+    .some(sixteen) { .ok(sockaddr(sixteen, port)) }
     .none { .err(.failed("looking up a host name is not built")) }
   }
 }
@@ -548,8 +453,341 @@ fn system_stop(l: take Listener) {
   if opened { __system(9, h, 0, 0, 0, 0, 0) }
 }
 
-fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] ! alloc {
-  where = try place(host, port)
+// The bytes of a file, up to 60000 of them, or none when it cannot be opened,
+// which is how a file that is not there is read. Only Linux is asked.
+fn file_text(path: str) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  if on_macos() or on_windows() { return made }
+  var name: List[Byte] = []
+  loop i in 0..path.size { name = push(name, path[i]) }
+  name = push(name, 0)
+  fd = __system(19, -100, name, 0, 0, 0, 0)
+  if fd < 0 { return made }
+  loop round in 0..16 {
+    var buffer: List[Byte] = __reserve(4096)
+    got = __system(20, fd, buffer, 4096, 0, 0, 0)
+    if got <= 0 { break }
+    chunk = __sized(buffer, count(got))
+    if made.size + chunk.size > 60000 { break }
+    made = append(made, chunk)
+  }
+  __system(9, fd, 0, 0, 0, 0, 0)
+  made
+}
+
+// The eight bytes of a number, the low one first, as the kernel reads them.
+fn eight(n: u64) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  loop i in 0..8 { made = push(made, bit_and(shift_right(n, 8 * i), 255)) }
+  made
+}
+
+// Makes a call that waits on the socket give up after the milliseconds: a read
+// of it for 20 and a write of it for 21, which Linux gives to the level 1.
+fn wait_at_most(fd: i64, name: i64, ms: u64) ! alloc {
+  var value: List[Byte] = eight(ms / 1000)
+  value = append(value, eight((ms % 1000) * 1000))
+  __system(6, fd, 1, name, value, 16, 0)
+}
+
+// The milliseconds the clock of the system says, which only goes forward.
+fn clock() -> u64 ! alloc {
+  stamp = append(eight(0), eight(0))
+  var which: i64 = 1
+  if on_macos() { which = 6 }
+  __system(18, which, stamp, 0, 0, 0, 0)
+  if stamp.size < 16 { return 0 }
+  var seconds: u64 = 0
+  var nanoseconds: u64 = 0
+  var scale: u64 = 1
+  loop i in 0..8 {
+    low: u64 = stamp[i]
+    high: u64 = stamp[8 + i]
+    seconds = wrapping_add(seconds, wrapping_mul(low, scale))
+    nanoseconds = wrapping_add(nanoseconds, wrapping_mul(high, scale))
+    scale = wrapping_mul(scale, 256)
+  }
+  part: u64 = nanoseconds / 1000000
+  wrapping_add(wrapping_mul(seconds, 1000), part)
+}
+
+// Whether a message came from the place that was asked: the family, the port,
+// and the address of what the kernel gave, and of what `sockaddr` made.
+fn from_there(from: List[Byte], to: List[Byte]) -> bool {
+  if to.size == 16 {
+    if from.size < 8 { return false }
+    var same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
+    loop k in 4..8 { if from[k] != to[k] { same = false } }
+    return same
+  }
+  if to.size != 28 or from.size < 24 { return false }
+  var same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
+  loop k in 8..24 { if from[k] != to[k] { same = false } }
+  same
+}
+
+// What a nameserver gives over TCP, when it has to, for a question that did not
+// fit in one datagram: the message, which has its length in two bytes before it.
+fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] ! alloc, task {
+  fd = __system(0, server.family, 1, 0, 0, 0, 0)
+  if fd < 0 { return .none }
+  wait_at_most(fd, 20, ms)
+  wait_at_most(fd, 21, ms)
+  if __system(4, fd, server.bytes, server.bytes.size, 0, 0, 0) < 0 {
+    __system(9, fd, 0, 0, 0, 0, 0)
+    return .none
+  }
+  var framed: List[Byte] = []
+  framed = push(push(framed, bit_and(shift_right(question.size, 8), 255)), bit_and(question.size, 255))
+  framed = append(framed, question)
+  size = framed.size
+  packet = freeze(framed)
+  var sent: Nat = 0
+  loop attempt in 0..64 {
+    if sent >= size { break }
+    rest = packet[sent..]
+    given = __system(7, fd, rest, rest.size, no_signal(), 0, 0)
+    if given < 0 and given != -4 {
+      __system(9, fd, 0, 0, 0, 0, 0)
+      return .none
+    }
+    if given > 0 { sent = saturating_add(sent, count(given)) }
+  }
+  var got: List[Byte] = []
+  var wanted: Nat = 2
+  loop attempt in 0..64 {
+    if got.size >= wanted { break }
+    var buffer: List[Byte] = __reserve(4096)
+    var n: i64 = 0
+    if __scheduled() {
+      // A task waits for the bytes until the time is gone, and the others run.
+      n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
+      if n == would_block() {
+        wait_to_read_by(wrapping_narrow(fd), ms)
+        n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
+        if n == would_block() { n = 0 }
+      }
+    } else {
+      n = __system(8, fd, buffer, 4096, 0, 0, 0)
+    }
+    if n == -4 {
+    } else if n <= 0 {
+      __system(9, fd, 0, 0, 0, 0, 0)
+      return .none
+    } else {
+      got = append(got, __sized(buffer, count(n)))
+    }
+    if got.size >= 2 and wanted == 2 { wanted = got[0] * 256 + got[1] + 2 }
+  }
+  __system(9, fd, 0, 0, 0, 0, 0)
+  if got.size < wanted or wanted < 14 { return .none }
+  var whole: List[Byte] = []
+  loop k in 0..got.size { if k >= 2 and k < wanted { whole = push(whole, got[k]) } }
+  .some(whole)
+}
+
+// A question that is asked of the nameservers, and what is known of it: whether
+// it is answered, the addresses the answer holds, and whether a nameserver said
+// it failed.
+struct Asked {
+  id: u16
+  kind: u16
+  packet: List[Byte]
+  answered: bool
+  failed: bool
+  addresses: List[List[Byte]]
+}
+
+fn send_to(fd: i64, packet: List[Byte], server: Place) {
+  __system(7, fd, packet, packet.size, no_signal(), server.bytes, server.bytes.size)
+}
+
+// What the message, which the server sent, does to the question: it answers
+// it when it is believed, as `read_reply` says, with the code of an answer or of
+// a name that does not exist, over TCP when it was cut short; a failure of the
+// server is said, and any other code is ignored.
+fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Place, ms: u64) -> Asked ! alloc, task {
+  var made = asked
+  if made.answered { return made }
+  match read_reply(message, made.id, name, made.kind) {
+    .some(r) {
+      if r.code == 2 {
+        made.failed = true
+      } else if r.code == 0 or r.code == 3 {
+        if not r.truncated {
+          made.answered = true
+          made.addresses = r.addresses
+        } else {
+          match over_tcp(server, made.packet, ms) {
+            .some(whole) {
+              match read_reply(whole, made.id, name, made.kind) {
+                .some(t) {
+                  if not t.truncated and (t.code == 0 or t.code == 3) {
+                    made.answered = true
+                    made.addresses = t.addresses
+                  }
+                }
+                .none { }
+              }
+            }
+            .none { }
+          }
+        }
+      }
+    }
+    .none { }
+  }
+  made
+}
+
+// What the nameservers said of a name, asked for its two kinds of address at
+// once of every nameserver, over a socket that is open: the addresses of both
+// kinds, `.ok(.none)` when the name has none, and when no nameserver answered
+// in time, `failed`. The queries are sent again, to each nameserver, every
+// `seconds` divided by `tries` of the configuration, until both are answered or
+// the `seconds` are gone. An answer is believed as `read_reply` says, and only
+// from the place it was asked; a failure of the nameserver is asked again at
+// once, four times at most, and any other code is ignored. A message that was
+// cut short is asked over TCP of the nameserver that sent it.
+fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host: str) -> Result[Option[List[List[Byte]]], NetError] ! alloc, entropy, task {
+  ids = fill([0, 0, 0, 0])
+  if ids.size < 4 { return .err(.failed("lookup of {host}: no random bytes")) }
+  first: u16 = ids[0] * 256 + ids[1]
+  var second: u16 = ids[2] * 256 + ids[3]
+  if second == first { second = bit_xor(first, 1) }
+  var one = Asked(id: first, kind: 1, packet: [], answered: false, failed: false, addresses: [])
+  var two = Asked(id: second, kind: 28, packet: [], answered: false, failed: false, addresses: [])
+  match query(first, name, 1) {
+    .some(q) { one.packet = q }
+    .none { return .ok(.none) }
+  }
+  match query(second, name, 28) {
+    .some(q) { two.packet = q }
+    .none { return .ok(.none) }
+  }
+  total: u64 = conf.seconds * 1000
+  step: u64 = total / conf.tries
+  start = clock()
+  var sent: u64 = 0
+  var retries: Nat = 4
+  var failed = false
+  loop turn in 0..1000 {
+    now = clock()
+    spent = wrapping_sub(now, start)
+    if spent >= total { break }
+    if one.answered and two.answered { break }
+    if sent == 0 or spent >= wrapping_mul(sent, step) {
+      loop v in 0..servers.size {
+        if not one.answered { send_to(fd, one.packet, servers[v]) }
+        if not two.answered { send_to(fd, two.packet, servers[v]) }
+      }
+      sent = saturating_add(sent, 1)
+    }
+    next = wrapping_sub(wrapping_mul(sent, step), spent)
+    left = total - spent
+    var wait: u64 = if next > left { left } else { next }
+    if wait == 0 { wait = 1 }
+    var buffer: List[Byte] = __reserve(4800)
+    from = zeros(28)
+    length = number(28)
+    var got: i64 = 0
+    if __scheduled() {
+      // A task of a group waits for the datagram until the time to send again,
+      // and the others run meanwhile.
+      got = __system(8, fd, buffer, 4800, no_wait(), from, length)
+      if got == would_block() {
+        wait_to_read_by(wrapping_narrow(fd), wait)
+        got = __system(8, fd, buffer, 4800, no_wait(), from, length)
+      }
+    } else {
+      wait_at_most(fd, 20, wait)
+      got = __system(8, fd, buffer, 4800, 0, from, length)
+    }
+    if got >= 0 {
+      message = __sized(buffer, count(got))
+      loop v in 0..servers.size {
+        if from_there(from, servers[v].bytes) {
+          one = believe(one, message, name, servers[v], left)
+          two = believe(two, message, name, servers[v], left)
+          if one.failed or two.failed {
+            failed = true
+            one.failed = false
+            two.failed = false
+            if retries > 0 {
+              retries = retries - 1
+              if not one.answered { send_to(fd, one.packet, servers[v]) }
+              if not two.answered { send_to(fd, two.packet, servers[v]) }
+            }
+          }
+        }
+      }
+    }
+  }
+  if not one.answered or not two.answered {
+    if failed { return .err(.failed("lookup of {host}: the nameserver failed")) }
+    return .err(.failed("lookup of {host}: no nameserver answered in time"))
+  }
+  var found: List[List[Byte]] = []
+  loop a in 0..one.addresses.size { found = push(found, copy(one.addresses[a])) }
+  loop a in 0..two.addresses.size { found = push(found, copy(two.addresses[a])) }
+  if found.size == 0 { return .ok(.none) }
+  .ok(.some(found))
+}
+
+// The addresses of a name, in the order they are tried: those of `/etc/hosts`,
+// when it has the name, and otherwise those the nameservers of
+// `/etc/resolv.conf` give for the first name of the list that has one. A name
+// that has none is `unknown_host`.
+pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536) -> Result[List[List[Byte]], NetError] ! alloc, entropy, task {
+  inside = hosts(hosts_text, host)
+  if inside.size > 0 { return .ok(inside) }
+  conf = config(resolv_text)
+  var wide = false
+  loop v in 0..conf.servers.size { if conf.servers[v].size == 16 { wide = true } }
+  var family: i64 = 2
+  if wide { family = 10 }
+  var fd = __system(0, family, 2, 0, 0, 0, 0)
+  if fd < 0 and wide {
+    family = 2
+    fd = __system(0, 2, 2, 0, 0, 0, 0)
+  }
+  if fd < 0 { return .err(failure("socket", fd)) }
+  if family == 10 { dual_stack(fd) }
+  var servers: List[Place] = []
+  loop v in 0..conf.servers.size {
+    address = conf.servers[v]
+    if address.size == 4 and family == 10 {
+      var mapped: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255]
+      mapped = append(mapped, address)
+      servers = push(servers, sockaddr(mapped, port))
+    } else if address.size == 16 or family == 2 {
+      servers = push(servers, sockaddr(address, port))
+    }
+  }
+  names = candidates(host, conf)
+  loop n in 0..names.size {
+    match ask_name(fd, servers, conf, names[n], host) {
+      .ok(found) {
+        match found {
+          .some(addresses) {
+            __system(9, fd, 0, 0, 0, 0, 0)
+            return .ok(addresses)
+          }
+          .none { }
+        }
+      }
+      .err(e) {
+        __system(9, fd, 0, 0, 0, 0, 0)
+        return .err(e)
+      }
+    }
+  }
+  __system(9, fd, 0, 0, 0, 0, 0)
+  .err(.unknown_host(host))
+}
+
+// Opens a connection to the place, as a number written with dots or colons is.
+fn connect_place(where: Place) -> Result[Connection, NetError] ! alloc {
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
   if where.family != 2 { dual_stack(fd) }
@@ -559,6 +797,24 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
     return .err(failure("connect", connected))
   }
   .ok(Connection(handle: fd, opened: true))
+}
+
+fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] ! alloc, entropy, task {
+  match place(host, port) {
+    .ok(where) { return connect_place(where) }
+    .err(e) {
+      if on_macos() { return .err(e) }
+    }
+  }
+  addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53)
+  var last: NetError = .unknown_host(host)
+  loop a in 0..addresses.size {
+    match connect_place(sockaddr(addresses[a], port)) {
+      .ok(c) { return .ok(c) }
+      .err(e) { last = e }
+    }
+  }
+  .err(last)
 }
 
 fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc, task {

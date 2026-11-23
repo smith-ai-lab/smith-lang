@@ -1397,14 +1397,22 @@ fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_on
         let name = target.name();
         let bytes = compile(source.as_bytes(), target).unwrap();
         let (libraries, symbols) = pe_imports(&bytes);
-        assert_eq!(libraries, ["KERNEL32.dll", "WS2_32.dll"], "{name} links what it needs");
+        // The lookup of a host name asks for random bytes for the ids of its queries,
+        // which a program that carries `net` links `ProcessPrng` for, though a
+        // lookup is not built for Windows yet.
+        assert_eq!(
+            libraries,
+            ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll"],
+            "{name} links what it needs"
+        );
         for function in SOCKET_FUNCTIONS {
             assert!(symbols.iter().any(|s| s == function), "{name} does not import {function}");
         }
         for symbol in &symbols {
             assert!(
                 KERNEL32_THIN_WRAPPERS.contains(&symbol.as_str())
-                    || SOCKET_FUNCTIONS.contains(&symbol.as_str()),
+                    || SOCKET_FUNCTIONS.contains(&symbol.as_str())
+                    || symbol == "ProcessPrng",
                 "{name} imports {symbol}, which is neither a thin wrapper nor a socket function"
             );
         }
