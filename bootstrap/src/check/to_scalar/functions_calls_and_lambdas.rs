@@ -116,7 +116,7 @@ pub(super) fn stops(body: &[Stmt], breaks: bool, returns: bool) -> bool {
 
 /// Whether an effect is one that waits for the system: `net` and `time` of the
 /// library.
-fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
+pub(super) fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
     defs.effect_named(effect).is_some_and(|at| {
         let e = &defs.file.effects[at];
         crate::check::of_std(e.pos) && matches!(crate::check::written_name(&e.name), "net" | "time")
@@ -1363,10 +1363,7 @@ impl<'a> Lowering<'a> {
         let Some(returns) = out.returns.last() else {
             return;
         };
-        if returns.kept.is_some() || returns.of.is_some() {
-            return;
-        }
-        let gives = returns.gives.clone();
+        let (kept, in_block, gives) = (returns.kept, returns.of.is_some(), returns.gives.clone());
         let asked = out.emit(
             form::Op::System {
                 call: form::System::Cancelled,
@@ -1378,8 +1375,28 @@ impl<'a> Lowering<'a> {
         let not_asked = out.compare(form::Compare::Equal, asked, none);
         let blocks = out.switch(not_asked, 2);
         out.current = blocks[0];
-        let zeros = self.zeros(out, &gives);
-        self.leave(out, zeros);
+        if let Some(kept) = kept {
+            // In the block of a loop over a value that has a `return`: as that
+            // `return` does, the block answers `.stop` and the function gives
+            // zeros once `each` is over.
+            let types: Vec<form::Type> = out.frames[kept.frame][kept.value]
+                .values
+                .iter()
+                .map(|v| out.types[v.0])
+                .collect();
+            let zeros: Vec<form::Value> = types.into_iter().map(|t| out.zero(t)).collect();
+            let ran = self.truth(out, true);
+            out.frames[kept.frame][kept.ran].values = vec![ran];
+            out.frames[kept.frame][kept.value].values = zeros;
+            let stop = self.flow(out, true);
+            self.leave(out, vec![stop]);
+        } else if in_block {
+            let stop = self.flow(out, true);
+            self.leave(out, vec![stop]);
+        } else {
+            let zeros = self.zeros(out, &gives);
+            self.leave(out, zeros);
+        }
         // What `leave` makes to follow the exit is reached by nothing, and goes
         // where the call goes on, so that it is a block that is well formed.
         let after = out.current;
@@ -1389,6 +1406,28 @@ impl<'a> Lowering<'a> {
         });
         out.current = blocks[1];
         out.exits += 1;
+    }
+
+    /// Whether a block calls a function that carries an effect that may suspend
+    /// the task: the network, the clock, or the scheduler.
+    pub(super) fn may_suspend(&self, body: &[Stmt]) -> bool {
+        let defs = self.typed.defs;
+        crate::check::exprs(crate::check::values(body))
+            .into_iter()
+            .filter_map(|e| match e {
+                Expr::Call(c) => Some(c),
+                _ => None,
+            })
+            .any(|c| {
+                c.qualifier.is_none()
+                    && crate::check::frames::kind(c).is_none()
+                    && defs.function(c.name_pos, &c.callee).is_some_and(|g| {
+                        defs.signatures[g].effects.iter().any(|e| {
+                            of_a_waiting_effect(defs, e)
+                                || defs.effect_named(e).is_some_and(|at| defs.is_scheduler(at))
+                        })
+                    })
+            })
     }
 
     /// Lowers a copy of a function for the handlers it runs under: its own

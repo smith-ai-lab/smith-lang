@@ -5,7 +5,7 @@ description: Ending a group's block is the one way to cancel a task, and a cance
 status: partial
 built:
   - "when the block of a scheduler ends, in a native executable and under `test_scheduler`, each task that is still in its group is ended and the frame and the stack it held go back to the pool, the one started last first, so a child is ended before the task that started it, and a block that leaves children waiting for ever, 1,000 times over, asks the system for the memory it asks for 20 times over"
-  - "a task is asked to end by a bit of its frame, which each function the task is in reads from its own frame, and after each call that may suspend the task a function leaves at once when the bit is set, with zeros for what it gives, as the call it is in is left by its own callee; the scheduler does not set the bit yet, and a call inside the block of a loop over a value has no such exit"
+  - "a task is asked to end by a bit of its frame, which each function the task is in reads from its own frame, and after each call that may suspend the task a function leaves at once when the bit is set, with zeros for what it gives, as the call it is in is left by its own callee; in the block of a loop over a value the exit answers `.stop`, so the loop does not go on to the next element, and the function leaves once the loop has stopped, for a block that calls a function that carries `net`, `time`, or `task`; the scheduler does not set the bit yet"
   - "not built: a task that is running and ends at its next suspension, the ending of the values a task held, a group opened inside a task that a scheduler runs, which ends its own children, and the block waiting for the children it cancelled"
 ---
 

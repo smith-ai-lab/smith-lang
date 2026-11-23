@@ -2428,6 +2428,16 @@ impl<'a> Lowering<'a> {
     /// element. A `return` in the block is kept, and the function gives it
     /// once `each` is over.
     fn each_loop(&mut self, out: &mut Out<'a>, l: &'a Loop, o: &'a Over, env: &[Ty]) {
+        let exits = out.exits;
+        self.each_loop_blocks(out, l, o, env);
+        // A task that was asked to end in the block leaves the function once the
+        // loop has stopped.
+        if out.exits > exits {
+            self.cancel_exit(out);
+        }
+    }
+
+    fn each_loop_blocks(&mut self, out: &mut Out<'a>, l: &'a Loop, o: &'a Over, env: &[Ty]) {
         let typed = self.typed;
         let defs = typed.defs;
         let instance = typed.each_of(o, env);
@@ -2679,7 +2689,7 @@ impl<'a> Lowering<'a> {
         let go = (m.arms.iter()).find(
             |arm| matches!(&arm.pattern, Pattern::Case { name, inner: None, .. } if name == "go"),
         );
-        let go = go.filter(|_| !can_stop(&each.body))?;
+        let go = go.filter(|_| !can_stop(&each.body) && !self.may_suspend(&each.body))?;
         self.call_value_as(out, call, env, true);
         // A name the block defines is not there after it.
         let before: Vec<usize> = out.frames.iter().map(Vec::len).collect();
