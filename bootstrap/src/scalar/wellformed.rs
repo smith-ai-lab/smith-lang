@@ -594,6 +594,17 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
+                    call: System::Cancelled,
+                    args,
+                } => {
+                    let [result] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !args.is_empty() || f.types[result.0] != Type::Int(Bits::B64) {
+                        return Err(Why::WrongCount);
+                    }
+                }
+                Op::System {
                     call: System::ArenaOpen,
                     args,
                 } => {

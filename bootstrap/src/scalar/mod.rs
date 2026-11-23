@@ -45,9 +45,10 @@ mod words;
 pub use build::Builder;
 pub use common::common;
 pub use eval::{
-    Outcome, Waited, call, call_waiting, poll_through, poll_to_end, run, run_copying, run_counting,
-    run_measured, run_taking, run_with_command_line, run_with_command_line_and_errors,
-    run_with_input, run_with_limit, run_with_words, run_with_words_and_errors,
+    Outcome, Waited, call, call_waiting, poll_cancelling, poll_through, poll_to_end, run,
+    run_copying, run_counting, run_measured, run_taking, run_with_command_line,
+    run_with_command_line_and_errors, run_with_input, run_with_limit, run_with_words,
+    run_with_words_and_errors,
 };
 pub use exp_fast::table as exp_table;
 pub use fold::fold;
@@ -58,7 +59,8 @@ pub use remat::rematerialized;
 pub use remove::{WALKS, remove, remove_counting};
 pub use ryu::tables as ryu_tables;
 pub use suspend::{
-    Frames, SCHEDULER_AT, Starter, Suspended, Task, result_places, suspend, suspend_frames,
+    CANCEL, CANCEL_AT, Frames, SCHEDULER_AT, Starter, Suspended, Task, result_places, suspend,
+    suspend_frames,
 };
 pub use tail::tail;
 pub use thread::thread;
@@ -357,6 +359,15 @@ pub enum System {
     /// function that suspends and is gone once `suspend` has made that function
     /// a state machine, so no target builds it.
     Suspend,
+    /// Whether the task that runs this function has been asked to end. It takes
+    /// nothing and gives a 64-bit integer, which is 1 once the task has been
+    /// asked to end and 0 until then. It is read from the frame of the function,
+    /// into which the poll that runs the function puts what the task's own
+    /// header says, so a function that a task suspends in sees it after each
+    /// wait. It is made by the lowering where a call may suspend, and is gone
+    /// once `suspend` has run: in a function that is not a state machine it is
+    /// the constant 0, so no target builds it.
+    Cancelled,
 }
 
 /// The calls of the kernel that a program asks for with `System::Raw`, each

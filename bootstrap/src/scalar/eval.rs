@@ -392,6 +392,24 @@ pub fn poll_through(
     between: &mut dyn FnMut(&mut Vec<u64>),
     ready: &mut dyn FnMut(u64, u64) -> bool,
 ) -> (Vec<u64>, Vec<Waited>, usize) {
+    poll_cancelling(program, poll_any, task, args, state, between, ready, None)
+}
+
+/// `poll_through` for a task that is asked to end after `cancel_after` of its
+/// waits, which is before its first poll when it is 0, and never when it is
+/// none: the bit that says so is set in the header of its frame, as a scheduler
+/// sets it, and each poll after goes on from where the task waits.
+#[allow(clippy::too_many_arguments)]
+pub fn poll_cancelling(
+    program: &Program,
+    poll_any: usize,
+    task: &super::Task,
+    args: &[u64],
+    state: &mut Vec<u64>,
+    between: &mut dyn FnMut(&mut Vec<u64>),
+    ready: &mut dyn FnMut(u64, u64) -> bool,
+    cancel_after: Option<usize>,
+) -> (Vec<u64>, Vec<Waited>, usize) {
     let mut machine = alone(program, ready);
     machine.memory.resize(16, 0);
     let frame = BASE + machine.memory.len();
@@ -405,6 +423,13 @@ pub fn poll_through(
     words.extend(args.iter().map(|n| Word::Int(*n)));
     machine.call(task.start, words).ok().expect("memory");
     let mut waiting = 0;
+    let ask = |machine: &mut Machine| {
+        let at = frame - BASE + super::suspend::CANCEL_AT as usize;
+        machine.memory[at..at + 8].copy_from_slice(&super::suspend::CANCEL.to_le_bytes());
+    };
+    if cancel_after == Some(0) {
+        ask(&mut machine);
+    }
     loop {
         let mut words = vec![Word::Address(frame)];
         words.extend(state.iter().map(|n| Word::Int(*n)));
@@ -430,6 +455,9 @@ pub fn poll_through(
         waiting += 1;
         machine.wait(kind, handle);
         between(state);
+        if cancel_after == Some(waiting) {
+            ask(&mut machine);
+        }
     }
 }
 
@@ -1222,6 +1250,11 @@ impl Machine<'_> {
                         // between the wait and what follows it.
                         args[2..].iter().map(get).collect()
                     }
+                    // Nothing asks a task of the evaluator to end.
+                    Op::System {
+                        call: System::Cancelled,
+                        ..
+                    } => vec![Word::Int(0)],
                     Op::System {
                         call:
                             System::TaskMark | System::TaskRelease | System::TaskFree | System::TaskMove,
