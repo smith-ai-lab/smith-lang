@@ -951,6 +951,9 @@ struct Defs<'a> {
     /// has that module.
     frame: Option<usize>,
     task: Option<usize>,
+    /// The structs of `std.net` that hold a handle the system opened, by their
+    /// places in the file's structs, and the operation of `net` that ends each.
+    handles: Vec<(usize, &'static str)>,
     poll: Option<usize>,
     wait: Option<usize>,
     /// The prelude's `bool`, `Order`, `Option`, `Flow`, and `Result`, by their
@@ -2470,6 +2473,16 @@ fn check_file(
         problem: library_item(&file, &items, "std.deserialize", Kind::Enum, "Problem"),
         frame: library_item(&file, &items, "std.task", Kind::Struct, "Frame"),
         task: library_item(&file, &items, "std.task", Kind::Struct, "Task"),
+        handles: [
+            ("Listener", "stop"),
+            ("Connection", "close"),
+            ("Socket", "unbind"),
+        ]
+        .into_iter()
+        .filter_map(|(name, end)| {
+            library_item(&file, &items, "std.net", Kind::Struct, name).map(|s| (s, end))
+        })
+        .collect(),
         poll: library_item(&file, &items, "std.task", Kind::Enum, "Poll"),
         wait: library_item(&file, &items, "std.task", Kind::Enum, "Wait"),
         boolean: prelude_item(&file, Kind::Enum, "bool"),

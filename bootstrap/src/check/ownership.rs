@@ -288,6 +288,7 @@ fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
     let parts: Vec<Ty> = match ty {
         Ty::Param(_) => return true,
         Ty::Struct(s, _) if Some(*s) == defs.task => return true,
+        Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
         Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
         Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
             .map(|t| t.subst(args))
@@ -300,6 +301,27 @@ fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
     }
     seen.push(ty.clone());
     let any = parts.iter().any(|t| may_hold(defs, t, seen));
+    seen.pop();
+    any
+}
+
+/// Whether a value of the type holds a handle of `net`, which a type parameter
+/// does not say.
+fn holds_handle(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+    let parts: Vec<Ty> = match ty {
+        Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
+        Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+        Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
+            .map(|t| t.subst(args))
+            .collect(),
+        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+        _ => return false,
+    };
+    if seen.contains(ty) {
+        return false;
+    }
+    seen.push(ty.clone());
+    let any = parts.iter().any(|t| holds_handle(defs, t, seen));
     seen.pop();
     any
 }
@@ -445,6 +467,9 @@ struct Walk<'a> {
     /// Where each name that owned a value that may hold a child was bound,
     /// for the names a `var` is assigned to again.
     bound: HashMap<String, (Pos, usize)>,
+    /// The names bound to a value that holds a handle of `net`, with the type as
+    /// it is written, which the exit of a task that is asked to end closes.
+    handles: HashMap<String, String>,
     /// The name a loop's element stands for, which what is read of the element
     /// is read of.
     alias: HashMap<String, String>,
@@ -484,6 +509,7 @@ pub(super) fn check(
         drops,
         depth: 0,
         bound: HashMap::new(),
+        handles: HashMap::new(),
         alias: HashMap::new(),
         projecting: false,
         visible: Vec::new(),
@@ -600,6 +626,12 @@ impl<'a> Walk<'a> {
     fn track(&mut self, st: &mut State, name: &str, pos: Pos, ty: &Ty) {
         if self.lent.contains_key(name) || !self.holds(ty) {
             return;
+        }
+        if holds_handle(self.defs, ty, &mut Vec::new()) {
+            self.handles
+                .insert(name.to_string(), self.defs.text(ty, self.scope));
+        } else {
+            self.handles.remove(name);
         }
         // A name that is bound again keeps the place it was first bound at.
         let outer = (self.visible.iter())
@@ -1847,7 +1879,48 @@ impl<'a> Walk<'a> {
                 .map(Dropped::whole)
                 .collect()
         });
+        // A function that holds a handle of `net` while it may wait has the handler
+        // close it if the task is asked to end, so it must carry `net`.
+        let held = (st.as_ref()).and_then(|moved| {
+            (moved.own.iter().filter(|o| o.depth >= base)).find_map(|o| {
+                self.handles
+                    .get(&o.name)
+                    .map(|t| (o.name.clone(), t.clone()))
+            })
+        });
+        if let Some((_, ty)) = held
+            && self.may_wait(call)
+            && !self
+                .f
+                .effects
+                .iter()
+                .any(|(e, _)| super::written_name(e) == "net")
+        {
+            let message = format!(
+                "`{}` holds a `{ty}` while it may wait, so it must carry `net`",
+                self.f.name
+            );
+            if let Some(error) = self.error(call.pos, message) {
+                error.fix = Some("add `net` to its effects".to_string());
+            }
+        }
         self.record(Site::Cancel(addr(call)), owned);
+    }
+
+    /// Whether the function a call names carries `net`, `time`, or `task`, which
+    /// are the effects a task waits in.
+    fn may_wait(&self, call: &Call) -> bool {
+        let defs = self.defs;
+        call.qualifier.is_none()
+            && defs.function(call.name_pos, &call.callee).is_some_and(|f| {
+                defs.file.functions[f].effects.iter().any(|(e, _)| {
+                    defs.effect_named(e).is_some_and(|at| {
+                        let e = &defs.file.effects[at];
+                        super::of_std(e.pos)
+                            && matches!(super::written_name(&e.name), "net" | "time" | "task")
+                    })
+                })
+            })
     }
 
     /// Reads the call of a function that is called once: its first call

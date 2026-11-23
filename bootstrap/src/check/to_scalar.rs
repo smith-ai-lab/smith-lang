@@ -76,6 +76,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         polling: HashMap::new(),
         detaches: Vec::new(),
         asking: false,
+        closing: false,
         defining_frame: false,
         made_frame: None,
         through: None,
@@ -198,6 +199,9 @@ struct Lowering<'a> {
     /// Whether a child that is dropped is asked to end, as it is where a task that
     /// is asked to end leaves, and not only detached.
     asking: bool,
+    /// Whether a value that is dropped has the handles it holds ended, and not
+    /// the children, which is so only where a task that was asked to end leaves.
+    closing: bool,
     /// The types of the state of the scheduler that polls the frames, once a
     /// program polls one under a handler that holds state.
     through: Option<Vec<form::Type>>,
@@ -1409,6 +1413,74 @@ impl<'a> Lowering<'a> {
         any
     }
 
+    /// Whether a value of the type holds a handle of `net`.
+    fn holds_handle(&self, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+        let defs = self.typed.defs;
+        let parts: Vec<Ty> = match ty {
+            Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
+            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
+                .map(|t| t.subst(args))
+                .collect(),
+            Ty::Tuple(items) | Ty::Array(items, _) | Ty::List(items) | Ty::Slice(items) => {
+                items.clone()
+            }
+            _ => return false,
+        };
+        if seen.contains(ty) {
+            return false;
+        }
+        seen.push(ty.clone());
+        let any = parts.iter().any(|t| self.holds_handle(t, seen));
+        seen.pop();
+        any
+    }
+
+    /// Ends each handle of `net` that a value holds, through the handler in
+    /// force, where a task that was asked to end leaves. The handles in a list
+    /// are not ended yet.
+    fn close_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
+        let defs = self.typed.defs;
+        if !self.holds_handle(ty, &mut Vec::new()) {
+            return;
+        }
+        let parts: Vec<Ty> = match ty {
+            Ty::Struct(s, _) if let Some((_, end)) = defs.handles.iter().find(|(h, _)| h == s) => {
+                self.end_handle(out, end, ty, values);
+                return;
+            }
+            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Tuple(items) => items.clone(),
+            Ty::Array(items, n) => vec![items[0].clone(); *n as usize],
+            Ty::Enum(e, args) => {
+                let layout = self.layout(*e, args);
+                let holds: Vec<Option<Ty>> = (defs.cases[*e].iter())
+                    .map(|t| t.as_ref().map(|t| t.subst(args)))
+                    .collect();
+                let on = out.switch(values[0], holds.len());
+                let mut ends = Vec::new();
+                for (k, held) in holds.iter().enumerate() {
+                    out.current = on[k];
+                    if let Some(held) = held {
+                        let payload: Vec<form::Value> =
+                            layout.cases[k].iter().map(|&p| values[1 + p]).collect();
+                        self.close_value(out, held, &payload);
+                    }
+                    ends.push((out.current, Vec::new()));
+                }
+                out.join(&[], ends);
+                return;
+            }
+            _ => return,
+        };
+        let mut at = 0;
+        for part in &parts {
+            let size = self.size(part);
+            self.close_value(out, part, &values[at..at + size]);
+            at += size;
+        }
+    }
+
     /// Drops what the checker found dropped at the site.
     fn drop_at(&mut self, out: &mut Out<'a>, site: Site) {
         let Some(items) = self.typed.drops.at.get(&site) else {
@@ -1419,7 +1491,8 @@ impl<'a> Lowering<'a> {
                 continue;
             };
             let bound = &out.names()[at];
-            if bound.home.is_some() || self.holds_none(&bound.ty) {
+            let handles = self.asking && self.holds_handle(&bound.ty, &mut Vec::new());
+            if bound.home.is_some() || (self.holds_none(&bound.ty) && !handles) {
                 continue;
             }
             let Some((start, size, ty)) = self.part_of(&bound.ty, &item.part) else {
@@ -1427,6 +1500,11 @@ impl<'a> Lowering<'a> {
             };
             let values = bound.values[start..start + size].to_vec();
             self.drop_except(out, &ty, &values, &item.except);
+            if handles {
+                self.closing = true;
+                self.drop_except(out, &ty, &values, &item.except);
+                self.closing = false;
+            }
         }
     }
 
@@ -1503,6 +1581,10 @@ impl<'a> Lowering<'a> {
     /// Detaches each child a value holds, as it is dropped, with the function
     /// the compiler writes for its type.
     fn drop_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
+        if self.closing {
+            self.close_value(out, ty, values);
+            return;
+        }
         if self.holds_none(ty) {
             return;
         }

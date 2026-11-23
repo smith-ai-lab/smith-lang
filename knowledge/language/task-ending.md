@@ -2,7 +2,10 @@
 type: specification
 title: How a task ends
 description: Three things end a task before its work is done, and what is dropped and closed when one does.
-status: planned
+status: partial
+built:
+  - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, or an enum, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
+  - "not built: a failure of a task, the handles of a list, and the handles of `fs`"
 ---
 
 # How a task ends
@@ -33,6 +36,22 @@ fn header(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
 ```
 
 `open` and `read` are those of [`std.fs`](../library/fs.md). If the task running `header` ends in the middle of `read`, the `fs` handler closes `f`, and `header` does not return.
+
+## A handle held while a task may wait
+
+A task that is cancelled while it waits is ended by the handlers: each handle of `net` that the function it is in owns is closed through the handler in force, a test's handler included, once. So a function that owns a handle, or a value that holds one, while it calls something that may wait must carry `net`, and one that does not is refused where it is compiled.
+
+```
+use std.net (Connection)
+use std.time (sleep, time)
+
+fn relay(c: take Connection) -> Connection ! time {
+  sleep(10)
+  c
+}
+```
+
+`relay` is refused at `sleep`: "`relay` holds a `Connection` while it may wait, so it must carry `net`", and the fix is "add `net` to its effects". A handle that a function has given to another function, or moved into a child, is not owned there, so it is closed once, by the task that owns it.
 
 ## Who ends a task
 
