@@ -6,7 +6,7 @@
 //! ends where the next item starts. Brackets are counted outside strings,
 //! characters, and comments. A source that does not follow this, or has
 //! anything at the top that is not a `use`, a `fn`, a `struct`, an `enum`, a
-//! `trait`, or an `impl`, is not divided, and is read whole.
+//! `trait`, an `effect`, a `without`, or an `impl`, is not divided, and is read whole.
 
 /// What an item is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -16,6 +16,8 @@ pub enum Kind {
     Struct,
     Enum,
     Trait,
+    Effect,
+    Without,
     Impl,
 }
 
@@ -106,6 +108,8 @@ fn head(source: &str, at: usize, end: usize, line: usize) -> Option<Piece> {
         "struct" => Kind::Struct,
         "enum" => Kind::Enum,
         "trait" => Kind::Trait,
+        "effect" => Kind::Effect,
+        "without" => Kind::Without,
         "impl" => Kind::Impl,
         _ => return None,
     };
@@ -135,12 +139,12 @@ fn head(source: &str, at: usize, end: usize, line: usize) -> Option<Piece> {
             }
         }
     }
-    let name = if kind == Kind::Use {
+    let name = if matches!(kind, Kind::Use | Kind::Without) {
         (0, 0)
     } else {
         word(&mut i)
     };
-    if name.0 == name.1 && kind != Kind::Use {
+    if name.0 == name.1 && !matches!(kind, Kind::Use | Kind::Without) {
         return None;
     }
     Some(Piece {

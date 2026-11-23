@@ -278,6 +278,11 @@ pub(super) fn withouts(defs: &Defs, errors: &mut Vec<Error>) -> Vec<(usize, Def)
             Def::Struct(s)
         } else if let Some(e) = defs.enum_at(w.ty_pos, ty) {
             Def::Enum(e)
+        } else if of_std(w.pos) && !defs.whole {
+            // A module of the library is read for what a program reaches, so
+            // the type may be one that it does not reach. A check of the
+            // library reads each module whole.
+            continue;
         } else {
             errors.push(if TYPES_NOT_BUILT.contains(&ty) {
                 Error::unsupported(w.ty_pos, &format!("the type `{ty}`"))
