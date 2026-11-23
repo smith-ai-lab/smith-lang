@@ -835,6 +835,34 @@ impl<'a> Lowering<'a> {
             }
             return self.provided_answer(out, call, instance, gives, env);
         };
+        let params = defs.params(instance.template);
+        let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
+        for (arg, at) in call
+            .args
+            .iter()
+            .zip(params_of(&params, &call.args).expect("checked"))
+        {
+            args[at] = Some(self.argument(out, &arg.value, &params[at], env));
+        }
+        for (at, default) in defs.left_out(call) {
+            args[at] = Some(self.argument(out, default, &params[at], &[]));
+        }
+        let args = args.into_iter().map(|a| a.expect("given")).collect();
+        self.through_handler(out, (handler, effect, at), instance, args, gives)
+    }
+
+    /// Runs the function the handler gives for an operation, in place, with the
+    /// arguments made, under the handlers that were in force outside it.
+    pub(super) fn through_handler(
+        &mut self,
+        out: &mut Out<'a>,
+        (handler, effect, at): (usize, usize, usize),
+        instance: Instance,
+        args: Vec<Bound<'a>>,
+        gives: Ty,
+    ) -> (Ty, Vec<form::Value>) {
+        let typed = self.typed;
+        let defs = typed.defs;
         let func = match out.handlers[handler].operations[at].clone() {
             // The type parameters an operation has of its own are those of the
             // call, after the type parameters of the function the handler is
@@ -849,19 +877,6 @@ impl<'a> Lowering<'a> {
             }
             func => func,
         };
-        let params = defs.params(instance.template);
-        let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
-        for (arg, at) in call
-            .args
-            .iter()
-            .zip(params_of(&params, &call.args).expect("checked"))
-        {
-            args[at] = Some(self.argument(out, &arg.value, &params[at], env));
-        }
-        for (at, default) in defs.left_out(call) {
-            args[at] = Some(self.argument(out, default, &params[at], &[]));
-        }
-        let args = args.into_iter().map(|a| a.expect("given")).collect();
         if out.handlers[handler].def.is_none() {
             let (effect, operations) = (
                 out.handlers[handler].effect,
@@ -891,6 +906,60 @@ impl<'a> Lowering<'a> {
             result.clear();
         }
         (gives, result)
+    }
+
+    /// Ends a handle of `net`, as the program that owns it would by calling
+    /// `end`, which is `close`, `stop`, or `unbind`: through the handler in force,
+    /// or the function the library answers it with where none is.
+    pub(super) fn end_handle(
+        &mut self,
+        out: &mut Out<'a>,
+        end: &str,
+        ty: &Ty,
+        values: &[form::Value],
+    ) {
+        let defs = self.typed.defs;
+        let f = (0..defs.file.functions.len())
+            .find(|&f| {
+                let g = &defs.file.functions[f];
+                g.name == end
+                    && defs.is_operation(f)
+                    && crate::check::of_std(g.pos)
+                    && crate::check::written_name(&g.effects[0].0) == "net"
+            })
+            .expect("an operation of `net` that ends the handle");
+        let instance = Instance {
+            template: Template::Free(f),
+            args: Vec::new(),
+        };
+        let (effect, at) = defs.operation_of(f);
+        let (name, _) = defs.params(instance.template).remove(0);
+        let arg = Bound {
+            name,
+            ty: ty.clone(),
+            values: values.to_vec(),
+            func: None,
+            home: None,
+        };
+        match out.handlers.iter().rposition(|h| h.effect == effect) {
+            Some(handler) => {
+                self.through_handler(out, (handler, effect, at), instance, vec![arg], Ty::Nothing);
+            }
+            None => {
+                let through = defs
+                    .provided(f)
+                    .and_then(|p| p.through)
+                    .expect("the library answers the end of a handle");
+                let g = defs
+                    .function(defs.file.functions[f].pos, through)
+                    .expect("the module of the effect has the function that answers it");
+                let instance = Instance {
+                    template: Template::Free(g),
+                    args: Vec::new(),
+                };
+                self.run_func(out, Func::Named(instance), vec![arg], &Ty::Nothing, false);
+            }
+        }
     }
 
     /// Lowers a call of an operation that no handler answers and that the
