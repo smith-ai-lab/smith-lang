@@ -834,18 +834,20 @@ pub fn take_with(pool_take: Option<usize>) -> Function {
     f.ret(vec![after, rest, start]);
     f.at(ask);
     let (asked, old_end, old_link, patch) = (a[0], a[1], a[2], a[3]);
+    // What the system or the pool gives, as the order of the instructions was
+    // when only the system gave it.
+    let from_pool = match (pool_take, pool) {
+        (Some(from_pool), Some(pool)) => Some(f.call(from_pool, vec![pool, asked], &[NEXT, LEFT])),
+        _ => None,
+    };
+    let start = match &from_pool {
+        Some(got) => got[0],
+        None => f.allocate(asked),
+    };
     let trailer = runtime::int(&mut f, TRAILER);
-    let (start, holds_now) = match (pool_take, pool) {
-        (Some(from_pool), Some(pool)) => {
-            let got = f.call(from_pool, vec![pool, asked], &[NEXT, LEFT]);
-            let holds_now = f.binary(Binary::Sub, got[1], trailer);
-            (got[0], holds_now)
-        }
-        _ => {
-            let start = f.allocate(asked);
-            let holds_now = f.binary(Binary::Sub, asked, trailer);
-            (start, holds_now)
-        }
+    let holds_now = match &from_pool {
+        Some(got) => f.binary(Binary::Sub, got[1], trailer),
+        None => f.binary(Binary::Sub, asked, trailer),
     };
     let new_end = f.binary(Binary::Add, start, holds_now);
     f.store(new_end, holds_now);
