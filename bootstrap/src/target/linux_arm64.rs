@@ -144,7 +144,7 @@ impl System for Linux {
             Raw::SendTo => 206,
             Raw::RecvFrom => 207,
             Raw::SetSockOpt => 208,
-            Raw::Close => 57,
+            Raw::Close | Raw::CloseQueue => 57,
             Raw::Read => 63,
             Raw::GetRandom => 278,
             Raw::OpenAt => 56,
