@@ -144,7 +144,7 @@ impl System for Linux {
             Raw::SendTo => 206,
             Raw::RecvFrom => 207,
             Raw::SetSockOpt => 208,
-            Raw::Close => 57,
+            Raw::Close | Raw::CloseQueue => 57,
             Raw::NanoSleep => 101,
             Raw::ClockGetTime | Raw::Now => 113,
             Raw::Kqueue | Raw::Kevent => {

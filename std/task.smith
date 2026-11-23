@@ -815,6 +815,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         }
       }
       cancel_rest(first, top)
+      if ep >= 0 { __system(19, ep, 0, 0, 0, 0, 0) }
       result: T = __result(root)
       result
     },

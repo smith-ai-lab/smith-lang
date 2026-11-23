@@ -416,6 +416,11 @@ pub enum Raw {
     /// machine, so it asks nothing of a machine that has no clock, where it
     /// gives minus 38 and is never run, as `EpollWait` does.
     Now,
+    /// `close(descriptor)` of the queue a scheduler waits with, as `Close` is
+    /// for a socket. It is built into the scheduler for every machine, so it
+    /// asks nothing of a machine that has no network, where it gives minus 38
+    /// and is never run.
+    CloseQueue,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.

@@ -119,7 +119,7 @@ impl System for Linux {
             Raw::Listen => 50,
             Raw::GetSockName => 51,
             Raw::SetSockOpt => 54,
-            Raw::Close => 3,
+            Raw::Close | Raw::CloseQueue => 3,
             Raw::NanoSleep => 35,
             Raw::ClockGetTime | Raw::Now => 228,
             Raw::Kqueue | Raw::Kevent => {
