@@ -32,6 +32,10 @@ pub const ONCE: &[Test] = &[
         "a_target_that_has_no_network_refuses_a_server_naming_itself",
         a_target_that_has_no_network_refuses_a_server_naming_itself,
     ),
+    (
+        "the_server_the_compiler_builds_is_the_one_the_tests_that_depend_on_the_machine_note",
+        the_server_the_compiler_builds_is_the_one_the_tests_that_depend_on_the_machine_note,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -107,8 +111,25 @@ fn program(target: Target) -> &'static [u8] {
     static ARM64: OnceLock<Vec<u8>> = OnceLock::new();
     let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
     cell.get_or_init(|| {
-        targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+        if targets::fingerprinting() {
+            targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+        } else {
+            built_by_the_compiler(target)
+        }
     })
+}
+
+/// The program as the compiler's executable builds it for `target`, which is
+/// the same bytes `targets::build` gives. Building it in the test would spend
+/// 200 ms of the thread's time of the first test that asks for it, which is
+/// most of what a test of this file computes for, and a program the test
+/// starts has not spent the time of its own.
+fn built_by_the_compiler(target: Target) -> Vec<u8> {
+    let dir = folder(&format!("http_listen_{}", target.name()));
+    std::fs::write(dir.join("server.smith"), PROGRAM).unwrap();
+    let built = smith(&dir, &["build", "--target", target.name(), "server.smith"]);
+    assert!(built.status.success(), "{}", stderr(&built));
+    std::fs::read(dir.join(target.executable_name("server"))).unwrap()
 }
 
 /// Notes the program for each target a fingerprint is made for, and says
@@ -116,6 +137,15 @@ fn program(target: Target) -> &'static [u8] {
 fn runs(target: Target) -> bool {
     targets::record(target, &[program(target)]);
     !targets::fingerprinting()
+}
+
+/// The tests that run the server note the executable `built_by_the_compiler`
+/// gives, and a fingerprint is made of the one `targets::build` gives, so they
+/// are one.
+fn the_server_the_compiler_builds_is_the_one_the_tests_that_depend_on_the_machine_note() {
+    let target = Target::LinuxX64;
+    let direct = targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(direct == built_by_the_compiler(target), "the two executables are not the same bytes");
 }
 
 /// A program that has been started, which is killed when the test ends,
