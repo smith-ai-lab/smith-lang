@@ -410,6 +410,28 @@ impl<'a> Lowering<'a> {
     }
 
     /// Lowers a list written out, `[]` or `[a, b, c]`.
+    /// The scalars of a value of type `from`, as the scalars of the type `to`
+    /// that it is held as, a whole number being the width of its range where
+    /// it is made and the width of the range of what holds it where it is kept.
+    pub(super) fn held_as(
+        &mut self,
+        out: &mut Out<'a>,
+        from: &Ty,
+        to: &Ty,
+        values: Vec<form::Value>,
+    ) -> Vec<form::Value> {
+        let signed = matches!(from, Ty::Int(t) if t.min() < 0);
+        let wanted = self.scalars(to);
+        (values.into_iter().zip(wanted))
+            .map(|(value, want)| match (out.types[value.0], want) {
+                (form::Type::Int(have), form::Type::Int(bits)) if have != bits => {
+                    out.resize(signed, value, bits)
+                }
+                _ => value,
+            })
+            .collect()
+    }
+
     pub(super) fn list_literal(
         &mut self,
         out: &mut Out<'a>,
@@ -418,11 +440,14 @@ impl<'a> Lowering<'a> {
         env: &[Ty],
     ) -> (Ty, Vec<form::Value>) {
         let ty = self.typed.type_of(expr, env);
-        if matches!(ty, Ty::Array(..)) {
-            let values = items
-                .iter()
-                .flat_map(|item| self.expr(out, item, env).1)
-                .collect();
+        if let Ty::Array(element, _) = &ty {
+            // An item is typed by what it is written as, and the array by the
+            // range of all its items, so an item is held as an element is.
+            let mut values = Vec::new();
+            for item in items {
+                let (item_ty, held) = self.expr(out, item, env);
+                values.extend(self.held_as(out, &item_ty, &element[0], held));
+            }
             return (ty, values);
         }
         let scalars = self.element(&ty);

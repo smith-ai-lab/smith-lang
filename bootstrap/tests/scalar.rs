@@ -28,6 +28,43 @@ pub const ONCE: &[Test] = &[
         every_lowered_program_is_well_formed,
     ),
     (
+        "an_array_of_literals_is_held_as_the_range_of_its_elements_and_is_well_formed",
+        an_array_of_literals_is_held_as_the_range_of_its_elements_and_is_well_formed,
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_1_of_8",
+        || every_case_lowers_to_a_well_formed_program(0),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_2_of_8",
+        || every_case_lowers_to_a_well_formed_program(1),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_3_of_8",
+        || every_case_lowers_to_a_well_formed_program(2),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_4_of_8",
+        || every_case_lowers_to_a_well_formed_program(3),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_5_of_8",
+        || every_case_lowers_to_a_well_formed_program(4),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_6_of_8",
+        || every_case_lowers_to_a_well_formed_program(5),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_7_of_8",
+        || every_case_lowers_to_a_well_formed_program(6),
+    ),
+    (
+        "every_case_lowers_to_a_well_formed_program_part_8_of_8",
+        || every_case_lowers_to_a_well_formed_program(7),
+    ),
+
+    (
         "the_scalar_form_prints_what_the_generators_say",
         the_scalar_form_prints_what_the_generators_say,
     ),
@@ -357,6 +394,37 @@ pub fn every_function() -> Vec<&'static scalar::Function> {
         .into_iter()
         .flat_map(|(_, s)| &s.functions)
         .collect()
+}
+
+/// A whole number is held at the width of its range, and a call, a result, a
+/// return, and a jump are given a value of the type they take. The elements of
+/// `[1, 2, 3]` are of the range `1..3`, and each literal was held at 64 bits,
+/// so `repr(xs[0])`, of `repr[u8]`, was given a number of 64 bits for one of 8,
+/// as the programs of the pages of WebAssembly that did not load were.
+fn an_array_of_literals_is_held_as_the_range_of_its_elements_and_is_well_formed() {
+    for source in [
+        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
+        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
+        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [-5, 100, 3]\n  ys = [300, 65000, 1]\n  print(repr(xs[0]))\n  print(repr(ys[1]))\n}\n",
+    ] {
+        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!(scalar::check(&program), Ok(()), "{source}");
+    }
+}
+
+/// The form every case that builds lowers to is well formed, in parts, as each
+/// is lowered by its own test and a case takes some of the time a test has.
+fn every_case_lowers_to_a_well_formed_program(part: usize) {
+    for source in crate::targets::case_files().iter().skip(part).step_by(8) {
+        if !source.with_extension("out").exists() {
+            continue;
+        }
+        let text = std::fs::read(source).unwrap();
+        let program = lower(&text).unwrap_or_else(|e| panic!("{}: {e:?}", source.display()));
+        if let Err(malformed) = scalar::check(&program) {
+            panic!("{} is not well formed: {malformed:?}", source.display());
+        }
+    }
 }
 
 fn every_lowered_program_is_well_formed() {
