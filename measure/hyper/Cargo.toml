@@ -1,0 +1,23 @@
+[package]
+name = "hyper_compare"
+version = "0.0.0"
+edition = "2021"
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread","net","macros","io-util"] }
+hyper = { version = "1", features = ["server","http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "load"
+path = "src/bin/load.rs"
+
+[profile.release]
+opt-level = 3
+
+[workspace]
