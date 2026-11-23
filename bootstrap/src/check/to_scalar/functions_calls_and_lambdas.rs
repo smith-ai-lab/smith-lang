@@ -1375,6 +1375,13 @@ impl<'a> Lowering<'a> {
         let not_asked = out.compare(form::Compare::Equal, asked, none);
         let blocks = out.switch(not_asked, 2);
         out.current = blocks[0];
+        // What the function owns that may hold a child is asked to end, as the
+        // children of a task that ends are.
+        if let Some(&site) = out.sites.last() {
+            let before = std::mem::replace(&mut self.asking, true);
+            self.drop_at(out, crate::check::ownership::Site::Cancel(site));
+            self.asking = before;
+        }
         if let Some(kept) = kept {
             // In the block of a loop over a value that has a `return`: as that
             // `return` does, the block answers `.stop` and the function gives

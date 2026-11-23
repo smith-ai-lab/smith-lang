@@ -225,6 +225,9 @@ pub(super) enum Site {
     Arm(usize),
     /// Where a loop over a range ends because the range does.
     Done(usize),
+    /// After a call, where the task may be asked to end and the function leaves
+    /// at once: what the function owns and has not handed on.
+    Cancel(usize),
 }
 
 /// Where the values that may hold a child task are dropped, which the
@@ -1836,6 +1839,15 @@ impl<'a> Walk<'a> {
         if !constructs && value_fn.is_none() && params.is_some() {
             self.generic(call, &given);
         }
+        // Where the call is left because the task was asked to end, the function
+        // ends what it owns, as it does where it returns.
+        let base = self.inside.last().map_or(0, |f| f.depth);
+        let owned: Vec<Dropped> = st.as_ref().map_or_else(Vec::new, |moved| {
+            (moved.own.iter().filter(|o| o.depth >= base))
+                .map(Dropped::whole)
+                .collect()
+        });
+        self.record(Site::Cancel(addr(call)), owned);
     }
 
     /// Reads the call of a function that is called once: its first call
