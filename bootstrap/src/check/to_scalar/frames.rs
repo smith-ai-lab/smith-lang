@@ -543,6 +543,26 @@ impl<'a> Lowering<'a> {
                 out.handlers[i].def = Some(Rc::new(def));
             }
         }
+        // What a handler's operation stores in its state is built where the
+        // operation runs, which is the stack of the child that called it, and
+        // is given back when the child ends, so state that holds memory is not
+        // built until it has a region of its own.
+        if out.handlers.iter().any(|h| {
+            !self.typed.defs.is_scheduler(h.effect)
+                && h.def.as_deref().is_some_and(|def| {
+                    (def.frames.iter()).any(|(_, names)| {
+                        names
+                            .iter()
+                            .any(|c| c.assigned && c.scalars.contains(&form::Type::Address))
+                    })
+                })
+        }) {
+            self.errors.push(Error::unsupported(
+                call.pos,
+                "a lambda made a frame under a handler whose state holds memory,",
+            ));
+            return (frame.clone(), self.zeros(out, &frame));
+        }
         // A handler that holds state and is installed under the scheduler that
         // runs the child is one the scheduler's own code does not run under, so
         // the poll it makes is not given that state.

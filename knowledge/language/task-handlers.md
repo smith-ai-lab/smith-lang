@@ -6,7 +6,7 @@ status: partial
 built:
   - "a child runs under the handlers in force where it was spawned when a handler holds no state, as `fixed` of [Handlers](handlers.md) holds a value it only reads, so every child reads the one value"
   - "a child under a handler that holds state, as `two_readings` and `two_pairs` of this page are under `fake_clock`: the handler's state goes through each poll, so each child reads and changes the one state"
-  - "not built: a handler that holds state installed under its scheduler, an operation of a handler that waits or locks, and the operations of a handler that run one at a time when they wait, until the region of [the compiler](../compiler.md#effects) is"
+  - "not built: a handler whose state holds memory, as a list that an operation pushes onto, which is refused until the state has a region of its own, a handler that holds state installed under its scheduler, an operation of a handler that waits or locks, and the operations of a handler that run one at a time when they wait, until the region of [the compiler](../compiler.md#effects) is"
 ---
 
 # Handlers and tasks
