@@ -48,6 +48,10 @@ pub const ONCE: &[Test] = &[
         tasks_that_wait_for_handles_run_in_the_order_the_test_makes_the_handles_ready_for_every_seed,
     ),
     (
+        "a_function_that_carries_only_the_effect_of_a_handler_that_holds_state_and_loops_runs_under_a_scheduler_of_a_test",
+        a_function_that_carries_only_the_effect_of_a_handler_that_holds_state_and_loops_runs_under_a_scheduler_of_a_test,
+    ),
+    (
         "a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet",
         a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet,
     ),
@@ -138,6 +142,18 @@ fn a_task_that_waits_for_another_runs_again_after_that_one_has_ended() {
             "{USES}fn child() -> u64 ! console, task {{\n  print(\"before\")\n  g = spawn {{\n    print(\"inside\")\n    v: u64 = 7\n    v\n  }}\n  v = join(g)\n  print(\"after\")\n  v\n}}\n\nfn run() -> u64 ! console, alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ child() }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
         );
         assert_eq!(run(&source), "before\ninside\nafter\n7\n", "seed {seed}");
+    }
+}
+
+/// A function that carries the effect of a handler and not the scheduler's
+/// is built under that handler alone, where its loop takes the state of that
+/// handler, which is no second scheduler's, and gives what it does under any group.
+fn a_function_that_carries_only_the_effect_of_a_handler_that_holds_state_and_loops_runs_under_a_scheduler_of_a_test() {
+    for seed in [0u64, 1, 2, 5] {
+        let source = format!(
+            "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T ! clock) -> T {{\n  var ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn many() -> u64 ! clock {{\n  var last: u64 = 0\n  loop i in 0..20 {{ last = now() }}\n  last\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with fake_clock()\n  with test_scheduler({seed})\n  a = spawn {{ many() }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+        );
+        assert_eq!(run(&source), "20\n", "for seed {seed}");
     }
 }
 

@@ -78,6 +78,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         defining_frame: false,
         made_frame: None,
         through: None,
+        through_scheduled: false,
         errors: Vec::new(),
     };
     lowering.add(Body::Copy(start));
@@ -196,6 +197,8 @@ struct Lowering<'a> {
     /// The types of the state of the scheduler that polls the frames, once a
     /// program polls one under a handler that holds state.
     through: Option<Vec<form::Type>>,
+    /// Whether `through` was found where a scheduler is in force.
+    through_scheduled: bool,
     /// What is not built yet and a program uses.
     errors: Vec<Error>,
     /// The place of each function of the runtime, which are few: a kind of
