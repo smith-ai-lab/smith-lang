@@ -1100,7 +1100,7 @@ const THIN_WRAPPERS: &[&str] = &[
 
 /// The wrappers a program that uses the network or the clock adds, which are
 /// the kernel's calls by the names `libSystem` gives them, and none of the
-/// C library's.
+/// C library's, with `kqueue` and `kevent`, which the scheduler waits with.
 const NET_AND_TIME_WRAPPERS: &[&str] = &[
     "_socket",
     "_bind",
@@ -1114,6 +1114,8 @@ const NET_AND_TIME_WRAPPERS: &[&str] = &[
     "_close",
     "_clock_gettime",
     "_nanosleep",
+    "_kqueue",
+    "_kevent",
 ];
 
 /// The same, by the names `KERNEL32.dll` gives them.

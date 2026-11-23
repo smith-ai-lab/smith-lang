@@ -1543,7 +1543,9 @@ impl Lowering<'_> {
             System::Raw(
                 crate::scalar::Raw::EpollCreate1
                 | crate::scalar::Raw::EpollCtl
-                | crate::scalar::Raw::EpollWait,
+                | crate::scalar::Raw::EpollWait
+                | crate::scalar::Raw::Kqueue
+                | crate::scalar::Raw::Kevent,
             ) => {
                 self.code.i64_const(-38);
                 self.set(results[0]);

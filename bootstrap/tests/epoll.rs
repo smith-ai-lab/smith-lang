@@ -151,9 +151,13 @@ fn main(args: List[str]) ! console, net, alloc {
 }
 "#;
 
-/// The targets that run the program: those of Linux, where `epoll` is built.
+/// The targets that run the program: those of Linux, which waits in `epoll`, and
+/// those of macOS, which waits in `kqueue`.
 fn linux() -> Vec<Target> {
-    targets::runnable().into_iter().filter(|t| t.name().starts_with("linux")).collect()
+    targets::runnable()
+        .into_iter()
+        .filter(|t| t.name().starts_with("linux") || t.name().starts_with("macos"))
+        .collect()
 }
 
 fn program(source: &'static str, target: Target) -> Vec<u8> {
@@ -229,9 +233,13 @@ impl Started {
 
     /// The threads the server has.
     fn threads(&self) -> usize {
-        let status = std::fs::read_to_string(format!("/proc/{}/status", self.child.id())).unwrap();
-        let line = status.lines().find(|l| l.starts_with("Threads:")).expect("a line of threads");
-        line["Threads:".len()..].trim().parse().unwrap()
+        if let Ok(status) = std::fs::read_to_string(format!("/proc/{}/status", self.child.id())) {
+            let line = status.lines().find(|l| l.starts_with("Threads:")).expect("a line of threads");
+            return line["Threads:".len()..].trim().parse().unwrap();
+        }
+        // macOS has no `/proc`: `ps -M` lists a thread to a line after its heading.
+        let listed = Command::new("ps").args(["-M", "-p", &self.child.id().to_string()]).output().unwrap();
+        String::from_utf8_lossy(&listed.stdout).lines().count() - 1
     }
 }
 
