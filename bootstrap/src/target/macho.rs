@@ -73,7 +73,7 @@ pub fn slot(call: Raw) -> usize {
         Raw::SendTo => 13,
         Raw::RecvFrom => 14,
         Raw::Close => 15,
-        Raw::ClockGetTime => 16,
+        Raw::ClockGetTime | Raw::Now => 16,
         Raw::NanoSleep => 17,
         Raw::Kqueue => 18,
         Raw::Kevent => 19,

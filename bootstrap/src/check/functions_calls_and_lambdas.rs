@@ -761,7 +761,7 @@ impl<'a> Checker<'a> {
             let sig = &defs.signatures[f];
             // `quiet` waits for tasks that no handle names, which the language
             // does not give a program: it is for the servers of the library.
-            if name == "quiet"
+            if matches!(name, "quiet" | "timed_out" | "limit")
                 && defs.is_operation(f)
                 && of_std(defs.file.functions[f].pos)
                 && !of_std(call.pos)
@@ -769,7 +769,7 @@ impl<'a> Checker<'a> {
                 self.errors.push(
                     Error::new(
                         call.name_pos,
-                        "`quiet` is for the library, since a program waits for a task by its handle",
+                        format!("`{name}` is for the library, since a program waits for a task by its handle"),
                     )
                     .with_fix("`join` the handle of each task that is waited for"),
                 );

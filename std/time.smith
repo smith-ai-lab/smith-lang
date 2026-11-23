@@ -1,6 +1,7 @@
 use std.bits (bit_and, shift_right, u64)
 use std.int (wrapping_add, wrapping_mul)
 use std.list (push)
+use std.task (task, wait_for_time)
 
 pub effect time {
   pub fn now() -> u64
@@ -42,7 +43,13 @@ fn system_now() -> u64 ! alloc {
   milliseconds(word(stamp, 0), word(stamp, 8))
 }
 
-fn system_sleep(ms: u64) ! alloc {
+fn system_sleep(ms: u64) ! alloc, task {
+  // A task that a scheduler runs waits for the time and lets the others run, and
+  // any other call waits on the thread.
+  if __scheduled() {
+    wait_for_time(ms)
+    return
+  }
   var left = ms
   loop attempt in 0..64 {
     seconds: u64 = left / 1000
