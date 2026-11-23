@@ -178,6 +178,17 @@ The compiler is lazy. It starts from the roots and does only the work they reach
 - Code that no root reaches is not compiled, so it can hold an error while a single test runs. That lets a new design be tried with one test before every caller is updated. The error surfaces when a command whose roots reach it is run.
 - `grad(f)` needs the body of `f` and of everything it calls. Its type depends only on the signature of `f`, so checking stays local, and whether `f` can be differentiated is decided when the code is built.
 
+### Keeping nothing of an older Smith
+
+Smith has no users but its authors, so a change to it removes the old form everywhere in the same pull request: from the parser, the checker, the lowering, the backends, the library, the tests, `compiler/`, `measure/`, the skills, and `knowledge/`. No code, error, fix, test, or page knows what was there before.
+
+- No error or fix recognises a spelling, keyword, name, or command that was once Smith and no page of `knowledge/` has now, to say what replaced it. A mistake that a reader of `knowledge/` could make, such as a missing `take`, is still refused and explained.
+- No alias, second name, or second spelling is kept so that older code builds, and no function of `std/` is kept for that.
+- No branch, function, field, or case of an enum is kept that no program the grammar allows reaches.
+- No test checks a behaviour that `knowledge/` does not have.
+
+A form is old when it was once Smith and no page of `knowledge/` has it now. What a page of `knowledge/` has and the compiler does not build yet is not old.
+
 ### Errors and warnings
 
 An error stops every command. A warning is reported only by `smith check`, which fails if there are any, so it is the lint step and a continuous integration run needs no extra flag.
