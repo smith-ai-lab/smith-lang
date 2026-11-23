@@ -65,6 +65,22 @@ pub const ONCE: &[Test] = &[
         a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints,
     ),
     (
+        "a_module_of_a_jump_that_gives_its_parameters_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints",
+        a_module_of_a_jump_that_gives_its_parameters_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints,
+    ),
+    (
+        "a_module_of_a_call_that_gives_its_arguments_and_takes_its_results_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints",
+        a_module_of_a_call_that_gives_its_arguments_and_takes_its_results_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints,
+    ),
+    (
+        "a_function_of_sixty_thousand_values_loads_and_ends_as_the_evaluator_says",
+        a_function_of_sixty_thousand_values_loads_and_ends_as_the_evaluator_says,
+    ),
+    (
+        "a_function_with_fewer_live_values_than_an_engine_takes_locals_loads_and_one_with_more_is_refused",
+        a_function_with_fewer_live_values_than_an_engine_takes_locals_loads_and_one_with_more_is_refused,
+    ),
+    (
         "a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not",
         a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not,
     ),
@@ -1073,4 +1089,85 @@ fn whole_numbers_of_every_width(g: &mut Gen) -> Widths {
 
 fn a_module_of_generated_programs_with_whole_numbers_of_every_width_prints_what_the_evaluator_prints() {
     every_module_agrees(106, 10, whole_numbers_of_every_width, |case| case.source.as_bytes());
+}
+
+/// A function that makes `count` numbers, each its own, and adds them up after
+/// all are made, so that all are alive at once, and ends with the low byte of
+/// the sum as its status.
+fn many_alive(count: u64) -> Program {
+    let mut b = Builder::new();
+    let values: Vec<Value> = (1..=count).map(|n| b.int(Bits::B64, n)).collect();
+    let mut total = values[0];
+    for v in &values[1..] {
+        total = b.binary(Binary::Add, total, *v);
+    }
+    let status = b.narrow(total, Bits::B8);
+    b.exit(status);
+    b.ret(vec![]);
+    let mut function = b.finish(&[]);
+    function.name = "sum_of_many".to_string();
+    Program {
+        data: Vec::new(),
+        functions: vec![function],
+        main: 0,
+    }
+}
+
+/// An engine takes about 50,000 locals in a function, and the backend gave each
+/// value its own: a function of 60,000 additions, the far choice of the tests of
+/// branches, gave a module that `node` refused with `local count too large`. A
+/// local is the one of a value that is dead by the time another is made.
+fn a_function_of_sixty_thousand_values_loads_and_ends_as_the_evaluator_says() {
+    if !node() {
+        return;
+    }
+    let program = crate::branches::far_choice();
+    assert_eq!(scalar::check(&program), Ok(()));
+    agree(&program);
+}
+
+/// The locals of a function are the most values of a kind alive at once, so a
+/// function with fewer than an engine takes loads however many values it makes,
+/// and one that needs more is refused when it is built, with its name and the
+/// limit, and no module is written that an engine would not load.
+fn a_function_with_fewer_live_values_than_an_engine_takes_locals_loads_and_one_with_more_is_refused() {
+    if node() {
+        let program = many_alive(40_000);
+        assert_eq!(scalar::check(&program), Ok(()));
+        agree(&program);
+    }
+    let program = many_alive(60_000);
+    assert_eq!(scalar::check(&program), Ok(()));
+    for target in modules() {
+        let said = std::panic::catch_unwind(|| target.emit(&program))
+            .err()
+            .map(|p| match p.downcast::<String>() {
+                Ok(message) => *message,
+                Err(p) => p.downcast_ref::<&str>().map(|m| m.to_string()).unwrap_or_default(),
+            })
+            .expect("a function with more live values than locals is refused");
+        assert!(said.contains("sum_of_many"), "{said}");
+        assert!(said.contains("50000"), "{said}");
+    }
+}
+
+/// Values share a local when they are not alive together, so a jump that gives
+/// a block its parameters, which are carried round a loop, and swaps them, as
+/// `rotating` says, is where a local that was shared would be given the wrong
+/// value: each module prints what the evaluator prints.
+fn a_module_of_a_jump_that_gives_its_parameters_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints() {
+    if !node() {
+        return;
+    }
+    generate::check(107, 12, crate::targets::a_rotation, agree);
+}
+
+/// The same for the arguments of a call and its results, and a function that
+/// passes its own parameters on in another order and has one alive across the
+/// call.
+fn a_module_of_a_call_that_gives_its_arguments_and_takes_its_results_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints() {
+    if !node() {
+        return;
+    }
+    generate::check(108, 12, crate::targets::a_pass, agree);
 }

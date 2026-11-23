@@ -743,25 +743,27 @@ pub fn rotating(types: &[Type], starts: &[u64], sources: &[usize], rounds: u64) 
     program
 }
 
+/// A program that rotates values of types, as `rotating` says, which the
+/// generator draws: each value comes from one of the same type, and two may
+/// come from the same one.
+pub fn a_rotation(g: &mut Gen) -> scalar::Program {
+    let count = 2 + g.below(40);
+    let types: Vec<Type> = (0..count).map(|_| *g.pick(&TYPES)).collect();
+    let starts: Vec<u64> = (0..count)
+        .map(|_| (g.below(1 << 20) as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+        .collect();
+    let sources: Vec<usize> = (0..count)
+        .map(|i| {
+            let same: Vec<usize> = (0..count).filter(|j| types[*j] == types[i]).collect();
+            *g.pick(&same)
+        })
+        .collect();
+    rotating(&types, &starts, &sources, g.below(4) as u64)
+}
+
 fn a_jump_gives_a_block_its_parameters_as_if_all_were_copied_at_once() {
     let targets = runnable();
-    let generate = |g: &mut Gen| {
-        let count = 2 + g.below(40);
-        let types: Vec<Type> = (0..count).map(|_| *g.pick(&TYPES)).collect();
-        let starts: Vec<u64> = (0..count)
-            .map(|_| (g.below(1 << 20) as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15))
-            .collect();
-        // Each value comes from one of the same type, and two may come from
-        // the same one.
-        let sources: Vec<usize> = (0..count)
-            .map(|i| {
-                let same: Vec<usize> = (0..count).filter(|j| types[*j] == types[i]).collect();
-                *g.pick(&same)
-            })
-            .collect();
-        rotating(&types, &starts, &sources, g.below(4) as u64)
-    };
-    generate::check(80, 100, generate, |program| {
+    generate::check(80, 100, a_rotation, |program| {
         let said = scalar::run(program);
         for &target in &targets {
             scalar_runs_as(program, target, &said);
@@ -827,7 +829,7 @@ fn a_jump_that_swaps_two_values_swaps_them() {
 /// after them its first parameter, which is alive across the call. `leaf`
 /// gives back the parameters `picks` says, so that it gives back more
 /// values than it has, or fewer, and two may be one.
-fn passing(
+pub fn passing(
     types: &[Type],
     starts: &[u64],
     order: &[usize],
@@ -872,39 +874,38 @@ fn passing(
 /// all were copied at once, with more arguments and results than there are
 /// registers for them, and with a function that passes its own parameters on
 /// in another order.
+/// A program of three functions, as `passing` says, which the generator draws:
+/// each argument is a parameter of the same type, and two may be the same one.
+pub fn a_pass(g: &mut Gen) -> scalar::Program {
+    let count = 1 + g.below(40);
+    let types: Vec<Type> = (0..count).map(|_| *g.pick(&TYPES)).collect();
+    let starts: Vec<u64> = (0..count)
+        .map(|_| (g.below(1 << 20) as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15))
+        .collect();
+    let order: Vec<usize> = (0..count)
+        .map(|i| {
+            let same: Vec<usize> = (0..count).filter(|j| types[*j] == types[i]).collect();
+            *g.pick(&same)
+        })
+        .collect();
+    let picks: Vec<usize> = (0..g.below(count + 8)).map(|_| g.below(count)).collect();
+    // `back` reads the results of the leaf, which there may be none of.
+    let back: Vec<usize> = if picks.is_empty() {
+        Vec::new()
+    } else {
+        (0..g.below(picks.len() + 1))
+            .map(|_| g.below(picks.len()))
+            .collect()
+    };
+    passing(&types, &starts, &order, &picks, &back)
+}
+
 fn a_call_gives_its_arguments_and_takes_its_results_as_if_all_were_copied_at_once() {
     let targets = runnable();
-    let generate = |g: &mut Gen| {
-        let count = 1 + g.below(40);
-        let types: Vec<Type> = (0..count).map(|_| *g.pick(&TYPES)).collect();
-        let starts: Vec<u64> = (0..count)
-            .map(|_| (g.below(1 << 20) as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15))
-            .collect();
-        // Each argument is a parameter of the same type, and two may be the
-        // same one.
-        let order: Vec<usize> = (0..count)
-            .map(|i| {
-                let same: Vec<usize> = (0..count).filter(|j| types[*j] == types[i]).collect();
-                *g.pick(&same)
-            })
-            .collect();
-        let picks: Vec<usize> = (0..g.below(count + 8)).map(|_| g.below(count)).collect();
-        let back: Vec<usize> = (0..g.below(picks.len() + 1))
-            .map(|_| g.below(picks.len()))
-            .collect();
-        (types, starts, order, picks, back)
-    };
-    generate::check(81, 100, generate, |(types, starts, order, picks, back)| {
-        // `back` reads the results of the leaf, which there may be none of.
-        let back: Vec<usize> = if picks.is_empty() {
-            Vec::new()
-        } else {
-            back.clone()
-        };
-        let program = passing(types, starts, order, picks, &back);
-        let said = scalar::run(&program);
+    generate::check(81, 100, a_pass, |program| {
+        let said = scalar::run(program);
         for &target in &targets {
-            scalar_runs_as(&program, target, &said);
+            scalar_runs_as(program, target, &said);
         }
     });
 }
