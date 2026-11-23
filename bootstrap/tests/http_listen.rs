@@ -101,12 +101,24 @@ fn routes() -> &'static str {
     PROGRAM.split("// What `serve` of `project.smith` does").next().unwrap()
 }
 
-/// The targets that build the program: those that talk to the kernel.
+/// The targets that build the program: those that talk to the kernel, which on
+/// Windows is the network, whose every call waits.
 fn kernel() -> Vec<Target> {
     targets::runnable()
         .into_iter()
-        .filter(|t| t.name().starts_with("linux") || t.name().starts_with("macos"))
+        .filter(|t| {
+            t.name().starts_with("linux")
+                || t.name().starts_with("macos")
+                || t.name().starts_with("windows")
+        })
         .collect()
+}
+
+/// The targets whose connections are served in tasks that wait for the system,
+/// each holding up none: those of Linux and macOS. On Windows every call waits, so
+/// a connection is served until it ends, and then the next.
+fn concurrent() -> Vec<Target> {
+    kernel().into_iter().filter(|t| !t.name().starts_with("windows")).collect()
 }
 
 /// The program, built once for `target`.
@@ -585,7 +597,7 @@ fn address_space(pid: u32) -> Option<u64> {
 }
 
 fn serving_requests_does_not_grow_what_the_system_is_asked_for() {
-    for target in kernel() {
+    for target in concurrent() {
         if !runs(target) {
             continue;
         }
@@ -628,7 +640,7 @@ fn a_wave(server: &Started, count: usize) {
 }
 
 fn a_thousand_connections_open_at_once_are_each_answered() {
-    for target in kernel() {
+    for target in concurrent() {
         if !runs(target) {
             continue;
         }
@@ -683,7 +695,7 @@ fn main(args: List[str]) ! net, time, alloc {
 /// connection must be made at once.
 fn connections_that_nothing_accepts_are_all_held_by_the_system() {
     let Some(target) = Target::host() else { return };
-    if !kernel().contains(&target) {
+    if !concurrent().contains(&target) {
         return;
     }
     let built = targets::build(NEVER_ACCEPTS.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
@@ -738,7 +750,7 @@ fn connections_that_nothing_accepts_are_all_held_by_the_system() {
 /// A child that is never joined gives its frame and its stack back to the pool
 /// when it ends, so a connection served is not kept by the server.
 fn a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first() {
-    for target in kernel() {
+    for target in concurrent() {
         if !runs(target) {
             continue;
         }
@@ -787,7 +799,10 @@ fn a_target_that_has_no_network_refuses_a_server_naming_itself() {
     let program = lower(PROGRAM.as_bytes()).unwrap_or_else(|e: Vec<Error>| panic!("{e:?}"));
     assert!(program.asks_the_kernel());
     for &target in Target::ALL.iter() {
-        if target.name().starts_with("linux") || target.name().starts_with("macos") {
+        if target.name().starts_with("linux")
+            || target.name().starts_with("macos")
+            || target.name().starts_with("windows")
+        {
             continue;
         }
         let refused = std::panic::catch_unwind(|| target.emit(&program));
