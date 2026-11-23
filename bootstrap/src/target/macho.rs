@@ -9,7 +9,8 @@
 //! bytes, `getentropy`, and in one that uses the network or the clock,
 //! `socket`, `bind`, `listen`, `accept`, `connect`, `getsockname`,
 //! `setsockopt`, `sendto`, `recvfrom`, `close`, `clock_gettime`, and
-//! `nanosleep`.
+//! `nanosleep`, and in one that waits for the system with a scheduler, `kqueue`
+//! and `kevent`.
 //! Nothing from the system is needed to build: the load commands that ask
 //! the loader for the library and its symbols, and the signature, are
 //! written here.
@@ -24,7 +25,7 @@ const SIGNATURE_PAGE: usize = 0x1000;
 /// The symbols a program may import from `libSystem`, in the order of their
 /// slots in `__got`. A program that never asks for memory imports only the
 /// first three.
-const IMPORTS: [&str; 18] = [
+const IMPORTS: [&str; 20] = [
     "_write",
     "___error",
     "__exit",
@@ -43,6 +44,8 @@ const IMPORTS: [&str; 18] = [
     "_close",
     "_clock_gettime",
     "_nanosleep",
+    "_kqueue",
+    "_kevent",
 ];
 /// `write`, which writes bytes to a file.
 pub const WRITE: usize = 0;
@@ -72,6 +75,8 @@ pub fn slot(call: Raw) -> usize {
         Raw::Close => 15,
         Raw::ClockGetTime => 16,
         Raw::NanoSleep => 17,
+        Raw::Kqueue => 18,
+        Raw::Kevent => 19,
         Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait => {
             unreachable!("which kernel it is, and what only Linux has, call nothing")
         }

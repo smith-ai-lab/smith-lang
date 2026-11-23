@@ -573,16 +573,20 @@ fn a_request_sent_with_the_next_is_answered_and_the_connection_is_then_closed() 
 }
 
 /// How much address space the program has, which grows when it asks the system
-/// for memory that it does not give back. Linux says it; macOS does not here.
+/// for memory that it does not give back, in kilobytes. Linux says it in
+/// `/proc`, and macOS to `ps`.
 fn address_space(pid: u32) -> Option<u64> {
-    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
-    let line = status.lines().find(|l| l.starts_with("VmSize:"))?;
-    line.split_whitespace().nth(1)?.parse().ok()
+    if let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) {
+        let line = status.lines().find(|l| l.starts_with("VmSize:"))?;
+        return line.split_whitespace().nth(1)?.parse().ok();
+    }
+    let said = Command::new("ps").args(["-o", "vsz=", "-p", &pid.to_string()]).output().ok()?;
+    String::from_utf8_lossy(&said.stdout).trim().parse().ok()
 }
 
 fn serving_requests_does_not_grow_what_the_system_is_asked_for() {
     for target in kernel() {
-        if !runs(target) || !target.name().starts_with("linux") {
+        if !runs(target) {
             continue;
         }
         let server = Started::new(target);
@@ -616,7 +620,7 @@ fn a_wave(server: &Started, count: usize) {
 
 fn a_thousand_connections_open_at_once_are_each_answered() {
     for target in kernel() {
-        if !runs(target) || !target.name().starts_with("linux") {
+        if !runs(target) {
             continue;
         }
         let server = Started::new(target);
@@ -670,7 +674,7 @@ fn main(args: List[str]) ! net, time, alloc {
 /// connection must be made at once.
 fn connections_that_nothing_accepts_are_all_held_by_the_system() {
     let Some(target) = Target::host() else { return };
-    if !kernel().contains(&target) || !target.name().starts_with("linux") {
+    if !kernel().contains(&target) {
         return;
     }
     let built = targets::build(NEVER_ACCEPTS.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
@@ -680,6 +684,10 @@ fn connections_that_nothing_accepts_are_all_held_by_the_system() {
     }
     let queue: usize = std::fs::read_to_string("/proc/sys/net/core/somaxconn")
         .ok()
+        .or_else(|| {
+            let said = Command::new("sysctl").args(["-n", "kern.ipc.somaxconn"]).output().ok()?;
+            Some(String::from_utf8_lossy(&said.stdout).into_owned())
+        })
         .and_then(|n| n.trim().parse().ok())
         .unwrap_or(128);
     let count = 1000.min(queue);
@@ -720,7 +728,7 @@ fn connections_that_nothing_accepts_are_all_held_by_the_system() {
 /// when it ends, so a connection served is not kept by the server.
 fn a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first() {
     for target in kernel() {
-        if !runs(target) || !target.name().starts_with("linux") {
+        if !runs(target) {
             continue;
         }
         let server = Started::new(target);

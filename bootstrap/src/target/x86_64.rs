@@ -1085,7 +1085,10 @@ pub trait System {
         // every machine, and are never run where there is none: they give minus
         // the number of the error for a call the kernel does not have.
         assert!(
-            matches!(call, Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait),
+            matches!(
+                call,
+                Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::Kqueue | Raw::Kevent
+            ),
             "a target that has no such call refuses the program before it is built"
         );
         asm.mov64(RAX, -38i64 as u64);

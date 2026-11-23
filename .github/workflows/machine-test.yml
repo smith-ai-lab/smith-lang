@@ -29,4 +29,8 @@ jobs:
       - name: Test
         env:
           SMITH_HASHES: ${{ runner.temp }}/case-hashes/case-hashes
-        run: cargo test --locked -- --group=machine
+        # A server of a thousand connections, and the test that connects to it, each
+        # hold a thousand descriptors, and macOS gives a process 256 until it is asked.
+        run: |
+          ulimit -n 10240 || true
+          cargo test --locked -- --group=machine

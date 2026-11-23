@@ -800,7 +800,10 @@ pub trait System {
     /// asked, as `Target::emit_parts` refuses first. It may change x0 to x17.
     fn raw(asm: &mut Asm, call: Raw) {
         assert!(
-            matches!(call, Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait),
+            matches!(
+                call,
+                Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::Kqueue | Raw::Kevent
+            ),
             "a target that has no such call refuses the program before it is built"
         );
         asm.mov64(X0, -38i64 as u64);

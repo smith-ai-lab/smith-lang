@@ -2,7 +2,9 @@
 type: specification
 title: Async
 description: All I/O is async and reads as sequential code, suspending a task under an async handler and blocking under a blocking one.
-status: planned
+status: partial
+built:
+  - "a call that waits for a connection, `read`, `write`, or `accept` of `net`, suspends its task under the scheduler in force, on Linux with `epoll` and on macOS, on both chips, with `kqueue`, and blocks under a blocking handler, as the source is the same for both"
 ---
 
 # Async

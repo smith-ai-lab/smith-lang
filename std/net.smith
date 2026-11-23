@@ -418,6 +418,17 @@ fn dual_stack(fd: i64) ! alloc {
   __system(6, fd, 41, name, off, 4, 0)
 }
 
+// What a call that would have to wait gives, as minus the error number: the
+// error is 11 on Linux and 35 on macOS.
+fn would_block() -> i64 {
+  if on_macos() { -35 } else { -11 }
+}
+
+// The flag that makes one read not wait, which Linux gives 64 and macOS 128.
+fn no_wait() -> i64 {
+  if on_macos() { 128 } else { 64 }
+}
+
 // The flag that says a write to a connection the other side closed is an error
 // to give back and no signal to end the program with.
 fn no_signal() -> i64 {
@@ -483,7 +494,7 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
         fd = got
         break
       }
-      if got != -4 and got != -11 {
+      if got != -4 and got != would_block() {
         failed = got
         break
       }
@@ -525,12 +536,12 @@ fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc
   if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
   if __scheduled() {
-    var got: i64 = -11
+    var got: i64 = would_block()
     loop attempt in 0..1000000 {
       // The call that does not wait is asked first, and the task waits for the
       // connection only when it would have blocked.
-      got = __system(8, c.handle, buffer, most, 64, 0, 0)
-      if got == -11 {
+      got = __system(8, c.handle, buffer, most, no_wait(), 0, 0)
+      if got == would_block() {
         wait_to_read(c.handle)
       } else if got != -4 {
         break
@@ -568,7 +579,7 @@ fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! all
     rest = bytes[sent..]
     given = __system(7, c.handle, rest, rest.size, flags, 0, 0)
     if given == -4 {
-    } else if given == -11 {
+    } else if given == would_block() {
       if __scheduled() { wait_to_write(c.handle) }
     } else if given < 0 {
       return .err(failure("write", given))

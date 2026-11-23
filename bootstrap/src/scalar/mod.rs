@@ -392,6 +392,12 @@ pub enum Raw {
     /// `epoll_pwait(epoll, events, count, milliseconds, 0, 0)`, with no mask of
     /// signals, which is how `epoll_wait` is asked on every machine.
     EpollWait,
+    /// `kqueue()`, which the scheduler of macOS waits with.
+    Kqueue,
+    /// `kevent(queue, changes, change count, events, event count, time)`, which
+    /// applies the changes and then waits for an event, until the time, which is
+    /// the address of a pair of numbers, or for ever when it is 0.
+    Kevent,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1193,6 +1199,8 @@ impl Program {
                             | Raw::Close
                             | Raw::ClockGetTime
                             | Raw::NanoSleep
+                            | Raw::Kqueue
+                            | Raw::Kevent
                             | Raw::Kind
                     ),
                     ..
