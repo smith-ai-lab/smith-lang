@@ -68,8 +68,6 @@ pub enum Pattern {
 pub enum Callee {
     /// A function of the file, by its place among them.
     Function(usize),
-    /// A function of a trait's implementation, by the trait and the function.
-    Trait(usize, usize),
     /// An operation of whole numbers, which no function of the file is.
     Operator(Operator),
     /// A step of a proof, which only the body of a proof has.
@@ -382,7 +380,6 @@ impl Term {
             Kind::Call { callee, args } => (
                 match callee {
                     Callee::Function(f) => format!("call f{f}"),
-                    Callee::Trait(t, f) => format!("call t{t}.f{f}"),
                     Callee::Operator(o) => format!("call {}", o.symbol()),
                     Callee::Step(s) => format!("call {}", s.name()),
                 },
