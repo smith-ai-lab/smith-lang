@@ -535,6 +535,10 @@ fn a_server_whose_first_port_is_held_by_another_socket_is_started_again_on_anoth
         // that holds one address only, so the socket holds them all too.
         let held = TcpListener::bind("[::]:0").or_else(|_| TcpListener::bind("0.0.0.0:0")).unwrap();
         let taken = held.local_addr().unwrap().port();
+        // Windows keeps the numbers written with colons and those written with
+        // dots apart for a socket of the first family that does not ask for both,
+        // so the numbers written with dots are held too.
+        let _also = TcpListener::bind(("0.0.0.0", taken)).ok();
         let server = Started::on(target, std::iter::once(taken).chain(ports::all()));
         assert_ne!(server.port, taken, "{}", target.name());
         let mut client = server.connect();
