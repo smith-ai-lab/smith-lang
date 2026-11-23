@@ -140,7 +140,7 @@ const TEXT: &str = "str";
 
 /// The types the language and its library define that the compiler does
 /// not build yet.
-const TYPES_NOT_BUILT: &[&str] = &["usize", "f16", "bf16", "Pos", "Fin", "Ptr", "Map"];
+const TYPES_NOT_BUILT: &[&str] = &["usize", "f16", "bf16", "Pos", "Ptr", "Map"];
 
 /// The names of sizes, which `std.bits` holds, and which the compiler knows
 /// as the whole number types of that many bits.
