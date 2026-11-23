@@ -216,8 +216,8 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
         functions.push(ready_with(at_take, true).named("<stack_ready>"));
         functions.push(claim(at_take + 8).named("<stack_claim>"));
         functions.push(free(at_take + 9).named("<stack_free_all>"));
-        functions.push(free_one(at_take + 3).named("<stack_free>"));
-        functions.push(move_in(at_take).named("<stack_move>"));
+        functions.push(free_one(at_take + 3, at_take + 9).named("<stack_free>"));
+        functions.push(move_in(at_take, at_take + 9).named("<stack_move>"));
         functions.push(release_above(at_take + 3).named("<stack_release>"));
         functions.push(super::pool::new().named("<pool_new>"));
         functions.push(super::pool::take_sized().named("<pool_take>"));
@@ -1154,30 +1154,28 @@ fn store_pair(
     });
 }
 
-/// Makes the frame of a task, and gives it its stack for results. A piece of the
-/// first class of the pool that holds the frame and some room more is taken: the
-/// frame is at its start, the stack starts where the frame ends, and the words of
-/// the frame after its two say where the stack is and where it started, which
-/// `free` needs. The function takes the pool and the bytes of the frame, and
-/// gives the address of the frame.
+/// Makes the frame of a task, and gives it a stack for results. The frame is a
+/// piece of the pool of its own, which `free_one` gives back when the task is
+/// joined, with the result read: what is moved to the one that joins is the
+/// stack, which starts as the smallest piece there is and doubles. The frame says
+/// where the stack is and where it started, which `free` needs, in the words
+/// after its header's two. The function takes the pool and the bytes of the frame,
+/// and gives the address of the frame.
 pub fn claim(pool_take: usize) -> Function {
     let mut f = Builder::new();
     let p = f.params(&[NEXT, LEFT]);
     let (pool, bytes) = (p[0], p[1]);
-    let fifteen = runtime::int(&mut f, 15);
-    let rounded = f.binary(Binary::Add, bytes, fifteen);
-    let mask = runtime::int(&mut f, !15);
-    let framed = f.binary(Binary::And, rounded, mask);
-    // Room for the frame and for a stack that starts small.
-    let room = runtime::int(&mut f, 512);
-    let wanted = f.binary(Binary::Add, framed, room);
-    let got = f.call(pool_take, vec![pool, wanted], &[NEXT, LEFT]);
-    let (frame, capacity) = (got[0], got[1]);
-    // The piece ends as the pieces of a stack do: with the bytes it holds and
-    // the end of the piece after it, which is none.
+    let got = f.call(pool_take, vec![pool, bytes], &[NEXT, LEFT]);
+    let frame = got[0];
+    let one = runtime::int(&mut f, 1);
+    let stack = f.call(pool_take, vec![pool, one], &[NEXT, LEFT]);
+    let (first, capacity) = (stack[0], stack[1]);
+    // The piece of the stack ends as the pieces of a stack do: with the bytes it
+    // holds, the end of the piece after it, which is none, and the head of the
+    // tasks moved into it, which is none.
     let trailer = runtime::int(&mut f, TRAILER_RECORDS);
     let holds = f.binary(Binary::Sub, capacity, trailer);
-    let end = f.binary(Binary::Add, frame, holds);
+    let end = f.binary(Binary::Add, first, holds);
     f.store(end, holds);
     let eight = runtime::int(&mut f, 8);
     let link = f.binary(Binary::Add, end, eight);
@@ -1187,10 +1185,8 @@ pub fn claim(pool_take: usize) -> Function {
     let records = f.binary(Binary::Add, end, sixteen);
     let nothing = runtime::int(&mut f, 0);
     f.store(records, nothing);
-    let first = f.binary(Binary::Add, frame, framed);
-    let left = f.binary(Binary::Sub, holds, framed);
     let words = [16u64, 24, 32, 40];
-    let values = [first, left, frame, holds];
+    let values = [first, holds, first, holds];
     for (by, value) in words.into_iter().zip(values) {
         let by = runtime::int(&mut f, by);
         let at = f.binary(Binary::Add, frame, by);
@@ -1221,15 +1217,15 @@ fn address_of(f: &mut Builder, number: Value) -> Value {
     f.load(NEXT, slot)
 }
 
-/// Gives the pieces of every task on a list back to the pool, and of the tasks
-/// that were moved into their stacks. The list is the tasks' frames, each with
-/// the next in the word of its header after the state, and it begins at the
-/// address the function is given, which is none for an empty list. A task's
-/// pieces are those from where its stack started, each followed by the one its
-/// end says, with the frame in the first; the records at the end of a piece name
-/// the tasks moved into the stack in it, which are put on the list before the
-/// piece is given back. A task whose frame says it has no pieces is not freed
-/// again. The function takes the pool and the list.
+/// Gives the pieces of every stack on a list back to the pool, and of the stacks
+/// that were moved into them. The list is of records, each of where a stack
+/// started, the bytes its first piece holds, and the next record on the list, and
+/// the function is given the first. A stack is the pieces from its first, each
+/// followed by the one its end says; the records at the end of a piece are those
+/// of the stacks moved into the stack in it, which are put on the list before the
+/// piece is given back, each with its link in the place of the record before it,
+/// which is read first. The function takes the pool and the first record of the
+/// list, or none.
 pub fn free(pool_give: usize) -> Function {
     let mut f = Builder::new();
     let p = f.params(&[NEXT, NEXT]);
@@ -1244,7 +1240,6 @@ pub fn free(pool_give: usize) -> Function {
     let (onward, _) = f.block(&[]);
     let zero = runtime::int(&mut f, 0);
     let eight = runtime::int(&mut f, 8);
-    let sixteen = runtime::int(&mut f, 16);
     let at = |f: &mut Builder, base: Value, by: u64| {
         let by = runtime::int(f, by);
         f.binary(Binary::Add, base, by)
@@ -1258,20 +1253,14 @@ pub fn free(pool_give: usize) -> Function {
     f.at(done);
     f.ret(Vec::new());
     f.at(open);
-    let frame = address_of(&mut f, pending);
-    let link_at = at(&mut f, frame, 56);
+    let item = address_of(&mut f, pending);
+    let origin = f.load(NEXT, item);
+    let held_at = f.binary(Binary::Add, item, eight);
+    let holds = f.load(LEFT, held_at);
+    let link_at = at(&mut f, item, 16);
     let next_pending = f.load(LEFT, link_at);
-    let origin_at = at(&mut f, frame, 32);
-    let holds_at = at(&mut f, frame, 40);
-    let origin = f.load(NEXT, origin_at);
-    let holds = f.load(LEFT, holds_at);
-    f.store(holds_at, zero);
-    let none = f.compare(Compare::Equal, holds, zero);
-    let (go, _) = f.block(&[]);
-    f.switch(none, vec![(go, vec![]), (outer, vec![next_pending])]);
-    f.at(go);
     f.jump(piece, vec![origin, holds, next_pending]);
-    // A piece of the task: the records at its end, then the piece after it.
+    // A piece of the stack: the records at its end, then the piece after it.
     f.at(piece);
     let (here, held, pend) = (q[0], q[1], q[2]);
     let end = f.binary(Binary::Add, here, held);
@@ -1291,16 +1280,15 @@ pub fn free(pool_give: usize) -> Function {
             (after, vec![pending_now]),
         ],
     );
+    // A record: where the stack moved in started, the bytes its first piece holds,
+    // and the record before.
     f.at(take_record);
     let (record, pending_now) = (t[0], t[1]);
     let record_at = address_of(&mut f, record);
-    let moved = f.load(LEFT, record_at);
-    let prev_at = f.binary(Binary::Add, record_at, eight);
+    let prev_at = at(&mut f, record_at, 16);
     let prev = f.load(LEFT, prev_at);
-    let moved_frame = address_of(&mut f, moved);
-    let moved_link = at(&mut f, moved_frame, 56);
-    f.store(moved_link, pending_now);
-    f.jump(records, vec![prev, moved]);
+    f.store(prev_at, pending_now);
+    f.jump(records, vec![prev, record]);
     // The piece goes back once what it holds that matters is read.
     f.at(after);
     let pending_after = a[0];
@@ -1312,57 +1300,85 @@ pub fn free(pool_give: usize) -> Function {
     let back = f.binary(Binary::Sub, zero, next_held);
     let next_piece = f.binary(Binary::Add, following, back);
     f.jump(piece, vec![next_piece, next_held, pending_after]);
-    let _ = sixteen;
     f.finish(&[])
 }
 
-/// Gives a task's pieces back to the pool, and with them those moved into its
-/// stack: the list that `free` takes is the one task. It takes the pool and the
-/// address of the frame.
-pub fn free_one(free_all: usize) -> Function {
+/// Gives a task's pieces back to the pool: the stack from where it started, and
+/// what was moved into it, and the frame, which is a piece of its own. A task
+/// whose frame says it has no stack, because it was moved, gives only the frame.
+/// It takes the pool and the address of the frame.
+pub fn free_one(free_all: usize, pool_give: usize) -> Function {
     let mut f = Builder::new();
     let p = f.params(&[NEXT, Type::Address]);
     let (pool, frame) = (p[0], p[1]);
+    let (stack, _) = f.block(&[]);
+    let (frame_only, _) = f.block(&[]);
     let zero = runtime::int(&mut f, 0);
-    let by = runtime::int(&mut f, 56);
-    let link = f.binary(Binary::Add, frame, by);
-    f.store(link, zero);
-    f.call(free_all, vec![pool, frame], &[]);
+    let at = |f: &mut Builder, by: u64| {
+        let by = runtime::int(f, by);
+        f.binary(Binary::Add, frame, by)
+    };
+    let record = at(&mut f, 32);
+    let holds_at = at(&mut f, 40);
+    let link_at = at(&mut f, 48);
+    let holds = f.load(LEFT, holds_at);
+    let moved = f.compare(Compare::Equal, holds, zero);
+    f.switch(moved, vec![(stack, vec![]), (frame_only, vec![])]);
+    // The words of the frame that say where the stack started and what its first
+    // piece holds are a record, with the word after them for the link.
+    f.at(stack);
+    f.store(link_at, zero);
+    f.call(free_all, vec![pool, record], &[]);
+    f.call(pool_give, vec![pool, frame], &[]);
+    f.ret(Vec::new());
+    f.at(frame_only);
+    f.call(pool_give, vec![pool, frame], &[]);
     f.ret(Vec::new());
     f.finish(&[])
 }
 
-/// Moves the pieces of a task into a stack, with no byte moved: a record of the
-/// task, and the one before it, is made at the top of the stack, and the head of
-/// the records of the piece the stack is in is the new one, so that a put-back of
-/// the stack that passes below the record gives the task's pieces back. It takes
-/// the pool, the pair of the stack and the frame of the task, and gives the pair
-/// after the record.
-pub fn move_in(take: usize) -> Function {
+/// Moves the stack of a task into a stack, with no byte moved: a record of where it
+/// started, the bytes its first piece holds, and the record before is made at the
+/// top of the stack, and the head of the records of the piece the stack is in is
+/// the new one, so that a put-back of the stack that passes below the record gives
+/// the stack's pieces back. The frame of the task is given back at once, since
+/// what the result holds is in the stack. It takes the pool, the pair of the stack
+/// and the frame of the task, and gives the pair after the record.
+pub fn move_in(take: usize, pool_give: usize) -> Function {
     let mut f = Builder::new();
     let p = f.params(&[NEXT, NEXT, LEFT, Type::Address]);
     let (pool, next, left, frame) = (p[0], p[1], p[2], p[3]);
-    let sixteen = runtime::int(&mut f, 16);
+    let size = runtime::int(&mut f, 24);
     let eight = runtime::int(&mut f, 8);
-    let made = f.call(take, vec![pool, next, left, sixteen], &[NEXT, LEFT, NEXT]);
+    let sixteen = runtime::int(&mut f, 16);
+    let zero = runtime::int(&mut f, 0);
+    let made = f.call(take, vec![pool, next, left, size], &[NEXT, LEFT, NEXT]);
     let (after, rest, record) = (made[0], made[1], made[2]);
     // The record is in the piece the stack is in now, whose end is where the
     // stack's room ends.
     let end = f.binary(Binary::Add, after, rest);
-    let sixteen = runtime::int(&mut f, 16);
     let recs = f.binary(Binary::Add, end, sixteen);
     let prev = f.load(LEFT, recs);
-    let number = number_of(&mut f, frame);
-    f.store(record, number);
-    let prev_at = f.binary(Binary::Add, record, eight);
-    f.store(prev_at, prev);
+    let thirty_two = runtime::int(&mut f, 32);
+    let forty = runtime::int(&mut f, 40);
+    let origin_at = f.binary(Binary::Add, frame, thirty_two);
+    let holds_at = f.binary(Binary::Add, frame, forty);
+    let origin = f.load(LEFT, origin_at);
+    let holds = f.load(LEFT, holds_at);
+    f.store(record, origin);
+    let holds_in = f.binary(Binary::Add, record, eight);
+    f.store(holds_in, holds);
+    let prev_in = f.binary(Binary::Add, record, sixteen);
+    f.store(prev_in, prev);
     let record_number = number_of(&mut f, record);
     f.store(recs, record_number);
+    f.store(holds_at, zero);
+    f.call(pool_give, vec![pool, frame], &[]);
     f.ret(vec![after, rest]);
     f.finish(&PAIR)
 }
 
-/// Gives back the tasks that were moved into a stack above the place a pair says,
+/// Gives back the stacks that were moved into a stack above the place a pair says,
 /// when the stack is put back to it: the records in the piece it is in that are
 /// at or above the place, and all those in the pieces after it. It takes the pool
 /// and the pair.
@@ -1374,7 +1390,7 @@ pub fn release_above(free_all: usize) -> Function {
     let (pop, pp) = f.block(&[LEFT, LEFT]);
     let (settle, s) = f.block(&[LEFT, LEFT]);
     let (rest, r) = f.block(&[LEFT, LEFT]);
-    let (visit, v) = f.block(&[LEFT, LEFT, LEFT]);
+    let (visit, v) = f.block(&[LEFT, LEFT]);
     let (drain, d) = f.block(&[LEFT, LEFT]);
     let (finish, fin) = f.block(&[LEFT]);
     let (call_free, _) = f.block(&[]);
@@ -1403,15 +1419,8 @@ pub fn release_above(free_all: usize) -> Function {
     );
     f.at(pop);
     let (record, pending) = (pp[0], pp[1]);
-    let record_at = address_of(&mut f, record);
-    let moved = f.load(LEFT, record_at);
-    let prev_at = f.binary(Binary::Add, record_at, eight);
-    let prev = f.load(LEFT, prev_at);
-    let moved_frame = address_of(&mut f, moved);
-    let by = runtime::int(&mut f, 56);
-    let moved_link = f.binary(Binary::Add, moved_frame, by);
-    f.store(moved_link, pending);
-    f.jump(top, vec![prev, moved]);
+    let (prev, origin) = put_on_list(&mut f, record, pending);
+    f.jump(top, vec![prev, origin]);
     // The head is written back only when a record was taken, since a stack that
     // has no piece is at a trailer that nothing may write.
     f.at(settle);
@@ -1431,17 +1440,14 @@ pub fn release_above(free_all: usize) -> Function {
     let last = f.compare(Compare::Equal, piece, zero);
     f.switch(
         last,
-        vec![(visit, vec![piece, pending, zero]), (finish, vec![pending])],
+        vec![(visit, vec![piece, pending]), (finish, vec![pending])],
     );
     f.at(visit);
-    let (piece, pending, _) = (v[0], v[1], v[2]);
+    let (piece, pending) = (v[0], v[1]);
     let piece_end = address_of(&mut f, piece);
     let piece_recs = f.binary(Binary::Add, piece_end, sixteen);
-    let piece_link = f.binary(Binary::Add, piece_end, eight);
     let head = f.load(LEFT, piece_recs);
     f.store(piece_recs, zero);
-    let onward = f.load(LEFT, piece_link);
-    let _ = onward;
     f.jump(drain, vec![head, pending]);
     f.at(drain);
     let (record, pending) = (d[0], d[1]);
@@ -1450,21 +1456,14 @@ pub fn release_above(free_all: usize) -> Function {
     let (go_on, _) = f.block(&[]);
     f.switch(done, vec![(take_it, vec![]), (go_on, vec![])]);
     f.at(take_it);
-    let record_at = address_of(&mut f, record);
-    let moved = f.load(LEFT, record_at);
-    let prev_at = f.binary(Binary::Add, record_at, eight);
-    let prev = f.load(LEFT, prev_at);
-    let moved_frame = address_of(&mut f, moved);
-    let by = runtime::int(&mut f, 56);
-    let moved_link = f.binary(Binary::Add, moved_frame, by);
-    f.store(moved_link, pending);
-    f.jump(drain, vec![prev, moved]);
+    let (prev, origin) = put_on_list(&mut f, record, pending);
+    f.jump(drain, vec![prev, origin]);
     f.at(go_on);
-    // The next piece is the one this piece's end says, which is read again from
-    // the piece the records were in.
-    let piece_end2 = address_of(&mut f, v_piece(&v));
-    let link2 = f.binary(Binary::Add, piece_end2, eight);
-    let next_piece = f.load(LEFT, link2);
+    // The next piece is the one this piece's end says, read again from the piece
+    // the records were in.
+    let piece_end_again = address_of(&mut f, v[0]);
+    let link_again = f.binary(Binary::Add, piece_end_again, eight);
+    let next_piece = f.load(LEFT, link_again);
     f.jump(rest, vec![next_piece, pending]);
     f.at(finish);
     let nothing = f.compare(Compare::Equal, fin[0], zero);
@@ -1478,8 +1477,16 @@ pub fn release_above(free_all: usize) -> Function {
     f.finish(&[])
 }
 
-fn v_piece(v: &[Value]) -> Value {
-    v[0]
+/// Takes a record, and puts it on the list of those to be given back, whose first
+/// is a number, with the record before it in the place of the link. It gives the
+/// record before and the record, which is the new first of the list.
+fn put_on_list(f: &mut Builder, record: Value, pending: Value) -> (Value, Value) {
+    let sixteen = runtime::int(f, 16);
+    let record_at = address_of(f, record);
+    let prev_at = f.binary(Binary::Add, record_at, sixteen);
+    let prev = f.load(LEFT, prev_at);
+    f.store(prev_at, pending);
+    (prev, record)
 }
 
 /// The arguments of a call of a runtime function, with the pool before them when
