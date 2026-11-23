@@ -275,6 +275,9 @@ struct Captured<'a> {
     scalars: Vec<form::Type>,
     /// The function it holds, when it holds one.
     func: Option<Func<'a>>,
+    /// For the region of a handler's state, how many handlers that have a region
+    /// are outside the handler.
+    depth: usize,
 }
 
 /// What a handler is made of: the effect it handles, the function that
@@ -1651,10 +1654,10 @@ impl<'a> Lowering<'a> {
     /// state of the handler whose operation is being lowered, where `name` is a
     /// name of that state that holds memory.
     fn keep_in_region(&mut self, out: &mut Out<'a>, name: &str, kept: &[form::Value]) {
-        let Some(region) = self.region_for(out, name) else {
+        let Some((region, depth)) = self.region_for(out, name) else {
             return;
         };
-        let mut args = vec![region];
+        let mut args = vec![region, out.int(form::Bits::B64, depth as i128)];
         args.extend(kept.iter().copied());
         out.emit(
             form::Op::System {
