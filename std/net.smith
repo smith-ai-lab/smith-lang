@@ -147,10 +147,14 @@ impl Release[Socket] {
 // The numbers of the kernel's calls, in the order the compiler gives them to
 // `__system`: socket, bind, listen, accept, connect, getsockname, setsockopt,
 // sendto, recvfrom, close. The number 12 is not a call: it is 1 when the kernel
-// is macOS's, and 0 when it is Linux's, whose numbers for a family, an option,
-// an error, and the layout of an address differ.
+// is macOS's, 2 when it is Windows's, and 0 when it is Linux's, whose numbers
+// for a family, an option, an error, and the layout of an address differ.
 fn on_macos() -> bool {
   __system(12) == 1
+}
+
+fn on_windows() -> bool {
+  __system(12) == 2
 }
 
 // What a value the system did not open is answered with: its handle is not one
@@ -163,6 +167,19 @@ fn not_opened(call: str, h: i64) -> NetError ! alloc {
 fn failure(call: str, given: i64) -> NetError ! alloc {
   code = 0 - given
   mac = on_macos()
+  win = on_windows()
+  if win {
+    // Winsock's numbers: the connection refused, the address in use, and the
+    // connection reset, aborted, or shut down.
+    if code == 10061 {
+      return .refused
+    } else if code == 10048 {
+      return .in_use
+    } else if code == 10054 or code == 10053 or code == 10058 {
+      return .closed
+    }
+    return .failed("{call}: error {code}")
+  }
   if (not mac and code == 111) or (mac and code == 61) {
     .refused
   } else if (not mac and code == 98) or (mac and code == 48) {
@@ -278,8 +295,8 @@ fn ipv6(host: str) -> Option[List[Byte]] ! alloc {
 // Where a socket is: the kernel's name for the family of its address, and the
 // address as the kernel reads it, which is a `sockaddr_in` of sixteen bytes for
 // a number written with dots and a `sockaddr_in6` of twenty-eight bytes for
-// one written with colons. Linux starts it with the family in two bytes, and
-// macOS with its length in one byte and the family in one.
+// one written with colons. Linux and Windows start it with the family in two
+// bytes, and macOS with its length in one byte and the family in one.
 struct Place {
   family: Byte
   bytes: List[Byte]
@@ -313,6 +330,9 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
       if on_macos() {
         family = 30
         made = push(push(made, 28), 30)
+      } else if on_windows() {
+        family = 23
+        made = push(push(made, 23), 0)
       } else {
         made = push(push(made, 10), 0)
       }
@@ -414,30 +434,31 @@ fn host_text(bytes: List[Byte]) -> str ! alloc {
 fn dual_stack(fd: i64) ! alloc {
   off = number(0)
   var name: i64 = 26
-  if on_macos() { name = 27 }
+  if on_macos() or on_windows() { name = 27 }
   __system(6, fd, 41, name, off, 4, 0)
 }
 
 // What a call that would have to wait gives, as minus the error number: the
 // error is 11 on Linux and 35 on macOS.
 fn would_block() -> i64 {
-  if on_macos() { -35 } else { -11 }
+  if on_windows() { -10035 } else if on_macos() { -35 } else { -11 }
 }
 
 // The flag that makes one read not wait, which Linux gives 64 and macOS 128.
+// Windows has none, and every call waits there, as the line `net.md` says.
 fn no_wait() -> i64 {
-  if on_macos() { 128 } else { 64 }
+  if on_windows() { 0 } else if on_macos() { 128 } else { 64 }
 }
 
 // The flag that says a write to a connection the other side closed is an error
 // to give back and no signal to end the program with.
 fn no_signal() -> i64 {
-  if on_macos() { 524288 } else { 16384 }
+  if on_windows() { 0 } else if on_macos() { 524288 } else { 16384 }
 }
 
 // The same flag with the one that says the call must not wait.
 fn no_signal_wait() -> i64 {
-  if on_macos() { 524416 } else { 16448 }
+  if on_windows() { 0 } else if on_macos() { 524416 } else { 16448 }
 }
 
 fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! alloc {
@@ -451,7 +472,9 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
     level = 65535
     name = 4
   }
-  __system(6, fd, level, name, one, 4, 0)
+  // Windows lets a second socket take a port that is held when this is set, so
+  // it is not set there, where a port that is held is refused as it is elsewhere.
+  if not on_windows() { __system(6, fd, level, name, one, 4, 0) }
   if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
@@ -488,7 +511,8 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
     var fd: i64 = -1
     var failed: i64 = 0
     loop attempt in 0..1000000 {
-      wait_to_read(l.handle)
+      // Windows has no scheduler that waits for a descriptor, so the call waits.
+      if not on_windows() { wait_to_read(l.handle) }
       got = __system(3, l.handle, 0, 0, 0, 0, 0)
       if got >= 0 {
         fd = got

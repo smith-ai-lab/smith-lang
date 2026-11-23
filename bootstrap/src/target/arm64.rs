@@ -833,6 +833,10 @@ pub trait System {
     /// by a call. The stack is ready for a call, and x0, x1, and x2 are as
     /// `arguments_on_entry` left them.
     fn arguments_by_call(asm: &mut Asm);
+    /// What a system asks a program to do once before anything else, as the
+    /// sockets of Windows ask for `WSAStartup`. The stack is ready for a call.
+    /// It may change what `write` may.
+    fn start(_: &mut Asm) {}
 }
 
 /// The machine code of the program, and the data it reads, each piece
@@ -855,6 +859,7 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     if S::RESERVED > 0 {
         asm.reserve_stack(S::RESERVED);
     }
+    S::start(&mut asm);
     if takes {
         S::arguments_by_call(&mut asm);
     }

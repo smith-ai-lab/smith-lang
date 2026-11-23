@@ -9,12 +9,13 @@ built:
   - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is `failed` with the one message that looking up a name is not built"
   - "`failed` holds the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
   - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing, and a handler that gives a `Listener`, a `Connection`, or a `Socket` makes it with `listener`, `connection`, or `socket` and reads its number with `handle`, as [Making a value in a handler](#making-a-value-in-a-handler) says"
-  - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux and macOS"
+  - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux, macOS, and Windows"
   - "on Linux and on macOS a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` on Linux and in `kqueue` on macOS for the connection while other tasks run, and a call with no group blocks, as it did"
   - "a listener from `listen_on` is made to hold up to 4096 connections that nothing has accepted, or as many as the system allows when that is fewer, so a thousand connections that arrive before the server takes the first are all made at once and none waits for the system to ask again"
   - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held"
   - "not built: a handler that keeps state and is under `listen` of `std.http`, which is refused as not built yet, as [Handlers and tasks](../language/task-handlers.md) says, and a handler that assigns a name under `stdio` of `std.mcp`, which stops the compiler"
-  - "not Windows, or a name looked up"
+  - "on Windows, on x86-64 and arm64, the system answers every operation through `ws2_32.dll`, which only a program that carries `net` asks the loader for, and every call waits where it is, as it did on Linux before tasks, so a task that waits for a connection is not built there and waits for an issue of its own, completion ports; `failed` holds Winsock's number, as `connect: error 10061`, and `refused`, `in_use`, and `closed` are the same refusals by their numbers; the clock is not built there"
+  - "not built: a name looked up, which on Windows will call `GetAddrInfoW` of `ws2_32.dll`, as it will call the system's own lookup on macOS, beside the issue for looking up a name"
 ---
 
 # The network
@@ -199,7 +200,8 @@ Not done: a cache of answers, DNS over TLS or HTTPS, mDNS (`.local` names), and 
 
 ## What answers it
 
-- A native executable answers `net` with the system's own calls, for every system Smith builds for, and a call that waits suspends its task.
+- A native executable answers `net` with the system's own calls: the kernel's on Linux, `libSystem`'s on macOS, and `ws2_32.dll`'s on Windows, which a program asks the loader for only when it carries `net`. A call that waits suspends its task on Linux, with `epoll`, and on macOS, with `kqueue`, and waits where it is on Windows, which a task waiting for the system there will change, as an issue of its own.
+- A server that takes bursts of connections on a Mac needs what the system's defaults do not give. macOS holds 128 connections that nothing has accepted and gives a process 256 descriptors, so a server of a thousand connections at once raises `kern.ipc.somaxconn`, with `sudo sysctl -w kern.ipc.somaxconn=4096`, and `ulimit -n`, before it starts, as the tests of the machine jobs do. Linux holds 4096 and gives a process a thousand or more, and a program that wants more raises the descriptors the same way.
 - A test answers it with a handler that plays the other side, so a server and a client are tested with no network and no port.
 - In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) the operations are imports. A host that gives a module no raw connection, as [Cloudflare](cloudflare.md) does not, supplies none of them, and a program that carries `net` to its start is not built for it: there `http` and `fetch` are answered by the host and `net` is not needed.
 

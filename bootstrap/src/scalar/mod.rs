@@ -1183,6 +1183,12 @@ impl Program {
     /// Whether the program asks the kernel for a call of its own, as a program
     /// that uses the network or the clock does.
     pub fn asks_the_kernel(&self) -> bool {
+        self.asks_the_network() || self.asks_the_clock()
+    }
+
+    /// Whether the program asks the kernel for a call of the network, which
+    /// is a program that carries `net`.
+    pub fn asks_the_network(&self) -> bool {
         let instructions = self.functions.iter().flat_map(|f| &f.blocks);
         instructions.flat_map(|b| &b.instructions).any(|i| {
             matches!(
@@ -1199,9 +1205,22 @@ impl Program {
                             | Raw::SendTo
                             | Raw::RecvFrom
                             | Raw::Close
-                            | Raw::ClockGetTime
-                            | Raw::NanoSleep
                     ),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Whether the program asks the kernel for the clock, which is a program
+    /// that carries `time`.
+    pub fn asks_the_clock(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(Raw::ClockGetTime | Raw::NanoSleep),
                     ..
                 }
             )

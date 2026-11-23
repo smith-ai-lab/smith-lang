@@ -81,6 +81,10 @@ pub const ONCE: &[Test] = &[
         a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without,
     ),
     (
+        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions",
+        a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
+    ),
+    (
         "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
         a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls,
     ),
@@ -1356,5 +1360,56 @@ fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_ot
                 assert!(symbols.iter().any(|s| s == wrapper), "{} does not import {wrapper}", target.name());
             }
         }
+    }
+}
+
+/// The functions of `WS2_32.dll` that a program that carries `net` calls: the
+/// start of the sockets, the reason a call refused, and the call of each
+/// operation, and nothing of the library's other functions.
+const SOCKET_FUNCTIONS: &[&str] = &[
+    "WSAStartup",
+    "WSAGetLastError",
+    "socket",
+    "bind",
+    "listen",
+    "accept",
+    "connect",
+    "getsockname",
+    "setsockopt",
+    "sendto",
+    "recvfrom",
+    "closesocket",
+];
+
+/// A program that carries `net` asks the loader for `WS2_32.dll`, and calls only
+/// the functions of it that `net` asks for, among them `WSAStartup`, which it
+/// calls once before its first operation, and a program that does not carry `net`
+/// asks for no such library.
+fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions()
+{
+    let source = include_str!("net_program.smith");
+    let windows: Vec<Target> = buildable()
+        .into_iter()
+        .filter(|t| t.name().starts_with("windows"))
+        .collect();
+    assert!(!windows.is_empty());
+    for target in windows {
+        let name = target.name();
+        let bytes = compile(source.as_bytes(), target).unwrap();
+        let (libraries, symbols) = pe_imports(&bytes);
+        assert_eq!(libraries, ["KERNEL32.dll", "WS2_32.dll"], "{name} links what it needs");
+        for function in SOCKET_FUNCTIONS {
+            assert!(symbols.iter().any(|s| s == function), "{name} does not import {function}");
+        }
+        for symbol in &symbols {
+            assert!(
+                KERNEL32_THIN_WRAPPERS.contains(&symbol.as_str())
+                    || SOCKET_FUNCTIONS.contains(&symbol.as_str()),
+                "{name} imports {symbol}, which is neither a thin wrapper nor a socket function"
+            );
+        }
+        let plain = compile(HELLO.as_bytes(), target).unwrap();
+        let (libraries, _) = pe_imports(&plain);
+        assert_eq!(libraries, ["KERNEL32.dll"], "{name}: a program with no net asks for no sockets");
     }
 }

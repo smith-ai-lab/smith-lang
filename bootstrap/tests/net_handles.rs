@@ -225,7 +225,10 @@ fn main() ! console, net, alloc {
 
 fn the_systems_handler_refuses_a_number_made_up_in_a_program_and_makes_no_system_call_with_it() {
     for target in targets::runnable() {
-        if !(target.name().starts_with("linux") || target.name().starts_with("macos")) {
+        if !(target.name().starts_with("linux")
+            || target.name().starts_with("macos")
+            || target.name().starts_with("windows"))
+        {
             continue;
         }
         let bytes = targets::build(MADE_UP.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));

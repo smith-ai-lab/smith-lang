@@ -1119,6 +1119,10 @@ pub trait System {
     /// by a call. The stack is ready for a call, and rdi, rsi, and r8 are as
     /// `arguments_on_entry` left them.
     fn arguments_by_call(asm: &mut Asm);
+    /// What a system asks a program to do once before anything else, as the
+    /// sockets of Windows ask for `WSAStartup`. The stack is ready for a call.
+    /// It may change what `write` may.
+    fn start(_: &mut Asm) {}
 }
 
 /// The machine code of the program, and the data it reads, each piece
@@ -1141,6 +1145,7 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     asm.align_stack();
     asm.reserve_stack(S::RESERVED);
     let lines = level::check::<S>(&mut asm, fail);
+    S::start(&mut asm);
     if takes {
         S::arguments_by_call(&mut asm);
     }
