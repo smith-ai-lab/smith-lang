@@ -594,6 +594,14 @@ impl Ty {
         }
     }
 
+    /// The type with each type parameter moved `by` places on.
+    fn shifted(&self, by: usize) -> Ty {
+        match self {
+            Ty::Param(i) => Ty::Param(i + by),
+            t => t.with_args(t.args().iter().map(|t| t.shifted(by)).collect()),
+        }
+    }
+
     /// The type with each type parameter replaced by the type at its place
     /// in `args`.
     fn subst(&self, args: &[Ty]) -> Ty {
@@ -2526,6 +2534,10 @@ fn check_file(
         named_calls: Map::default(),
         type_args: Map::default(),
         frame_gives: Map::default(),
+        seeded: None,
+        extended: Map::default(),
+        handler_slots: Map::default(),
+        lambda_base: Map::default(),
         no_impl: false,
         refusals: 0,
         zero_divisors: Vec::new(),
@@ -2608,6 +2620,12 @@ fn check_file(
         named_calls: checker.named_calls,
         type_args: checker.type_args,
         core_vars: RefCell::new(Vec::new()),
+        extended: checker
+            .extended
+            .iter()
+            .map(|(f, s)| (*f, s.names.len()))
+            .collect(),
+        lambda_base: checker.lambda_base,
     };
     let mut errors = Vec::new();
     typed.copies(
@@ -6127,6 +6145,13 @@ struct Typed<'a> {
     type_args: Map<usize, Vec<Ty>>,
     /// The `var`s in scope while a core term is made, with their types.
     core_vars: RefCell<Vec<(String, core::Type)>>,
+    /// For each function with a handler of an operation that has type
+    /// parameters of its own, by the address of the function, how many type
+    /// parameters its lambdas are written among: its own, and then those.
+    extended: Map<usize, usize>,
+    /// Where the type parameters of the operations that a lambda of such a
+    /// handler is checked against begin, by the address of the lambda.
+    lambda_base: Map<usize, usize>,
 }
 
 impl<'a> Typed<'a> {
@@ -6391,6 +6416,20 @@ impl<'a> Typed<'a> {
         let view = self.defs.view(instance.template);
         let mut out = Vec::new();
         let mut cycles = Vec::new();
+        // The lambdas of a handler of an operation with type parameters of its
+        // own are written among more parameters than the function has, which
+        // are here the parameters themselves, so that what a lambda calls is
+        // told by what it is written for and not by what it is run for.
+        let mut args = instance.args.clone();
+        if let Some(&total) = self.extended.get(&addr(view.f)) {
+            while args.len() < total {
+                args.push(Ty::Param(args.len()));
+            }
+        }
+        let instance = &Instance {
+            template: instance.template,
+            args,
+        };
         for e in exprs(values(&view.f.body)) {
             if let Some(&f) = self.fn_values.get(&addr(e)) {
                 let template = Template::Free(f);
@@ -6528,6 +6567,20 @@ struct Checker<'a> {
     /// What the lambda of each call of `__frame` gives, by the address of the
     /// call, which `__result` reads a frame at.
     frame_gives: Map<usize, Ty>,
+    /// What the type parameters of the signature of the call being checked
+    /// are taken to be before any argument says, which is the type parameters
+    /// themselves for those a handler's lambdas are checked against.
+    seeded: Option<Vec<Option<Ty>>>,
+    /// For each function with a handler of an operation that has type
+    /// parameters of its own, by its address, the type parameters its lambdas
+    /// are written among: its own, and then those of each such handler, which
+    /// each have places of their own.
+    extended: Map<usize, Scope>,
+    /// Where the type parameters of the operations a handler's lambdas are
+    /// checked against begin, by the address of the call of the handler.
+    handler_slots: Map<usize, usize>,
+    /// The same for each lambda of the handler, by its address.
+    lambda_base: Map<usize, usize>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
     /// The names of functions passed as values, by their addresses, with
@@ -7365,10 +7418,11 @@ impl<'a> Checker<'a> {
         self.run_body(template, Numbers::Decided(decided));
         if self.errors.len() == errors {
             let view = self.defs.view(template);
+            let scope = self.extended.get(&addr(view.f)).unwrap_or(view.scope);
             ownership::check(
                 self.defs,
                 &self.types,
-                (view.f, view.scope, &view.params),
+                (view.f, scope, &view.params),
                 &mut self.errors,
                 &mut self.drops,
             );

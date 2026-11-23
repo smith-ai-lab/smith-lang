@@ -11,7 +11,7 @@ built:
   - "the effect's name is a function that takes a lambda for each operation, each taking every parameter of the operation, and the body to run, and gives what the body gives"
   - "`net` and `time` are declared by `std/net.smith` and `std/time.smith`, and a program that reaches `main` on Linux with no handler has each of their operations answered by the system, by a function of the module that asks the kernel for plain numbers and builds the `Result` or the handle from them, which a handler replaces"
   - "an effect that the program declares and lists in `main`, which the target does not provide and no handler answers, is one error at its name in the list that names the effect"
-  - "a handler of an operation that has type parameters of its own is refused as not built yet, at the effect's name in the handler, where the handler's lambdas would be checked against the operation's type parameters"
+  - "a handler of an operation that has type parameters of its own checks each lambda against them as parameters of its own, kept apart from those of the function the handler is written in, so the lambda is checked once and is the same for every type the operation is called at, and one that takes a type parameter to be a given type is refused at the lambda"
 ---
 
 # Declaring an effect

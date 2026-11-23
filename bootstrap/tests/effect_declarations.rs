@@ -33,8 +33,20 @@ pub const ONCE: &[Test] = &[
         an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it,
     ),
     (
-        "a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted",
-        a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted,
+        "a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_given",
+        a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_given,
+    ),
+    (
+        "a_handler_in_a_generic_function_keeps_the_type_parameters_of_the_operation_and_of_the_function_apart",
+        a_handler_in_a_generic_function_keeps_the_type_parameters_of_the_operation_and_of_the_function_apart,
+    ),
+    (
+        "a_handler_of_an_operation_with_type_parameters_gives_the_value_the_model_gives",
+        a_handler_of_an_operation_with_type_parameters_gives_the_value_the_model_gives,
+    ),
+    (
+        "a_handler_lambda_that_treats_a_type_parameter_of_its_operation_as_a_type_is_refused",
+        a_handler_lambda_that_treats_a_type_parameter_of_its_operation_as_a_type_is_refused,
     ),
 ];
 
@@ -321,60 +333,151 @@ fn an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it() {
     );
 }
 
-/// A handler of an operation with type parameters of its own, which passes the
-/// value through, puts it in a struct, or gives it back, is refused at the
-/// effect's name as not built, and the same handler of an operation with no
-/// type parameter is accepted.
-fn a_handler_of_an_operation_with_type_parameters_is_refused_as_not_built_and_never_accepted() {
+/// What a program prints, which is nothing for a program that is refused.
+fn printed(source: &str) -> String {
+    let program = smith::lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
+    assert_eq!(smith::scalar::check(&program), Ok(()), "for\n{source}");
+    let ran = smith::scalar::run(&program);
+    assert_eq!(ran.status, 0, "for\n{source}");
+    String::from_utf8(ran.stdout).expect("text")
+}
+
+/// A lambda for an operation that has type parameters of its own is checked
+/// against them as parameters of its own, and is the same for every type they
+/// stand for. It passed the value through to `same`, which gave the empty
+/// string where the value was `"s"`, since the type parameter of the operation
+/// and the type the handler gives were one, and one that built a struct of the
+/// type panicked.
+fn a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_given() {
+    let pass = "use std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn main() ! console, alloc {\n  r = store(put: fn(x) { same(x) }, body: { put(\"s\") })\n  print(r)\n}\n";
+    assert_eq!(printed(pass), "s\n");
+    let built = "use std.console (console, print)\n\nstruct Tk[T] {\n  value: T\n}\n\neffect jobs {\n  fn run[T](work: take fn() -> T) -> Tk[T]\n}\n\nfn main() ! console, alloc {\n  r = jobs(run: fn(work) { Tk(value: work()) }, body: { run({ \"x\" }) })\n  print(r.value)\n}\n";
+    assert_eq!(printed(built), "x\n");
+}
+
+/// The type parameters of an operation are not those of the function a handler
+/// is written in, and they are checked once and stand for each type the
+/// operation is called at.
+fn a_handler_in_a_generic_function_keeps_the_type_parameters_of_the_operation_and_of_the_function_apart()
+{
+    let source = "use std.bits (u64)\nuse std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn through[U](u: take U) -> U ! alloc {\n  store(put: fn(x) { same(x) }, body: { put(u) })\n}\n\nfn main() ! console, alloc {\n  a = through(\"g\")\n  b: u64 = through(5)\n  r = store(put: fn(x) { same(x) }, body: {\n    c = put(\"s\")\n    d: u64 = put(7)\n    \"{c} {d}\"\n  })\n  print(\"{a} {b} {r}\")\n}\n";
+    assert_eq!(printed(source), "g 5 s 7\n");
+}
+
+/// The values the generated programs give an operation, and what each prints.
+const VALUES: [(&str, &str); 3] = [("\"s\"", "s"), ("7", "7"), ("\"t\"", "t")];
+
+/// A handler of an operation with zero to two type parameters of its own, used
+/// at several types, whose lambda passes a value through, puts it in a struct,
+/// or gives it back through a function, written in `main` or in a generic
+/// function that the handler is run by, gives what the program says by
+/// construction.
+fn a_handler_of_an_operation_with_type_parameters_gives_the_value_the_model_gives() {
     generate::check(
         6107,
         30,
-        |g: &mut Gen| (g.below(3), g.below(3)),
-        |(parameters, lambda)| {
-            let names = ["T", "U"];
-            let own = &names[..*parameters];
-            let generics = if own.is_empty() {
-                String::new()
-            } else {
-                format!("[{}]", own.join(", "))
-            };
-            let ty = if own.is_empty() { "str" } else { own[0] };
-            let takes: Vec<String> = (own.iter().enumerate())
-                .map(|(i, t)| format!("x{i}: take {t}"))
+        |g: &mut Gen| {
+            let uses: Vec<(usize, usize)> = (0..1 + g.below(3))
+                .map(|_| (g.below(VALUES.len()), g.below(VALUES.len())))
                 .collect();
-            let takes = if takes.is_empty() {
-                "x0: take str".to_string()
-            } else {
-                takes.join(", ")
+            (g.below(3), g.below(3), g.below(2) == 0, uses)
+        },
+        |(parameters, lambda, wrapped, uses)| {
+            let prelude = "struct keep[A] {\n  item: A\n}\n\nstruct Pair[A, B] {\n  first: A\n  second: B\n}\n\nfn same[A](a: take A) -> A { a }\n\nfn open[A](k: take keep[A]) -> A { k.item }\n\n";
+            let (operation, lambda_text) = match parameters {
+                0 => (
+                    "fn put(x0: take str) -> str",
+                    ["fn(x0) { x0 }", "fn(x0) { open(keep(item: x0)) }", "fn(x0) { same(x0) }"][*lambda],
+                ),
+                1 => (
+                    "fn put[T](x0: take T) -> T",
+                    ["fn(x0) { x0 }", "fn(x0) { open(keep(item: x0)) }", "fn(x0) { same(x0) }"][*lambda],
+                ),
+                _ => (
+                    "fn put[T, U](x0: take T, x1: take U) -> Pair[T, U]",
+                    [
+                        "fn(x0, x1) { Pair(first: x0, second: x1) }",
+                        "fn(x0, x1) { Pair(first: open(keep(item: x0)), second: x1) }",
+                        "fn(x0, x1) { Pair(first: same(x0), second: same(x1)) }",
+                    ][*lambda],
+                ),
             };
-            let lambda_args = (0..own.len().max(1))
-                .map(|i| format!("x{i}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let call_args = vec!["\"s\""; own.len().max(1)].join(", ");
-            let x = "x0";
-            let given = match lambda {
-                0 => x.to_string(),
-                1 => format!("keep(item: {x}).item"),
-                _ => format!("same({x})"),
+            let mut calls = String::new();
+            let mut model = Vec::new();
+            for (k, (first, second)) in uses.iter().enumerate() {
+                let (text, shown) = VALUES[*first];
+                match parameters {
+                    0 => {
+                        calls += &format!("  v{k} = put(\"s\")\n  print(\"{{v{k}}}\")\n");
+                        model.push("s".to_string());
+                    }
+                    1 => {
+                        calls += &format!("  v{k} = put({text})\n  print(\"{{v{k}}}\")\n");
+                        model.push(shown.to_string());
+                    }
+                    _ => {
+                        let (other, other_shown) = VALUES[*second];
+                        calls += &format!(
+                            "  v{k} = put({text}, {other})\n  print(\"{{v{k}.first}} {{v{k}.second}}\")\n"
+                        );
+                        model.push(format!("{shown} {other_shown}"));
+                    }
+                }
+            }
+            let handler = format!("fx(put: {lambda_text}, body: body)");
+            let source = if *wrapped {
+                format!(
+                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn run[R](body: fn() -> R ! fx) -> R {{\n  {handler}\n}}\n\nfn main() ! console, alloc {{\n  with run()\n{calls}}}\n"
+                )
+            } else {
+                let body = &calls;
+                format!(
+                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn main() ! console, alloc {{\n  fx(put: {lambda_text}, body: {{\n{body}  }})\n}}\n"
+                )
+            };
+            let expected: String = model.iter().map(|m| format!("{m}\n")).collect();
+            assert_eq!(printed(&source), expected, "for\n{source}");
+        },
+    );
+}
+
+/// A lambda for an operation with type parameters of its own that takes one of
+/// them to be a type is refused, at the lambda, as a generic function that did
+/// is: it gives a number or a text where the type parameter is needed, or
+/// writes a type for a parameter that is one, or uses it as a number.
+fn a_handler_lambda_that_treats_a_type_parameter_of_its_operation_as_a_type_is_refused() {
+    generate::check(
+        6108,
+        30,
+        |g: &mut Gen| (g.below(2), g.below(4)),
+        |(parameters, lambda)| {
+            let (operation, call, lambdas): (&str, &str, [&str; 4]) = if *parameters == 0 {
+                (
+                    "fn put[T](x0: take T) -> T",
+                    "put(\"s\")",
+                    ["fn(x0) { 1 }", "fn(x0) { \"s\" }", "fn(x0: str) { x0 }", "fn(x0) { x0 + 1 }"],
+                )
+            } else {
+                (
+                    "fn put[T, U](x0: take T, x1: take U) -> U",
+                    "put(\"s\", \"t\")",
+                    [
+                        "fn(x0, x1) { 1 }",
+                        "fn(x0, x1) { \"s\" }",
+                        "fn(x0: str, x1) { x1 }",
+                        "fn(x0, x1) { x1 + 1 }",
+                    ],
+                )
             };
             let source = format!(
-                "struct keep[A] {{\n  item: A\n}}\n\n\
-                 fn same[A](a: take A) -> A {{ a }}\n\n\
-                 effect fx {{\n  fn put{generics}({takes}) -> {ty}\n}}\n\n\
-                 fn run[R](body: fn() -> R ! fx) -> R {{\n  fx(put: fn({lambda_args}) {{ {given} }}, body: body)\n}}\n\n\
-                 fn main() {{\n  with run()\n  x = put({call_args})\n}}\n"
+                "use std.console (console, print)\n\neffect fx {{\n  {operation}\n}}\n\nfn main() ! console, alloc {{\n  r = fx(put: {}, body: {{ {call} }})\n  print(r)\n}}\n",
+                lambdas[*lambda]
             );
             let found = errors(&source);
-            if own.is_empty() {
-                assert!(found.is_empty(), "for\n{source}\n{found:?}");
-            } else {
-                let at = place(&source, "fx(put");
-                assert_eq!(found.len(), 1, "for\n{source}\n{found:?}");
-                assert_eq!(found[0].pos, at, "for\n{source}\n{found:?}");
-                assert!(found[0].unbuilt, "{found:?}");
-                assert!(found[0].message.contains("`put`"), "{found:?}");
-            }
+            assert!(!found.is_empty(), "accepted:\n{source}");
+            assert!(found.iter().all(|e| !e.unbuilt), "not built, and not refused:\n{source}\n{found:?}");
+            let at = place(&source, "fx(put");
+            assert!(found.iter().all(|e| e.pos.line == at.line), "for\n{source}\n{found:?}");
         },
     );
 }

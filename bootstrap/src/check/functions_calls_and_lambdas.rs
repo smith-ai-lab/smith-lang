@@ -930,7 +930,10 @@ impl<'a> Checker<'a> {
         if let Some(t) = placed {
             seed(&signature.gives, t, &mut from_place);
         }
-        let mut sol: Vec<Option<Ty>> = vec![None; vars.names.len()];
+        let mut sol: Vec<Option<Ty>> = match self.seeded.take() {
+            Some(seeded) if seeded.len() == vars.names.len() => seeded,
+            _ => vec![None; vars.names.len()],
+        };
         let comparing = call.args.len() == 2
             && matches!(&call.qualifier, Some((q, _)) if q == "Ord" || q == "Eq")
             && matches!(call.callee.as_str(), "compare" | "eq");
