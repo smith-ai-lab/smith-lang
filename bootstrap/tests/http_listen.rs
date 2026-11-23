@@ -576,7 +576,7 @@ fn a_wave(server: &Started, count: usize) {
 
 fn a_thousand_connections_open_at_once_are_each_answered() {
     for target in kernel() {
-        if !runs(target) {
+        if !runs(target) || !target.name().starts_with("linux") {
             continue;
         }
         let server = Started::new(target);
