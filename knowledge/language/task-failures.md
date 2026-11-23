@@ -41,7 +41,7 @@ If either child of `fetch_both` runs out of memory, `main` ends the same way and
 
 ## outcome
 
-`outcome(t)` waits as `join` does and returns a `Result` whose error says which failure it was, so the task that calls it can recover.
+`outcome(t)` waits as `join` does and returns a `Result[T, Failure]`, so the task that calls it can recover. `Failure` is an enum of [`std.task`](../library/task.md), with a case for each failure that [ends a task](task-ending.md): `pub enum Failure { out_of_memory, refused_write }`, which a program matches as any enum.
 
 ```
 fn fetch_or_empty(url: str) -> List[Byte] ! net, alloc {
@@ -50,7 +50,8 @@ fn fetch_or_empty(url: str) -> List[Byte] ! net, alloc {
   match outcome(t) {
     .ok(.ok(page)) { page }
     .ok(.err(e)) { [] }
-    .err(failure) { [] }
+    .err(.out_of_memory) { [] }
+    .err(.refused_write) { [] }
   }
 }
 ```
