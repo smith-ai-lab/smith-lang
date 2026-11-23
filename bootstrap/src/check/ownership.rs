@@ -684,6 +684,63 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// Whether a value that is read by fields is made where it is read, as
+    /// the result of a call, and so is bound to no name.
+    fn made_root(e: &Expr) -> bool {
+        match e {
+            Expr::Field { of, .. } => Self::made_root(of),
+            e => matches!(
+                e,
+                Expr::Call(_) | Expr::Tuple { .. } | Expr::List { .. } | Expr::Case { .. }
+            ),
+        }
+    }
+
+    /// Reports each other field of the value `of`, which is not bound to a name,
+    /// that has no `Discard`, as the field `name` is taken and what is left of
+    /// the value is dropped.
+    fn left_of_field(&mut self, of: &Expr, name: &str) {
+        let Some(Ty::Struct(s, args)) = self.types.get(&addr(of)).cloned() else {
+            return;
+        };
+        let fields = &self.defs.file.structs[s].fields;
+        let taken = fields
+            .iter()
+            .zip(&self.defs.fields[s])
+            .find(|(f, _)| f.name == name)
+            .map(|(_, t)| t.subst(&args));
+        // A field that is duplicated is read and not taken, so the whole of
+        // the value is dropped, as one that only a lend reads is.
+        if taken.is_none_or(|t| copies(self.defs, self.scope, &t)) {
+            let whole = Ty::Struct(s, args);
+            if let Some(cause) = undiscardable(self.defs, self.scope, &whole) {
+                let (why, fix) = why_dropped(self.defs, self.scope, &whole, cause);
+                let message = format!("this value is dropped, as nothing takes it{why}");
+                if let Some(error) = self.error(of.pos(), message) {
+                    error.fix = Some(fix);
+                }
+            }
+            return;
+        }
+        for (f, t) in fields.iter().zip(&self.defs.fields[s]) {
+            if f.name == name {
+                continue;
+            }
+            let t = t.subst(&args);
+            let Some(cause) = undiscardable(self.defs, self.scope, &t) else {
+                continue;
+            };
+            let (why, fix) = why_dropped(self.defs, self.scope, &t, cause);
+            let message = format!(
+                "this value is dropped, as nothing takes its field `{}`{why}",
+                f.name
+            );
+            if let Some(error) = self.error(of.pos(), message) {
+                error.fix = Some(fix);
+            }
+        }
+    }
+
     /// Notes each name a pattern binds to a part of a value of type `ty`.
     fn own_pattern(&mut self, st: &mut State, pattern: &Pattern, ty: &Ty) {
         match (pattern, ty) {
@@ -953,10 +1010,22 @@ impl<'a> Walk<'a> {
                 None
             }
             Expr::Name { .. } => None,
-            Expr::Field { of, .. } => {
+            Expr::Field { of, name, .. } => {
+                let made = Self::made_root(of);
                 self.projecting = true;
-                self.eval(st, of, Flow::Lend);
+                self.eval(
+                    st,
+                    of,
+                    if matches!(**of, Expr::Field { .. }) {
+                        Flow::Lend
+                    } else {
+                        Flow::Stored
+                    },
+                );
                 self.projecting = false;
+                if made {
+                    self.left_of_field(of, name);
+                }
                 None
             }
             Expr::Call(call) => {

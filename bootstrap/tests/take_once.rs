@@ -59,6 +59,10 @@ pub const ONCE: &[Test] = &[
         "a_made_value_that_is_only_lent_or_read_is_dropped",
         a_made_value_that_is_only_lent_or_read_is_dropped,
     ),
+    (
+        "a_field_taken_from_a_value_bound_to_no_name_is_refused_where_the_bound_value_would_be",
+        a_field_taken_from_a_value_bound_to_no_name_is_refused_where_the_bound_value_would_be,
+    ),
 ];
 
 /// The errors a program gives, which are none when it is accepted.
@@ -1305,4 +1309,67 @@ fn run(c: bool, d: Dir) ! diverge {{
             assert!(found[0].message.contains("nothing takes it"), "{}", found[0]);
         }
     });
+}
+
+/// A field taken from a value that is made where it is read, as
+/// `pair(a: x, b: y).a`, is accepted where binding the value to a name and
+/// taking the field from the name is accepted, and refused where that is
+/// refused, once at the value, naming the first field that is left when the field is taken, and not when it is only a number that is read. A field has
+/// `Discard` when it is a number, and has none when its type is a type
+/// parameter that the function does not bound, and nothing of the value is
+/// left to drop when the struct has no other field.
+fn a_field_taken_from_a_value_bound_to_no_name_is_refused_where_the_bound_value_would_be() {
+    generate::check(
+        4979,
+        60,
+        |g: &mut Gen| {
+            let count = 1 + g.below(3);
+            let discard: Vec<bool> = (0..count).map(|_| g.below(2) == 0).collect();
+            (g.below(count), discard)
+        },
+        |(taken, discard)| {
+            let count = discard.len();
+            let params: Vec<String> = (0..count)
+                .filter(|i| !discard[*i])
+                .map(|i| format!("P{i}"))
+                .collect();
+            let generics = |names: &[String]| {
+                if names.is_empty() { String::new() } else { format!("[{}]", names.join(", ")) }
+            };
+            let ty_of = |i: usize| if discard[i] { "u64".to_string() } else { format!("P{i}") };
+            let mut source = String::from("use std.bits (u64)\n\nstruct Holder");
+            source += &generics(&params);
+            source += " {\n";
+            for i in 0..count {
+                source += &format!("  f{i}: {}\n", ty_of(i));
+            }
+            source += "}\n\nfn field_of";
+            source += &generics(&params);
+            let args: Vec<String> = (0..count).map(|i| format!("a{i}: take {}", ty_of(i))).collect();
+            source += &format!("({}) -> {} {{\n", args.join(", "), ty_of(*taken));
+            let made: Vec<String> = (0..count).map(|i| format!("f{i}: a{i}")).collect();
+            let made = format!("Holder({})", made.join(", "));
+            let given: Vec<&str> = (0..count).map(|i| if discard[i] { "1" } else { "\"s\"" }).collect();
+            let run = format!("\nfn main() {{\n  r = field_of({})\n}}\n", given.join(", "));
+            let bound = format!("  h = {made}\n  h.f{taken}\n}}\n{run}");
+            let unbound = format!("  {made}.f{taken}\n}}\n{run}");
+            let before = source.clone();
+            let with_bound = errors(&(before + &bound));
+            source += &unbound;
+            let found = errors(&source);
+            let left: Vec<usize> = (0..count).filter(|i| i != taken && !discard[*i]).collect();
+            if left.is_empty() {
+                assert!(with_bound.is_empty(), "{with_bound:?}\n{source}");
+                assert!(found.is_empty(), "{found:?}\n{source}");
+            } else {
+                assert!(!with_bound.is_empty(), "{source}");
+                assert_eq!(found.len(), 1, "{found:?}\n{source}");
+                let e = &found[0];
+                assert!(e.message.contains("this value is dropped"), "{e}");
+                if !discard[*taken] {
+                    assert!(e.message.contains(&format!("`f{}`", left[0])), "{e}");
+                }
+            }
+        },
+    );
 }
