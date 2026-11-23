@@ -126,6 +126,14 @@ pub const ONCE: &[Test] = &[
         a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends,
     ),
     (
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends,
+    ),
+    (
         "a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined",
         a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined,
     ),
@@ -484,7 +492,15 @@ fn a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_ba
 }
 
 fn a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[17..]);
+    kept_by_drops(&DROPS[17..20]);
+}
+
+fn a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[20..22]);
+}
+
+fn a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[22..]);
 }
 
 fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends() {
@@ -512,7 +528,7 @@ fn kept_by_drops(hows: &[&str]) {
 /// round: as a statement, as a name nothing reads, joined in some rounds and
 /// dropped in the others, in a tuple, in a struct, and as the value that the last
 /// statement of an arm gives to a `match` whose value is thrown away.
-const DROPS: [&str; 20] = [
+const DROPS: [&str; 23] = [
     "spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }\n    if r < 5 { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) } else { }",
@@ -533,6 +549,9 @@ const DROPS: [&str; 20] = [
     "match Held.one(spawn { total(build(500)) }) {\n      .none { }\n      .one(t) { }\n    }",
     "t = spawn { total(build(500)) }\n    sum = wrapping_add(sum, wrapping_mul(maybe(t, r < 5), 0))",
     "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })\n    sum = wrapping_add(sum, wrapping_mul(join(a), 0))",
+    "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })\n    sum = wrapping_add(sum, wrapping_mul(join(both.first), 0))",
+    "var both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })\n    both.first = spawn { total(build(250)) }\n    both.second = spawn { total(build(250)) }",
+    "t = spawn { total(build(500)) }\n    xs = build(3)\n    loop x in xs {\n      if r < 5 {\n        sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n        break\n      } else { }\n    }",
 ];
 
 /// A handle that is read is the program's to join, so what it holds is not given
@@ -589,6 +608,11 @@ enum Hold {
     Looped,
     /// A list that is made where the loop over it is written.
     Over,
+    /// A `var` struct whose fields are assigned over before they are read.
+    Fielded,
+    /// A name that a loop over a list joins and leaves on one path, and that
+    /// ends it where the list does on the other.
+    OverBreak,
 }
 
 /// What a generated program does with the children of an item in a round.
@@ -627,10 +651,14 @@ impl Item {
     /// The children the item starts, as the sizes that tell them apart.
     fn children(&self) -> Vec<u64> {
         match self.hold {
-            Hold::Name | Hold::Var | Hold::Assigned | Hold::Param | Hold::Looped | Hold::Enum => {
-                vec![0]
-            }
-            Hold::Tuple | Hold::Struct | Hold::List => vec![0, 1],
+            Hold::Name
+            | Hold::Var
+            | Hold::Assigned
+            | Hold::Param
+            | Hold::Looped
+            | Hold::OverBreak
+            | Hold::Enum => vec![0],
+            Hold::Tuple | Hold::Struct | Hold::Fielded | Hold::List => vec![0, 1],
             Hold::Nested => vec![0, 1, 2],
             Hold::Deep(_) => vec![0],
             Hold::Reborn => vec![0],
@@ -647,7 +675,7 @@ impl Item {
         };
         let all: u64 = self.children().iter().map(|&k| self.value(k)).sum();
         let once = match (self.hold, self.end) {
-            (Hold::Tuple, End::Half) => self.value(0),
+            (Hold::Tuple | Hold::Struct | Hold::Fielded, End::Half) => self.value(0),
             _ => all,
         };
         // A `var` that a loop joins and starts again joins twice before it ends.
@@ -657,7 +685,7 @@ impl Item {
         };
         // A loop that joins on one path joins only when the end does.
         match self.hold {
-            Hold::Looped => {
+            Hold::Looped | Hold::OverBreak => {
                 if joined {
                     self.value(0)
                 } else {
@@ -706,15 +734,28 @@ impl Item {
                 };
                 format!("(a{id}, b{id}) = ({}, {})\n{}", w(0), w(1), ends(join, String::new()))
             }
-            Hold::Struct => format!(
-                "p{id} = Both(first: {}, second: {})\n{}",
-                w(0),
-                w(1),
-                ends(
-                    format!("{}\n{}", add(&format!("join(p{id}.first)")), add(&format!("join(p{id}.second)"))),
-                    String::new()
-                )
-            ),
+            Hold::Struct | Hold::Fielded => {
+                let join = match self.end {
+                    End::Half => add(&format!("join(p{id}.first)")),
+                    _ => format!(
+                        "{}\n{}",
+                        add(&format!("join(p{id}.first)")),
+                        add(&format!("join(p{id}.second)"))
+                    ),
+                };
+                if matches!(self.hold, Hold::Fielded) {
+                    format!(
+                        "var p{id} = Both(first: {}, second: {})\np{id}.first = {}\np{id}.second = {}\n{}",
+                        w(8),
+                        w(9),
+                        w(0),
+                        w(1),
+                        ends(join, String::new())
+                    )
+                } else {
+                    format!("p{id} = Both(first: {}, second: {})\n{}", w(0), w(1), ends(join, String::new()))
+                }
+            }
             Hold::List => format!(
                 "hs{id}: List[Task[u64]] = [{}, {}]\n{}",
                 w(0),
@@ -800,6 +841,18 @@ impl Item {
                     add(&format!("join(h{id})"))
                 )
             }
+            Hold::OverBreak => {
+                let c = match self.end {
+                    End::Below(c) => c,
+                    End::Join | End::Half => u64::MAX,
+                    End::Drop => 0,
+                };
+                format!(
+                    "t{id} = {}\nxs{id} = build(3)\nloop x{id} in xs{id} {{\nif r < {c} {{\n{}\nbreak\n}} else {{ }}\n}}",
+                    w(0),
+                    add(&format!("join(t{id})"))
+                )
+            }
             Hold::Over => match self.end {
                 End::Drop => format!("handles({})", self.size),
                 _ => format!(
@@ -820,7 +873,7 @@ struct Held_ {
 }
 
 fn an_item(g: &mut Gen) -> Item {
-    let hold = match g.below(13) {
+    let hold = match g.below(15) {
         0 => Hold::Name,
         1 => Hold::Var,
         2 => Hold::Assigned,
@@ -833,6 +886,8 @@ fn an_item(g: &mut Gen) -> Item {
         9 => Hold::Param,
         10 => Hold::Reborn,
         11 => Hold::Looped,
+        12 => Hold::Fielded,
+        13 => Hold::OverBreak,
         _ => Hold::Over,
     };
     let end = match g.below(4) {
