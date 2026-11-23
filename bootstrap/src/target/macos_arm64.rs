@@ -26,7 +26,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.allocates(),
         program.asks_for_entropy(),
         program.reads(),
-        program.asks_the_kernel(),
+        program.asks_the_kernel() || program.waits_in_kqueue(),
     );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {

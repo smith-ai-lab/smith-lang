@@ -799,6 +799,10 @@ pub trait System {
     /// what it gives in x0. Linux and macOS build it, and the others are never
     /// asked, as `Target::emit_parts` refuses first. It may change x0 to x17.
     fn raw(asm: &mut Asm, call: Raw) {
+        if call == Raw::Kind {
+            asm.mov_w(X0, 0);
+            return;
+        }
         assert!(
             matches!(
                 call,

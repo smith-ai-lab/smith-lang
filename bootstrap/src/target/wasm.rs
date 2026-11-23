@@ -1540,6 +1540,10 @@ impl Lowering<'_> {
             // The calls only Linux has are built into the scheduler for every
             // machine and never run here: they give minus the error for a call
             // the kernel does not have.
+            System::Raw(crate::scalar::Raw::Kind) => {
+                self.code.i64_const(0);
+                self.set(results[0]);
+            }
             System::Raw(
                 crate::scalar::Raw::EpollCreate1
                 | crate::scalar::Raw::EpollCtl

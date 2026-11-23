@@ -1177,10 +1177,24 @@ impl Program {
                             | Raw::Close
                             | Raw::ClockGetTime
                             | Raw::NanoSleep
-                            | Raw::Kqueue
-                            | Raw::Kevent
-                            | Raw::Kind
                     ),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Whether the program waits for the system in `kqueue`, which only macOS
+    /// has, as the scheduler of a group does where it is built for every machine.
+    /// It asks nothing of a machine that has none, so a target that has no network
+    /// still builds it, and a macOS executable imports the wrappers when it does.
+    pub fn waits_in_kqueue(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(Raw::Kqueue | Raw::Kevent),
                     ..
                 }
             )
