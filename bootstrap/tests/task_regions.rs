@@ -664,8 +664,6 @@ impl Item {
                     0
                 }
             }
-            Hold::Over if matches!(self.end, End::Drop) => 0,
-            Hold::Over => all,
             _ => before + if joined { once } else { 0 },
         }
     }
@@ -715,28 +713,8 @@ impl Item {
                     String::new()
                 )
             ),
-            Hold::List => format!(
-                "hs{id}: List[Task[u64]] = [{}, {}]\n{}",
-                w(0),
-                w(1),
-                ends(
-                    format!("loop h{id} in hs{id} {{\n{}\n}}", add(&format!("join(h{id})"))),
-                    String::new()
-                )
-            ),
-            Hold::Nested => format!(
-                "ns{id}: List[List[Task[u64]]] = [[{}], [{}, {}]]\n{}",
-                w(0),
-                w(1),
-                w(2),
-                ends(
-                    format!(
-                        "loop row{id} in ns{id} {{\nloop h{id} in row{id} {{\n{}\n}}\n}}",
-                        add(&format!("join(h{id})"))
-                    ),
-                    String::new()
-                )
-            ),
+            Hold::List => format!("hs{id}: List[Task[u64]] = [{}, {}]", w(0), w(1)),
+            Hold::Nested => format!("ns{id}: List[List[Task[u64]]] = [[{}], [{}, {}]]", w(0), w(1), w(2)),
             Hold::Enum => format!(
                 "e{id} = Held.one({})\n{}",
                 w(0),
@@ -753,25 +731,7 @@ impl Item {
                 for _ in 0..depth {
                     made = format!("Deep.more([{made}])");
                 }
-                // Each level matches what the level above it gave, and joins
-                // the leaf where there is one.
-                let mut join = String::new();
-                let mut closing = String::new();
-                let mut of = format!("d{id}");
-                for level in 0..=depth {
-                    join.push_str(&format!(
-                        "match {of} {{\n.leaf(t{id}x{level}) {{\n{}\n}}\n.more(m{id}x{level}) {{\n",
-                        add(&format!("join(t{id}x{level})"))
-                    ));
-                    closing.insert_str(0, "\n}\n}");
-                    if level < depth {
-                        join.push_str(&format!("loop y{id}x{level} in m{id}x{level} {{\n"));
-                        closing.insert_str(0, "\n}");
-                        of = format!("y{id}x{level}");
-                    }
-                }
-                join.push_str(&closing);
-                format!("d{id} = {made}\n{}", ends(join, String::new()))
+                format!("d{id} = {made}")
             }
             Hold::Param => {
                 let bind = format!("h{id} = {}\n", w(0));
@@ -800,14 +760,7 @@ impl Item {
                     add(&format!("join(h{id})"))
                 )
             }
-            Hold::Over => match self.end {
-                End::Drop => format!("handles({})", self.size),
-                _ => format!(
-                    "loop h{id} in handles({}) {{\n{}\n}}",
-                    self.size,
-                    add(&format!("join(h{id})"))
-                ),
-            },
+            Hold::Over => format!("handles({})", self.size),
         }
     }
 }
@@ -817,6 +770,10 @@ impl Item {
 struct Held_ {
     items: Vec<Item>,
     seed: u64,
+}
+
+fn holds_a_list(hold: Hold) -> bool {
+    matches!(hold, Hold::List | Hold::Nested | Hold::Deep(_) | Hold::Over)
 }
 
 fn an_item(g: &mut Gen) -> Item {
@@ -841,6 +798,9 @@ fn an_item(g: &mut Gen) -> Item {
         2 => End::Below(1 + g.below(6) as u64),
         _ => End::Half,
     };
+    // A loop lends the handles of a list, and a handle is given away to be
+    // joined, so the handles of a list are dropped and never joined.
+    let end = if holds_a_list(hold) { End::Drop } else { end };
     let size = 10 + 5 * g.below(7) as u64;
     Item { hold, end, size }
 }

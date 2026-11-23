@@ -44,6 +44,8 @@ pub struct Task[T] {
   gives: [0]T
 }
 
+without Copy for Task
+
 // What a scheduler answers: `start` takes a child's frame and gives its number,
 // and `finish` waits until that child has ended and gives its frame back, once.
 pub effect task {

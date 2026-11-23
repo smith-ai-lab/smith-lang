@@ -68,6 +68,10 @@ pub const ONCE: &[Test] = &[
         "a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents",
         a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents,
     ),
+    (
+        "a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken",
+        a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[(
@@ -345,4 +349,23 @@ fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
             runs_as(source.as_bytes(), target, &said);
         }
     });
+}
+
+/// A `Task` has no `Copy`, so a second `join` of one handle is a use after it
+/// was given away, which this program did not say before: it read the frame of
+/// a child that had ended. A function that lends the handle may not join it,
+/// and one that takes it may.
+fn a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken() {
+    let twice = program("fn main() ! console, alloc {\n  with tasks()\n  t = spawn { \"seven\" }\n  a = join(t)\n  b = join(t)\n  print(\"{a} {b}\")\n}\n");
+    let errors = refused(&twice);
+    assert!(errors.contains("`t` is used here, after it was given away"), "{errors}");
+    let once = |param: &str| {
+        program(&format!(
+            "fn wait(t: {param}Task[str]) -> str ! task {{\n  join(t)\n}}\n\nfn main() ! console, alloc {{\n  with tasks()\n  t = spawn {{ \"seven\" }}\n  print(wait(t))\n}}\n"
+        ))
+        .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks)")
+    };
+    assert_eq!(run(&once("take ")), "seven\n");
+    let errors = refused(&once(""));
+    assert!(errors.contains("`t` is lent to `wait`"), "{errors}");
 }

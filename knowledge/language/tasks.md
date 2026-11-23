@@ -32,7 +32,7 @@ fn fetch_one(url: str) -> Result[List[Byte], NetError] ! net, alloc {
 }
 ```
 
-`t` is the child, and `join(t)` is what `fetch(url)` gave.
+`t` is the child, and `join(t)` is what `fetch(url)` gave. `join` takes the child, and a `Task` has no `Copy`, so a child is joined once: a second `join(t)` is refused as a use of `t` after it was given away. A `Task` has `Discard`, so a child that is never joined is allowed.
 
 ## Two children
 
