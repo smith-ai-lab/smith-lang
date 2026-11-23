@@ -55,7 +55,7 @@ pub fn checked_rem[T](a: T, b: T) -> Option[T]
 }
 
 pub fn narrow[A, B](x: A) -> Option[B] {
-  __checked_narrow(x)
+  __narrow(x)
 }
 
 pub fn wrapping_narrow[A, B](x: A) -> B {
@@ -63,7 +63,7 @@ pub fn wrapping_narrow[A, B](x: A) -> B {
 }
 
 pub fn clamp[A, B](x: A) -> B {
-  __saturating_narrow(x)
+  __clamp(x)
 }
 
 pub fn wrapping_shift_left[T](a: T, by: Byte) -> T {
