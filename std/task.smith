@@ -1,5 +1,5 @@
 use std.bits (bit_and, bit_xor, i64, shift_right, u64)
-use std.int (checked_rem, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
+use std.int (checked_rem, saturating_add, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
 use std.list (push)
 
 // The functions of task groups: `tasks` opens a group for the rest of a block,
@@ -490,14 +490,14 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
                   .task(t) { waits_on_task(n, t) }
                   .read(h) { waits_on_descriptor(n, h.number) }
                   .write(h) { waits_on_descriptor(n, h.number) }
-                  .time(t) { waits_on_time(n, wrapping_add(clock, t)) }
+                  .time(t) { waits_on_time(n, test_moment(clock, t)) }
                   .read_by(h) {
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(clock, by))
+                    waits_on_time(n, test_moment(clock, by))
                   }
                   .write_by(h) {
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(clock, by))
+                    waits_on_time(n, test_moment(clock, by))
                   }
                 }
               }
@@ -597,11 +597,6 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
   n
 }
 
-// A moment that a task waits until, on this clock, is one more than the clock says
-// and the time asked for, since the clock says the milliseconds that have gone whole, and a
-// task that was woken at the moment would otherwise be woken up to a millisecond
-// before the time it asked for.
-
 // The milliseconds the clock of the system says, which only goes forward: the
 // monotonic clock, 1 on Linux and 6 on macOS.
 fn read_clock() -> u64 ! alloc {
@@ -613,6 +608,22 @@ fn read_clock() -> u64 ! alloc {
   seconds = word64(stamp, 0)
   part: u64 = word64(stamp, 8) / 1000000
   wrapping_add(wrapping_mul(seconds, 1000), part)
+}
+
+// The moment, on the clock of the system, that a wait of `t` milliseconds that
+// begins now ends. It is one more than the clock says and `t`, since the clock
+// says the milliseconds that have gone whole, and a task woken at the moment
+// would otherwise be woken up to a millisecond before the time it asked for. It
+// is the largest number when the sum is more, so a wait that long never ends by
+// its time, where a sum that wrapped would be a moment that has gone.
+fn moment(t: u64) -> u64 ! alloc {
+  saturating_add(saturating_add(read_clock(), 1), t)
+}
+
+// The moment, on the clock of a test, that a wait of `t` milliseconds that begins
+// at `clock` ends, which is the largest number when the sum is more.
+fn test_moment(clock: u64, t: u64) -> u64 {
+  saturating_add(clock, t)
 }
 
 // The queue the system's scheduler waits with, which is an `epoll` of Linux or
@@ -781,19 +792,19 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
                     waits_on_descriptor(n, h.number)
                     parked = wrapping_add(parked, 1)
                   }
-                  .time(t) { waits_on_time(n, wrapping_add(wrapping_add(read_clock(), t), 1)) }
+                  .time(t) { waits_on_time(n, moment(t)) }
                   .read_by(h) {
                     if ep < 0 { ep = make_queue() }
                     register_wait(ep, h.number, false)
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(wrapping_add(read_clock(), by), 1))
+                    waits_on_time(n, moment(by))
                     parked = wrapping_add(parked, 1)
                   }
                   .write_by(h) {
                     if ep < 0 { ep = make_queue() }
                     register_wait(ep, h.number, true)
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(wrapping_add(read_clock(), by), 1))
+                    waits_on_time(n, moment(by))
                     parked = wrapping_add(parked, 1)
                   }
                 }
