@@ -1089,6 +1089,19 @@ impl<'a> Lowering<'a> {
         match ty {
             Ty::Nothing => self.text(out, b"()"),
             Ty::List(of) | Ty::Slice(of) => self.repr_elements(out, &of[0], values),
+            Ty::Array(of, n) => {
+                let size = self.size(&of[0]);
+                let items = (0..*n as usize)
+                    .map(|k| {
+                        (
+                            String::new(),
+                            of[0].clone(),
+                            values[k * size..(k + 1) * size].to_vec(),
+                        )
+                    })
+                    .collect();
+                self.listed(out, "[", "]", items)
+            }
             Ty::Text => self.call_runtime(out, Runtime::Escape, values.to_vec(), TEXT.to_vec()),
             Ty::Struct(s, args) => {
                 let def = &defs.file.structs[*s];
@@ -1104,13 +1117,13 @@ impl<'a> Lowering<'a> {
                     ));
                     at += size;
                 }
-                self.listed(out, &format!("{}(", def.name), items)
+                self.listed(out, &format!("{}(", def.name), ")", items)
             }
             Ty::Tuple(of) => {
                 let items = (of.iter().zip(self.elements(of, values)))
                     .map(|(t, values)| (String::new(), t.clone(), values))
                     .collect();
-                self.listed(out, "(", items)
+                self.listed(out, "(", ")", items)
             }
             Ty::Enum(e, args) => {
                 let def = &defs.file.enums[*e];
@@ -1125,7 +1138,7 @@ impl<'a> Lowering<'a> {
                         Some(t) => {
                             let held = layout.cases[k].iter().map(|&p| values[1 + p]).collect();
                             let item = (String::new(), t.subst(args), held);
-                            self.listed(out, &format!(".{}(", case.name), vec![item])
+                            self.listed(out, &format!(".{}(", case.name), ")", vec![item])
                         }
                         // The cases of `bool` are written as bare names.
                         None if *e == defs.boolean => self.text(out, case.name.as_bytes()),
@@ -1206,11 +1219,12 @@ impl<'a> Lowering<'a> {
     }
 
     /// The text `open`, then the label of each item and the text its value's
-    /// `Repr` gives, the items separated by commas, and then `)`.
+    /// `Repr` gives, the items separated by commas, and then `close`.
     fn listed(
         &mut self,
         out: &mut Out<'a>,
         open: &str,
+        close: &str,
         items: Vec<(String, Ty, Vec<form::Value>)>,
     ) -> Vec<form::Value> {
         let repr = self.typed.defs.repr;
@@ -1225,7 +1239,7 @@ impl<'a> Lowering<'a> {
             parts.push(self.text(out, &std::mem::take(&mut known)));
             parts.push(text);
         }
-        known.push(b')');
+        known.extend(close.bytes());
         let close = self.text(out, &known);
         if parts.is_empty() {
             return close;

@@ -1,0 +1,3 @@
+array_without_fmt.smith:12:11: there is no implementation of `Fmt` for `[2]Key`, as `Key` has no `Fmt`
+  12 |   print("{keys}")
+     |           ^
