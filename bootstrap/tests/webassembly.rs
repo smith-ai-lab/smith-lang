@@ -69,8 +69,8 @@ pub const ONCE: &[Test] = &[
         a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_valid_one_is_not,
     ),
     (
-        "a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width",
-        a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width,
+        "a_module_of_an_array_of_literals_given_to_a_function_of_the_type_of_its_elements_loads",
+        a_module_of_an_array_of_literals_given_to_a_function_of_the_type_of_its_elements_loads,
     ),
     (
         "a_module_of_generated_programs_with_whole_numbers_of_every_width_prints_what_the_evaluator_prints",
@@ -1005,12 +1005,12 @@ fn a_module_of_wrong_types_is_refused_by_the_check_every_module_passes_and_a_val
     assert_eq!(valid_modules::check(empty), Ok(()));
 }
 
-/// A whole number is held as 32 bits or as 64 by the range of its type where it
-/// is made, and a call took it so, where the function it calls takes it as the
-/// type of its own: an element of `[1, 2, 3]` is a number of 64 bits, and
-/// `repr` of it is `repr[u8]`, which takes 8. A module of such a call did not
-/// load: `call[2] expected type i32, found local.get of type i64`.
-fn a_call_is_given_what_its_function_takes_where_the_value_is_held_at_another_width() {
+/// The elements of `[1, 2, 3]` are of the range `1..3`, and each literal was
+/// held at 64 bits where it was written, so `repr(xs[0])`, which is `repr[u8]`,
+/// was given a number of 64 bits for one of 8: the form was not well formed at
+/// the call, the other targets read the low bits of a register, and a module
+/// did not load: `call[2] expected type i32, found local.get of type i64`.
+fn a_module_of_an_array_of_literals_given_to_a_function_of_the_type_of_its_elements_loads() {
     if !node() {
         return;
     }
