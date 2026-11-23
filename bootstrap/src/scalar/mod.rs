@@ -400,6 +400,11 @@ pub enum Raw {
     /// applies the changes and then waits for an event, until the time, which is
     /// the address of a pair of numbers, or for ever when it is 0.
     Kevent,
+    /// `clock_gettime(clock, time)`, as `ClockGetTime` is, which the scheduler
+    /// of a group reads the time with. It is built into the scheduler for every
+    /// machine, so it asks nothing of a machine that has no clock, where it
+    /// gives minus 38 and is never run, as `EpollWait` does.
+    Now,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1218,7 +1223,7 @@ impl Program {
             matches!(
                 i.op,
                 Op::System {
-                    call: System::Raw(Raw::Kqueue | Raw::Kevent),
+                    call: System::Raw(Raw::Kqueue | Raw::Kevent | Raw::Now),
                     ..
                 }
             )

@@ -22,13 +22,18 @@ pub struct Handle {
   pub number: u64
 }
 
-// What a task waits for: a handle to be ready to read or to write, a moment of
-// the clock in milliseconds, or another task, by its number, to end.
+// What a task waits for: a handle to be ready to read or to write, some
+// milliseconds from when it waits, another task, by its number, to end, or a
+// handle to be ready to read or to write until some milliseconds have gone,
+// whichever comes first, which the task says by `limit` just before it waits, so
+// that the handle and the milliseconds are each held whole.
 pub enum Wait {
   read: Handle
   write: Handle
   time: u64
   task: u64
+  read_by: Handle
+  write_by: Handle
 }
 
 // What polling a frame says: that the task is done, or what it waits for.
@@ -56,6 +61,14 @@ pub effect task {
   // after it asked too, which is how a server that is shut down serves the
   // connections it has.
   pub fn quiet()
+  // For the library alone, which a program that calls it is refused: whether the
+  // task that asks was woken by its time and not by its handle, after it waited
+  // for a handle by a time.
+  pub fn timed_out() -> bool
+  // For the library alone, which a program that calls it is refused: the
+  // milliseconds that the next wait of the task that asks, for a handle until a
+  // time, lasts.
+  pub fn limit(ms: u64)
 }
 
 // Runs a frame to its end. The system's scheduler waits for nothing yet, so a
@@ -90,6 +103,11 @@ fn system_finish(number: u64) -> Frame {
 // is left to wait for.
 fn system_quiet() { }
 
+// The system's scheduler waits for nothing, so no task was woken by its time.
+fn system_timed_out() -> bool { false }
+
+fn system_limit(ms: u64) { }
+
 // A group. Where a scheduler is in force it hands each child to that one, and
 // where none is it is the scheduler of its children, which runs them until they
 // all wait and then waits for the system with `epoll`, so that a task that waits
@@ -103,6 +121,8 @@ pub fn tasks[T](body: take fn() -> T ! task) -> T ! task {
       start: fn(work) { start(__frame_at(__address(work))) },
       finish: fn(child) { finish(child) },
       quiet: { quiet() },
+      timed_out: { timed_out() },
+      limit: fn(ms) { limit(ms) },
       body: body,
     )
   } else {
@@ -153,6 +173,14 @@ fn waits_for_task(n: u64) -> bool { bits(n, 2) != 0 }
 fn waits_for_descriptor(n: u64) -> bool { bits(n, 4) != 0 }
 
 fn is_detached(n: u64) -> bool { bits(n, 8) != 0 }
+
+// That it waits for a time, whose moment is in the fourth word of its header, and
+// that it was woken by the time and not by the handle it waited for.
+fn waits_for_time(n: u64) -> bool { bits(n, 16) != 0 }
+
+fn is_timed_out(n: u64) -> bool { bits(n, 32) != 0 }
+
+fn deadline(n: u64) -> u64 { __word(n, 3) }
 
 // Whether a task of the chain that begins at `first` waits for the task, which
 // then keeps its frame, since the one that waits reads it ended from there.
@@ -207,6 +235,7 @@ fn enter(n: u64, first: u64) -> u64 {
   __set_word(n, 0, first)
   __set_word(n, 1, 0)
   __set_word(n, 2, 0)
+  __set_word(n, 3, 0)
   n
 }
 
@@ -229,7 +258,7 @@ fn leave(first: u64, n: u64) -> u64 {
 // Whether the task may run: it has not ended, it does not wait for a descriptor,
 // and the task it waits for, if it waits for one, has ended.
 fn runnable(n: u64) -> bool {
-  if has_ended(n) or waits_for_descriptor(n) { return false }
+  if has_ended(n) or waits_for_descriptor(n) or waits_for_time(n) { return false }
   if waits_for_task(n) { has_ended(on(n)) } else { true }
 }
 
@@ -259,6 +288,14 @@ fn nth_runnable(first: u64, k: u64) -> u64 {
   found
 }
 
+// The task stops waiting for a descriptor and for a time, whichever it waited
+// for, and is told whether its time came.
+fn woken_by(n: u64, time: bool) {
+  var made = wrapping_sub(wrapping_sub(wrapping_sub(state(n), bits(n, 4)), bits(n, 16)), bits(n, 32))
+  if time { made = wrapping_add(made, 32) }
+  __set_word(n, 1, made)
+}
+
 // Wakes the tasks that wait for the descriptor, and gives how many there were.
 fn wake(first: u64, fd: u64) -> u64 {
   var woken: u64 = 0
@@ -266,12 +303,69 @@ fn wake(first: u64, fd: u64) -> u64 {
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_descriptor(at) and on(at) == fd {
-      __set_word(at, 1, wrapping_sub(state(at), 4))
+      woken_by(at, false)
       woken = wrapping_add(woken, 1)
     }
     at = after(at)
   }
   woken
+}
+
+// Whether a task waits for a time.
+fn has_timers(first: u64) -> bool {
+  var found = false
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_time(at) { found = true }
+    at = after(at)
+  }
+  found
+}
+
+// Whether a task waits for the descriptor.
+fn has_waiter(first: u64, fd: u64) -> bool {
+  var found = false
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_descriptor(at) and on(at) == fd { found = true }
+    at = after(at)
+  }
+  found
+}
+
+// Wakes the tasks whose time has come, as `moment` says, and gives how many of
+// them were waiting for a descriptor too.
+fn expire(first: u64, moment: u64) -> u64 {
+  var woken: u64 = 0
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_time(at) and deadline(at) <= moment {
+      if waits_for_descriptor(at) { woken = wrapping_add(woken, 1) }
+      woken_by(at, true)
+    }
+    at = after(at)
+  }
+  woken
+}
+
+// The milliseconds from `moment` to the nearest time that a task waits for, and
+// none, which is 0, when none waits for one. A time that has come is not one,
+// since `expire` wakes it.
+fn nearest(first: u64, moment: u64) -> u64 {
+  var found: u64 = 0
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_time(at) and deadline(at) > moment {
+      left = wrapping_sub(deadline(at), moment)
+      if found == 0 or left < found { found = left }
+    }
+    at = after(at)
+  }
+  found
 }
 
 // What the task did when it was run: it ended, or it waits for something.
@@ -285,8 +379,14 @@ fn waits_on_task(n: u64, t: u64) {
 }
 
 fn waits_on_descriptor(n: u64, fd: u64) {
-  __set_word(n, 1, wrapping_add(state(n), 4))
+  __set_word(n, 1, wrapping_add(wrapping_sub(state(n), bits(n, 32)), 4))
   __set_word(n, 2, fd)
+}
+
+// The task waits until the moment, as well as for what else it waits for.
+fn waits_on_time(n: u64, moment: u64) {
+  __set_word(n, 1, wrapping_add(wrapping_sub(state(n), bits(n, 32)), 16))
+  __set_word(n, 3, moment)
 }
 
 // The task goes on when it is run again, so it waits for nothing then.
@@ -313,6 +413,8 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
   var next: u64 = 0
   var rng: u64 = seed
   var current: u64 = 0
+  var clock: u64 = 0
+  var by: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -332,6 +434,8 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         __wait(.task(other))
       }
     },
+    timed_out: { is_timed_out(current) },
+    limit: fn(ms) { by = ms },
     body: {
       root = __frame(body)
       top = enter(__address(root), first)
@@ -340,9 +444,18 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         if has_ended(top) { break }
         first = reap(first)
         var many = count_runnable(first)
-        if many == 0 and next < ready.size {
-          wake(first, ready[next])
-          next = wrapping_add(next, 1)
+        if many == 0 {
+          // Nothing can run: a handle of `ready` becomes ready, when a task that
+          // waits for a time has none to wait for, and otherwise the time of the
+          // test goes forward to the nearest that a task waits for.
+          soon = nearest(first, clock)
+          if next < ready.size and (soon == 0 or has_waiter(first, ready[next])) {
+            wake(first, ready[next])
+            next = wrapping_add(next, 1)
+          } else if soon > 0 {
+            clock = wrapping_add(clock, soon)
+            expire(first, clock)
+          }
           many = count_runnable(first)
         }
         rng = wrapping_add(rng, 11400714819323198485)
@@ -363,7 +476,15 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
                   .task(t) { waits_on_task(n, t) }
                   .read(h) { waits_on_descriptor(n, h.number) }
                   .write(h) { waits_on_descriptor(n, h.number) }
-                  .time(t) { }
+                  .time(t) { waits_on_time(n, wrapping_add(clock, t)) }
+                  .read_by(h) {
+                    waits_on_descriptor(n, h.number)
+                    waits_on_time(n, wrapping_add(clock, by))
+                  }
+                  .write_by(h) {
+                    waits_on_descriptor(n, h.number)
+                    waits_on_time(n, wrapping_add(clock, by))
+                  }
                 }
               }
             }
@@ -381,6 +502,32 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
 // connection of a socket under the scheduler of a program.
 pub fn test_ready(handle: u64) ! task {
   __wait(.read(Handle(number: handle)))
+}
+
+// A task waits until the test says the handle is ready or the milliseconds have
+// gone, whichever comes first, in the time of the test, which goes forward only
+// when no task can run. It is told which: true when the handle was ready.
+pub fn test_ready_by(handle: u64, ms: u64) -> bool ! task {
+  wait_to_read_by(handle, ms)
+}
+
+// For the library: waits for the milliseconds, as a task that a scheduler runs.
+pub fn wait_for_time(ms: u64) ! task {
+  __wait(.time(ms))
+}
+
+// Waits until the descriptor can be read or the milliseconds have gone, whichever
+// comes first, and says which: true when it can be read.
+pub fn wait_to_read_by(handle: u64, ms: u64) -> bool ! task {
+  limit(ms)
+  __wait(.read_by(Handle(number: handle)))
+  not timed_out()
+}
+
+pub fn wait_to_write_by(handle: u64, ms: u64) -> bool ! task {
+  limit(ms)
+  __wait(.write_by(Handle(number: handle)))
+  not timed_out()
 }
 
 // Bytes of a number of 32 bits, lowest first.
@@ -412,6 +559,40 @@ fn register(ep: i64, fd: u64, write: bool) -> i64 ! alloc {
 // `epoll`. Which one is asked is known when the program is built.
 fn on_macos() -> bool {
   __system(12) == 1
+}
+
+// Bytes of a number of 64 bits, lowest first.
+fn le64(list: take List[Byte], n: u64) -> List[Byte] ! alloc {
+  low: u64 = bit_and(n, 4294967295)
+  high: u64 = shift_right(n, 32)
+  le32(le32(list, low), high)
+}
+
+// The number that the eight bytes from `at` are, the low one first.
+fn word64(bytes: List[Byte], at: Nat) -> u64 {
+  var n: u64 = 0
+  var scale: u64 = 1
+  loop i in 0..bytes.size {
+    if i >= at and i < at + 8 {
+      wide: u64 = bytes[i]
+      n = wrapping_add(n, wrapping_mul(wide, scale))
+      scale = wrapping_mul(scale, 256)
+    }
+  }
+  n
+}
+
+// The milliseconds the clock of the system says, which only goes forward: the
+// monotonic clock, 1 on Linux and 6 on macOS.
+fn read_clock() -> u64 ! alloc {
+  var stamp: List[Byte] = []
+  stamp = le64(le64(stamp, 0), 0)
+  var clock: i64 = 1
+  if on_macos() { clock = 6 }
+  __system(18, clock, stamp, 0, 0, 0, 0)
+  seconds = word64(stamp, 0)
+  part: u64 = word64(stamp, 8) / 1000000
+  wrapping_add(wrapping_mul(seconds, 1000), part)
 }
 
 // The queue the system's scheduler waits with, which is an `epoll` of Linux or
@@ -446,12 +627,12 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] ! alloc {
   if time < 0 {
     got = __system(17, kq, 0, 0, buffer, 1, 0)
   } else {
-    var none: List[Byte] = []
-    none = le32(none, 0)
-    none = le32(none, 0)
-    none = le32(none, 0)
-    none = le32(none, 0)
-    got = __system(17, kq, 0, 0, buffer, 1, none)
+    // The time to wait is a pair of numbers, the seconds and the nanoseconds.
+    ms: u64 = wrapping_narrow(time)
+    var limit: List[Byte] = []
+    limit = le64(limit, ms / 1000)
+    limit = le64(limit, (ms % 1000) * 1000000)
+    got = __system(17, kq, 0, 0, buffer, 1, limit)
   }
   if got != 1 { return .none }
   event = __sized(buffer, 32)
@@ -498,6 +679,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
   var ep: i64 = -1
   var turn: u64 = 0
   var current: u64 = 0
+  var by: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -517,6 +699,8 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         __wait(.task(other))
       }
     },
+    timed_out: { is_timed_out(current) },
+    limit: fn(ms) { by = ms },
     body: {
       root = __frame(body)
       top = enter(__address(root), first)
@@ -524,14 +708,29 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       loop round in 0..9223372036854775807 {
         if has_ended(top) { break }
         first = reap(first)
+        // The clock is read only when a task waits for a time.
+        timers = has_timers(first)
+        if timers { parked = wrapping_sub(parked, expire(first, read_clock())) }
         var many = count_runnable(first)
-        if parked > 0 {
+        var soon: u64 = 0
+        if timers and many == 0 { soon = nearest(first, read_clock()) }
+        if parked > 0 or soon > 0 {
+          // The system's queue is asked what is ready, and when nothing can run it
+          // is waited in until the nearest time that a task waits for, or for ever
+          // when none waits for one.
           var time: i64 = 0
-          if many == 0 { time = -1 }
+          if many == 0 {
+            time = -1
+            if soon > 0 {
+              if soon > 2147483647 { time = 2147483647 } else { time = wrapping_narrow(soon) }
+            }
+          }
+          if ep < 0 { ep = make_queue() }
           match ready(ep, time) {
             .some(fd) { parked = wrapping_sub(parked, wake(first, fd)) }
             .none { }
           }
+          if timers { parked = wrapping_sub(parked, expire(first, read_clock())) }
           many = count_runnable(first)
         }
         turn = wrapping_add(turn, 1)
@@ -562,7 +761,21 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
                     waits_on_descriptor(n, h.number)
                     parked = wrapping_add(parked, 1)
                   }
-                  .time(t) { }
+                  .time(t) { waits_on_time(n, wrapping_add(read_clock(), t)) }
+                  .read_by(h) {
+                    if ep < 0 { ep = make_queue() }
+                    register_wait(ep, h.number, false)
+                    waits_on_descriptor(n, h.number)
+                    waits_on_time(n, wrapping_add(read_clock(), by))
+                    parked = wrapping_add(parked, 1)
+                  }
+                  .write_by(h) {
+                    if ep < 0 { ep = make_queue() }
+                    register_wait(ep, h.number, true)
+                    waits_on_descriptor(n, h.number)
+                    waits_on_time(n, wrapping_add(read_clock(), by))
+                    parked = wrapping_add(parked, 1)
+                  }
                 }
               }
             }
