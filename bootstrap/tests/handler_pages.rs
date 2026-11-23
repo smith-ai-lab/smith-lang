@@ -27,6 +27,14 @@ pub const ONCE: &[Test] = &[
         the_loud_clock_prints_when_asked_and_is_refused_without_console_and_the_fix_repairs_it,
     ),
     (
+        "two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_either_order",
+        two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_either_order,
+    ),
+    (
+        "two_pairs_of_two_children_under_the_clock_that_counts_are_the_four_ticks_each_once_for_every_seed",
+        two_pairs_of_two_children_under_the_clock_that_counts_are_the_four_ticks_each_once_for_every_seed,
+    ),
+    (
         "one_function_that_asks_is_answered_by_each_handler_it_runs_under",
         one_function_that_asks_is_answered_by_each_handler_it_runs_under,
     ),
@@ -131,4 +139,42 @@ fn one_function_that_asks_is_answered_by_each_handler_it_runs_under() {
          fn main() ! console, alloc {{\n  print(\"{{at_one()}}\")\n  print(\"{{at_two()}}\")\n}}\n"
     );
     assert_eq!(prints(&source), "1\n2\n");
+}
+
+/// What `task-handlers.md` gives, with `test_scheduler` for the scheduler so that a
+/// seed picks the order the children run in.
+const TASKS: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.task (join, spawn, test_scheduler)\n\neffect time {\n  fn now() -> u64\n}\n\n";
+
+/// `two_readings` of `task-handlers.md`: each child asks the clock that counts,
+/// and the two ticks are one and two, whichever child runs first.
+fn two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_either_order() {
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 1..=12u64 {
+        let source = format!(
+            "{TASKS}{FAKE}fn two_readings() -> (u64, u64) ! alloc, diverge {{\n  with fake_clock()\n  with test_scheduler({seed})\n  ta = spawn {{ now() }}\n  tb = spawn {{ now() }}\n  (join(ta), join(tb))\n}}\n\n\
+             fn main() ! console, alloc, diverge {{\n  print(\"{{two_readings()}}\")\n}}\n"
+        );
+        let said = prints(&source);
+        assert!(said == "(1, 2)\n" || said == "(2, 1)\n", "seed {seed}: {said}");
+        seen.insert(said);
+    }
+    assert_eq!(seen.len(), 2, "some seed runs each child first: {seen:?}");
+}
+
+/// `two_pairs` of `task-handlers.md`: the four readings are the ticks one to four,
+/// each once, whatever way the two children's readings interleave.
+fn two_pairs_of_two_children_under_the_clock_that_counts_are_the_four_ticks_each_once_for_every_seed() {
+    for seed in 1..=12u64 {
+        let source = format!(
+            "{TASKS}{FAKE}fn two_pairs() -> ((u64, u64), (u64, u64)) ! alloc, diverge {{\n  with fake_clock()\n  with test_scheduler({seed})\n  ta = spawn {{ (now(), now()) }}\n  tb = spawn {{ (now(), now()) }}\n  (join(ta), join(tb))\n}}\n\n\
+             fn main() ! console, alloc, diverge {{\n  ((a, b), (c, d)) = two_pairs()\n  print(\"{{wrapping_add(wrapping_mul(a, 1000), wrapping_add(wrapping_mul(b, 100), wrapping_add(wrapping_mul(c, 10), d)))}}\")\n}}\n"
+        );
+        let said = prints(&source);
+        let digits: Vec<char> = said.trim().chars().collect();
+        let mut sorted = digits.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, vec!['1', '2', '3', '4'], "seed {seed}: {said}");
+        // Each child's own readings come in order.
+        assert!(digits[0] < digits[1] && digits[2] < digits[3], "seed {seed}: {said}");
+    }
 }

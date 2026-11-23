@@ -84,6 +84,14 @@ pub(super) fn poll_any_stub(through: &[form::Type]) -> form::Function {
     stub("<poll any>", &params, &results)
 }
 
+/// Whether the functions of a handler assign a name of the function around it,
+/// so that the names it uses are state that goes through each poll.
+pub(super) fn holds_state(def: &HandlerDef) -> bool {
+    def.frames
+        .iter()
+        .any(|(_, names)| names.iter().any(|c| c.assigned))
+}
+
 impl<'a> Lowering<'a> {
     /// The names that are the state of the scheduler at the code being lowered:
     /// those of the nearest handler of `task` that holds state, among the
@@ -110,8 +118,26 @@ impl<'a> Lowering<'a> {
                 out.handlers[i].frames.clone(),
             ));
         }
+        // The names that other handlers assign go through each poll too, before
+        // those of the scheduler, in the order the handlers were installed.
+        let mut others: Vec<(Rc<HandlerDef<'a>>, Vec<usize>)> = Vec::new();
+        for i in 0..out.handlers.len() {
+            if defs.is_scheduler(out.handlers[i].effect) {
+                continue;
+            }
+            if out.handlers[i].def.is_none() {
+                let (effect, operations) =
+                    (out.handlers[i].effect, out.handlers[i].operations.clone());
+                let def = self.capture(out, effect, &operations);
+                out.handlers[i].def = Some(Rc::new(def));
+            }
+            let def = out.handlers[i].def.clone().expect("made");
+            if holds_state(&def) {
+                others.push((def, out.handlers[i].frames.clone()));
+            }
+        }
         let mut slots = Vec::new();
-        for (def, frames) in found {
+        let state_of = |def: &HandlerDef<'a>, frames: &[usize], slots: &mut Vec<Slot>| {
             for (i, (orig, names)) in def.frames.iter().enumerate() {
                 let frame = frames.get(i).copied().unwrap_or(*orig);
                 for c in names.iter().filter(|c| c.assigned) {
@@ -122,7 +148,14 @@ impl<'a> Lowering<'a> {
                     });
                 }
             }
-            if !slots.is_empty() {
+        };
+        for (def, frames) in &others {
+            state_of(def, frames, &mut slots);
+        }
+        for (def, frames) in found {
+            let before = slots.len();
+            state_of(&def, &frames, &mut slots);
+            if slots.len() > before {
                 break;
             }
         }
@@ -141,14 +174,58 @@ impl<'a> Lowering<'a> {
         slots
     }
 
-    /// The order in which the handlers of a copy or a frame give and take what
-    /// their functions use: those of a scheduler last, and the rest as they are.
-    pub(super) fn state_last(&self, effects: impl Iterator<Item = usize>) -> Vec<usize> {
-        let effects: Vec<usize> = effects.collect();
+    /// Whether a function polls a frame, itself or by a function it calls, so
+    /// that it must be given the state that goes through each poll.
+    pub(super) fn polls(&mut self, f: usize, seen: &mut Vec<usize>) -> bool {
+        if let Some(&known) = self.polling.get(&f) {
+            return known;
+        }
+        if seen.contains(&f) {
+            return false;
+        }
+        seen.push(f);
         let defs = self.typed.defs;
+        let view = defs.view(Template::Free(f));
+        let calls: Vec<&Call> = crate::check::exprs(crate::check::values(&view.f.body))
+            .into_iter()
+            .filter_map(|e| match e {
+                Expr::Call(c) => Some(c),
+                _ => None,
+            })
+            .collect();
+        let mut found = false;
+        for c in calls {
+            if crate::check::frames::kind(c) == Some(crate::check::frames::Kind::Poll) {
+                found = true;
+                break;
+            }
+            if c.qualifier.is_none()
+                && crate::check::frames::kind(c).is_none()
+                && let Some(g) = defs.function(c.name_pos, &c.callee)
+                && !defs.is_operation(g)
+                && self.polls(g, seen)
+            {
+                found = true;
+                break;
+            }
+        }
+        seen.pop();
+        self.polling.insert(f, found);
+        found
+    }
+
+    /// The order in which the handlers of a copy or a frame give and take what
+    /// their functions use: those that hold state last, which a scheduler does,
+    /// and the rest as they are. Each is its effect and whether it holds state.
+    pub(super) fn state_last(&self, handlers: impl Iterator<Item = (usize, bool)>) -> Vec<usize> {
+        let handlers: Vec<(usize, bool)> = handlers.collect();
+        let defs = self.typed.defs;
+        let scheduler = |i: &usize| defs.is_scheduler(handlers[*i].0);
         let (state, rest): (Vec<usize>, Vec<usize>) =
-            (0..effects.len()).partition(|i| defs.is_scheduler(effects[*i]));
-        rest.into_iter().chain(state).collect()
+            (0..handlers.len()).partition(|i| handlers[*i].1 || scheduler(i));
+        // The state of a scheduler is the very last, which `suspend` finds.
+        let (scheduled, others): (Vec<usize>, Vec<usize>) = state.into_iter().partition(scheduler);
+        rest.into_iter().chain(others).chain(scheduled).collect()
     }
 
     /// The values of the names of a state, in order.
@@ -466,23 +543,27 @@ impl<'a> Lowering<'a> {
                 out.handlers[i].def = Some(Rc::new(def));
             }
         }
-        // The state of a scheduler goes through the poll and is not held.
-        let defs = self.typed.defs;
-        let holds_state = (out.handlers.iter())
-            .filter(|h| !defs.is_scheduler(h.effect))
-            .filter_map(|h| h.def.as_ref())
-            .any(|d| {
-                d.frames
-                    .iter()
-                    .any(|(_, names)| names.iter().any(|c| c.assigned))
-            });
-        if holds_state {
+        // A handler that holds state and is installed under the scheduler that
+        // runs the child is one the scheduler's own code does not run under, so
+        // the poll it makes is not given that state.
+        let first_scheduler = out
+            .handlers
+            .iter()
+            .position(|h| self.typed.defs.is_scheduler(h.effect));
+        if let Some(scheduler) = first_scheduler
+            && out.handlers[scheduler + 1..]
+                .iter()
+                .any(|h| h.def.as_deref().is_some_and(holds_state))
+        {
             self.errors.push(Error::unsupported(
                 call.pos,
-                "a lambda made a frame under a handler that holds state,",
+                "a lambda made a frame under a handler that holds state and is installed under its scheduler,",
             ));
             return (frame.clone(), self.zeros(out, &frame));
         }
+        // The state that goes through the polls is the same in each place that
+        // asks for it.
+        let _ = self.scheduler_state(out);
         let mut args = Vec::new();
         for (orig, names) in &own.frames {
             for c in names.iter().filter(|c| c.func.is_none()) {
@@ -493,19 +574,29 @@ impl<'a> Lowering<'a> {
             }
         }
         let mut context = Vec::new();
-        for h in &out.handlers {
+        // The names the functions only read are given in the order the function
+        // the lambda becomes takes them, which has those of a handler that holds
+        // state after the others.
+        let order = self.state_last(
+            out.handlers
+                .iter()
+                .map(|h| (h.effect, h.def.as_deref().is_some_and(holds_state))),
+        );
+        for at in order {
+            let h = &out.handlers[at];
             let def = h.def.clone().expect("made");
-            let state = defs.is_scheduler(h.effect);
             for (i, (orig, names)) in def.frames.iter().enumerate() {
                 let frame = h.frames.get(i).copied().unwrap_or(*orig);
-                for c in names.iter().filter(|c| c.func.is_none() && !state) {
+                for c in names.iter().filter(|c| c.func.is_none() && !c.assigned) {
                     let at = (out.frames[frame].iter())
                         .rposition(|b| b.name == c.name)
                         .expect("a name the functions of the handler use");
                     args.extend(out.frames[frame][at].values.iter().copied());
                 }
             }
-            context.push((h.id, def));
+        }
+        for h in &out.handlers {
+            context.push((h.id, h.def.clone().expect("made")));
         }
         let params: Vec<form::Type> = args.iter().map(|v| out.types[v.0]).collect();
         let k = self.lambdas.len();
@@ -546,7 +637,7 @@ impl<'a> Lowering<'a> {
         out.homed.insert(out.written, homed);
         out.place = form::Place::of(&name);
         let mut own_slots = Vec::new();
-        let map = self.push_frames(&mut out, &def.own, &mut own_slots);
+        let map = self.push_frames(&mut out, &def.own, &mut own_slots, None);
         out.at = (map.iter())
             .find(|(from, _)| *from == def.frame)
             .expect("the frame the lambda is written in")
@@ -555,17 +646,19 @@ impl<'a> Lowering<'a> {
         // handlers, except that those of a scheduler come last, after what the
         // lambda takes, and are given back last, so that `suspend` finds them
         // after what the function takes and gives of its own.
-        let order = self.state_last(def.context.iter().map(|(_, h)| h.effect));
+        let order = self.state_last(def.context.iter().map(|(_, h)| (h.effect, holds_state(h))));
         let mut maps: Vec<Vec<(usize, usize)>> = vec![Vec::new(); def.context.len()];
         let mut state: Vec<Slot> = Vec::new();
+        let mut later = Vec::new();
         for i in order {
             let handler = &def.context[i].1;
             let mut slots = Vec::new();
-            maps[i] = self.push_frames(&mut out, handler, &mut slots);
-            if self.typed.defs.is_scheduler(handler.effect) {
+            maps[i] = self.push_frames(&mut out, handler, &mut slots, Some(&mut later));
+            if self.typed.defs.is_scheduler(handler.effect) || holds_state(handler) {
                 state.extend(slots);
             }
         }
+        super::functions_calls_and_lambdas::finish_params(&mut out, later);
         for ((id, handler), map) in def.context.iter().zip(maps) {
             let below = out.handlers.len();
             out.handlers.push(Handler {
