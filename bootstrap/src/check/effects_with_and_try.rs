@@ -252,6 +252,92 @@ impl<'a> Defs<'a> {
         })
     }
 
+    /// How many type parameters of their own the operations of an effect have
+    /// before the `at`th, and how many they have in all, which place the
+    /// parameters of each operation after the type parameters of the function a
+    /// handler is written in.
+    pub(crate) fn own_parameters(&self, effect: usize, at: usize) -> (usize, usize) {
+        let def = &self.file.effects[effect];
+        let count = |name: &String| {
+            self.function(def.pos, name)
+                .map_or(0, |f| self.signatures[f].scope.names.len())
+        };
+        let before = def.operations[..at].iter().map(count).sum();
+        let all = def.operations.iter().map(count).sum();
+        (before, all)
+    }
+
+    /// The type parameters the operations of an effect have of their own, one
+    /// after another, for a handler written in a function that has `base` type
+    /// parameters: their names, what each is known to have, and what their
+    /// bounds require, among the type parameters of the function and these.
+    pub(super) fn own_scope(&self, effect: usize, base: usize) -> Scope {
+        let def = &self.file.effects[effect];
+        let mut own = Scope::default();
+        for name in &def.operations {
+            let Some(f) = self.function(def.pos, name) else {
+                continue;
+            };
+            let sig = &self.signatures[f];
+            let by = base + own.names.len();
+            own.names.extend(sig.scope.names.iter().cloned());
+            own.invalid.extend(sig.scope.invalid.iter().copied());
+            own.copy.extend(sig.scope.copy.iter().copied());
+            own.discard.extend(sig.scope.discard.iter().copied());
+            for r in &sig.scope.requires {
+                own.requires.push(Requirement {
+                    of: r.of,
+                    types: r.types.iter().map(|t| t.shifted(by)).collect(),
+                });
+            }
+        }
+        own
+    }
+
+    /// The signature of a call of an effect's name, as `handler_signature`
+    /// says, for a handler written in a function that has `base` type
+    /// parameters. Each type parameter an operation has of its own is one more
+    /// parameter after those, distinct from them and from the handler's own,
+    /// which is the last. A lambda is checked against them as a generic
+    /// function is, and they are fixed: the lambda cannot take any of them to
+    /// be a type.
+    pub(super) fn handler_signature_in(&self, effect: usize, base: usize) -> Signature {
+        let def = &self.file.effects[effect];
+        let mut params: Vec<(String, Ty)> = Vec::new();
+        let mut taken = 0;
+        for name in &def.operations {
+            let f = self
+                .function(def.pos, name)
+                .expect("an operation is a function of the module that declares the effect");
+            let sig = &self.signatures[f];
+            let by = base + taken;
+            let mut items: Vec<Ty> = sig.params.iter().map(|(_, t)| t.shifted(by)).collect();
+            items.push(sig.gives.shifted(by));
+            taken += sig.scope.names.len();
+            params.push((written_name(name).to_string(), Ty::Fn(items)));
+        }
+        let own = base + taken;
+        params.push(("body".to_string(), Ty::Fn(vec![Ty::Param(own)])));
+        let mut fn_effects = vec![Vec::new(); params.len()];
+        fn_effects[params.len() - 1] = vec![def.name.clone()];
+        let count = own + 1;
+        Signature {
+            scope: Scope {
+                names: (0..count).map(|_| "T".to_string()).collect(),
+                invalid: vec![false; count],
+                copy: vec![false; count],
+                discard: vec![false; count],
+                ..Scope::default()
+            },
+            defaults: vec![false; params.len()],
+            params,
+            param_defaults: vec![None; count],
+            gives: Ty::Param(own),
+            effects: Vec::new(),
+            fn_effects,
+        }
+    }
+
     /// The signature of a call of an effect's name: a function for each
     /// operation, which takes all of the operation's parameters, and the body
     /// to run with them in force, which may carry the effect and gives what
@@ -389,23 +475,70 @@ impl<'a> Checker<'a> {
             self.refusals += 1;
             return self.unknown_call(body, call);
         }
-        // The type parameters of an operation are not told from the handler's
-        // own, so a lambda written for one would be checked against the wrong
-        // type and give a value it did not compute.
-        if let Some(operation) = self.defs.generic_operation(effect) {
+        // A lambda for an operation that has type parameters of its own is
+        // checked against them as a generic function is: they come after those
+        // of the function the handler is written in, so that the three are
+        // distinct, and they are fixed, so that the lambda is the same for every
+        // type they stand for.
+        let generic = self.defs.generic_operation(effect).is_some() && body.f.is_some();
+        if self.defs.generic_operation(effect).is_some() && !generic {
+            let operation = self.defs.generic_operation(effect).unwrap_or_default();
             self.errors.push(Error::unsupported(
                 call.name_pos,
                 &format!(
-                    "a handler of `{operation}`, an operation with type parameters of its own,"
+                    "a handler of `{operation}`, an operation with type parameters of its own, outside a function,"
                 ),
             ));
             self.refusals += 1;
             return self.unknown_call(body, call);
         }
-        let signature = self.defs.handler_signature(effect);
+        let (signature, outer) = if generic {
+            let function = addr(body.f.expect("a function"));
+            // Each handler has places of its own among the type parameters, after
+            // those of the function and of every handler before it.
+            let key = addr(call);
+            let running = self
+                .extended
+                .entry(function)
+                .or_insert_with(|| body.scope.clone());
+            let start = match self.handler_slots.get(&key) {
+                Some(&start) => start,
+                None => {
+                    let start = running.names.len();
+                    let mine = self.defs.own_scope(effect, start);
+                    running.names.extend(mine.names);
+                    running.invalid.extend(mine.invalid);
+                    running.copy.extend(mine.copy);
+                    running.discard.extend(mine.discard);
+                    running.requires.extend(mine.requires);
+                    self.handler_slots.insert(key, start);
+                    start
+                }
+            };
+            let extended: &'a Scope = Box::leak(Box::new(running.clone()));
+            for arg in &call.args {
+                if let Expr::Lambda(l) = &arg.value {
+                    self.lambda_base.insert(addr(&**l), start);
+                }
+            }
+            let signature = self.defs.handler_signature_in(effect, start);
+            let own = signature.scope.names.len() - 1;
+            let mut seeded: Vec<Option<Ty>> = (0..own).map(|i| Some(Ty::Param(i))).collect();
+            seeded.push(None);
+            self.seeded = Some(seeded);
+            (
+                signature,
+                Some(std::mem::replace(&mut body.scope, extended)),
+            )
+        } else {
+            (self.defs.handler_signature(effect), None)
+        };
         let before = self.errors.len();
         let private = self.defs.private_operations(effect, call.name_pos);
         let sol = self.arguments(body, call, &signature, false, None, None);
+        if let Some(outer) = outer {
+            body.scope = outer;
+        }
         // A handler names every operation, and one that is private to another
         // module cannot be named here. That is the one mistake of the call.
         if let Some(error) = private {

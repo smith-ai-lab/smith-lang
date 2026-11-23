@@ -683,7 +683,20 @@ impl<'a> Lowering<'a> {
             }
             return self.provided_answer(out, call, instance, gives, env);
         };
-        let func = out.handlers[handler].operations[at].clone();
+        let func = match out.handlers[handler].operations[at].clone() {
+            // The type parameters an operation has of its own are those of the
+            // call, after the type parameters of the function the handler is
+            // written in, where the lambda was checked against them.
+            Func::Lambda(lambda, frame, mut lambda_env) if !instance.args.is_empty() => {
+                let (before, all) = defs.own_parameters(effect, at);
+                let base = typed.lambda_base[&addr(lambda)];
+                lambda_env.resize(base + before, Ty::Nothing);
+                lambda_env.extend(instance.args.iter().cloned());
+                lambda_env.resize(base + all, Ty::Nothing);
+                Func::Lambda(lambda, frame, lambda_env)
+            }
+            func => func,
+        };
         let params = defs.params(instance.template);
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
         for (arg, at) in call
