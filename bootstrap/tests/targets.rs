@@ -256,20 +256,8 @@ pub const MACHINE: &[Test] = &[
         a_program_the_system_refuses_memory_ends_with_a_failing_status_and_does_nothing_more,
     ),
     (
-        "every_target_builds_the_cases_to_the_hashes_another_machine_made_part_1_of_4",
-        || every_target_builds_the_cases_to_the_hashes_another_machine_made(0),
-    ),
-    (
-        "every_target_builds_the_cases_to_the_hashes_another_machine_made_part_2_of_4",
-        || every_target_builds_the_cases_to_the_hashes_another_machine_made(1),
-    ),
-    (
-        "every_target_builds_the_cases_to_the_hashes_another_machine_made_part_3_of_4",
-        || every_target_builds_the_cases_to_the_hashes_another_machine_made(2),
-    ),
-    (
-        "every_target_builds_the_cases_to_the_hashes_another_machine_made_part_4_of_4",
-        || every_target_builds_the_cases_to_the_hashes_another_machine_made(3),
+        "every_target_builds_the_cases_to_the_hashes_another_machine_made",
+        every_target_builds_the_cases_to_the_hashes_another_machine_made,
     ),
 ];
 
@@ -1023,7 +1011,7 @@ const HASHES: &str = "SMITH_HASHES";
 /// each, one line for each as `<target> <case file> <sha256>`, and every other
 /// kind of machine builds the same cases and compares. A run that is given no
 /// file has nothing to compare with, and checks nothing.
-fn every_target_builds_the_cases_to_the_hashes_another_machine_made(part: usize) {
+fn every_target_builds_the_cases_to_the_hashes_another_machine_made() {
     let Some(path) = std::env::var_os(HASHES) else {
         return;
     };
@@ -1035,11 +1023,7 @@ fn every_target_builds_the_cases_to_the_hashes_another_machine_made(part: usize)
     assert!(!made.trim().is_empty(), "{HASHES} names an empty file");
     let mut differ = Vec::new();
     let mut compared = 0;
-    // Each part takes every fourth line, so that no part builds them all.
-    for (n, line) in made.lines().enumerate() {
-        if n % 4 != part {
-            continue;
-        }
+    for line in made.lines() {
         let [target, file, hash] = line.split(' ').collect::<Vec<_>>()[..] else {
             panic!("{HASHES}: `{line}` is not `<target> <case> <hash>`");
         };
