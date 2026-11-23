@@ -613,8 +613,17 @@ fn a_wave(server: &Started, count: usize) {
     for (i, client) in clients.iter_mut().enumerate() {
         client.send(get(&format!("/users/{}", 1 + i % 7)).as_bytes());
     }
-    for client in clients.iter_mut() {
-        assert_eq!(client.reply().status, 200);
+    for (i, client) in clients.iter_mut().enumerate() {
+        let status = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.reply().status));
+        let Ok(status) = status else {
+            // Say what the server is doing, so that a machine that cannot be reached is
+            // read from what the test saw.
+            let pid = server.child.id().to_string();
+            let state = Command::new("ps").args(["-o", "pid=,%cpu=,stat=,rss=", "-p", &pid]).output().ok();
+            let state = state.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+            panic!("the answer to connection {i} of {count} never came; the server is {state:?}");
+        };
+        assert_eq!(status, 200);
     }
 }
 
