@@ -152,6 +152,11 @@ impl<'a> Lowering<'a> {
         for (def, frames) in &others {
             state_of(def, frames, &mut slots);
         }
+        // The state that goes through the polls is that of the code a scheduler
+        // is in force for. Code that no scheduler is in force for, a function
+        // that carries only the effect of a handler that holds state, is given
+        // the state of that handler and no more, and is no other state.
+        let scheduled = !found.is_empty();
         for (def, frames) in found {
             let before = slots.len();
             state_of(&def, &frames, &mut slots);
@@ -160,16 +165,27 @@ impl<'a> Lowering<'a> {
             }
         }
         let types: Vec<form::Type> = slots.iter().flat_map(|s| s.types.iter().copied()).collect();
-        match &self.through {
-            Some(known) if *known != types && !types.is_empty() => {
-                self.errors.push(Error::unsupported(
-                    Pos { line: 1, col: 1 },
-                    "two schedulers that hold different state in one program,",
-                ));
+        if !types.is_empty() {
+            match &self.through {
+                None => {
+                    self.through = Some(types);
+                    self.through_scheduled = scheduled;
+                }
+                Some(known) if *known == types => self.through_scheduled |= scheduled,
+                // What an earlier place gave with no scheduler in force is the
+                // state of the handlers there, which a scheduler's is added to.
+                Some(_) if scheduled && !self.through_scheduled => {
+                    self.through = Some(types);
+                    self.through_scheduled = true;
+                }
+                Some(_) if scheduled => {
+                    self.errors.push(Error::unsupported(
+                        Pos { line: 1, col: 1 },
+                        "two schedulers that hold different state in one program,",
+                    ));
+                }
+                Some(_) => {}
             }
-            Some(_) => {}
-            None if !types.is_empty() => self.through = Some(types),
-            None => {}
         }
         slots
     }
