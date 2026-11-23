@@ -2514,6 +2514,7 @@ fn check_file(
         defs: &defs,
         errors,
         types: HashMap::new(),
+        drops: ownership::Drops::default(),
         widened: HashMap::new(),
         comparing: false,
         discovering: false,
@@ -2599,6 +2600,7 @@ fn check_file(
     let typed = Typed {
         defs: &defs,
         types: checker.types,
+        drops: checker.drops,
         widened: checker.widened,
         value_calls: checker.value_calls,
         fn_values: checker.fn_values,
@@ -6104,6 +6106,8 @@ fn addr<T>(node: &T) -> usize {
 struct Typed<'a> {
     defs: &'a Defs<'a>,
     types: HashMap<usize, Ty>,
+    /// Where the values that may hold a child task are dropped.
+    drops: ownership::Drops,
     /// The expressions that give a range where a wider one is needed, by
     /// their addresses, with the wider range each is taken as.
     widened: HashMap<usize, Int>,
@@ -6503,6 +6507,8 @@ struct Checker<'a> {
     errors: Vec<Error>,
     /// The type of each expression checked, by its address.
     types: HashMap<usize, Ty>,
+    /// Where the values that may hold a child task are dropped.
+    drops: ownership::Drops,
     /// The expressions that give a range where a wider one is needed, by
     /// their addresses, with the wider range each is taken as.
     widened: HashMap<usize, Int>,
@@ -7364,6 +7370,7 @@ impl<'a> Checker<'a> {
                 &self.types,
                 (view.f, view.scope, &view.params),
                 &mut self.errors,
+                &mut self.drops,
             );
         }
     }
