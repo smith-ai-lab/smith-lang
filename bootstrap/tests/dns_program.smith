@@ -1,0 +1,77 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.deserialize (ReadError)
+use std.entropy (entropy)
+use std.fromtext (from_text)
+use std.net (NetError, resolve)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+
+// The bytes of an address, each as a number and a dot after it but the last.
+fn written(address: List[Byte]) -> str ! alloc {
+  var line = ""
+  loop i in 0..address.size {
+    if i > 0 { line = "{line}." }
+    line = "{line}{address[i]}"
+  }
+  line
+}
+
+// What `resolve` gives for the name, which the test's nameserver answers at the
+// port: each address on a line of its own, or the kind of the failure and what
+// it says.
+fn look(name: str, hosts: str, resolv: str, port: 0..65536) ! console, alloc, entropy, task {
+  match resolve(name, hosts, resolv, port) {
+    .ok(found) {
+      loop i in 0..found.size { print(written(found[i])) }
+    }
+    .err(e) {
+      match e {
+        .unknown_host(host) { print("unknown_host {host}") }
+        .refused { print("refused") }
+        .in_use { print("in_use") }
+        .closed { print("closed") }
+        .failed(why) { print("failed {why}") }
+      }
+    }
+  }
+}
+
+// A task that says it is running, five times, a tenth of a second apart.
+fn ticker() -> u64 ! console, time, alloc, task {
+  loop i in 0..5 {
+    sleep(100)
+    print("tick")
+  }
+  0
+}
+
+fn main(args: List[str]) ! console, alloc, entropy, task, time {
+  if args.size < 4 {
+    print("usage")
+    return
+  }
+  number: Result[0..65536, ReadError] = from_text("port", args[0])
+  match number {
+    .ok(port) {
+      // A lookup in a task of a group waits for the nameserver and lets the
+      // others run, and a lookup with no group blocks, as it always did.
+      if args.size > 4 and args[4] == "overlap" {
+        // The lookup waits for a nameserver that does not answer, and the other
+        // task runs while it does.
+        with tasks()
+        a = spawn { look(args[1], args[3], args[2], port) }
+        b = spawn { ticker() }
+        join(b)
+        join(a)
+      } else if args.size > 4 and args[4] == "group" {
+        with tasks()
+        t = spawn { look(args[1], args[3], args[2], port) }
+        join(t)
+      } else {
+        look(args[1], args[3], args[2], port)
+      }
+    }
+    .err(e) { print("bad port") }
+  }
+}
