@@ -18,6 +18,10 @@ use crate::targets;
 
 pub const MACHINE: &[Test] = &[
     (
+        "a_group_ends_within_a_second_with_a_task_that_sleeps_the_largest_number_left_unjoined",
+        a_group_ends_within_a_second_with_a_task_that_sleeps_the_largest_number_left_unjoined,
+    ),
+    (
         "a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done",
         a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done,
     ),
@@ -279,6 +283,47 @@ fn main(args: List[str]) ! console, alloc, time, diverge {
 /// is a moment that is past the largest number, which is the largest number and
 /// not a moment that has gone: a sum that wrapped would wake the task at once,
 /// before the short one.
+/// A group whose task sleeps the largest number of milliseconds, which is more
+/// than the system's wait can be given, and that nothing joins, and that joins a
+/// task that sleeps 10 milliseconds, is not held by the long one: the wait it
+/// makes is cut to the most the system takes, and the long task is ended when
+/// the block ends, so the program ends at once and not after the long sleep.
+fn a_group_ends_within_a_second_with_a_task_that_sleeps_the_largest_number_left_unjoined() {
+    let source = "use std.bits (u64)
+use std.console (console, print)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+
+fn long() -> u64 ! console, time, alloc, task {
+  sleep(18446744073709551615)
+  print(\"long woke\")
+  0
+}
+
+fn short() -> u64 ! console, time, alloc, task {
+  sleep(10)
+  print(\"short\")
+  1
+}
+
+fn main() ! console, alloc, time {
+  with tasks()
+  a = spawn { long() }
+  b = spawn { short() }
+  join(b)
+  print(\"done\")
+}
+";
+    for target in kernel() {
+        let (lines, took) = run(target, source, &[], |_| {});
+        if targets::fingerprinting() {
+            continue;
+        }
+        assert_eq!(lines, ["short", "done"], "{}", target.name());
+        assert!(took < Duration::from_secs(1), "{took:?} on {}", target.name());
+    }
+}
+
 fn a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done() {
     // Which task runs first when both may is what the seed picks, so the seeds
     // are many: a sum that wrapped wakes the long one with the short one, and
