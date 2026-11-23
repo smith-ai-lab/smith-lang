@@ -389,6 +389,12 @@ pub fn check_standard_library_part(part: usize, parts: usize) -> Vec<diag::Error
     in_order(check::check_standard_library_part(part, parts))
 }
 
+/// The modules of the standard library for which what is held by the compiler
+/// differs between reading the module in pieces and reading it whole.
+pub fn modules_whose_held_names_differ() -> Vec<String> {
+    check::modules_whose_held_names_differ()
+}
+
 /// The errors in every module of a library, given as a name and a source each,
 /// read whole and checked whole.
 pub fn check_library(modules: &[(&str, &str)]) -> Vec<diag::Error> {
