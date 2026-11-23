@@ -1479,6 +1479,7 @@ impl<'a> Walk<'a> {
         // of names that a round moves a value along is known after one round,
         // and no program built for this has needed more than three.
         let mut rounds: Vec<State> = Vec::new();
+        let mut before_gone: Vec<(Path, Pos)> = Vec::new();
         let mut head = st.clone();
         loop {
             assert!(
@@ -1490,8 +1491,19 @@ impl<'a> Walk<'a> {
             // dropped, as it is the one made from what is known at the head
             // when the loop goes round.
             *self.drops = saved.clone();
+            // What a `break` of an earlier look gave away was given away by a
+            // round the loop can make, so it is gone after the loop whatever
+            // a later look finds: a later look reads the body from what is
+            // known at the head by then, and a value given away in it again is
+            // reported and no longer recorded.
             if let Some((_, exits)) = self.breaks.last_mut() {
-                exits.clear();
+                for (moved, _) in exits.drain(..) {
+                    for gone in moved.gone {
+                        if !before_gone.iter().any(|(p, _)| *p == gone.0) {
+                            before_gone.push(gone);
+                        }
+                    }
+                }
             }
             let mut round = head.clone();
             if let (Some(range), Some(_)) = (&l.range, &round) {
@@ -1538,6 +1550,13 @@ impl<'a> Walk<'a> {
         let mut after: State = None;
         for (exit, _) in exits {
             after = join(after, Some(exit));
+        }
+        if let Some(moved) = &mut after {
+            for (path, at) in before_gone {
+                if !moved.gone.iter().any(|(p, _)| *p == path) {
+                    moved.gone.push((path, at));
+                }
+            }
         }
         if l.range.is_some() || l.over.is_some() {
             after = join(after, entry);
