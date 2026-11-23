@@ -151,6 +151,10 @@ const SIZES: &[&str] = &["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64"];
 const LEANED_ON: &[(&str, &str)] = &[
     ("std.deserialize", "ReadError"),
     ("std.deserialize", "Problem"),
+    ("std.task", "Frame"),
+    ("std.task", "Task"),
+    ("std.task", "Poll"),
+    ("std.task", "Wait"),
 ];
 
 /// The names of the types `PRELUDE` defines.
@@ -865,6 +869,9 @@ impl Signature {
 /// any body is checked.
 struct Defs<'a> {
     file: &'a File,
+    /// Whether every item of the library is checked, as a check of the library
+    /// does, and not those a program reaches.
+    whole: bool,
     /// How each module wrote its names, and what each calls what.
     resolution: Resolution,
     function_names: Map<std::borrow::Cow<'a, str>, usize>,
@@ -2215,12 +2222,35 @@ fn check_file(
         );
         let wanted = prelude.wanted(&file, &found.items, &loaded);
         let from_modules = lazy.wanted(&file, &names, &found);
-        if wanted.is_empty() && from_modules.is_empty() {
+        // An operation the target answers through a function of the library
+        // calls for it when the program reaches the operation, though no line
+        // writes its name.
+        let throughs: Vec<(&str, Pos)> = (found.items.iter())
+            .filter_map(|item| match item {
+                Item::Fn(f) => {
+                    let f = &file.functions[*f];
+                    provided_by(f).and_then(|p| p.through).map(|t| (t, f.pos))
+                }
+                _ => None,
+            })
+            .collect();
+        let before = lazy.reads;
+        loaded.extend(wanted.iter().copied());
+        loaded.sort_unstable();
+        lazy.load(
+            &from_modules,
+            &[],
+            |out| {
+                for &(through, pos) in &throughs {
+                    out(through, pos, Ask::Any);
+                }
+            },
+            &trait_names,
+            &mut errors,
+        );
+        if wanted.is_empty() && from_modules.is_empty() && lazy.reads == before {
             break;
         }
-        loaded.extend(wanted);
-        loaded.sort_unstable();
-        lazy.load(&from_modules, &[], |_| {}, &trait_names, &mut errors);
     }
 
     // The first definition of a name holds it, and a later one is a
@@ -2377,6 +2407,7 @@ fn check_file(
     let (function_names, trait_fns, types) = (names.functions, names.trait_fns, names.types);
     let mut defs = Defs {
         file: &file,
+        whole,
         resolution,
         function_names,
         function_memo: Default::default(),
@@ -3447,7 +3478,7 @@ impl Pieces {
         let mut impls: Vec<u32> = Vec::new();
         for (i, p) in list.iter().enumerate() {
             match p.kind {
-                PieceKind::Use => {}
+                PieceKind::Use | PieceKind::Without => {}
                 PieceKind::Impl => impls.push(i as u32),
                 _ => named.push(i as u32),
             }
@@ -3574,7 +3605,7 @@ impl Module<'_> {
                 match p.list[i as usize].kind {
                     PieceKind::Fn => function = true,
                     PieceKind::Struct | PieceKind::Enum | PieceKind::Trait => ty = true,
-                    PieceKind::Use | PieceKind::Impl => {}
+                    PieceKind::Use | PieceKind::Impl | PieceKind::Effect | PieceKind::Without => {}
                 }
             }
         }
@@ -3854,13 +3885,13 @@ impl<'l, 'a> Resolver<'l, 'a> {
             let text = &source[p.text.0..p.text.1];
             let word = &source[p.name.0..p.name.1];
             let read_now = match p.kind {
-                PieceKind::Use | PieceKind::Trait => true,
+                PieceKind::Use | PieceKind::Trait | PieceKind::Effect | PieceKind::Without => true,
                 PieceKind::Struct | PieceKind::Enum => LEANED_ON.contains(&(name, word)),
                 PieceKind::Fn | PieceKind::Impl => false,
             };
             // A function whose whole body calls what the compiler builds is
             // read to tell whether it is one.
-            let wrapper = p.kind == PieceKind::Fn && text.contains("__");
+            let wrapper = p.kind == PieceKind::Fn && may_be_wrapper(text);
             if p.kind != PieceKind::Use
                 && p.kind != PieceKind::Impl
                 && PRELUDE_TYPES.contains(&word)
@@ -3900,6 +3931,11 @@ impl<'l, 'a> Resolver<'l, 'a> {
             if read_now {
                 file.uses.append(&mut found.uses);
                 file.traits.append(&mut found.traits);
+                file.effects.append(&mut found.effects);
+                file.withouts.append(&mut found.withouts);
+                if p.kind == PieceKind::Effect {
+                    file.functions.append(&mut found.functions);
+                }
                 file.structs.append(&mut found.structs);
                 file.enums.append(&mut found.enums);
                 file.exports.append(&mut found.exports);
@@ -4099,7 +4135,11 @@ impl<'l, 'a> Resolver<'l, 'a> {
                         if let Reader::Module(of) = reader {
                             self.read[of].aliases.push((called.to_string(), slot));
                         }
-                        if !qualified.iter().any(|q| q.written.0 == called) {
+                        // What a divided module writes is not looked for, so
+                        // a module it imports is not found to be unused.
+                        let divided =
+                            matches!(reader, Reader::Module(of) if self.read[of].pieces.is_some());
+                        if !divided && !qualified.iter().any(|q| q.written.0 == called) {
                             self.warnings.push(
                                 Error::new(pos, format!("`{module}` is imported and never used"))
                                     .with_fix("delete the `use`"),
@@ -4355,6 +4395,18 @@ impl<'l, 'a> Resolver<'l, 'a> {
         }
         error
     }
+}
+
+/// Whether the text of a function may be one whose whole body is one call of a
+/// function the compiler builds, which is told without lexing it: the last line
+/// of its body begins with the name of such a function. `is_wrapper` decides,
+/// for what this lets by.
+fn may_be_wrapper(text: &str) -> bool {
+    let Some(body) = text.trim_end().strip_suffix('}') else {
+        return false;
+    };
+    let call = body.trim_end().rsplit(['{', '\n']).next().unwrap_or("");
+    call.trim_start().starts_with("__")
 }
 
 /// Whether a function's whole body is one call of a function the compiler
@@ -4620,7 +4672,7 @@ fn splice<'a>(
             let piece = lazy.pieces.list[at];
             let text = &lazy.source[piece.name.0..piece.name.1];
             let now = match piece.kind {
-                PieceKind::Trait => true,
+                PieceKind::Trait | PieceKind::Effect | PieceKind::Without => true,
                 PieceKind::Struct | PieceKind::Enum => {
                     LEANED_ON.contains(&(lazy.naming.name.as_str(), text))
                 }
@@ -4668,6 +4720,7 @@ fn splice<'a>(
             keys: Vec::new(),
             filter,
             written: Vec::new(),
+            reads: 0,
         }
     })
 }
@@ -4719,6 +4772,8 @@ struct Lazy<'a> {
     filter: Filter,
     /// The names the file that is built writes.
     written: Vec<String>,
+    /// How many items `load` has read.
+    reads: usize,
 }
 
 /// A set of the lengths and first letters that names have, so that a name
@@ -5075,11 +5130,6 @@ fn names_in_items(file: &File, impls: &[Arc<Impl>], out: &mut dyn FnMut(&str, Po
 
 /// Every name a function looks up, as `reach` does.
 fn names_in_function(f: &Function, out: &mut dyn FnMut(&str, Pos, Ask)) {
-    // An operation the target answers through a function of the library calls
-    // for it, though no line writes its name.
-    if let Some(through) = provided_by(f).and_then(|p| p.through) {
-        out(through, f.pos, Ask::Any);
-    }
     types_named(f, &mut |n, pos| out(n, pos, Ask::Type));
     let defaults = f.params.iter().filter_map(|p| p.default.as_ref());
     let statement = f.result.as_ref().and_then(|t| t.statement.as_deref());
@@ -5320,6 +5370,7 @@ impl<'a> Lazy<'a> {
             let Some(mut found) = module.read(i, errors) else {
                 continue;
             };
+            self.reads += 1;
             traits::split_functions_needs(&mut found.functions, traits);
             let written = std::mem::take(&mut self.modules[m].written);
             self.resolution.written.extend(written);

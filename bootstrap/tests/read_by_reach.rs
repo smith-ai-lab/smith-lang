@@ -41,13 +41,23 @@ const COPIES: [usize; 3] = [1, 10, 100];
 /// lists that grow by doubling.
 const SLACK: u64 = 24;
 
-/// The module: what the program reaches, a function that calls an `impl`, and
-/// then `copies` of a struct, an enum, a function, and an `impl` of the trait
+/// The module: what the program reaches, a function that calls an `impl`, an
+/// effect and a `without` that it does not use, and then `copies` of a struct, an enum, a function, and an `impl` of the trait
 /// for the struct, which nothing reaches.
 fn module(copies: usize) -> String {
     let mut text = String::from(
         "pub struct Square {
   side: Int
+}
+
+pub struct Token {
+  number: Int
+}
+
+without Copy for Token
+
+pub effect probe {
+  pub fn ping(x: Int) -> Int
 }
 
 pub trait Area[T] {
