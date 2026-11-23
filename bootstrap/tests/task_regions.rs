@@ -66,8 +66,16 @@ pub const ONCE: &[Test] = &[
         a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends,
     ),
     (
-        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_1_of_3",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(0),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_2_of_3",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_3_of_3",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(2),
     ),
     (
         "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends",
@@ -518,8 +526,8 @@ fn a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memo
     kept_by_drops(&DROPS[22..]);
 }
 
-fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[4..7]);
+fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[4 + part..5 + part]);
 }
 
 fn kept_by_drops(hows: &[&str]) {
