@@ -24,6 +24,8 @@ fn main() ! console {
 
 No syntax means `print`, or the `console` effect it needs, so a program that prints imports both, as it imports anything, in the way [Importing with use](use.md) describes. `main`, `fn`, and the string need nothing.
 
+The prelude is not a module that a file imports, since its names are in scope already, and `use std.prelude (Option)` is refused with "there is no module `std.prelude`".
+
 ## What is in it, and what means it
 
 | In the prelude | The syntax that means it |
