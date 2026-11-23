@@ -60,6 +60,11 @@ pub struct Task {
     /// How many bytes the frame has, and so how many the one who starts the
     /// task must give it. The address is a multiple of 16.
     pub bytes: u64,
+    /// Where in the frame the task keeps its own stack for results, when the
+    /// task is one that a frame is made of: the poll runs on it, and not on the
+    /// stack of whoever polls, so that what the task builds is its own, and
+    /// an arena of the task puts back no memory that another task built.
+    pub stack_at: Option<u64>,
     /// The types of the values the poll gives after the wait, which are the
     /// types the function gave.
     pub results: Vec<Type>,
@@ -111,6 +116,17 @@ pub struct Suspended {
     pub poll_any: Option<usize>,
 }
 
+/// The bytes at the start of a frame: the number of the state, the number of
+/// the poll, and the stack for results of the task, as it is now and as it was
+/// when the task began, each a pair of the address and the bytes left.
+pub const HEADER: u64 = 80;
+
+/// Where in the header the four words are that a scheduler keeps its queues in.
+pub const SCHEDULER_AT: u64 = 48;
+
+/// Where in the header the pair of the stack is.
+pub const STACK_AT: u64 = 16;
+
 const STATUS: Type = Type::Int(Bits::B8);
 const WORD: Type = Type::Int(Bits::B64);
 
@@ -161,6 +177,15 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
     functions.extend(polls);
     let mut list: Vec<(usize, Task)> = tasks.into_iter().collect();
     list.sort_by_key(|(f, _)| *f);
+    // The frame of a task that is made as a frame has room, after all else in
+    // it, for the stack for results that the task builds in.
+    for starter in &frames.starters {
+        let at = list
+            .binary_search_by_key(&starter.function, |(f, _)| *f)
+            .expect("a task");
+        let task = &mut list[at].1;
+        task.stack_at = Some(STACK_AT);
+    }
     for starter in &frames.starters {
         let task = &list[list
             .binary_search_by_key(&starter.function, |(f, _)| *f)
@@ -196,7 +221,7 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
 /// function that gives them, and a frame is read for what it gave without
 /// knowing which function it is of.
 pub fn result_places(types: &[Type]) -> (Vec<u64>, u64) {
-    let mut at = 16u64;
+    let mut at = HEADER;
     let places = types
         .iter()
         .map(|ty| {
@@ -220,21 +245,25 @@ fn make_frame(stub: &Function, task: &Task) -> Function {
         Value(types.len() - 1)
     };
     let (bytes, frame) = (fresh(WORD), fresh(Type::Address));
-    let mut instructions = vec![
+    let instructions = vec![
         Instruction {
             results: vec![bytes],
             op: Op::Constant(Constant::Int(task.bytes)),
             at: Place::NONE,
         },
+        // The frame is in the pool, with the stack of the task, and is where it
+        // is until the task is freed, so that the memory of whoever makes it
+        // may be released and the frame goes on.
         Instruction {
             results: vec![frame],
             op: Op::System {
-                call: System::Allocate,
+                call: System::TaskFrame,
                 args: vec![bytes],
             },
             at: Place::NONE,
         },
     ];
+    let mut instructions = instructions;
     let mut args = vec![frame];
     args.extend(params.iter().copied());
     instructions.push(Instruction {
@@ -360,6 +389,9 @@ struct Machine<'a> {
     param_slot: Vec<u64>,
     /// The place of the bytes of each `Frame` instruction, by block and place.
     frame_at: HashMap<(usize, usize), u64>,
+    /// Where in the frame each arena the function opens notes the stack for
+    /// results, by the token it gives.
+    arena_at: HashMap<Value, u64>,
     /// The place of the frame of the function each call of one that suspends
     /// starts, by block and place, and what that function is.
     callee_at: HashMap<(usize, usize), (u64, &'a Task)>,
@@ -409,6 +441,7 @@ impl<'a> Machine<'a> {
             .map(|p| place(&mut at, original.types[p.0]))
             .collect();
         let mut frame_at = HashMap::new();
+        let mut arena_at = HashMap::new();
         let mut callee_at = HashMap::new();
         let mut slot = HashMap::new();
         let mut values: Vec<Value> = live.into_iter().collect();
@@ -423,6 +456,14 @@ impl<'a> Machine<'a> {
                         at = align(at, 16);
                         frame_at.insert((b, i), at);
                         at += bytes;
+                    }
+                    Op::System {
+                        call: System::ArenaOpen,
+                        ..
+                    } => {
+                        at = align(at, 16);
+                        arena_at.insert(ins.results[0], at);
+                        at += 16;
                     }
                     Op::Call { function, .. } if suspends.contains(function) => {
                         at = align(at, 16);
@@ -443,6 +484,7 @@ impl<'a> Machine<'a> {
             slot,
             param_slot,
             frame_at,
+            arena_at,
             callee_at,
             bytes: align(at, 16),
             types: original.types.clone(),
@@ -617,25 +659,53 @@ impl<'a> Machine<'a> {
                         });
                         self.keep(at, &ins.results);
                     }
-                    // What a task builds lives until the task ends, since it is
-                    // read after a wait, and the poll builds all of it in the
-                    // stack for results, which is not put back: an arena in a
-                    // task is no place where memory is released, and its
-                    // token is no value that has to be kept across a wait.
+                    // An arena in a task puts the stack for results back at its
+                    // end, as in code that never waits: the place of the stack
+                    // is noted in the frame, since the token of an arena is no
+                    // value a poll that is run again could keep, and what is
+                    // built in the arena is built in the task's own stack.
                     Op::System {
                         call: System::ArenaOpen,
                         ..
                     } => {
+                        // The token is a value that is kept across a wait like
+                        // any other, and says nothing: the place of the stack is
+                        // in the frame.
                         self.blocks[at].instructions.push(Instruction {
                             results: ins.results.clone(),
                             op: Op::Constant(Constant::Int(0)),
+                            at: ins.at,
+                        });
+                        self.keep(at, &ins.results);
+                        let offset = self.arena_at[&ins.results[0]];
+                        let slot = self.within(at, offset);
+                        self.blocks[at].instructions.push(Instruction {
+                            results: Vec::new(),
+                            op: Op::System {
+                                call: System::TaskMark,
+                                args: vec![slot],
+                            },
                             at: ins.at,
                         });
                     }
                     Op::System {
                         call: System::ArenaClose,
                         ..
-                    } => {}
+                    } => {
+                        let Op::System { args: opened, .. } = &ins.op else {
+                            unreachable!("a close")
+                        };
+                        let offset = self.arena_at[&opened[0]];
+                        let slot = self.within(at, offset);
+                        self.blocks[at].instructions.push(Instruction {
+                            results: Vec::new(),
+                            op: Op::System {
+                                call: System::TaskRelease,
+                                args: vec![slot],
+                            },
+                            at: ins.at,
+                        });
+                    }
                     Op::System {
                         call: System::Suspend,
                         args,
@@ -805,6 +875,7 @@ impl<'a> Machine<'a> {
             id: self.id,
             result_at: self.result_at.clone(),
             bytes: self.bytes,
+            stack_at: None,
             results: original.results[..original.results.len() - self.through.len()].to_vec(),
         };
         (start, poll, task)

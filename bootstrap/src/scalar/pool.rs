@@ -48,10 +48,10 @@ pub fn new() -> Function {
 }
 
 /// The function that takes a pool and a number of bytes and gives the address of
-/// that many bytes, which are in a piece of the smallest class that holds them
+/// that many bytes, and how many the piece holds, which is not less, which are in a piece of the smallest class that holds them
 /// and their header, from the pieces that were given back when there is one,
 /// and from the chunk being carved when there is not.
-pub fn take() -> Function {
+pub fn take_sized() -> Function {
     let mut f = Builder::new();
     let p = f.params(&[NEXT, LEFT]);
     let (pool, bytes) = (p[0], p[1]);
@@ -107,7 +107,11 @@ pub fn take() -> Function {
     let after = f.load(NEXT, after_at);
     f.store(slot, after);
     let given = f.binary(Binary::Add, piece, header);
-    f.ret(vec![given]);
+    let class = f.load(LEFT, piece);
+    let first_size = runtime::int(&mut f, FIRST);
+    let size = f.binary(Binary::ShiftLeft, first_size, class);
+    let capacity = f.binary(Binary::Sub, size, header);
+    f.ret(vec![given, capacity]);
     // The chunk being carved gives the piece when it has the room, and a new
     // chunk is asked of the system when it has not, with room for the piece.
     f.at(carve);
@@ -140,15 +144,16 @@ pub fn take() -> Function {
     f.store(left_at, rest);
     f.store(piece, class);
     let given = f.binary(Binary::Add, piece, header);
-    f.ret(vec![given]);
+    let capacity = f.binary(Binary::Sub, size, header);
+    f.ret(vec![given, capacity]);
     // A request no class holds is asked of the system as it is.
     f.at(large);
     let piece = f.allocate(total);
     let marker = runtime::int(&mut f, CLASSES);
     f.store(piece, marker);
     let given = f.binary(Binary::Add, piece, header);
-    f.ret(vec![given]);
-    f.finish(&[NEXT])
+    f.ret(vec![given, bytes]);
+    f.finish(&[NEXT, LEFT])
 }
 
 /// The function that takes a pool and an address that `take` gave, and puts the

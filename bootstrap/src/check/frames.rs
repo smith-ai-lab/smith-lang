@@ -17,6 +17,8 @@ pub(super) enum Kind {
     Address,
     At,
     Scheduled,
+    Word,
+    SetWord,
 }
 
 /// Which call a call is, when it is one that only the library may make.
@@ -32,6 +34,8 @@ pub(super) fn kind(call: &Call) -> Option<Kind> {
         "__address" => Some(Kind::Address),
         "__frame_at" => Some(Kind::At),
         "__scheduled" => Some(Kind::Scheduled),
+        "__word" => Some(Kind::Word),
+        "__set_word" => Some(Kind::SetWord),
         _ => None,
     }
 }
@@ -115,6 +119,31 @@ impl<'a> Checker<'a> {
                 let signature = one("number", Ty::Int(Int::U64), frame);
                 self.arguments(body, call, &signature, false, None, None);
                 signature.gives
+            }
+            Kind::Word | Kind::SetWord => {
+                // A word of the header of the frame of the task with the number,
+                // which a scheduler keeps its queues in, so that it holds no
+                // memory of its own that a task could free.
+                let number = ("number".to_string(), Ty::Int(Int::U64));
+                let which = ("which".to_string(), Ty::Int(Int::U64));
+                let mut params = vec![number, which];
+                let gives = if kind == Kind::Word {
+                    Ty::Int(Int::U64)
+                } else {
+                    params.push(("value".to_string(), Ty::Int(Int::U64)));
+                    Ty::Nothing
+                };
+                let signature = Signature {
+                    scope: Scope::default(),
+                    defaults: vec![false; params.len()],
+                    fn_effects: vec![Vec::new(); params.len()],
+                    params,
+                    param_defaults: Vec::new(),
+                    gives: gives.clone(),
+                    effects: Vec::new(),
+                };
+                self.arguments(body, call, &signature, false, None, None);
+                gives
             }
             Kind::Scheduled => unreachable!("answered before the frame's types are read"),
             Kind::Wait => {

@@ -1742,7 +1742,13 @@ impl<S: System> Writer<'_, S> {
                 self.run(asm, &moves);
             }
             Op::System {
-                call: Call::ArenaOpen | Call::ArenaClose,
+                call:
+                    Call::ArenaOpen
+                    | Call::ArenaClose
+                    | Call::TaskMark
+                    | Call::TaskRelease
+                    | Call::TaskFrame
+                    | Call::TaskFree,
                 ..
             } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
             Op::System {

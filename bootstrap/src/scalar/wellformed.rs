@@ -605,6 +605,33 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
+                    call: System::TaskMark | System::TaskRelease | System::TaskFree,
+                    args,
+                } => {
+                    let [slot] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !instruction.results.is_empty() {
+                        return Err(Why::WrongCount);
+                    }
+                    used(slot, i, Type::Address)?;
+                }
+                Op::System {
+                    call: System::TaskFrame,
+                    args,
+                } => {
+                    let [bytes] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    let [frame] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if f.types[frame.0] != Type::Address {
+                        return Err(Why::WrongType(*frame));
+                    }
+                    used(bytes, i, Type::Int(Bits::B64))?;
+                }
+                Op::System {
                     call: System::ArenaClose,
                     args,
                 } => {

@@ -57,7 +57,9 @@ pub use recur::recur;
 pub use remat::rematerialized;
 pub use remove::{WALKS, remove, remove_counting};
 pub use ryu::tables as ryu_tables;
-pub use suspend::{Frames, Starter, Suspended, Task, result_places, suspend, suspend_frames};
+pub use suspend::{
+    Frames, SCHEDULER_AT, Starter, Suspended, Task, result_places, suspend, suspend_frames,
+};
 pub use tail::tail;
 pub use thread::thread;
 pub use trim::trim;
@@ -274,6 +276,26 @@ pub enum System {
     ArenaOpen,
     /// Closes the arena that the token it takes opened.
     ArenaClose,
+    /// Notes in the frame of a task, at the address it takes, where the stack
+    /// for results is, which is what an arena inside a task that waits puts
+    /// back, since the token of an arena is no value that a poll may keep
+    /// across a wait. It gives nothing, and is gone once the stacks of `alloc`
+    /// are passed.
+    TaskMark,
+    /// Puts the stack for results back to where the `TaskMark` at the address
+    /// it takes noted it.
+    TaskRelease,
+    /// Gives the frame of a task: it takes the number of bytes the frame has and
+    /// gives its address, in a piece of the first class of the pool that the
+    /// frame shares with the stack of results the task has of its own, which
+    /// starts where the frame ends. The frame is where it is until the task is
+    /// freed, whoever made it. It is gone once the stacks of `alloc` are passed.
+    TaskFrame,
+    /// Gives the pieces of the stack of the task whose frame is at the address it
+    /// takes back to the pool, where the next task that is given a stack takes
+    /// them, when the task is over and what it gave holds no address into them.
+    /// It gives nothing, and is gone once the stacks of `alloc` are passed.
+    TaskFree,
     /// Ends the program with the status, a byte, that it takes. It gives
     /// nothing.
     Exit,

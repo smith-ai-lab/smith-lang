@@ -1,5 +1,5 @@
 use std.bits (bit_and, bit_xor, i64, shift_right, u64)
-use std.int (checked_rem, wrapping_add, wrapping_mul, wrapping_narrow)
+use std.int (checked_rem, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
 use std.list (push)
 
 // The functions of task groups: `tasks` opens a group for the rest of a block,
@@ -114,85 +114,129 @@ fn mixed(state: u64) -> u64 {
   bit_xor(b, shift_right(b, 31))
 }
 
-// A task that waits for a descriptor, by the number of each.
-struct Parked {
-  task: u64
-  fd: u64
+// What a scheduler knows of a task is in the header of the task's frame, in four
+// words that `__word` and `__set_word` read and write by the number of the task,
+// which is where its frame is: the task that was started before it, the state
+// of the task, what it waits for, and a word to spare. So a scheduler holds
+// nothing in memory of its own: its queues are chains through the frames, which
+// a task's memory, released when an arena ends, cannot take from under it.
+fn after(n: u64) -> u64 { __word(n, 0) }
+
+fn state(n: u64) -> u64 { __word(n, 1) }
+
+fn on(n: u64) -> u64 { __word(n, 2) }
+
+// The bits of the state of a task: that it has ended, that it waits for a task
+// that has not, and that it waits for a descriptor.
+// The bits of the state that a mask picks, as a number.
+fn bits(n: u64, mask: u64) -> u64 {
+  picked: u64 = bit_and(state(n), mask)
+  picked
 }
 
-fn parks(list: List[Parked], n: u64) -> bool {
-  var found = false
-  loop i in 0..list.size {
-    if list[i].task == n { found = true }
-  }
-  found
+fn has_ended(n: u64) -> bool { bits(n, 1) != 0 }
+
+fn waits_for_task(n: u64) -> bool { bits(n, 2) != 0 }
+
+fn waits_for_descriptor(n: u64) -> bool { bits(n, 4) != 0 }
+
+// Puts a task first in the chain of those started, and gives its number.
+fn enter(n: u64, first: u64) -> u64 {
+  __set_word(n, 0, first)
+  __set_word(n, 1, 0)
+  __set_word(n, 2, 0)
+  n
 }
 
-// What is left of the tasks that wait for descriptors when those that wait for
-// the descriptor are not among them.
-fn unpark(list: List[Parked], fd: u64) -> List[Parked] ! alloc {
-  var left: List[Parked] = []
-  loop i in 0..list.size {
-    if list[i].fd != fd { left = push(left, list[i]) }
-  }
-  left
-}
-
-fn contains(list: List[u64], x: u64) -> bool {
-  var found = false
-  loop i in 0..list.size {
-    if list[i] == x { found = true }
-  }
-  found
-}
-
-// A task that waits for another task to end.
-struct Blocked {
-  task: u64
-  on: u64
-}
-
-// Whether the task may run: it has not ended, and the last task it waited for
-// has ended. `waits` holds each wait of a task for another, and the last of a
-// task's is the one that counts.
-fn runnable(n: u64, ended: List[u64], waits: List[Blocked], parked: List[Parked]) -> bool {
-  if contains(ended, n) or parks(parked, n) { return false }
-  var on = n
-  var waiting = false
-  loop i in 0..waits.size {
-    if waits[i].task == n {
-      waiting = true
-      on = waits[i].on
+// Takes a task out of the chain that begins at `first`, and gives where the
+// chain begins now.
+fn leave(first: u64, n: u64) -> u64 {
+  if first == n { return after(n) }
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if after(at) == n {
+      __set_word(at, 0, after(n))
+      break
     }
+    at = after(at)
   }
-  if waiting { contains(ended, on) } else { true }
+  first
 }
 
-fn count_runnable(started: List[u64], ended: List[u64], waits: List[Blocked], parked: List[Parked]) -> u64 {
+// Whether the task may run: it has not ended, it does not wait for a descriptor,
+// and the task it waits for, if it waits for one, has ended.
+fn runnable(n: u64) -> bool {
+  if has_ended(n) or waits_for_descriptor(n) { return false }
+  if waits_for_task(n) { has_ended(on(n)) } else { true }
+}
+
+fn count_runnable(first: u64) -> u64 {
   var count: u64 = 0
-  loop i in 0..started.size {
-    if runnable(started[i], ended, waits, parked) { count = wrapping_add(count, 1) }
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if runnable(at) { count = wrapping_add(count, 1) }
+    at = after(at)
   }
   count
 }
 
-fn nth_runnable(k: u64, started: List[u64], ended: List[u64], waits: List[Blocked], parked: List[Parked]) -> u64 {
+fn nth_runnable(first: u64, k: u64) -> u64 {
   var seen: u64 = 0
   var found: u64 = 0
-  loop i in 0..started.size {
-    if runnable(started[i], ended, waits, parked) {
-      if seen == k { found = started[i] }
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if runnable(at) {
+      if seen == k { found = at }
       seen = wrapping_add(seen, 1)
     }
+    at = after(at)
   }
   found
+}
+
+// Wakes the tasks that wait for the descriptor, and gives how many there were.
+fn wake(first: u64, fd: u64) -> u64 {
+  var woken: u64 = 0
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_descriptor(at) and on(at) == fd {
+      __set_word(at, 1, wrapping_sub(state(at), 4))
+      woken = wrapping_add(woken, 1)
+    }
+    at = after(at)
+  }
+  woken
+}
+
+// What the task did when it was run: it ended, or it waits for something.
+fn ended(n: u64) {
+  __set_word(n, 1, wrapping_add(state(n), 1))
+}
+
+fn waits_on_task(n: u64, t: u64) {
+  __set_word(n, 1, wrapping_add(wrapping_sub(state(n), bits(n, 2)), 2))
+  __set_word(n, 2, t)
+}
+
+fn waits_on_descriptor(n: u64, fd: u64) {
+  __set_word(n, 1, wrapping_add(state(n), 4))
+  __set_word(n, 2, fd)
+}
+
+// The task goes on when it is run again, so it waits for nothing then.
+fn runs_again(n: u64) {
+  __set_word(n, 1, wrapping_sub(state(n), bits(n, 2)))
 }
 
 // A scheduler for tests. It starts nothing until a task is waited for, and runs
 // the tasks that may run in an order that `seed` picks: one seed always gives
 // the same order. A task that waits for another is suspended, and runs again
 // when that one has ended. `body` is the first task.
-pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! alloc, diverge {
+pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! diverge {
   with test_scheduler_with_io(seed, [])
   body()
 }
@@ -202,35 +246,33 @@ pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! alloc, d
 // tasks that wait for it with `test_ready`. A handle never becomes ready before
 // a task waits for it, and a task that waits for a handle that is not in `ready`
 // waits for ever, which ends the program as every task waiting does.
-pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T ! task) -> T ! alloc, diverge {
-  var started: List[u64] = []
-  var ended: List[u64] = []
-  var waits: List[Blocked] = []
-  var parked: List[Parked] = []
+pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T ! task) -> T ! diverge {
+  var first: u64 = 0
   var next: u64 = 0
   var rng: u64 = seed
   task(
     start: fn(work) {
-      n = __address(work)
-      started = push(started, n)
+      n = enter(__address(work), first)
+      first = n
       n
     },
     finish: fn(child) {
-      if not contains(ended, child) { __wait(.task(child)) }
+      if not has_ended(child) { __wait(.task(child)) }
+      first = leave(first, child)
       f = __frame_at(child)
       f
     },
     body: {
       root = __frame(body)
-      top = __address(root)
-      started = push(started, top)
+      top = enter(__address(root), first)
+      first = top
       loop {
-        if contains(ended, top) { break }
-        var many = count_runnable(started, ended, waits, parked)
+        if has_ended(top) { break }
+        var many = count_runnable(first)
         if many == 0 and next < ready.size {
-          parked = unpark(parked, ready[next])
+          wake(first, ready[next])
           next = wrapping_add(next, 1)
-          many = count_runnable(started, ended, waits, parked)
+          many = count_runnable(first)
         }
         rng = wrapping_add(rng, 11400714819323198485)
         match checked_rem(mixed(rng), many) {
@@ -239,15 +281,16 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             __end(1)
           }
           .some(k) {
-            n = nth_runnable(k, started, ended, waits, parked)
+            n = nth_runnable(first, k)
+            runs_again(n)
             f = __frame_at(n)
             match __poll(f) {
-              .done { ended = push(ended, n) }
+              .done { ended(n) }
               .waiting(w) {
                 match w {
-                  .task(t) { waits = push(waits, Blocked(task: n, on: t)) }
-                  .read(h) { parked = push(parked, Parked(task: n, fd: h.number)) }
-                  .write(h) { parked = push(parked, Parked(task: n, fd: h.number)) }
+                  .task(t) { waits_on_task(n, t) }
+                  .read(h) { waits_on_descriptor(n, h.number) }
+                  .write(h) { waits_on_descriptor(n, h.number) }
                   .time(t) { }
                 }
               }
@@ -310,40 +353,40 @@ fn ready_descriptor(ep: i64, time: i64) -> Option[u64] ! alloc {
 
 // The scheduler of a group that no scheduler is in force of: its children are
 // run in turn, each until it waits, and when every one waits for the system the
-// group waits for the system, in `epoll`, for a descriptor to be ready.
+// group waits for the system, in `epoll`, for a descriptor to be ready. It holds
+// numbers and nothing else, as every scheduler does.
 fn group[T](body: take fn() -> T ! task) -> T ! alloc {
-  var started: List[u64] = []
-  var ended: List[u64] = []
-  var waits: List[Blocked] = []
-  var parked: List[Parked] = []
+  var first: u64 = 0
+  var parked: u64 = 0
   var ep: i64 = -1
   var turn: u64 = 0
   task(
     start: fn(work) {
-      n = __address(work)
-      started = push(started, n)
+      n = enter(__address(work), first)
+      first = n
       n
     },
     finish: fn(child) {
-      if not contains(ended, child) { __wait(.task(child)) }
+      if not has_ended(child) { __wait(.task(child)) }
+      first = leave(first, child)
       f = __frame_at(child)
       f
     },
     body: {
       root = __frame(body)
-      top = __address(root)
-      started = push(started, top)
+      top = enter(__address(root), first)
+      first = top
       loop round in 0..9223372036854775807 {
-        if contains(ended, top) { break }
-        var many = count_runnable(started, ended, waits, parked)
-        if parked.size > 0 {
+        if has_ended(top) { break }
+        var many = count_runnable(first)
+        if parked > 0 {
           var time: i64 = 0
           if many == 0 { time = -1 }
           match ready_descriptor(ep, time) {
-            .some(fd) { parked = unpark(parked, fd) }
+            .some(fd) { parked = wrapping_sub(parked, wake(first, fd)) }
             .none { }
           }
-          many = count_runnable(started, ended, waits, parked)
+          many = count_runnable(first)
         }
         turn = wrapping_add(turn, 1)
         match checked_rem(turn, many) {
@@ -352,22 +395,25 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             __end(1)
           }
           .some(k) {
-            n = nth_runnable(k, started, ended, waits, parked)
+            n = nth_runnable(first, k)
+            runs_again(n)
             f = __frame_at(n)
             match __poll(f) {
-              .done { ended = push(ended, n) }
+              .done { ended(n) }
               .waiting(w) {
                 match w {
-                  .task(t) { waits = push(waits, Blocked(task: n, on: t)) }
+                  .task(t) { waits_on_task(n, t) }
                   .read(h) {
                     if ep < 0 { ep = __system(13, 0, 0, 0, 0, 0, 0) }
                     register(ep, h.number, false)
-                    parked = push(parked, Parked(task: n, fd: h.number))
+                    waits_on_descriptor(n, h.number)
+                    parked = wrapping_add(parked, 1)
                   }
                   .write(h) {
                     if ep < 0 { ep = __system(13, 0, 0, 0, 0, 0, 0) }
                     register(ep, h.number, true)
-                    parked = push(parked, Parked(task: n, fd: h.number))
+                    waits_on_descriptor(n, h.number)
+                    parked = wrapping_add(parked, 1)
                   }
                   .time(t) { }
                 }
