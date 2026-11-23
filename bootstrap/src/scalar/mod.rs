@@ -296,6 +296,12 @@ pub enum System {
     /// them, when the task is over and what it gave holds no address into them.
     /// It gives nothing, and is gone once the stacks of `alloc` are passed.
     TaskFree,
+    /// Gives the pieces of the task whose frame is at the address it takes to the
+    /// stack for results of the one that takes them, with no byte moved: a record of
+    /// it is made at the top of the stack, which a put-back of the stack that passes
+    /// below the record gives to the pool, with the pieces of the task. It gives
+    /// nothing, and is gone once the stacks of `alloc` are passed.
+    TaskMove,
     /// Ends the program with the status, a byte, that it takes. It gives
     /// nothing.
     Exit,

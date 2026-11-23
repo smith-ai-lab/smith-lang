@@ -2304,7 +2304,8 @@ impl<S: System> Writer<'_, S> {
                     | Call::TaskMark
                     | Call::TaskRelease
                     | Call::TaskFrame
-                    | Call::TaskFree,
+                    | Call::TaskFree
+                    | Call::TaskMove,
                 ..
             } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
             Op::System {

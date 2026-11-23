@@ -6,7 +6,8 @@ status: partial
 built:
   - "each child has an arena of its own, which is freed whole when the child ends, and its result is built in its parent's, so a program that spawns a child that builds a list and gives back a number asks the system for the same memory however many children it spawns"
   - "a task has memory of its own, in pieces of a pool that start at 4 KB and double, so a task that waits with nothing built holds a few KB and `with arena()` in a task frees its block whole at its end even when the block waits, and a joined task whose result holds no address gives its memory back to the pool when it is joined, so 10,000 children one after another ask the system for what one does"
-  - "not built: a result that holds an address moved to its parent at `join` with no copy, which keeps the child's memory until its parent's ends, a child that is never joined giving its memory back, and a task for each connection of a server, which waits for the system"
+  - "a result that holds an address is not copied at `join`: the child's memory becomes the parent's, and is freed when the memory the parent built in its place would have been, so 10,000 children that each give a list, joined one after another, ask the system for what one does, and a list a function gives up to its caller is read there as it was built"
+  - "not built: what a child's result holds apart from what else the child built, so a result of a few bytes is held in the child's whole first piece, a child that is never joined giving its memory back, and a task for each connection of a server, which waits for the system"
 ---
 
 # Memory of a task

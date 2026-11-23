@@ -351,17 +351,21 @@ impl<'a> Lowering<'a> {
                 let back = values.split_off(own);
                 self.set_state(out, &given, back);
                 // A task that gave no address has built nothing that its result
-                // holds, so its pieces go back to the pool once it is read.
-                // What holds an address is built in them, and they stay.
-                if !self.scalars(&ty).contains(&form::Type::Address) {
-                    out.emit(
-                        form::Op::System {
-                            call: form::System::TaskFree,
-                            args: vec![frame[0]],
-                        },
-                        Vec::new(),
-                    );
-                }
+                // holds, so its pieces go back to the pool once it is read. What
+                // holds an address is built in them, so they go to the one that
+                // reads it, with no byte moved.
+                let call = if self.scalars(&ty).contains(&form::Type::Address) {
+                    form::System::TaskMove
+                } else {
+                    form::System::TaskFree
+                };
+                out.emit(
+                    form::Op::System {
+                        call,
+                        args: vec![frame[0]],
+                    },
+                    Vec::new(),
+                );
                 (ty, values)
             }
         }

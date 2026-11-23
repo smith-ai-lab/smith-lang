@@ -1223,7 +1223,8 @@ impl Machine<'_> {
                         args[2..].iter().map(get).collect()
                     }
                     Op::System {
-                        call: System::TaskMark | System::TaskRelease | System::TaskFree,
+                        call:
+                            System::TaskMark | System::TaskRelease | System::TaskFree | System::TaskMove,
                         ..
                     } => Vec::new(),
                     // The evaluator keeps a frame where it is, as it keeps every
