@@ -132,7 +132,7 @@ pub const STACK_AT: u64 = 16;
 /// scheduler sets it in the header of the task's own frame, and the poll of each
 /// function that the task is in the middle of puts it in the header of the frame
 /// of the function it polls, so each function reads it from its own frame.
-pub const CANCEL: u64 = 16;
+pub const CANCEL: u64 = 64;
 
 /// Where the word that holds the bit is, in any frame.
 pub const CANCEL_AT: u64 = SCHEDULER_AT + 8;
