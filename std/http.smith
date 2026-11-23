@@ -1186,7 +1186,9 @@ fn serve_one_at_a_time[T](l: Listener, body: fn() -> T ! http) ! net, alloc, div
         serve_connection(c, body)
         close(c)
       }
-      .err(e) { }
+      .err(e) {
+        if is_closed(e) { break }
+      }
     }
   }
 }
