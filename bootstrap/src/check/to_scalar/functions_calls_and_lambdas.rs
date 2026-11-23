@@ -333,6 +333,10 @@ impl<'a> Lowering<'a> {
                     leaving: Vec::new(),
                     body: true,
                 });
+                self.entry = Some(super::Entry {
+                    discard: true,
+                    ..super::Entry::default()
+                });
                 self.block(out, &l.body, env);
                 out.loops.pop();
                 if read {

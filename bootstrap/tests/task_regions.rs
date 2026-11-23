@@ -61,6 +61,18 @@ pub const ONCE: &[Test] = &[
         a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read,
     ),
     (
+        "a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends,
+    ),
+    (
         "a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined",
         a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined,
     ),
@@ -79,6 +91,8 @@ pub const MACHINE: &[Test] = &[
     "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back",
     every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back,
 )];
+
+const USES_WITH_TASK: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\nuse std.task (Task, join, spawn, task, test_scheduler)\n";
 
 const USES: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\nuse std.task (join, spawn, task, test_scheduler)\n\n";
 
@@ -380,7 +394,7 @@ fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_an
 /// or bound to a name that nothing reads. The handle is `how`.
 fn dropped_children(count: u64, seed: u64, how: &str) -> String {
     format!(
-        "{USES}{LISTS}fn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    sum = wrapping_add(sum, 1)\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\n{LISTS}fn handles() -> List[Task[u64]] ! task, alloc {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\nfn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -389,21 +403,53 @@ fn dropped_children(count: u64, seed: u64, how: &str) -> String {
 /// the child's memory back when the child has ended, whether it was dropped before
 /// the child ended or after, which the seeds of the scheduler pick between.
 fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read() {
+    kept_by_drops(&DROPS[..3]);
+}
+
+fn a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[3..4]);
+}
+
+fn a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[7..]);
+}
+
+fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[4..7]);
+}
+
+fn kept_by_drops(hows: &[&str]) {
     let kept = |how: &str, seed: u64| {
-        let (few_said, few) = asked(&dropped_children(10, seed, how));
-        let (many_said, more) = asked(&dropped_children(100, seed, how));
-        assert_eq!((few_said.as_str(), many_said.as_str()), ("10\n", "100\n"), "{how}");
+        let (few_said, few) = asked(&dropped_children(8, seed, how));
+        let (many_said, more) = asked(&dropped_children(56, seed, how));
+        assert_eq!((few_said, many_said), ("8\n".to_string(), "56\n".to_string()), "{how}");
         more.saturating_sub(few)
     };
     for seed in [1, 2] {
-        for how in ["spawn { total(build(500)) }", "t = spawn { total(build(500)) }"] {
+        for how in hows {
             let more = kept(how, seed);
-            // 90 more children, each of 4 KB of list and the pieces it grew in, would
-            // be 800 KB of chunks, which is three more.
-            assert!(more <= scalar::pool::CHUNK as usize, "{more} bytes more for 90 children, `{how}`, seed {seed}");
+            // 48 more children, each of 4 KB of list and the pieces it grew in, would
+            // be 400 KB of chunks, which is more than one.
+            assert!(more <= scalar::pool::CHUNK as usize, "{more} bytes more for 48 children, `{how}`, seed {seed}");
         }
     }
 }
+
+/// The places a handle is dropped, each in a loop that starts a child in each
+/// round: as a statement, as a name nothing reads, joined in some rounds and
+/// dropped in the others, in a tuple, in a struct, and as the value that the last
+/// statement of an arm gives to a `match` whose value is thrown away.
+const DROPS: [&str; 9] = [
+    "spawn { total(build(500)) }",
+    "t = spawn { total(build(500)) }",
+    "t = spawn { total(build(500)) }\n    if r < 5 { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) } else { }",
+    "t = spawn { total(build(500)) }\n    if r < 5 { } else { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) }",
+    "pair = (spawn { total(build(250)) }, spawn { total(build(250)) })",
+    "hs = handles()",
+    "held = Held.one(spawn { total(build(500)) })",
+    "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })",
+    "match r < 1000 {\n      .true { spawn { total(build(500)) } }\n      .false { spawn { total(build(500)) } }\n    }",
+];
 
 /// A handle that is read is the program's to join, so what it holds is not given
 /// back until it is joined: the same loop, which joins each child after the next
@@ -420,9 +466,11 @@ fn a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined() {
 fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped() {
     let targets = runnable();
     for (source, wanted) in [
-        (dropped_children(100, 2, "t = spawn { total(build(50)) }"), "100\n"),
         (dropped_children(3_000, 1, "spawn { total(build(100)) }"), "3000\n"),
-    ] {
+    ]
+    .into_iter()
+    .chain(DROPS.iter().map(|how| (dropped_children(30, 2, how), "30\n")))
+    {
         let said = scalar::Outcome {
             status: 0,
             stdout: wanted.as_bytes().to_vec(),
