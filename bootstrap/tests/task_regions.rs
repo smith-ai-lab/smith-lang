@@ -174,8 +174,9 @@ fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_j
         }
     }
     // The executables run what the evaluator has not the time for: 1,000 tasks
-    // that all exist at once, and 10,000 children one after another.
+    // that all exist at once, 2,000 rounds of an arena in a task, and 10,000 children one after another.
     let big = [
+        (arena_rounds(2000), format!("{}\n", (0..2000u64).map(|r| (0..200u64).sum::<u64>() + r + 1).sum::<u64>())),
         (many(1000), "500500\n".to_string()),
         (one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
         (lists_one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),

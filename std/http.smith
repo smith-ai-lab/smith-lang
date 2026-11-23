@@ -1,3 +1,4 @@
+use std.alloc (arena)
 use std.bits (u16, u64)
 use std.deserialize (Deserialize, Problem, ReadError, Reader)
 use std.describe (Describe, Describer)
@@ -1092,8 +1093,17 @@ fn serve_connection[T](c: Connection, body: fn() -> T ! http) ! net, alloc, dive
   requires Discard[T]
 {
   loop {
-    if not serve_one(c, body) { break }
+    if not serve_round(c, body) { break }
   }
+}
+
+// One request of a connection, with the memory it builds freed whole when it is
+// answered, whether or not it waited for the connection to say more.
+fn serve_round[T](c: Connection, body: fn() -> T ! http) -> bool ! net, alloc
+  requires Discard[T]
+{
+  with arena()
+  serve_one(c, body)
 }
 
 // Ends the program with a failing status, after saying why on standard error.

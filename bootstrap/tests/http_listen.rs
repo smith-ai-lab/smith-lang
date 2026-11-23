@@ -72,6 +72,10 @@ pub const MACHINE: &[Test] = &[
         serving_requests_does_not_grow_what_the_system_is_asked_for,
     ),
     (
+        "a_thousand_connections_open_at_once_are_each_answered",
+        a_thousand_connections_open_at_once_are_each_answered,
+    ),
+    (
         "the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given",
         the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given,
     ),
@@ -555,6 +559,32 @@ fn serving_requests_does_not_grow_what_the_system_is_asked_for() {
         ask(2000);
         let after = address_space(server.child.id()).unwrap();
         assert!(after <= before + 1024, "{target:?}: {before} KB to {after} KB", target = target.name());
+    }
+}
+
+/// A wave of connections that are all open at once, each asked for a user and
+/// each answered, and then closed, as 1,000 clients of a server are.
+fn a_wave(server: &Started, count: usize) {
+    let mut clients: Vec<Client> = (0..count).map(|_| server.connect()).collect();
+    for (i, client) in clients.iter_mut().enumerate() {
+        client.send(get(&format!("/users/{}", 1 + i % 7)).as_bytes());
+    }
+    for client in clients.iter_mut() {
+        assert_eq!(client.reply().status, 200);
+    }
+}
+
+fn a_thousand_connections_open_at_once_are_each_answered() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let server = Started::new(target);
+        a_wave(&server, 1000);
+        // The server still answers on a connection of its own after the wave.
+        let mut client = server.connect();
+        client.send(get("/users/7").as_bytes());
+        assert_eq!(client.reply().status, 200);
     }
 }
 
