@@ -196,6 +196,11 @@ fn far_choice() -> scalar::Program {
 /// choice went to.
 /// Whether the target writes an executable for arm64.
 fn far_choice_on(target: Target) -> bool {
+    // A module is no executable for arm64, and one of this function has more
+    // locals than an engine takes, so it is not built.
+    if !target.is_machine_code() {
+        return false;
+    }
     let program = far_choice();
     let said = scalar::run(&program);
     assert_eq!(said.status, 3);
