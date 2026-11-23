@@ -25,6 +25,22 @@ pub const ONCE: &[Test] = &[
         two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_change,
     ),
     (
+        "ten_thousand_children_that_give_a_list_joined_one_after_another_ask_the_system_for_the_memory_of_one",
+        ten_thousand_children_that_give_a_list_joined_one_after_another_ask_the_system_for_the_memory_of_one,
+    ),
+    (
+        "a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is",
+        a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is,
+    ),
+    (
+        "a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes",
+        a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes,
+    ),
+    (
+        "a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_built",
+        a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_built,
+    ),
+    (
         "a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had",
         a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had,
     ),
@@ -138,7 +154,14 @@ fn ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_
 
 fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back() {
     let targets = runnable();
-    for source in [many(200), arena_rounds(300), two_in_arenas(4), one_after_another(500)] {
+    for source in [
+        many(200),
+        arena_rounds(300),
+        two_in_arenas(4),
+        one_after_another(500),
+        lists_one_after_another(200),
+        list_up_to_main(),
+    ] {
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let said = scalar::run(&scalar::passes(&program));
         assert_eq!(said.status, 0);
@@ -151,6 +174,7 @@ fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_j
     let big = [
         (many(1000), "500500\n".to_string()),
         (one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
+        (lists_one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
     ];
     for (source, wanted) in big {
         let said = scalar::Outcome {
@@ -239,4 +263,72 @@ fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had() {
         checked += 1;
     }
     assert!(checked > 50, "{checked} cases");
+}
+
+const LISTS: &str = "fn build(n: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
+
+/// Children that each build a list and give it, joined one after another, by a
+/// function that gives back what is in the list.
+fn lists_one_after_another(count: u64) -> String {
+    format!(
+        "{USES}{LISTS}fn child() -> u64 ! alloc, diverge {{\n  with test_scheduler(1)\n  g = spawn {{ build(100) }}\n  xs = join(g)\n  total(xs)\n}}\n\nfn main() ! console, alloc, diverge {{\n  var sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+    )
+}
+
+fn ten_thousand_children_that_give_a_list_joined_one_after_another_ask_the_system_for_the_memory_of_one()
+ {
+    let (few, few_bytes) = asked(&lists_one_after_another(10));
+    let (many, many_bytes) = asked(&lists_one_after_another(300));
+    assert_eq!(few, format!("{}\n", 4950 * 10));
+    assert_eq!(many, format!("{}\n", 4950 * 300));
+    assert_eq!(few_bytes, many_bytes);
+}
+
+/// A child that builds a list of `n` numbers and gives the list, or only its
+/// size, to a parent that joins it.
+fn join_of(n: u64, whole_list: bool) -> String {
+    let gives = if whole_list { "build(n)" } else { "scalar(n)" };
+    format!(
+        "{USES}{LISTS}fn scalar(n: u64) -> u64 ! alloc {{\n  xs = build(n)\n  xs.size\n}}\n\nfn run(n: u64) -> u64 ! alloc, diverge {{\n  with test_scheduler(1)\n  g = spawn {{ {gives} }}\n  v = join(g)\n  1\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run({n})}}\")\n}}\n"
+    )
+}
+
+/// What a join costs is what the program takes with a list given, less what it
+/// takes with a number given, since the child builds the same list in both.
+fn instructions_of_a_join(n: u64) -> i64 {
+    let ran = |source: String| {
+        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+        scalar::run_measured(&scalar::passes(&program)).1 as i64
+    };
+    ran(join_of(n, true)) - ran(join_of(n, false))
+}
+
+fn a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is() {
+    let small = instructions_of_a_join(10);
+    let large = instructions_of_a_join(125_000);
+    assert!((large - small).abs() <= 200, "{small} instructions for 10 numbers, {large} for 125,000");
+}
+
+fn a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes() {
+    let source = format!(
+        "{USES}{LISTS}fn run() -> u64 ! alloc, diverge {{\n  with test_scheduler(4)\n  g = spawn {{ build(1000) }}\n  xs = join(g)\n  var more: u64 = 0\n  loop r in 0..50 {{\n    ys = build(2000)\n    more = wrapping_add(more, total(ys))\n  }}\n  wrapping_add(total(xs), more)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+    );
+    let (said, _) = asked(&source);
+    let one = (0..1000u64).sum::<u64>();
+    let two = (0..2000u64).sum::<u64>();
+    assert_eq!(said, format!("{}\n", one + 50 * two));
+}
+
+/// A function that gives the list a child gave up to `main`, which reads it after
+/// more calls of the same function.
+fn list_up_to_main() -> String {
+    format!(
+        "{USES}{LISTS}fn child(n: u64) -> List[u64] ! alloc, diverge {{\n  with test_scheduler(2)\n  g = spawn {{ build(n) }}\n  join(g)\n}}\n\nfn main() ! console, alloc, diverge {{\n  first = child(30)\n  second = child(40)\n  third = child(50)\n  print(\"{{total(first)}} {{total(second)}} {{total(third)}}\")\n}}\n"
+    )
+}
+
+fn a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_built() {
+    let (said, _) = asked(&list_up_to_main());
+    let sum = |n: u64| (0..n).sum::<u64>();
+    assert_eq!(said, format!("{} {} {}\n", sum(30), sum(40), sum(50)));
 }

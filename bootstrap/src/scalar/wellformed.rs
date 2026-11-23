@@ -605,7 +605,8 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
-                    call: System::TaskMark | System::TaskRelease | System::TaskFree,
+                    call:
+                        System::TaskMark | System::TaskRelease | System::TaskFree | System::TaskMove,
                     args,
                 } => {
                     let [slot] = &args[..] else {
