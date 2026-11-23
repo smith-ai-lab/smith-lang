@@ -1,7 +1,5 @@
-//! The parser written in Smith, in `compiler/parser.smith`, as far as the
-//! compiler on `main` builds it: the part above the line `// ---- not built`,
-//! which reads the `use` lines of a file and steps over the other items. It
-//! takes the tokens of the lexer written in Smith, and is held to the Rust
+//! The parser written in Smith, in `compiler/parser.smith`, which reads the
+//! `use` lines of a file and steps over the other items. It takes the tokens of the lexer written in Smith, and is held to the Rust
 //! parser by what both can be asked.
 //!
 //! The Rust parser is not public, and its tree can be reached from no test, so
@@ -30,18 +28,14 @@ pub const MACHINE: &[Test] = &[
 const FILES: u64 = 40;
 
 /// The lexer and the parser written in Smith, without the `main` of the lexer
-/// and the `use` lines of the parser, which the lexer has already, and the part
-/// of the parser that the compiler does not build.
+/// and the `use` lines of the parser, which the lexer has already.
 fn parser() -> &'static str {
     static PARSER: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     PARSER.get_or_init(|| {
         let lexer = include_str!("../../compiler/lexer.smith");
         let lexer = &lexer[..lexer.find("\nfn main()").expect("lexer.smith has a main") + 1];
         let parser = include_str!("../../compiler/parser.smith");
-        let end = parser
-            .find("\n// ---- not built")
-            .expect("parser.smith says where what is not built starts");
-        let built: String = parser[..end + 1]
+        let built: String = parser
             .lines()
             .filter(|line| !line.starts_with("use "))
             .map(|line| format!("{line}\n"))
