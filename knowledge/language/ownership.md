@@ -9,6 +9,7 @@ built:
   - "a value without `Copy` that a lambda gives away is spent in the function it is written in from the call the lambda is passed to, when that call takes its function"
   - "a `List` has `Discard` and not `Copy`, and neither has a struct, a tuple, an enum, or a list that holds one, so a list used after it was given away is one error at the second use, whose fix is `copy(xs)`, and `push` takes its list and grows it in place"
   - "a value of a type without `Discard`, as a struct that `without Discard` was written for, or one that holds it, is followed to the end of every path and refused where it is dropped, and reading it, lending it, and reading a field of it take nothing"
+  - "a field of a value that is made where it is read and bound to no name, as `keep(item: x).item`, is taken as it is of a value bound to a name: it is accepted when each other field of the value has `Discard`, and otherwise refused once, at the value, naming the first other field that has none, or the whole value when the field is only read"
   - "a type parameter has `Copy` and `Discard` only where a bound or a `requires` line asks, so a value of one is used at most once and must be taken, and a call, or an implementation it chooses, is given only a type that has what the bounds ask"
 ---
 
@@ -85,7 +86,7 @@ fn forget(path: str) -> Result[(), FsError] ! fs {
 }
 ```
 
-This is refused: `f` is a `File`, which cannot be dropped, and nothing closes it. A type with `Discard` is dropped without a word. A value without `Discard` must be taken on every path, which [Values used exactly once](resources.md) says, and looking at it, lending it, and reading a field of it take nothing.
+This is refused: `f` is a `File`, which cannot be dropped, and nothing closes it. A type with `Discard` is dropped without a word. A value without `Discard` must be taken on every path, which [Values used exactly once](resources.md) says, and looking at it, lending it, and reading a field of it take nothing. A field taken from a value that is made where it is read, as `keep(item: x).item`, leaves the rest of the value to be dropped, so it is accepted when every other field has `Discard`, as it is of a value bound to a name, and refused otherwise, at the value, with the first field that has none. A field that is only read, because its type has `Copy`, takes nothing, so the whole value is dropped, as it is when it is bound.
 
 ## Copy and Discard in a generic function
 
