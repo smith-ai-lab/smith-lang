@@ -1364,21 +1364,94 @@ impl<'a> Lowering<'a> {
         any
     }
 
-    /// Drops the names the checker found dropped at the site.
+    /// Drops what the checker found dropped at the site.
     fn drop_at(&mut self, out: &mut Out<'a>, site: Site) {
-        let Some(names) = self.typed.drops.at.get(&site) else {
+        let Some(items) = self.typed.drops.at.get(&site) else {
             return;
         };
-        for name in names {
-            let Some(at) = out.find(name) else {
+        for item in items {
+            let Some(at) = out.find(&item.name) else {
                 continue;
             };
             let bound = &out.names()[at];
             if bound.home.is_some() || self.holds_none(&bound.ty) {
                 continue;
             }
-            let (ty, values) = (bound.ty.clone(), bound.values.clone());
-            self.drop_value(out, &ty, &values);
+            let Some((start, size, ty)) = self.part_of(&bound.ty, &item.part) else {
+                continue;
+            };
+            let values = bound.values[start..start + size].to_vec();
+            self.drop_except(out, &ty, &values, &item.except);
+        }
+    }
+
+    /// Where the part of a value of the type that the fields name is among its
+    /// scalars, how many there are, and its type.
+    fn part_of(&self, ty: &Ty, fields: &[String]) -> Option<(usize, usize, Ty)> {
+        let defs = self.typed.defs;
+        let (mut ty, mut start) = (ty.clone(), 0);
+        for field in fields {
+            let parts: Vec<(String, Ty)> = match &ty {
+                Ty::Struct(s, args) => (defs.file.structs[*s].fields.iter())
+                    .zip(&defs.fields[*s])
+                    .map(|(f, t)| (f.name.clone(), t.subst(args)))
+                    .collect(),
+                Ty::Tuple(items) => (items.iter().enumerate())
+                    .map(|(k, t)| (k.to_string(), t.clone()))
+                    .collect(),
+                _ => return None,
+            };
+            let mut found = None;
+            for (name, t) in parts {
+                if name == *field {
+                    found = Some(t);
+                    break;
+                }
+                start += self.size(&t);
+            }
+            ty = found?;
+        }
+        let size = self.size(&ty);
+        Some((start, size, ty))
+    }
+
+    /// Detaches each child a value holds but for the fields in `except`, which
+    /// were handed on.
+    fn drop_except(
+        &mut self,
+        out: &mut Out<'a>,
+        ty: &Ty,
+        values: &[form::Value],
+        except: &[Vec<String>],
+    ) {
+        if except.is_empty() {
+            self.drop_value(out, ty, values);
+            return;
+        }
+        if except.iter().any(Vec::is_empty) {
+            return;
+        }
+        let defs = self.typed.defs;
+        let parts: Vec<(String, Ty)> = match ty {
+            Ty::Struct(s, args) => (defs.file.structs[*s].fields.iter())
+                .zip(&defs.fields[*s])
+                .map(|(f, t)| (f.name.clone(), t.subst(args)))
+                .collect(),
+            Ty::Tuple(items) => (items.iter().enumerate())
+                .map(|(k, t)| (k.to_string(), t.clone()))
+                .collect(),
+            _ => return,
+        };
+        let mut at = 0;
+        for (name, part) in parts {
+            let size = self.size(&part);
+            let inside: Vec<Vec<String>> = (except.iter())
+                .filter(|e| e[0] == name)
+                .map(|e| e[1..].to_vec())
+                .collect();
+            let held = values[at..at + size].to_vec();
+            self.drop_except(out, &part, &held, &inside);
+            at += size;
         }
     }
 
@@ -2314,9 +2387,27 @@ impl<'a> Lowering<'a> {
         out.written = written;
         out.frames.pop();
         out.at = caller;
+        // What a path that leaves the loop by a `break` handed on, and the path
+        // that runs it to its end did not, is dropped where `each` is over, which
+        // it tells by the `Flow` it gives.
+        let done = self.typed.drops.at.contains_key(&Site::Done(addr(l)));
+        if let (true, [flow]) = (done, &result[..]) {
+            let on = defs.case_of(defs.flow, "go").expect("a case");
+            let arms = out.switch(*flow, 2);
+            let mut ends = Vec::new();
+            for (k, &block) in arms.iter().enumerate() {
+                out.current = block;
+                if k == on {
+                    self.drop_at(out, Site::Done(addr(l)));
+                }
+                ends.push((out.current, Vec::new()));
+            }
+            out.join(&[], ends);
+        }
         // A loop reads nothing of the `Flow` that `each` gives, so a constant
         // that was only built to give it is not kept.
-        if let [value] = result[..] {
+        if let ([value], false) = (&result[..], done) {
+            let value = *value;
             let last = out.blocks[out.current].instructions.last();
             let built =
                 last.is_some_and(|i| i.results == [value] && matches!(i.op, form::Op::Constant(_)));
