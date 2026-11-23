@@ -1130,10 +1130,18 @@ fn open(port: 0..65536) -> Result[Listener, NetError] ! net {
   }
 }
 
-// Serves each connection in a task of its own, so that a connection that says
-// nothing holds up no other: the tasks wait in the scheduler of the group, which
-// holds no thread for a task that waits.
+// Serves each connection in a task of its own on Linux, so that a connection
+// that says nothing holds up no other: the tasks wait in the scheduler, which
+// holds no thread for a task that waits. On macOS the handler of `net` blocks
+// and the scheduler cannot wait for a descriptor, so the connections are served
+// one at a time. The number 12 of `__system` is 1 when the kernel is macOS's.
 fn serve_listener[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+  requires Discard[T]
+{
+  if __system(12) == 1 { serve_one_at_a_time(l, body) } else { serve_in_tasks(l, body) }
+}
+
+fn serve_in_tasks[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
   requires Discard[T]
 {
   with tasks()
@@ -1144,6 +1152,20 @@ fn serve_listener[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
           serve_connection(c, body)
           close(c)
         }
+      }
+      .err(e) { }
+    }
+  }
+}
+
+fn serve_one_at_a_time[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+  requires Discard[T]
+{
+  loop {
+    match accept(l) {
+      .ok(c) {
+        serve_connection(c, body)
+        close(c)
       }
       .err(e) { }
     }
