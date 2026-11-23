@@ -114,6 +114,16 @@ pub(super) const PROVIDED: &[Provided] = &[
         through: Some("system_quiet"),
     },
     Provided {
+        effect: "task",
+        operation: "timed_out",
+        through: Some("system_timed_out"),
+    },
+    Provided {
+        effect: "task",
+        operation: "limit",
+        through: Some("system_limit"),
+    },
+    Provided {
         effect: "time",
         operation: "now",
         through: Some("system_now"),

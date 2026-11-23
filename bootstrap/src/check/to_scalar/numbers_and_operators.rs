@@ -626,6 +626,7 @@ impl<'a> Lowering<'a> {
                     EpollWait,
                     Kqueue,
                     Kevent,
+                    Now,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);

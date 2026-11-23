@@ -5,8 +5,9 @@ description: The time effect, by which a program reads the clock and waits for a
 status: partial
 built:
   - "`std.time` declares `time`, with `now` and `sleep` as the page shows them"
-  - "on Linux and macOS, on x86-64 and arm64, the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given; a handler answers both on every target"
-  - "not Windows, a `sleep` that suspends its task, or one that a cancelled task ends"
+  - "on Linux and macOS, on x86-64 and arm64, the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given where no group of tasks is in force; a handler answers both on every target"
+  - "`sleep` in a task of a group, which no scheduler is in force of, suspends the task for the milliseconds and runs the others meanwhile, so two tasks that sleep 300 and 100 milliseconds wake in that order and the program takes about 300, and a thousand tasks that each sleep wake once each; the group waits in `epoll` or `kqueue` with the timeout of the nearest time, and under `test_scheduler` the time of the test goes forward to the nearest time when no task can run, so a thousand sleeps of a test take no time"
+  - "not Windows, or a `sleep` that a cancelled task ends"
 ---
 
 # Time

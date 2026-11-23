@@ -1549,7 +1549,8 @@ impl Lowering<'_> {
                 | crate::scalar::Raw::EpollCtl
                 | crate::scalar::Raw::EpollWait
                 | crate::scalar::Raw::Kqueue
-                | crate::scalar::Raw::Kevent,
+                | crate::scalar::Raw::Kevent
+                | crate::scalar::Raw::Now,
             ) => {
                 self.code.i64_const(-38);
                 self.set(results[0]);

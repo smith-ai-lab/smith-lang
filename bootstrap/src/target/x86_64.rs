@@ -1092,7 +1092,12 @@ pub trait System {
         assert!(
             matches!(
                 call,
-                Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::Kqueue | Raw::Kevent
+                Raw::EpollCreate1
+                    | Raw::EpollCtl
+                    | Raw::EpollWait
+                    | Raw::Kqueue
+                    | Raw::Kevent
+                    | Raw::Now
             ),
             "a target that has no such call refuses the program before it is built"
         );

@@ -121,7 +121,7 @@ impl System for Linux {
             Raw::SetSockOpt => 54,
             Raw::Close => 3,
             Raw::NanoSleep => 35,
-            Raw::ClockGetTime => 228,
+            Raw::ClockGetTime | Raw::Now => 228,
             Raw::Kqueue | Raw::Kevent => {
                 // Linux has no `kqueue`, and what is built for it is never run there.
                 asm.mov64(RAX, -38i64 as u64);
