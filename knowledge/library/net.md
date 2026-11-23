@@ -11,6 +11,7 @@ built:
   - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing, and a handler that gives a `Listener`, a `Connection`, or a `Socket` makes it with `listener`, `connection`, or `socket` and reads its number with `handle`, as [Making a value in a handler](#making-a-value-in-a-handler) says"
   - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux and macOS"
   - "on Linux a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` for the connection while other tasks run, and a call with no group blocks, as it did; macOS blocks until #967"
+  - "a listener from `listen_on` is made to hold up to 4096 connections that nothing has accepted, or as many as the system allows when that is fewer, so a thousand connections that arrive before the server takes the first are all made at once and none waits for the system to ask again"
   - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held"
   - "not built: a handler that keeps state and is under `listen` of `std.http`, which is refused as not built yet, as [Handlers and tasks](../language/task-handlers.md) says, and a handler that assigns a name under `stdio` of `std.mcp`, which stops the compiler"
   - "not Windows, or a name looked up"
@@ -69,7 +70,7 @@ enum NetError {
 
 | Operation | Does |
 | --- | --- |
-| `listen_on` | Begins to take connections at a port of this machine. Port 0 asks the system for one that is free |
+| `listen_on` | Begins to take connections at a port of this machine. Port 0 asks the system for one that is free. The system holds up to 4096 connections that `accept` has not yet taken, or as many as it allows when that is fewer, so a burst of connections arrives without a wait |
 | `accept` | Waits for the next connection to a listener, and gives it |
 | `connect_to` | Opens a connection to a port of a host |
 | `read` | Waits for bytes and gives those that have come, at most `most`. No bytes means the other side has finished sending |

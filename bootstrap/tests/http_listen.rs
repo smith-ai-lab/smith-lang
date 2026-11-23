@@ -80,6 +80,10 @@ pub const MACHINE: &[Test] = &[
         a_thousand_connections_open_at_once_are_each_answered,
     ),
     (
+        "connections_that_nothing_accepts_are_all_held_by_the_system",
+        connections_that_nothing_accepts_are_all_held_by_the_system,
+    ),
+    (
         "a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first",
         a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first,
     ),
@@ -621,6 +625,94 @@ fn a_thousand_connections_open_at_once_are_each_answered() {
         let mut client = server.connect();
         client.send(get("/users/7").as_bytes());
         assert_eq!(client.reply().status, 200);
+    }
+}
+
+/// A program that listens at the port it is given and never accepts, so that
+/// what holds the connections made to it is the queue the system keeps for the
+/// listener, as `listen_on` of `std.net` sizes it.
+const NEVER_ACCEPTS: &str = "use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.int (narrow)
+use std.net (listen_on, net, stop)
+use std.time (sleep, time)
+
+fn main(args: List[str]) ! net, time, alloc {
+  if args.size == 0 { return }
+  number: Result[Nat, ReadError] = from_text(\"port\", args[0])
+  match number {
+    .ok(port) {
+      fits: Option[0..65536] = narrow(port)
+      match fits {
+        .some(p) {
+          match listen_on(\"127.0.0.1\", p) {
+            .ok(l) {
+              sleep(60000)
+              stop(l)
+            }
+            .err(e) { }
+          }
+        }
+        .none { }
+      }
+    }
+    .err(e) { }
+  }
+}
+";
+
+/// A connection that nothing has accepted waits in the queue the system keeps
+/// for the listener. When the queue is full the system drops the next
+/// connection's first packet, and the client sends it again after one second,
+/// then two, then four, so a wave that arrives faster than the server accepts
+/// it waits for seconds, and a test that sent a wave of a thousand was taken for
+/// one that hung. With nothing accepting, the queue is all there is: every
+/// connection must be made at once.
+fn connections_that_nothing_accepts_are_all_held_by_the_system() {
+    let Some(target) = Target::host() else { return };
+    if !kernel().contains(&target) || !target.name().starts_with("linux") {
+        return;
+    }
+    let built = targets::build(NEVER_ACCEPTS.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
+    targets::record(target, &[&built]);
+    if targets::fingerprinting() {
+        return;
+    }
+    let queue: usize = std::fs::read_to_string("/proc/sys/net/core/somaxconn")
+        .ok()
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(128);
+    let count = 1000.min(queue);
+    let dir = crate::scratch::path("http_listen_queue");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("program");
+    crate::executable::write(&path, &built);
+    let server = ports::serve(ports::all(), |port| {
+        let child = Command::new(&path).arg(port.to_string()).stdout(Stdio::null()).stderr(Stdio::piped()).spawn().unwrap();
+        let mut started = Started { child, port };
+        let end = std::time::Instant::now() + Duration::from_secs(8);
+        loop {
+            if let Some(status) = started.child.try_wait().unwrap() {
+                let said = ports::said(&mut started.child);
+                return if said.contains("in use") { ports::Start::Taken } else { ports::Start::Failed(format!("{status}: {said:?}")) };
+            }
+            assert!(std::time::Instant::now() < end, "the program never listened");
+            // A connection is held by the system once the program listens.
+            if TcpStream::connect_timeout(&std::net::SocketAddr::from(([127, 0, 0, 1], port)), Duration::from_millis(200)).is_ok() {
+                return ports::Start::Up(started);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    });
+    std::fs::remove_dir_all(&dir).ok();
+    let mut streams = Vec::new();
+    for i in 0..count {
+        let stream = TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 1], server.port)),
+            Duration::from_millis(500),
+        )
+        .unwrap_or_else(|e| panic!("connection {i} of {count} was not held while nothing accepted: {e}"));
+        streams.push(stream);
     }
 }
 
