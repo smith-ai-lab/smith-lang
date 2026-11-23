@@ -1223,6 +1223,28 @@ impl Machine<'_> {
                         args[2..].iter().map(get).collect()
                     }
                     Op::System {
+                        call: System::TaskMark | System::TaskRelease | System::TaskFree,
+                        ..
+                    } => Vec::new(),
+                    // The evaluator keeps a frame where it is, as it keeps every
+                    // request for memory.
+                    Op::System {
+                        call: System::TaskFrame,
+                        args,
+                    } => {
+                        let Word::Int(count) = get(&args[0]) else {
+                            panic!("a frame of a number of bytes that is not one")
+                        };
+                        self.requests.push(count as usize);
+                        if count > self.left as u64 {
+                            return Err(Ended(1));
+                        }
+                        self.left -= count as usize;
+                        let at = BASE + self.memory.len();
+                        self.memory.resize(self.memory.len() + count as usize, 0);
+                        vec![Word::Address(at)]
+                    }
+                    Op::System {
                         call: System::ArenaOpen | System::ArenaClose,
                         ..
                     } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),

@@ -48,7 +48,7 @@ fn program(build: impl FnOnce(&mut Builder, &mut Calls)) -> Program {
     let main: Function = b.finish(&[]);
     let program = Program {
         data: Vec::new(),
-        functions: vec![pool::new(), pool::take(), pool::give(), main],
+        functions: vec![pool::new(), pool::take_sized(), pool::give(), main],
         main: 3,
     };
     assert_eq!(scalar::check(&program), Ok(()));
@@ -64,7 +64,7 @@ impl Calls {
 
     fn take(&self, b: &mut Builder, pool: Value, bytes: u64) -> Value {
         let bytes = b.int(Bits::B64, bytes);
-        b.call(1, vec![pool, bytes], &[Type::Address])[0]
+        b.call(1, vec![pool, bytes], &[Type::Address, WORD])[0]
     }
 
     fn give(&self, b: &mut Builder, pool: Value, address: Value) {

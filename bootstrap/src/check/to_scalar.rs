@@ -127,7 +127,12 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
     // whether it waits or not, once the functions that call themselves have a
     // stack of their own.
     match form::suspend_frames(form::recur(program), &frames) {
-        Ok(suspended) => Ok(form::handler::install(suspended.program)),
+        Ok(suspended) => {
+            let roots: Vec<(usize, u64)> = (suspended.tasks.iter())
+                .filter_map(|t| t.stack_at.map(|at| (t.poll, at)))
+                .collect();
+            Ok(form::handler::install_tasks(suspended.program, &roots))
+        }
         Err(message) => Err(vec![Error::new(Pos { line: 1, col: 1 }, message)]),
     }
 }

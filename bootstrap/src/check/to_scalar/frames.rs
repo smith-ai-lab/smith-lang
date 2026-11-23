@@ -264,6 +264,48 @@ impl<'a> Lowering<'a> {
                 )[0];
                 (ty, vec![number])
             }
+            Kind::Word | Kind::SetWord => {
+                // The address of a word of the header of the frame at a number,
+                // found as `At` finds the frame.
+                let (_, number) = self.expr(out, &call.args[0].value, env);
+                let (_, which) = self.expr(out, &call.args[1].value, env);
+                let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+                out.emit(
+                    form::Op::Store {
+                        ty: WORD,
+                        address: slot,
+                        value: number[0],
+                    },
+                    Vec::new(),
+                );
+                let frame = out.emit(
+                    form::Op::Load {
+                        ty: form::Type::Address,
+                        address: slot,
+                    },
+                    vec![form::Type::Address],
+                )[0];
+                let eight = out.int(form::Bits::B64, 8);
+                let by = out.binary(form::Binary::Mul, which[0], eight);
+                let first = out.int(form::Bits::B64, form::SCHEDULER_AT as i128);
+                let from = out.binary(form::Binary::Add, by, first);
+                let address = out.binary(form::Binary::Add, frame, from);
+                if kind == Kind::Word {
+                    let word = out.emit(form::Op::Load { ty: WORD, address }, vec![WORD])[0];
+                    (ty, vec![word])
+                } else {
+                    let (_, value) = self.expr(out, &call.args[2].value, env);
+                    out.emit(
+                        form::Op::Store {
+                            ty: WORD,
+                            address,
+                            value: value[0],
+                        },
+                        Vec::new(),
+                    );
+                    (Ty::Nothing, Vec::new())
+                }
+            }
             Kind::At => {
                 // The frame at a number, whose size nothing reads again.
                 let (_, number) = self.expr(out, &call.args[0].value, env);
@@ -308,6 +350,18 @@ impl<'a> Lowering<'a> {
                 }
                 let back = values.split_off(own);
                 self.set_state(out, &given, back);
+                // A task that gave no address has built nothing that its result
+                // holds, so its pieces go back to the pool once it is read.
+                // What holds an address is built in them, and they stay.
+                if !self.scalars(&ty).contains(&form::Type::Address) {
+                    out.emit(
+                        form::Op::System {
+                            call: form::System::TaskFree,
+                            args: vec![frame[0]],
+                        },
+                        Vec::new(),
+                    );
+                }
                 (ty, values)
             }
         }

@@ -89,15 +89,46 @@ impl State {
 
 /// The program with the stacks passed to every function that needs room.
 pub fn install(program: Program) -> Program {
+    install_tasks(program, &[])
+}
+
+/// `install` for a program whose tasks have a stack of their own: each poll of
+/// `roots`, with the place in its frame of the pair that is the stack for
+/// results, runs on that stack, which its frame keeps from one poll to the
+/// next, and gives back the stack of whoever polled it as it was.
+pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
     // The poll of a task runs to a wait and is run again, and what the task made
     // before the wait is read after it, so everything a poll builds is built in
     // the stack for results, which its caller goes on with, and a call of a poll
     // is a call whose result is kept. A task's memory is then below where every
     // poll after it begins, and nothing a task holds across a wait is overwritten.
-    let polls: Vec<bool> = program.functions.iter().map(is_poll).collect();
+    let forced: Vec<bool> = program.functions.iter().map(is_poll).collect();
+    let polls = forced.clone();
+    // A program that starts a task has the pool its memory is taken from, a
+    // value that a function takes when it asks for room, gives a task its
+    // stack, or gives it back, or calls one that does.
+    let tasks_program = (program
+        .functions
+        .iter()
+        .flat_map(|f| &f.blocks)
+        .flat_map(|b| &b.instructions))
+    .any(|i| {
+        matches!(
+            i.op,
+            Op::System {
+                call: System::TaskFrame | System::TaskFree,
+                ..
+            }
+        )
+    });
+    let pooled: Vec<bool> = if tasks_program {
+        pooled_functions(&program)
+    } else {
+        vec![false; program.functions.len()]
+    };
     let given: Vec<Vec<bool>> = (program.functions.iter().enumerate())
         .map(|(k, f)| {
-            if polls[k] {
+            if forced[k] {
                 vec![true; f.types.len()]
             } else {
                 escape::given_back(f)
@@ -136,29 +167,97 @@ pub fn install(program: Program) -> Program {
                     f,
                     &given[k],
                     &rounds[k],
-                    &uses,
-                    &polls,
-                    k == program.main,
-                    at_take,
+                    &About {
+                        uses: &uses,
+                        polls: &polls,
+                        pooled: &pooled,
+                        take: at_take,
+                        first: k == program.main,
+                        root: roots.iter().find(|(r, _)| *r == k).map(|(_, at)| *at),
+                        me_index: k,
+                    },
                 )
             } else {
                 without_arenas(f)
             }
         })
         .collect();
-    functions.push(take().named("<stack_take>"));
-    functions.push(ready(at_take).named("<stack_ready>"));
+    // What a task takes from the pool, and gives back to it, is written only for
+    // a program that has tasks, and every stack of that program grows from the
+    // pool, in pieces that start small and double.
     let mut data = program.data;
     // What a stack that has no piece reads at its end: a piece that holds
     // nothing and has none after it.
     data.push(vec![0; TRAILER as usize]);
-    functions.push(
-        entry(&main, program.main, uses[program.main], data.len() - 1).named("<stack_entry>"),
-    );
+    let empty = data.len() - 1;
+    let main_at = if tasks_program {
+        functions.push(take_with(Some(at_take + 5)).named("<stack_take>"));
+        functions.push(ready_with(at_take, true).named("<stack_ready>"));
+        functions.push(claim(at_take + 5).named("<stack_claim>"));
+        functions.push(free(at_take + 6).named("<stack_free>"));
+        functions.push(super::pool::new().named("<pool_new>"));
+        functions.push(super::pool::take_sized().named("<pool_take>"));
+        functions.push(super::pool::give().named("<pool_give>"));
+        functions.push(
+            entry(
+                &main,
+                program.main,
+                uses[program.main],
+                empty,
+                Some((at_take + 4, pooled[program.main])),
+            )
+            .named("<stack_entry>"),
+        );
+        at_take + 7
+    } else {
+        functions.push(take_with(None).named("<stack_take>"));
+        functions.push(ready_with(at_take, false).named("<stack_ready>"));
+        functions.push(
+            entry(&main, program.main, uses[program.main], empty, None).named("<stack_entry>"),
+        );
+        at_take + 2
+    };
     Program {
         data,
-        main: at_take + 2,
+        main: main_at,
         functions,
+    }
+}
+
+/// Which functions take the pool: those that ask for room, give a task its
+/// stack, or give it back, and those that call one.
+fn pooled_functions(program: &Program) -> Vec<bool> {
+    let mut found: Vec<bool> = program
+        .functions
+        .iter()
+        .map(|f| {
+            (f.blocks.iter().flat_map(|b| &b.instructions)).any(|i| {
+                matches!(
+                    i.op,
+                    Op::System {
+                        call: System::Allocate | System::TaskFrame | System::TaskFree,
+                        ..
+                    }
+                )
+            })
+        })
+        .collect();
+    // The function the program starts with makes each stack it passes have a
+    // piece, which asks the pool.
+    found[program.main] = true;
+    loop {
+        let mut changed = false;
+        for (k, f) in program.functions.iter().enumerate() {
+            let calls = (f.blocks.iter().flat_map(|b| &b.instructions))
+                .any(|i| matches!(&i.op, Op::Call { function, .. } if found[*function]));
+            if calls && !found[k] {
+                found[k] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return found;
+        }
     }
 }
 
@@ -203,19 +302,39 @@ fn fresh(f: &mut Function) -> [Value; 2] {
     })
 }
 
+/// What `with_state` knows of the program and of the function it is given.
+struct About<'a> {
+    uses: &'a [Uses],
+    polls: &'a [bool],
+    pooled: &'a [bool],
+    /// Where the runtime functions of the pass are, which `take` is the first of.
+    take: usize,
+    /// Whether the function is the one the program starts with.
+    first: bool,
+    /// Where in its frame the poll of a task keeps its stack, when it is one.
+    root: Option<u64>,
+    /// The place of the function in the program.
+    me_index: usize,
+}
+
 /// The function with the stacks it takes before its parameters, and the one
 /// for results before its results, taking room where it asked the system, and
 /// giving the stacks to each call that needs them, and to each block.
-fn with_state(
-    mut f: Function,
-    given: &[bool],
-    rounds: &escape::Rounds,
-    uses: &[Uses],
-    polls: &[bool],
-    first: bool,
-    take: usize,
-) -> Function {
+fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &About) -> Function {
+    let About {
+        uses,
+        polls,
+        pooled,
+        take,
+        first,
+        root,
+        me_index,
+    } = *about;
     let me = needing_of(&f, given, uses, polls);
+    let pool: Option<Value> = pooled[me_index].then(|| {
+        f.types.push(NEXT);
+        Value(f.types.len() - 1)
+    });
     let start = |f: &mut Function| State {
         results: me.results.then(|| fresh(f)),
         temporaries: me.temporaries.then(|| fresh(f)),
@@ -235,10 +354,19 @@ fn with_state(
     } else {
         (0..f.blocks.len()).collect()
     };
+    // The frame of a task that has a stack of its own is the parameter after the
+    // stacks, and the stack it runs on is the one the frame keeps.
+    let own_stack = root.filter(|_| me.results);
+    let frame = f.blocks[0].params.get(at_start[0].values().len()).copied();
+    let caller = at_start[0].results;
     for k in order {
         let mut now = at_start[k];
         let instructions = std::mem::take(&mut f.blocks[k].instructions);
         let mut kept: Vec<Instruction> = Vec::with_capacity(instructions.len());
+        if let (0, Some(at)) = (k, own_stack) {
+            let [next, left] = load_pair(&mut f, &mut kept, frame.expect("the frame"), at);
+            now.results = Some([next, left]);
+        }
         for mut i in instructions {
             match &mut i.op {
                 Op::System {
@@ -255,7 +383,7 @@ fn with_state(
                             results: made.to_vec(),
                             op: Op::Call {
                                 function: take + 1,
-                                args: vec![at, left],
+                                args: with_pool(vec![at, left], pool),
                             },
                             at: Place::of("<stack_take>"),
                         });
@@ -278,6 +406,52 @@ fn with_state(
                     continue;
                 }
                 Op::System {
+                    call: System::TaskMark,
+                    args,
+                } => {
+                    if let Some(pair) = now.results {
+                        store_pair(&mut f, &mut kept, args[0], 0, pair);
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::TaskFrame,
+                    args,
+                } => {
+                    kept.push(Instruction {
+                        results: i.results.clone(),
+                        op: Op::Call {
+                            function: take + 2,
+                            args: with_pool(vec![args[0]], pool),
+                        },
+                        at: Place::of("<stack_claim>"),
+                    });
+                    continue;
+                }
+                Op::System {
+                    call: System::TaskFree,
+                    args,
+                } => {
+                    kept.push(Instruction {
+                        results: Vec::new(),
+                        op: Op::Call {
+                            function: take + 3,
+                            args: with_pool(vec![args[0]], pool),
+                        },
+                        at: Place::of("<stack_free>"),
+                    });
+                    continue;
+                }
+                Op::System {
+                    call: System::TaskRelease,
+                    args,
+                } => {
+                    if now.results.is_some() {
+                        now.results = Some(load_pair(&mut f, &mut kept, args[0], 0));
+                    }
+                    continue;
+                }
+                Op::System {
                     call: System::Allocate,
                     args,
                 } => {
@@ -290,7 +464,7 @@ fn with_state(
                     let [at, left] = stack.expect("the function takes the stack it asks");
                     i.op = Op::Call {
                         function: take,
-                        args: vec![at, left, args[0]],
+                        args: with_pool(vec![at, left, args[0]], pool),
                     };
                     i.results.splice(0..0, next);
                     *stack = Some(next);
@@ -321,7 +495,7 @@ fn with_state(
                                 results: made.to_vec(),
                                 op: Op::Call {
                                     function: take + 1,
-                                    args: vec![at, left],
+                                    args: with_pool(vec![at, left], pool),
                                 },
                                 at: Place::of("<stack_take>"),
                             });
@@ -343,6 +517,9 @@ fn with_state(
                         passed.extend(for_temporaries.expect("the function takes what it gives"));
                     }
                     args.splice(0..0, passed);
+                    if pooled[*function] {
+                        args.insert(0, pool.expect("a function that takes the pool gives it"));
+                    }
                     if callee.results {
                         // What the callee gives back is the stack it built
                         // its result in, moved on by it. The other goes on as
@@ -370,7 +547,7 @@ fn with_state(
                 results: made.to_vec(),
                 op: Op::Call {
                     function: take + 1,
-                    args: vec![at, left],
+                    args: with_pool(vec![at, left], pool),
                 },
                 at: Place::of("<stack_take>"),
             });
@@ -398,12 +575,27 @@ fn with_state(
                 }
             }
             End::Return(values) => {
-                values.splice(0..0, now.results.into_iter().flatten());
+                if let (Some(at), Some(pair)) = (own_stack, now.results) {
+                    // The task keeps its stack, and whoever polled it goes on
+                    // with the stack it gave.
+                    let mut tail = Vec::new();
+                    store_pair(&mut f, &mut tail, frame.expect("the frame"), at, pair);
+                    f.blocks[k].instructions.extend(tail);
+                    let End::Return(values) = &mut f.blocks[k].end else {
+                        unreachable!("a return")
+                    };
+                    values.splice(0..0, caller.into_iter().flatten());
+                } else {
+                    values.splice(0..0, now.results.into_iter().flatten());
+                }
             }
         }
     }
     if me.results {
         f.results.splice(0..0, PAIR);
+    }
+    if let Some(pool) = pool {
+        f.blocks[0].params.insert(0, pool);
     }
     f
 }
@@ -429,7 +621,12 @@ fn without_arenas(mut f: Function) -> Function {
             !matches!(
                 i.op,
                 Op::System {
-                    call: System::ArenaOpen | System::ArenaClose,
+                    call: System::ArenaOpen
+                        | System::ArenaClose
+                        | System::TaskMark
+                        | System::TaskRelease
+                        | System::TaskFrame
+                        | System::TaskFree,
                     ..
                 }
             )
@@ -483,6 +680,10 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool]) -> Us
                     now.temporaries = true;
                 }
             }
+            Op::System {
+                call: System::TaskFrame | System::TaskFree,
+                ..
+            } => now.results = true,
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
                 if polls[*function] || gives_back(f, given, &i.results) {
@@ -512,7 +713,17 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool]) -> Us
 /// found again from where its stack ends. A count too large to round is asked
 /// of the system as it is, and refused.
 pub fn take() -> Function {
+    take_with(None)
+}
+
+/// `take`, and for a program that has tasks `take` that asks the pool of the
+/// program, which is its first parameter, for a piece of the smallest class that
+/// holds what is needed and at least twice what the piece the stack is in holds,
+/// so that a stack starts small and doubles, in place of asking the system for
+/// 64 KB. `pool_take` is where the pool's `take_sized` is.
+pub fn take_with(pool_take: Option<usize>) -> Function {
     let mut f = Builder::new();
+    let pool = pool_take.map(|_| f.params(&[NEXT])[0]);
     let p = f.params(&[NEXT, LEFT, LEFT]);
     let (next, left, count) = (p[0], p[1], p[2]);
     let seven = runtime::int(&mut f, 7);
@@ -563,10 +774,21 @@ pub fn take() -> Function {
     let large = f.compare(Compare::LessU, fits_from, size);
     let twice = f.binary(Binary::Add, size, size);
     let room = f.choose(large, twice, size);
-    let more = runtime::int(&mut f, TRAILER + PIECE - 1);
-    let up = f.binary(Binary::Add, room, more);
-    let pieces = runtime::int(&mut f, !(PIECE - 1));
-    let wanted = f.binary(Binary::And, up, pieces);
+    let wanted = if pool_take.is_some() {
+        // What the request needs and its trailer, or twice what the piece the
+        // stack is in holds and a trailer when that is more.
+        let trailer = runtime::int(&mut f, TRAILER);
+        let base = f.binary(Binary::Add, room, trailer);
+        let doubled = f.binary(Binary::Add, holds, holds);
+        let grown = f.binary(Binary::Add, doubled, trailer);
+        let more = f.compare(Compare::LessU, base, grown);
+        f.choose(more, grown, base)
+    } else {
+        let more = runtime::int(&mut f, TRAILER + PIECE - 1);
+        let up = f.binary(Binary::Add, room, more);
+        let pieces = runtime::int(&mut f, !(PIECE - 1));
+        f.binary(Binary::And, up, pieces)
+    };
     let none = f.null();
     f.switch(huge, vec![(look, vec![]), (trying, vec![])]);
     // A count with its top bit set asks for the rest of it only if the piece
@@ -612,9 +834,19 @@ pub fn take() -> Function {
     f.ret(vec![after, rest, start]);
     f.at(ask);
     let (asked, old_end, old_link, patch) = (a[0], a[1], a[2], a[3]);
-    let start = f.allocate(asked);
     let trailer = runtime::int(&mut f, TRAILER);
-    let holds_now = f.binary(Binary::Sub, asked, trailer);
+    let (start, holds_now) = match (pool_take, pool) {
+        (Some(from_pool), Some(pool)) => {
+            let got = f.call(from_pool, vec![pool, asked], &[NEXT, LEFT]);
+            let holds_now = f.binary(Binary::Sub, got[1], trailer);
+            (got[0], holds_now)
+        }
+        _ => {
+            let start = f.allocate(asked);
+            let holds_now = f.binary(Binary::Sub, asked, trailer);
+            (start, holds_now)
+        }
+    };
     let new_end = f.binary(Binary::Add, start, holds_now);
     f.store(new_end, holds_now);
     let new_link = f.binary(Binary::Add, new_end, eight);
@@ -636,7 +868,13 @@ pub fn take() -> Function {
 /// It is what makes a stack that a callee may use for its temporaries one that
 /// remembers the piece, since the callee does not give the stack back.
 pub fn ready(take: usize) -> Function {
+    ready_with(take, false)
+}
+
+/// `ready`, for a program that has tasks, with the pool before the pair.
+pub fn ready_with(take: usize, pooled: bool) -> Function {
     let mut f = Builder::new();
+    let pool = pooled.then(|| f.params(&[NEXT])[0]);
     let p = f.params(&[NEXT, LEFT]);
     let (next, left) = (p[0], p[1]);
     let (has, _) = f.block(&[]);
@@ -650,20 +888,33 @@ pub fn ready(take: usize) -> Function {
     f.ret(vec![next, left]);
     f.at(bare);
     let one = runtime::int(&mut f, 1);
-    let made = f.call(take, vec![next, left, one], &[NEXT, LEFT, NEXT]);
+    let mut args = vec![next, left, one];
+    if let Some(pool) = pool {
+        args.insert(0, pool);
+    }
+    let made = f.call(take, args, &[NEXT, LEFT, NEXT]);
     f.ret(vec![made[0], made[1]]);
     f.finish(&PAIR)
 }
 
 /// What starts the program: it calls `main`, which took what the system gives,
 /// with stacks that have no bytes before them.
-fn entry(main: &Function, at: usize, uses: Uses, empty: usize) -> Function {
+fn entry(
+    main: &Function,
+    at: usize,
+    uses: Uses,
+    empty: usize,
+    pool: Option<(usize, bool)>,
+) -> Function {
     let mut f = Builder::new();
     let types: Vec<Type> = (main.blocks[0].params.iter())
         .map(|v| main.types[v.0])
         .collect();
     let params = f.params(&types);
     let mut args = Vec::new();
+    if let Some((make, true)) = pool {
+        args.push(f.call(make, vec![], &[NEXT])[0]);
+    }
     for _ in 0..usize::from(uses.results) + usize::from(uses.temporaries) {
         args.push(f.emit(Op::Constant(Constant::Data(empty)), &[NEXT])[0]);
         args.push(runtime::int(&mut f, 0));
@@ -677,4 +928,212 @@ fn entry(main: &Function, at: usize, uses: Uses, empty: usize) -> Function {
     f.call(at, args, &results);
     f.ret(Vec::new());
     f.finish(&[])
+}
+
+/// Loads the pair of a stack that is at `by` bytes from `base`, and gives its
+/// values.
+fn load_pair(f: &mut Function, kept: &mut Vec<Instruction>, base: Value, by: u64) -> [Value; 2] {
+    let make = |f: &mut Function, kept: &mut Vec<Instruction>, op: Op, ty: Type| {
+        f.types.push(ty);
+        let value = Value(f.types.len() - 1);
+        kept.push(Instruction {
+            results: vec![value],
+            op,
+            at: Place::NONE,
+        });
+        value
+    };
+    let at = |f: &mut Function, kept: &mut Vec<Instruction>, by: u64| {
+        let offset = make(f, kept, Op::Constant(Constant::Int(by)), LEFT);
+        make(
+            f,
+            kept,
+            Op::Binary {
+                op: Binary::Add,
+                a: base,
+                b: offset,
+            },
+            Type::Address,
+        )
+    };
+    let first = at(f, kept, by);
+    let second = at(f, kept, by + 8);
+    let next = make(
+        f,
+        kept,
+        Op::Load {
+            ty: NEXT,
+            address: first,
+        },
+        NEXT,
+    );
+    let left = make(
+        f,
+        kept,
+        Op::Load {
+            ty: LEFT,
+            address: second,
+        },
+        LEFT,
+    );
+    [next, left]
+}
+
+/// Stores the pair of a stack at `by` bytes from `base`.
+fn store_pair(
+    f: &mut Function,
+    kept: &mut Vec<Instruction>,
+    base: Value,
+    by: u64,
+    pair: [Value; 2],
+) {
+    let at = |f: &mut Function, kept: &mut Vec<Instruction>, by: u64| {
+        f.types.push(LEFT);
+        let offset = Value(f.types.len() - 1);
+        kept.push(Instruction {
+            results: vec![offset],
+            op: Op::Constant(Constant::Int(by)),
+            at: Place::NONE,
+        });
+        f.types.push(Type::Address);
+        let address = Value(f.types.len() - 1);
+        kept.push(Instruction {
+            results: vec![address],
+            op: Op::Binary {
+                op: Binary::Add,
+                a: base,
+                b: offset,
+            },
+            at: Place::NONE,
+        });
+        address
+    };
+    let first = at(f, kept, by);
+    let second = at(f, kept, by + 8);
+    kept.push(Instruction {
+        results: Vec::new(),
+        op: Op::Store {
+            ty: NEXT,
+            address: first,
+            value: pair[0],
+        },
+        at: Place::NONE,
+    });
+    kept.push(Instruction {
+        results: Vec::new(),
+        op: Op::Store {
+            ty: LEFT,
+            address: second,
+            value: pair[1],
+        },
+        at: Place::NONE,
+    });
+}
+
+/// Makes the frame of a task, and gives it its stack for results. A piece of the
+/// first class of the pool that holds the frame and some room more is taken: the
+/// frame is at its start, the stack starts where the frame ends, and the words of
+/// the frame after its two say where the stack is and where it started, which
+/// `free` needs. The function takes the pool and the bytes of the frame, and
+/// gives the address of the frame.
+pub fn claim(pool_take: usize) -> Function {
+    let mut f = Builder::new();
+    let p = f.params(&[NEXT, LEFT]);
+    let (pool, bytes) = (p[0], p[1]);
+    let fifteen = runtime::int(&mut f, 15);
+    let rounded = f.binary(Binary::Add, bytes, fifteen);
+    let mask = runtime::int(&mut f, !15);
+    let framed = f.binary(Binary::And, rounded, mask);
+    // Room for the frame and for a stack that starts small.
+    let room = runtime::int(&mut f, 512);
+    let wanted = f.binary(Binary::Add, framed, room);
+    let got = f.call(pool_take, vec![pool, wanted], &[NEXT, LEFT]);
+    let (frame, capacity) = (got[0], got[1]);
+    // The piece ends as the pieces of a stack do: with the bytes it holds and
+    // the end of the piece after it, which is none.
+    let trailer = runtime::int(&mut f, TRAILER);
+    let holds = f.binary(Binary::Sub, capacity, trailer);
+    let end = f.binary(Binary::Add, frame, holds);
+    f.store(end, holds);
+    let eight = runtime::int(&mut f, 8);
+    let link = f.binary(Binary::Add, end, eight);
+    let none = f.null();
+    f.store(link, none);
+    let first = f.binary(Binary::Add, frame, framed);
+    let left = f.binary(Binary::Sub, holds, framed);
+    let words = [16u64, 24, 32, 40];
+    let values = [first, left, frame, holds];
+    for (by, value) in words.into_iter().zip(values) {
+        let by = runtime::int(&mut f, by);
+        let at = f.binary(Binary::Add, frame, by);
+        f.store(at, value);
+    }
+    // The words a scheduler keeps its queues in start as nothing.
+    let zero = runtime::int(&mut f, 0);
+    for by in [48u64, 56, 64, 72] {
+        let by = runtime::int(&mut f, by);
+        let at = f.binary(Binary::Add, frame, by);
+        f.store(at, zero);
+    }
+    f.ret(vec![frame]);
+    f.finish(&[NEXT])
+}
+
+/// Gives the pieces of the task whose frame is given back to the pool, the frame
+/// being in the first: the pieces from where the stack started, each followed by the one its
+/// end says. A task whose frame says it has none is not freed again. The
+/// function takes the pool and the address of the frame.
+pub fn free(pool_give: usize) -> Function {
+    let mut f = Builder::new();
+    let p = f.params(&[NEXT, Type::Address]);
+    let (pool, frame) = (p[0], p[1]);
+    let (look, _) = f.block(&[]);
+    let (done, _) = f.block(&[]);
+    let (each, e) = f.block(&[NEXT, LEFT]);
+    let (step, _) = f.block(&[]);
+    let (onward, _) = f.block(&[]);
+    let zero = runtime::int(&mut f, 0);
+    let eight = runtime::int(&mut f, 8);
+    let at = |f: &mut Builder, by: u64| {
+        let by = runtime::int(f, by);
+        f.binary(Binary::Add, frame, by)
+    };
+    let origin_at = at(&mut f, 32);
+    let holds_at = at(&mut f, 40);
+    let origin = f.load(NEXT, origin_at);
+    let holds = f.load(LEFT, holds_at);
+    let freed = f.compare(Compare::Equal, holds, zero);
+    f.switch(freed, vec![(look, vec![]), (done, vec![])]);
+    f.at(look);
+    f.store(holds_at, zero);
+    f.jump(each, vec![origin, holds]);
+    f.at(done);
+    f.ret(Vec::new());
+    // A piece, with the bytes it holds: the next is where its end says, and is
+    // read before the piece is given back.
+    f.at(each);
+    let (piece, held) = (e[0], e[1]);
+    let end = f.binary(Binary::Add, piece, held);
+    let link = f.binary(Binary::Add, end, eight);
+    let after_end = f.load(NEXT, link);
+    let after_word = f.load(LEFT, link);
+    f.call(pool_give, vec![pool, piece], &[]);
+    let last = f.compare(Compare::Equal, after_word, zero);
+    f.switch(last, vec![(step, vec![]), (done, vec![])]);
+    f.at(step);
+    let after_held = f.load(LEFT, after_end);
+    let back = f.binary(Binary::Sub, zero, after_held);
+    let after = f.binary(Binary::Add, after_end, back);
+    f.jump(each, vec![after, after_held]);
+    let _ = onward;
+    f.finish(&[])
+}
+
+/// The arguments of a call of a runtime function, with the pool before them when
+/// the program has one.
+fn with_pool(mut args: Vec<Value>, pool: Option<Value>) -> Vec<Value> {
+    if let Some(pool) = pool {
+        args.insert(0, pool);
+    }
+    args
 }
