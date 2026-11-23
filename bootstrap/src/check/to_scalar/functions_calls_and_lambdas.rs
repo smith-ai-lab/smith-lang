@@ -556,9 +556,15 @@ impl<'a> Lowering<'a> {
                     out.names_mut().push(arg);
                 }
                 let code = Code::Stmts(&lambda.body);
+                let exits = out.exits;
                 let result = self.leaving(out, code, &lambda_env, (gives, false), limits);
                 out.names_mut().truncate(before);
                 out.at = caller;
+                // A lambda that was left because the task was asked to end leaves
+                // the function that runs it too.
+                if out.exits > exits {
+                    self.cancel_exit(out);
+                }
                 result
             }
             Func::Each(each, frame, each_env) => {
@@ -1159,6 +1165,9 @@ impl<'a> Lowering<'a> {
         // under a scheduler is given the scheduler's state, as one that calls
         // `spawn` is.
         let suspends = effects.iter().any(|e| of_a_waiting_effect(defs, e));
+        let asks_the_scheduler = effects
+            .iter()
+            .any(|e| defs.effect_named(e).is_some_and(|at| defs.is_scheduler(at)));
         let mut handled: Vec<usize> = effects
             .into_iter()
             .filter_map(|e| {
@@ -1176,6 +1185,7 @@ impl<'a> Lowering<'a> {
         if let (true, Some(scheduler)) = (suspends, scheduler) {
             handled.push(scheduler);
         }
+        let may_suspend = scheduler.is_some() && (suspends || asks_the_scheduler) || polls;
         if polls || (suspends && scheduler.is_some()) {
             // A function that waits or polls is given the state of every handler
             // that holds any, as it is given that of the scheduler it waits under.
@@ -1200,6 +1210,7 @@ impl<'a> Lowering<'a> {
                 function: self.place(Body::Copy(instance.clone())),
                 reads: Vec::new(),
                 slots: Vec::new(),
+                suspends: false,
             };
         }
         let upto = (handled.iter())
@@ -1262,6 +1273,7 @@ impl<'a> Lowering<'a> {
             function,
             reads,
             slots,
+            suspends: may_suspend,
         }
     }
 
@@ -1298,6 +1310,7 @@ impl<'a> Lowering<'a> {
             function: self.place(Body::Copy(instance.clone())),
             reads: Vec::new(),
             slots: Vec::new(),
+            suspends: false,
         }
     }
 
@@ -1334,7 +1347,48 @@ impl<'a> Lowering<'a> {
                 .expect("a name the functions of the handler use");
             out.frames[slot.frame][at].values = given.by_ref().take(slot.types.len()).collect();
         }
+        if prepared.suspends {
+            self.cancel_exit(out);
+        }
         results
+    }
+
+    /// Where the task may be asked to end, after a call it may be suspended in:
+    /// when it has been, the function is left at once, with zeros for what it
+    /// gives, which nothing reads, since whatever called it takes its own exit
+    /// as soon as the call is over. The values the function owns that end by
+    /// themselves are ended by their handlers. Inside the block of a loop over
+    /// a value no exit is written, as the block does not leave the function.
+    pub(super) fn cancel_exit(&mut self, out: &mut Out<'a>) {
+        let Some(returns) = out.returns.last() else {
+            return;
+        };
+        if returns.kept.is_some() || returns.of.is_some() {
+            return;
+        }
+        let gives = returns.gives.clone();
+        let asked = out.emit(
+            form::Op::System {
+                call: form::System::Cancelled,
+                args: Vec::new(),
+            },
+            vec![form::Type::Int(form::Bits::B64)],
+        )[0];
+        let none = out.zero(form::Type::Int(form::Bits::B64));
+        let not_asked = out.compare(form::Compare::Equal, asked, none);
+        let blocks = out.switch(not_asked, 2);
+        out.current = blocks[0];
+        let zeros = self.zeros(out, &gives);
+        self.leave(out, zeros);
+        // What `leave` makes to follow the exit is reached by nothing, and goes
+        // where the call goes on, so that it is a block that is well formed.
+        let after = out.current;
+        out.blocks[after].end = form::End::Jump(form::Jump {
+            block: blocks[1],
+            args: Vec::new(),
+        });
+        out.current = blocks[1];
+        out.exits += 1;
     }
 
     /// Lowers a copy of a function for the handlers it runs under: its own

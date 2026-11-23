@@ -232,6 +232,8 @@ struct Out<'a> {
     returns: Vec<Returns>,
     /// The blocks that follow a `return`, which nothing reaches.
     dead: Vec<usize>,
+    /// How many exits for a task that is asked to end have been written.
+    exits: usize,
     /// The place in the source of what is being lowered, which each
     /// instruction made holds.
     place: form::Place,
@@ -347,6 +349,9 @@ struct Prepared {
     reads: Vec<(usize, usize)>,
     /// The names it gives back after its own results.
     slots: Vec<Slot>,
+    /// Whether the call may suspend the task, so that the task may be asked to
+    /// end while it is in it.
+    suspends: bool,
 }
 
 /// A `loop` being lowered: the names its body assigns, which each round
@@ -535,6 +540,7 @@ impl<'a> Out<'a> {
             loops: Vec::new(),
             returns: Vec::new(),
             dead: Vec::new(),
+            exits: 0,
             place: form::Place::NONE,
             written: 0,
             handlers: Vec::new(),

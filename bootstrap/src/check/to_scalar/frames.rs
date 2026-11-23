@@ -268,7 +268,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// The values of a type's zero, for a call that is refused.
-    fn zeros(&self, out: &mut Out<'a>, ty: &Ty) -> Vec<form::Value> {
+    pub(super) fn zeros(&self, out: &mut Out<'a>, ty: &Ty) -> Vec<form::Value> {
         self.scalars(ty).into_iter().map(|t| out.zero(t)).collect()
     }
 
