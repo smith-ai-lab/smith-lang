@@ -19,6 +19,7 @@ pub(super) enum Kind {
     Scheduled,
     Word,
     SetWord,
+    Drop,
 }
 
 /// Which call a call is, when it is one that only the library may make.
@@ -36,6 +37,7 @@ pub(super) fn kind(call: &Call) -> Option<Kind> {
         "__scheduled" => Some(Kind::Scheduled),
         "__word" => Some(Kind::Word),
         "__set_word" => Some(Kind::SetWord),
+        "__drop" => Some(Kind::Drop),
         _ => None,
     }
 }
@@ -46,9 +48,10 @@ pub(super) fn is_frame_call(call: &Call) -> bool {
     kind(call) == Some(Kind::Frame)
 }
 
-/// A call of `__result`, which takes the frame it reads.
+/// A call of `__result`, which takes the frame it reads, or of `__drop`, which
+/// takes the frame it gives back.
 pub(super) fn takes_frame(call: &Call) -> bool {
-    kind(call) == Some(Kind::Result)
+    matches!(kind(call), Some(Kind::Result | Kind::Drop))
 }
 
 impl<'a> Checker<'a> {
@@ -146,6 +149,12 @@ impl<'a> Checker<'a> {
                 gives
             }
             Kind::Scheduled => unreachable!("answered before the frame's types are read"),
+            Kind::Drop => {
+                // A frame whose result nothing reads, given back whole.
+                let signature = one("frame", frame, Ty::Nothing);
+                self.arguments(body, call, &signature, false, None, None);
+                Ty::Nothing
+            }
             Kind::Wait => {
                 let signature = one("wait", Ty::Enum(wait, Vec::new()), Ty::Nothing);
                 self.arguments(body, call, &signature, false, None, None);

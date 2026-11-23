@@ -237,6 +237,20 @@ impl<'a> Lowering<'a> {
                 debug_assert_eq!(self.scalars(&ty), vec![status, status, WORD]);
                 (ty, values)
             }
+            Kind::Drop => {
+                // The frame of a child that has ended and is not joined: its
+                // stack and its frame go back to the pool, and what it gave is
+                // not read.
+                let (_, frame) = self.expr(out, &call.args[0].value, env);
+                out.emit(
+                    form::Op::System {
+                        call: form::System::TaskFree,
+                        args: vec![frame[0]],
+                    },
+                    Vec::new(),
+                );
+                (Ty::Nothing, Vec::new())
+            }
             Kind::Scheduled => {
                 let state = self.scheduler_state(out);
                 (ty, vec![self.truth(out, !state.is_empty())])

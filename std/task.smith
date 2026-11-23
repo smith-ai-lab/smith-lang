@@ -140,6 +140,27 @@ fn waits_for_task(n: u64) -> bool { bits(n, 2) != 0 }
 
 fn waits_for_descriptor(n: u64) -> bool { bits(n, 4) != 0 }
 
+fn is_detached(n: u64) -> bool { bits(n, 8) != 0 }
+
+// Gives back the frame and the stack of every task that has ended and whose
+// handle was dropped, which the compiler marks in the state of the task where
+// the handle is dropped, and takes each out of the chain that begins at
+// `first`. It gives where the chain begins now.
+fn reap(first: u64) -> u64 {
+  var head = first
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    next = after(at)
+    if has_ended(at) and is_detached(at) {
+      head = leave(head, at)
+      __drop(__frame_at(at))
+    }
+    at = next
+  }
+  head
+}
+
 // Puts a task first in the chain of those started, and gives its number.
 fn enter(n: u64, first: u64) -> u64 {
   __set_word(n, 0, first)
@@ -268,6 +289,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
       first = top
       loop {
         if has_ended(top) { break }
+        first = reap(first)
         var many = count_runnable(first)
         if many == 0 and next < ready.size {
           wake(first, ready[next])
@@ -378,6 +400,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       first = top
       loop round in 0..9223372036854775807 {
         if has_ended(top) { break }
+        first = reap(first)
         var many = count_runnable(first)
         if parked > 0 {
           var time: i64 = 0
