@@ -173,7 +173,7 @@ fn failure(call: str, given: i64) -> NetError ! alloc {
     // connection reset, aborted, or shut down.
     if code == 10061 {
       return .refused
-    } else if code == 10048 {
+    } else if code == 10048 or code == 10013 {
       return .in_use
     } else if code == 10054 or code == 10053 or code == 10058 {
       return .closed
@@ -472,9 +472,15 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
     level = 65535
     name = 4
   }
-  // Windows lets a second socket take a port that is held when this is set, so
-  // it is not set there, where a port that is held is refused as it is elsewhere.
-  if not on_windows() { __system(6, fd, level, name, one, 4, 0) }
+  // Windows lets a second socket take a port that is held unless the first
+  // asks to be the only one, so it does that there, where a port that is held
+  // is then refused as it is elsewhere, and it does not set the option that
+  // lets a port be shared.
+  if on_windows() {
+    __system(6, fd, 65535, 0 - 5, one, 4, 0)
+  } else {
+    __system(6, fd, level, name, one, 4, 0)
+  }
   if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
