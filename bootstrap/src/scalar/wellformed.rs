@@ -606,7 +606,12 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                 }
                 Op::System {
                     call:
-                        System::TaskMark | System::TaskRelease | System::TaskFree | System::TaskMove,
+                        System::TaskMark
+                        | System::TaskRelease
+                        | System::TaskFree
+                        | System::TaskMove
+                        | System::RegionFree
+                        | System::RegionMove,
                     args,
                 } => {
                     let [slot] = &args[..] else {
@@ -631,6 +636,48 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                         return Err(Why::WrongType(*frame));
                     }
                     used(bytes, i, Type::Int(Bits::B64))?;
+                }
+                Op::System {
+                    call: System::RegionNew,
+                    args,
+                } => {
+                    let [frame] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !args.is_empty() || f.types[frame.0] != Type::Address {
+                        return Err(Why::WrongCount);
+                    }
+                }
+                Op::System {
+                    call: System::RegionOpen,
+                    args,
+                } => {
+                    let [frame] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    let [token] = &instruction.results[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if f.types[token.0] != Type::Int(Bits::B8) {
+                        return Err(Why::WrongType(*token));
+                    }
+                    used(frame, i, Type::Address)?;
+                }
+                Op::System {
+                    call: System::RegionClose,
+                    args,
+                } => {
+                    let [token, frame, kept @ ..] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !instruction.results.is_empty() {
+                        return Err(Why::WrongCount);
+                    }
+                    used(token, i, Type::Int(Bits::B8))?;
+                    used(frame, i, Type::Address)?;
+                    for v in kept {
+                        used(v, i, f.types[v.0])?;
+                    }
                 }
                 Op::System {
                     call: System::ArenaClose,

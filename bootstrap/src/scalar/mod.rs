@@ -302,6 +302,34 @@ pub enum System {
     /// below the record gives to the pool, with the pieces of the task. It gives
     /// nothing, and is gone once the stacks of `alloc` are passed.
     TaskMove,
+    /// Gives the region of a handler's state: a frame of the same make as a
+    /// task's, which holds a stack of its own that nothing else builds in. It
+    /// takes nothing and gives the address of the frame. A program that starts no
+    /// task has no pool to take it from, so there it gives a null address and
+    /// every other operation of a region does nothing. It is gone once the
+    /// stacks of `alloc` are passed.
+    RegionNew,
+    /// Gives the pieces of the region whose frame is at the address it takes back
+    /// to the pool, where the handler's block has ended and nothing it gave holds
+    /// an address into them. It gives nothing.
+    RegionFree,
+    /// Gives the pieces of the region whose frame is at the address it takes to
+    /// the stack for results, with no byte moved, as `TaskMove` gives those of a
+    /// task, where what the handler's block gave holds an address into them. It
+    /// gives nothing.
+    RegionMove,
+    /// Opens a window in which the memory that is built for results is built in
+    /// the region whose frame is at the address it takes, and not in the stack
+    /// for results of the function. It gives the token that the `RegionClose`
+    /// that ends the window takes, a byte, and is gone once the stacks of `alloc`
+    /// are passed.
+    RegionOpen,
+    /// Ends the window that the token it takes opened, which is its first
+    /// argument, and the address of the region's frame its second. The values
+    /// after them are those that were built in the window and are kept in the
+    /// region: they are the memory that the window gives back, as the values a
+    /// function returns are. It gives nothing.
+    RegionClose,
     /// Ends the program with the status, a byte, that it takes. It gives
     /// nothing.
     Exit,

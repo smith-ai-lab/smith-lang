@@ -628,16 +628,28 @@ impl<'a> Lowering<'a> {
         }
         let mut given: Vec<Bound<'a>> = given.into_iter().map(|a| a.expect("given")).collect();
         let body = given.pop().expect("a body").func.expect("a function");
-        let operations = (given.into_iter())
+        let operations: Vec<Func<'a>> = (given.into_iter())
             .map(|b| b.func.expect("a function"))
             .collect();
         let below = out.handlers.len();
         let id = self.handler_id(call, out);
+        // What the operations of a handler store in its state is built in a
+        // region of its own, which the handler's block ends, so that a child
+        // that adds to the state never puts it in a stack that is given back
+        // when the child ends.
+        let (def, region) = self.region_of_handler(out, effect, &operations);
+        if let Some(frame) = region {
+            out.regions.push(MadeRegion {
+                handler: id,
+                frame,
+                escapes: false,
+            });
+        }
         out.handlers.push(Handler {
             id,
             effect,
             operations,
-            def: None,
+            def,
             frames: Vec::new(),
             below,
         });
@@ -648,6 +660,74 @@ impl<'a> Lowering<'a> {
             result.clear();
         }
         (gives, result)
+    }
+
+    /// The handler's definition and its region, when its operations assign a
+    /// name that holds memory: the region is made here, and is a name of the
+    /// function the operations are written in, which goes through each poll as the
+    /// rest of the state does.
+    fn region_of_handler(
+        &mut self,
+        out: &mut Out<'a>,
+        effect: usize,
+        operations: &[Func<'a>],
+    ) -> (Option<Rc<HandlerDef<'a>>>, Option<usize>) {
+        if self.typed.defs.is_scheduler(effect) {
+            return (None, None);
+        }
+        let mut def = self.capture(out, effect, operations);
+        let holds = |c: &Captured<'a>| c.assigned && c.scalars.contains(&form::Type::Address);
+        let Some(at) = def
+            .frames
+            .iter()
+            .position(|(_, names)| names.iter().any(holds))
+        else {
+            return (None, None);
+        };
+        let address = out.emit(
+            form::Op::System {
+                call: form::System::RegionNew,
+                args: Vec::new(),
+            },
+            vec![form::Type::Address],
+        )[0];
+        let frame = def.frames[at].0;
+        out.frames[frame].push(Bound {
+            name: REGION.to_string(),
+            ty: Ty::Nothing,
+            values: vec![address],
+            func: None,
+            home: None,
+        });
+        def.frames[at].1.push(Captured {
+            name: REGION.to_string(),
+            ty: Ty::Nothing,
+            assigned: true,
+            scalars: vec![form::Type::Address],
+            func: None,
+        });
+        (Some(Rc::new(def)), Some(frame))
+    }
+
+    /// The region of the state of the handler whose operation is being lowered,
+    /// when it has one and `name` is a name of its state that holds memory.
+    pub(super) fn region_for(&self, out: &Out<'a>, name: &str) -> Option<form::Value> {
+        let operating = out.operating.last()?;
+        let (i, _) = operating
+            .def
+            .frames
+            .iter()
+            .enumerate()
+            .find(|(_, (_, names))| {
+                names.iter().any(|c| {
+                    c.name == name && c.assigned && c.scalars.contains(&form::Type::Address)
+                })
+            })?;
+        let (orig, names) = &operating.def.frames[i];
+        names.iter().find(|c| c.name == REGION)?;
+        let frame = operating.frames.get(i).copied().unwrap_or(*orig);
+        let at = out.frames[frame].iter().rposition(|b| b.name == REGION)?;
+        Some(out.frames[frame][at].values[0])
     }
 
     /// Lowers a call of `alloc`: the body runs in place, between the opening
@@ -756,6 +836,15 @@ impl<'a> Lowering<'a> {
         let mut result = self.run_func(out, func, args, &gives, false);
         out.handlers.extend(outside);
         out.operating.pop();
+        // What an operation gives out may be memory of the region of the
+        // state, so the region is not given back where the handler's block
+        // ends, but goes with what the block gives.
+        if result.iter().any(|v| out.types[v.0] == form::Type::Address) {
+            let id = out.handlers[handler].id;
+            if let Some(made) = out.regions.iter_mut().rev().find(|r| r.handler == id) {
+                made.escapes = true;
+            }
+        }
         if gives == Ty::Nothing {
             result.clear();
         }
