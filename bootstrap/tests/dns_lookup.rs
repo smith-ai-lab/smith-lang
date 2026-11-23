@@ -255,9 +255,11 @@ fn a_name_in_the_hosts_file_is_found_with_no_question_asked_and_with_no_regard_f
 fn a_name_answered_for_both_kinds_gives_the_addresses_of_the_first_and_then_of_the_second_whatever_came_first() {
     for target in linux() {
         let mut held: Option<(Question, SocketAddr)> = None;
+        let mut ids: Vec<(u16, [u8; 2])> = Vec::new();
         let said = run(target, "a.test", "", FAST, |s, q, from| {
             // The answer for the second kind is sent before the one for the
             // first, which is held until it has come.
+            ids.push((q.kind, [q.message[0], q.message[1]]));
             if q.kind == 1 {
                 held = Some((Question { message: q.message.clone(), name: q.name.clone(), kind: 1 }, from));
             } else {
@@ -273,6 +275,10 @@ fn a_name_answered_for_both_kinds_gives_the_addresses_of_the_first_and_then_of_t
             continue;
         }
         assert_eq!(said.lines, ["10.0.0.7", "0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2"], "{}", target.name());
+        // The ids are the bytes that the program gave `resolve` for them: 1 and 2
+        // for the first kind, and 3 and 4 for the second, and each is asked again.
+        assert_eq!(ids[0], (1, [1, 2]), "{}", target.name());
+        assert!(ids.contains(&(28, [3, 4])), "{ids:?} on {}", target.name());
     }
 }
 
