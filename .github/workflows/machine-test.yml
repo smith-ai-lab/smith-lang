@@ -33,5 +33,5 @@ jobs:
         # hold a thousand descriptors, and macOS gives a process 256 until it is asked.
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 10240; fi
+          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 10240 || true; fi
           cargo test --locked -- --group=machine
