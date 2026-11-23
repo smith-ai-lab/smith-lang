@@ -9,6 +9,7 @@ use smith::lower;
 use smith::scalar;
 
 use crate::Test;
+use crate::generate::{self, Gen};
 use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
@@ -71,6 +72,58 @@ pub const ONCE: &[Test] = &[
     (
         "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends",
         a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8,
+    ),
+    (
+        "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends",
+        a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends,
     ),
     (
         "a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined",
@@ -394,7 +447,7 @@ fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_an
 /// or bound to a name that nothing reads. The handle is `how`.
 fn dropped_children(count: u64, seed: u64, how: &str) -> String {
     format!(
-        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\n{LISTS}fn handles() -> List[Task[u64]] ! task, alloc {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\nfn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] ! task, alloc {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 ! task {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] ! task, alloc {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\nfn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -411,7 +464,27 @@ fn a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_i
 }
 
 fn a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[7..]);
+    kept_by_drops(&DROPS[7..9]);
+}
+
+fn a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[9..12]);
+}
+
+fn a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[12..13]);
+}
+
+fn a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[13..15]);
+}
+
+fn a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[15..17]);
+}
+
+fn a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends() {
+    kept_by_drops(&DROPS[17..]);
 }
 
 fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends() {
@@ -439,7 +512,7 @@ fn kept_by_drops(hows: &[&str]) {
 /// round: as a statement, as a name nothing reads, joined in some rounds and
 /// dropped in the others, in a tuple, in a struct, and as the value that the last
 /// statement of an arm gives to a `match` whose value is thrown away.
-const DROPS: [&str; 9] = [
+const DROPS: [&str; 20] = [
     "spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }\n    if r < 5 { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) } else { }",
@@ -449,6 +522,17 @@ const DROPS: [&str; 9] = [
     "held = Held.one(spawn { total(build(500)) })",
     "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })",
     "match r < 1000 {\n      .true { spawn { total(build(500)) } }\n      .false { spawn { total(build(500)) } }\n    }",
+    "var t = spawn { total(build(500)) }",
+    "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })",
+    "ignore(spawn { total(build(500)) })",
+    "var t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }",
+    "ns = nest()",
+    "d = Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.leaf(spawn { total(build(250)) })])])])])])])])])])])",
+    "t = spawn { total(build(500)) }\n    loop i in 0..3 {\n      if r < 5 {\n        sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n        break\n      } else { }\n    }",
+    "var t = spawn { total(build(500)) }\n    loop i in 0..2 {\n      sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n      t = spawn { total(build(500)) }\n    }",
+    "match Held.one(spawn { total(build(500)) }) {\n      .none { }\n      .one(t) { }\n    }",
+    "t = spawn { total(build(500)) }\n    sum = wrapping_add(sum, wrapping_mul(maybe(t, r < 5), 0))",
+    "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })\n    sum = wrapping_add(sum, wrapping_mul(join(a), 0))",
 ];
 
 /// A handle that is read is the program's to join, so what it holds is not given
@@ -479,4 +563,379 @@ fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(
             runs_as(source.as_bytes(), target, &said);
         }
     }
+}
+
+/// How a generated program holds the children one item of it starts.
+#[derive(Clone, Copy, Debug)]
+enum Hold {
+    Name,
+    Var,
+    /// A `var` that is assigned over before it is read.
+    Assigned,
+    Tuple,
+    Struct,
+    List,
+    /// A list in a list.
+    Nested,
+    Enum,
+    /// An enum that holds a list of itself, this deep.
+    Deep(usize),
+    /// A parameter of a function.
+    Param,
+    /// A `var` that a loop joins and starts again.
+    Reborn,
+    /// A name that a loop joins and leaves on one path, and that ends it where
+    /// the range does on the other.
+    Looped,
+    /// A list that is made where the loop over it is written.
+    Over,
+}
+
+/// What a generated program does with the children of an item in a round.
+#[derive(Clone, Copy, Debug)]
+enum End {
+    Join,
+    Drop,
+    /// Joins them in the rounds below the number, and drops them in the others.
+    Below(u64),
+    /// Joins the first of two, and drops the other.
+    Half,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Item {
+    hold: Hold,
+    end: End,
+    size: u64,
+}
+
+/// What `total(build(n))` gives.
+fn sum_to(n: u64) -> u64 {
+    n * n.saturating_sub(1) / 2
+}
+
+impl Item {
+    /// The work of a child of the item, the `which`th, which gives a number of its own.
+    fn work(&self, which: u64) -> String {
+        format!("spawn {{ total(build({})) }}", self.size + which)
+    }
+
+    fn value(&self, which: u64) -> u64 {
+        sum_to(self.size + which)
+    }
+
+    /// The children the item starts, as the sizes that tell them apart.
+    fn children(&self) -> Vec<u64> {
+        match self.hold {
+            Hold::Name | Hold::Var | Hold::Assigned | Hold::Param | Hold::Looped | Hold::Enum => {
+                vec![0]
+            }
+            Hold::Tuple | Hold::Struct | Hold::List => vec![0, 1],
+            Hold::Nested => vec![0, 1, 2],
+            Hold::Deep(_) => vec![0],
+            Hold::Reborn => vec![0],
+            Hold::Over => vec![0, 1, 2],
+        }
+    }
+
+    /// What the item adds to the sum in the round `r`.
+    fn adds(&self, r: u64) -> u64 {
+        let joined = match self.end {
+            End::Join | End::Half => true,
+            End::Drop => false,
+            End::Below(c) => r < c,
+        };
+        let all: u64 = self.children().iter().map(|&k| self.value(k)).sum();
+        let once = match (self.hold, self.end) {
+            (Hold::Tuple, End::Half) => self.value(0),
+            _ => all,
+        };
+        // A `var` that a loop joins and starts again joins twice before it ends.
+        let before = match self.hold {
+            Hold::Reborn => 2 * self.value(0),
+            _ => 0,
+        };
+        // A loop that joins on one path joins only when the end does.
+        match self.hold {
+            Hold::Looped => {
+                if joined {
+                    self.value(0)
+                } else {
+                    0
+                }
+            }
+            Hold::Over if matches!(self.end, End::Drop) => 0,
+            Hold::Over => all,
+            _ => before + if joined { once } else { 0 },
+        }
+    }
+
+    /// The statements of the item in a round, each of which is one line, with
+    /// the names it defines ended by `id`.
+    fn source(&self, id: usize) -> String {
+        let add = |what: &str| format!("sum = wrapping_add(sum, {what})");
+        // The statements that end the children of the name, as `join` of what
+        // the closure makes the join of one.
+        let ends = |join: String, drop: String| -> String {
+            match self.end {
+                End::Join | End::Half => join,
+                End::Drop => drop,
+                End::Below(c) => format!("if r < {c} {{\n{join}\n}} else {{ }}"),
+            }
+        };
+        let w = |k: u64| self.work(k);
+        match self.hold {
+            Hold::Name | Hold::Var => {
+                let bind = if matches!(self.hold, Hold::Var) { "var " } else { "" };
+                format!(
+                    "{bind}h{id} = {}\n{}",
+                    w(0),
+                    ends(add(&format!("join(h{id})")), String::new())
+                )
+            }
+            Hold::Assigned => format!(
+                "var h{id} = {}\nh{id} = {}\n{}",
+                self.work(9),
+                w(0),
+                ends(add(&format!("join(h{id})")), String::new())
+            ),
+            Hold::Tuple => {
+                let join = match self.end {
+                    End::Half => add(&format!("join(a{id})")),
+                    _ => format!("{}\n{}", add(&format!("join(a{id})")), add(&format!("join(b{id})"))),
+                };
+                format!("(a{id}, b{id}) = ({}, {})\n{}", w(0), w(1), ends(join, String::new()))
+            }
+            Hold::Struct => format!(
+                "p{id} = Both(first: {}, second: {})\n{}",
+                w(0),
+                w(1),
+                ends(
+                    format!("{}\n{}", add(&format!("join(p{id}.first)")), add(&format!("join(p{id}.second)"))),
+                    String::new()
+                )
+            ),
+            Hold::List => format!(
+                "hs{id}: List[Task[u64]] = [{}, {}]\n{}",
+                w(0),
+                w(1),
+                ends(
+                    format!("loop h{id} in hs{id} {{\n{}\n}}", add(&format!("join(h{id})"))),
+                    String::new()
+                )
+            ),
+            Hold::Nested => format!(
+                "ns{id}: List[List[Task[u64]]] = [[{}], [{}, {}]]\n{}",
+                w(0),
+                w(1),
+                w(2),
+                ends(
+                    format!(
+                        "loop row{id} in ns{id} {{\nloop h{id} in row{id} {{\n{}\n}}\n}}",
+                        add(&format!("join(h{id})"))
+                    ),
+                    String::new()
+                )
+            ),
+            Hold::Enum => format!(
+                "e{id} = Held.one({})\n{}",
+                w(0),
+                ends(
+                    format!(
+                        "match e{id} {{\n.none {{ }}\n.one(t{id}) {{\n{}\n}}\n}}",
+                        add(&format!("join(t{id})"))
+                    ),
+                    String::new()
+                )
+            ),
+            Hold::Deep(depth) => {
+                let mut made = format!("Deep.leaf({})", w(0));
+                for _ in 0..depth {
+                    made = format!("Deep.more([{made}])");
+                }
+                // Each level matches what the level above it gave, and joins
+                // the leaf where there is one.
+                let mut join = String::new();
+                let mut closing = String::new();
+                let mut of = format!("d{id}");
+                for level in 0..=depth {
+                    join.push_str(&format!(
+                        "match {of} {{\n.leaf(t{id}x{level}) {{\n{}\n}}\n.more(m{id}x{level}) {{\n",
+                        add(&format!("join(t{id}x{level})"))
+                    ));
+                    closing.insert_str(0, "\n}\n}");
+                    if level < depth {
+                        join.push_str(&format!("loop y{id}x{level} in m{id}x{level} {{\n"));
+                        closing.insert_str(0, "\n}");
+                        of = format!("y{id}x{level}");
+                    }
+                }
+                join.push_str(&closing);
+                format!("d{id} = {made}\n{}", ends(join, String::new()))
+            }
+            Hold::Param => {
+                let bind = format!("h{id} = {}\n", w(0));
+                match self.end {
+                    End::Join | End::Half => format!("{bind}{}", add(&format!("finish(h{id})"))),
+                    End::Drop => format!("{bind}ignore(h{id})"),
+                    End::Below(c) => format!("{bind}{}", add(&format!("maybe(h{id}, r < {c})"))),
+                }
+            }
+            Hold::Reborn => format!(
+                "var h{id} = {}\nloop i{id} in 0..2 {{\n{}\nh{id} = {}\n}}\n{}",
+                w(0),
+                add(&format!("join(h{id})")),
+                w(0),
+                ends(add(&format!("join(h{id})")), String::new())
+            ),
+            Hold::Looped => {
+                let c = match self.end {
+                    End::Below(c) => c,
+                    End::Join | End::Half => u64::MAX,
+                    End::Drop => 0,
+                };
+                format!(
+                    "h{id} = {}\nloop i{id} in 0..3 {{\nif r < {c} {{\n{}\nbreak\n}} else {{ }}\n}}",
+                    w(0),
+                    add(&format!("join(h{id})"))
+                )
+            }
+            Hold::Over => match self.end {
+                End::Drop => format!("handles({})", self.size),
+                _ => format!(
+                    "loop h{id} in handles({}) {{\n{}\n}}",
+                    self.size,
+                    add(&format!("join(h{id})"))
+                ),
+            },
+        }
+    }
+}
+
+/// A generated program: the items it runs in each round of a loop.
+#[derive(Clone, Debug)]
+struct Held_ {
+    items: Vec<Item>,
+    seed: u64,
+}
+
+fn an_item(g: &mut Gen) -> Item {
+    let hold = match g.below(13) {
+        0 => Hold::Name,
+        1 => Hold::Var,
+        2 => Hold::Assigned,
+        3 => Hold::Tuple,
+        4 => Hold::Struct,
+        5 => Hold::List,
+        6 => Hold::Nested,
+        7 => Hold::Enum,
+        8 => Hold::Deep(1 + g.below(11)),
+        9 => Hold::Param,
+        10 => Hold::Reborn,
+        11 => Hold::Looped,
+        _ => Hold::Over,
+    };
+    let end = match g.below(4) {
+        0 => End::Join,
+        1 => End::Drop,
+        2 => End::Below(1 + g.below(6) as u64),
+        _ => End::Half,
+    };
+    let size = 10 + 5 * g.below(7) as u64;
+    Item { hold, end, size }
+}
+
+fn generated_program(g: &mut Gen) -> Held_ {
+    // The evaluator enters 3 million blocks at most, and a child costs thousands
+    // of them in the scheduler of a test, so a round starts four children at most.
+    let count = 1 + g.below(3);
+    let mut items: Vec<Item> = Vec::new();
+    let mut children = 0;
+    for _ in 0..count {
+        let item = an_item(g);
+        children += item.children().len();
+        if children > 4 && !items.is_empty() {
+            break;
+        }
+        items.push(item);
+    }
+    Held_ {
+        items,
+        seed: 1 + g.below(3) as u64,
+    }
+}
+
+impl Held_ {
+    fn source(&self, rounds: u64) -> String {
+        let body: String = (self.items.iter().enumerate())
+            .map(|(id, item)| {
+                item.source(id)
+                    .lines()
+                    .map(|line| format!("    {line}\n"))
+                    .collect::<String>()
+            })
+            .collect();
+        format!(
+            "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn finish(t: take Task[u64]) -> u64 ! task {{\n  join(t)\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 ! task {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles(n: u64) -> List[Task[u64]] ! task, alloc {{\n  [spawn {{ total(build(n)) }}, spawn {{ total(build(wrapping_add(n, 1))) }}, spawn {{ total(build(wrapping_add(n, 2))) }}]\n}}\n\nfn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n{body}    var more: u64 = 0\n    loop q in 0..2 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_mul(more, 0))\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({})\n  a = spawn {{ rounds({rounds}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n",
+            self.seed
+        )
+    }
+
+    /// What the program prints.
+    fn prints(&self, rounds: u64) -> u64 {
+        (0..rounds)
+            .map(|r| self.items.iter().map(|item| item.adds(r)).sum::<u64>())
+            .sum()
+    }
+}
+
+/// A program that holds children in names, `var`s, patterns, parameters, structs,
+/// lists in lists, enums, and loops, and joins them or drops them on any path,
+/// gives each child's value once, and asks the system for the same memory for 100
+/// rounds as for 10: a child that was freed before its join would give another
+/// number, and one that was never freed would ask for more.
+fn generated_children(part: u64) {
+    generate::check_part(9601, 40, part, 8, generated_program, |program| {
+        let (few_said, few) = asked(&program.source(10));
+        let (many_said, many) = asked(&program.source(100));
+        assert_eq!(few_said, format!("{}\n", program.prints(10)), "{}", program.source(10));
+        assert_eq!(many_said, format!("{}\n", program.prints(100)), "{}", program.source(100));
+        assert!(
+            many.saturating_sub(few) <= scalar::pool::CHUNK as usize,
+            "{few} bytes for 10 rounds and {many} for 100 of\n{}",
+            program.source(100)
+        );
+    });
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8() {
+    generated_children(0);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8() {
+    generated_children(1);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8() {
+    generated_children(2);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8() {
+    generated_children(3);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8() {
+    generated_children(4);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8() {
+    generated_children(5);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8() {
+    generated_children(6);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8() {
+    generated_children(7);
 }

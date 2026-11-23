@@ -163,11 +163,6 @@ pub enum Runtime {
     /// one is not, it writes one line to standard error that says which, counted
     /// from 1, and ends the program with status 1.
     Check,
-    /// Takes the address of the elements of a list and how many there are, and
-    /// marks as detached each child that an element holds, at the places in the
-    /// element that `offsets` gives, in elements of `stride` bytes. It gives
-    /// nothing.
-    Detach { stride: u64, offsets: Vec<u64> },
 }
 
 impl Runtime {
@@ -212,7 +207,6 @@ impl Runtime {
             Runtime::Check => "<check>",
             Runtime::Entropy => "<entropy>",
             Runtime::Input => "<input>",
-            Runtime::Detach { .. } => "<detach>",
         }
     }
 }
@@ -291,7 +285,6 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
         Runtime::Valid => words::valid(),
         Runtime::Entropy => words::entropy(),
         Runtime::Input => words::input(place(Runtime::Copy)),
-        Runtime::Detach { stride, offsets } => detach(stride, &offsets),
         Runtime::Check => words::check(
             place(Runtime::Valid),
             place(Runtime::Decimal {
@@ -301,38 +294,6 @@ fn built(kind: Runtime, place: &mut dyn FnMut(Runtime) -> usize) -> Function {
             place(Runtime::Join(3)),
         ),
     }
-}
-
-/// Marks each child that an element of a list holds as detached, which is the
-/// word of its frame that its scheduler keeps its state in with a bit set.
-fn detach(stride: u64, offsets: &[u64]) -> Function {
-    let mut f = Builder::new();
-    let p = f.params(&[ADDRESS, LENGTH]);
-    let (base, count) = (p[0], p[1]);
-    repeat(&mut f, count, Vec::new(), |f, i, _| {
-        let by = int(f, stride);
-        let at = f.binary(Binary::Mul, i, by);
-        let element = after(f, base, at);
-        for &offset in offsets {
-            let place = {
-                let offset = int(f, offset);
-                after(f, element, offset)
-            };
-            let number = f.load(WORD, place);
-            let slot = f.emit(super::Op::Frame { bytes: 8 }, &[ADDRESS])[0];
-            f.store(slot, number);
-            let frame = f.load(ADDRESS, slot);
-            let to_state = int(f, super::SCHEDULER_AT + 8);
-            let state = after(f, frame, to_state);
-            let held = f.load(WORD, state);
-            let mark = int(f, 8);
-            let marked = f.binary(Binary::Or, held, mark);
-            f.store(state, marked);
-        }
-        Vec::new()
-    });
-    f.ret(Vec::new());
-    f.finish(&[])
 }
 
 pub(super) fn int(f: &mut Builder, n: u64) -> Value {

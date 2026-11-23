@@ -137,6 +137,100 @@ struct Held {
 struct Moved {
     gone: Vec<(Path, Pos)>,
     held: Vec<Held>,
+    /// The names, on this path, that own a value that may hold a child task
+    /// and have not handed it on.
+    own: Vec<Own>,
+}
+
+/// A name that owns a value that may hold a child task, and where it was
+/// bound, and how deep in the blocks it is.
+#[derive(Clone, Debug, PartialEq)]
+struct Own {
+    name: String,
+    pos: Pos,
+    depth: usize,
+}
+
+/// A place in the function where names are dropped, by the address of the
+/// statement, arm, loop, or expression it is written at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub(super) enum Site {
+    /// Once the last statement of a block has run: the names that die with it.
+    After(usize),
+    /// Once the value of an assignment is made, before the name takes it: the
+    /// value the name held.
+    Replace(usize),
+    /// Where a `break` or a `return` leaves, once its value is made.
+    Leave(usize),
+    /// At the end of an arm of a `match`.
+    Arm(usize),
+    /// Where a loop over a range ends because the range does.
+    Done(usize),
+}
+
+/// Where the values that may hold a child task are dropped, which the
+/// lowering reads, as it knows which of them do.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Drops {
+    /// The names dropped at a site.
+    pub(super) at: HashMap<Site, Vec<String>>,
+    /// The expressions whose value is made and then dropped, by address.
+    pub(super) temps: HashSet<usize>,
+    /// The loops over a value that is made where the loop is written, by
+    /// address, which holds it in a name of its own while it runs.
+    pub(super) held: HashSet<usize>,
+}
+
+/// The name a loop over a value that is not a name keeps it in.
+pub(super) fn held_name(l: &Loop) -> String {
+    format!("<over {}>", addr(l))
+}
+
+/// Whether a pattern binds a name.
+fn binds_name(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Bind { .. } => true,
+        Pattern::Case { inner, .. } => inner.as_deref().is_some_and(binds_name),
+        Pattern::Tuple { items, .. } | Pattern::List { items, .. } => items.iter().any(binds_name),
+        Pattern::Number { .. } | Pattern::Text { .. } => false,
+    }
+}
+
+/// The names that own on every one of the paths.
+fn intersection<'m>(states: impl Iterator<Item = &'m Moved>) -> Vec<Own> {
+    let mut all: Option<Vec<Own>> = None;
+    for moved in states {
+        all = Some(match all {
+            None => moved.own.clone(),
+            Some(mut kept) => {
+                kept.retain(|o| moved.own.contains(o));
+                kept
+            }
+        });
+    }
+    all.unwrap_or_default()
+}
+
+/// Whether a value of the type may hold a child task, which a type parameter
+/// may be given.
+fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+    let parts: Vec<Ty> = match ty {
+        Ty::Param(_) => return true,
+        Ty::Struct(s, _) if Some(*s) == defs.task => return true,
+        Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+        Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
+            .map(|t| t.subst(args))
+            .collect(),
+        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+        _ => return false,
+    };
+    if seen.contains(ty) {
+        return false;
+    }
+    seen.push(ty.clone());
+    let any = parts.iter().any(|t| may_hold(defs, t, seen));
+    seen.pop();
+    any
 }
 
 /// What a lambda that is being read defines or takes as a parameter, and the
@@ -149,6 +243,8 @@ struct Frame {
     gives: Vec<(String, Pos, Option<Ty>)>,
     /// The names that are gone where each `return` of the lambda leaves it.
     leaves: Vec<Vec<String>>,
+    /// How deep in the blocks the lambda's own names begin.
+    depth: usize,
 }
 
 /// Whether the parameter that receives a lambda owns it.
@@ -207,7 +303,7 @@ fn same(a: &State, b: &State) -> bool {
                     .iter()
                     .all(|(p, _)| y.gone.iter().any(|(q, _)| p == q))
             };
-            held(a, b) && held(b, a) && gone(a, b) && gone(b, a)
+            held(a, b) && held(b, a) && gone(a, b) && gone(b, a) && a.own == b.own
         }
         _ => false,
     }
@@ -218,6 +314,7 @@ fn join(a: State, b: State) -> State {
     match (a, b) {
         (None, other) | (other, None) => other,
         (Some(mut a), Some(b)) => {
+            a.own.retain(|o| b.own.contains(o));
             for (path, at) in b.gone {
                 if !a.gone.iter().any(|(p, _)| *p == path) {
                     a.gone.push((path, at));
@@ -249,12 +346,29 @@ struct Walk<'a> {
     /// The names that are lent, each with what lends it, for as long as they
     /// mean what they did when they were bound.
     lent: HashMap<String, String>,
-    /// The states at each `break` of the loops being read, innermost last.
-    breaks: Vec<Vec<Moved>>,
+    /// The states at each `break` of the loops being read, innermost last,
+    /// each with the address of the `break`, and how deep the loop's block is.
+    breaks: Vec<(usize, Vec<(Moved, usize)>)>,
     /// The lambdas being read, innermost last.
     inside: Vec<Frame>,
     /// The names that were used after they were given away.
     reused: HashSet<String>,
+    /// Where the values that may hold a child are dropped.
+    drops: &'a mut Drops,
+    /// How deep in the blocks, the arms, and the lambdas the walk is.
+    depth: usize,
+    /// Where each name that owned a value that may hold a child was bound,
+    /// for the names a `var` is assigned to again.
+    bound: HashMap<String, (Pos, usize)>,
+    /// The name a loop's element stands for, which what is read of the element
+    /// is read of.
+    alias: HashMap<String, String>,
+    /// Whether the expression read next is a part of a value that is made.
+    projecting: bool,
+    /// The names that can be used where the walk is, with how deep each is
+    /// bound, so that a name that is bound again, as a `var` is, keeps the
+    /// place it was bound at.
+    visible: Vec<(String, usize)>,
 }
 
 /// Checks the body of `f`. Mistakes go in `errors`.
@@ -263,6 +377,7 @@ pub(super) fn check(
     types: &HashMap<usize, Ty>,
     (f, scope, params): (&Function, &Scope, &[(String, Ty)]),
     errors: &mut Vec<Error>,
+    drops: &mut Drops,
 ) {
     let mut walk = Walk {
         defs,
@@ -277,6 +392,12 @@ pub(super) fn check(
         breaks: Vec::new(),
         inside: Vec::new(),
         reused: HashSet::new(),
+        drops,
+        depth: 0,
+        bound: HashMap::new(),
+        alias: HashMap::new(),
+        projecting: false,
+        visible: Vec::new(),
     };
     let flow = if f.result.is_some() {
         Flow::Returned
@@ -290,6 +411,11 @@ pub(super) fn check(
         }
     }
     walk.block(&mut st, &f.body, flow);
+    // What the function owns that it did not hand on ends with it.
+    let dying = walk.dying(&mut st, 0);
+    if let Some(last) = f.body.last() {
+        walk.record(Site::After(addr(last)), dying);
+    }
     walk.dropped(&st);
 }
 
@@ -335,9 +461,75 @@ impl<'a> Walk<'a> {
         (self.types.get(&addr(e))).is_none_or(|ty| copies(self.defs, self.scope, ty))
     }
 
+    /// Whether a value of the type may hold a child task.
+    fn holds(&self, ty: &Ty) -> bool {
+        may_hold(self.defs, ty, &mut Vec::new())
+    }
+
+    /// Notes that the names own values that may hold a child task, which they
+    /// drop where they end if they have not handed them on.
+    fn record(&mut self, site: Site, names: Vec<String>) {
+        if names.is_empty() {
+            return;
+        }
+        let list = self.drops.at.entry(site).or_default();
+        for name in names {
+            if !list.contains(&name) {
+                list.push(name);
+            }
+        }
+    }
+
+    /// Leaves the block, the arm, or the lambda the walk is in: the names bound
+    /// in it can be used no more.
+    fn leave(&mut self) {
+        self.depth -= 1;
+        let depth = self.depth;
+        self.visible.retain(|(_, d)| *d <= depth);
+    }
+
+    /// Takes the names that own a value and are at least `depth` deep out of
+    /// the state, as they end.
+    fn dying(&mut self, st: &mut State, depth: usize) -> Vec<String> {
+        let mut names = Vec::new();
+        if let Some(moved) = st {
+            moved.own.retain(|o| {
+                let dies = o.depth >= depth;
+                if dies {
+                    names.push(o.name.clone());
+                }
+                !dies
+            });
+        }
+        names
+    }
+
+    /// Notes that a name was bound to a value that may hold a child task, and
+    /// owns it unless it is lent.
+    fn track(&mut self, st: &mut State, name: &str, pos: Pos, ty: &Ty) {
+        if self.lent.contains_key(name) || !self.holds(ty) {
+            return;
+        }
+        // A name that is bound again keeps the place it was first bound at.
+        let outer = (self.visible.iter())
+            .find(|(n, depth)| n == name && *depth < self.depth)
+            .and_then(|_| self.bound.get(name).copied());
+        let (pos, depth) = outer.unwrap_or((pos, self.depth));
+        self.bound.insert(name.to_string(), (pos, depth));
+        if let Some(moved) = st {
+            moved.own.retain(|o| o.name != name);
+            moved.own.push(Own {
+                name: name.to_string(),
+                pos,
+                depth,
+            });
+        }
+    }
+
     /// Notes that a value was bound that must be taken, if its type has no
     /// `Discard`.
     fn own(&mut self, st: &mut State, name: &str, pos: Pos, ty: &Ty) {
+        self.track(st, name, pos, ty);
         if self.lent.contains_key(name) || undiscardable(self.defs, self.scope, ty).is_none() {
             return;
         }
@@ -486,6 +678,16 @@ impl<'a> Walk<'a> {
             return None;
         };
         let lent = self.lent.get(&path.0).cloned();
+        // A value that is read to be given on is the one it is given to that
+        // drops it, so a name that holds a child hands it on.
+        // A field of a child is read to act on the child, as `join` does with
+        // its number, so that reads it too.
+        let of_child = matches!(e, Expr::Field { of, .. }
+            if matches!(self.types.get(&addr(&**of)), Some(Ty::Struct(s, _)) if Some(*s) == self.defs.task));
+        if !matches!(flow, Flow::Lend) || of_child {
+            let root = self.alias.get(&path.0).unwrap_or(&path.0).clone();
+            moved.own.retain(|o| o.name != root && o.name != path.0);
+        }
         // A value is taken where a value without `Copy` would be given away:
         // looking at it, lending it, and reading a part of it take nothing.
         // A part that has no `Discard` is taken, and each other part of what
@@ -624,9 +826,17 @@ impl<'a> Walk<'a> {
         if let Some(path) = self.place(e) {
             return self.read(st, e, path, flow);
         }
+        let projected = std::mem::take(&mut self.projecting);
         // A value that is made and only looked at is dropped.
         if matches!(flow, Flow::Lend) {
             self.temporary(e);
+            let made = matches!(
+                e,
+                Expr::Call(_) | Expr::Tuple { .. } | Expr::List { .. } | Expr::Case { .. }
+            );
+            if made && !projected && self.types.get(&addr(e)).is_some_and(|ty| self.holds(ty)) {
+                self.drops.temps.insert(addr(e));
+            }
         }
         match e {
             Expr::Text { .. } | Expr::Number { .. } | Expr::Float { .. } | Expr::Unbuilt { .. } => {
@@ -642,7 +852,9 @@ impl<'a> Walk<'a> {
             }
             Expr::Name { .. } => None,
             Expr::Field { of, .. } => {
+                self.projecting = true;
                 self.eval(st, of, Flow::Lend);
+                self.projecting = false;
                 None
             }
             Expr::Call(call) => {
@@ -668,12 +880,16 @@ impl<'a> Walk<'a> {
                 None
             }
             Expr::Index { of, index, .. } => {
+                self.projecting = true;
                 self.eval(st, of, Flow::Lend);
+                self.projecting = false;
                 self.eval(st, index, Flow::Lend);
                 None
             }
             Expr::Slice { of, from, to, .. } => {
+                self.projecting = true;
                 self.eval(st, of, Flow::Lend);
+                self.projecting = false;
                 for end in [from, to].into_iter().flatten() {
                     self.eval(st, end, Flow::Lend);
                 }
@@ -688,8 +904,14 @@ impl<'a> Walk<'a> {
                 None
             }
             Expr::Break { .. } => {
-                if let (Some(moved), Some(exits)) = (st.take(), self.breaks.last_mut()) {
-                    exits.push(moved);
+                // What the loop's block owns ends where it is left.
+                let inside = self.breaks.last().map(|(depth, _)| *depth);
+                if let Some(depth) = inside {
+                    let dying = self.dying(st, depth);
+                    self.record(Site::Leave(addr(e)), dying);
+                }
+                if let (Some(moved), Some((_, exits))) = (st.take(), self.breaks.last_mut()) {
+                    exits.push((moved, addr(e)));
                 }
                 None
             }
@@ -702,6 +924,10 @@ impl<'a> Walk<'a> {
                 if let Some(value) = value {
                     self.eval(st, value, Flow::Returned);
                 }
+                // What the function or the lambda owns ends where it returns.
+                let base = self.inside.last().map_or(0, |f| f.depth);
+                let dying = self.dying(st, base);
+                self.record(Site::Leave(addr(e)), dying);
                 self.dropped(st);
                 if let (Some(moved), Some(frame)) = (st.as_ref(), self.inside.last_mut()) {
                     frame
@@ -717,6 +943,18 @@ impl<'a> Walk<'a> {
     /// The statements of a block, whose last gives the value that goes where
     /// `flow` says. It gives whether that value is lent.
     fn block(&mut self, st: &mut State, stmts: &[Stmt], flow: Flow) -> Lent {
+        self.depth += 1;
+        let lent = self.statements(st, stmts, flow);
+        // What the block owns ends with it.
+        let dying = self.dying(st, self.depth);
+        if let Some(last) = stmts.last() {
+            self.record(Site::After(addr(last)), dying);
+        }
+        self.leave();
+        lent
+    }
+
+    fn statements(&mut self, st: &mut State, stmts: &[Stmt], flow: Flow) -> Lent {
         let mut lent = None;
         for (i, stmt) in stmts.iter().enumerate() {
             let last = i + 1 == stmts.len();
@@ -725,6 +963,14 @@ impl<'a> Walk<'a> {
                     name, value, pos, ..
                 } => {
                     let l = self.eval(st, value, Flow::Bind);
+                    // A `var` that is bound again drops the value it held, if
+                    // it did not hand it on.
+                    if st
+                        .as_ref()
+                        .is_some_and(|m| m.own.iter().any(|o| o.name == *name))
+                    {
+                        self.record(Site::Replace(addr(stmt)), vec![name.clone()]);
+                    }
                     self.bind(st, name, l);
                     if let Some(ty) = self.types.get(&addr(value)) {
                         self.own(st, name, *pos, &ty.clone());
@@ -737,6 +983,29 @@ impl<'a> Walk<'a> {
                     ..
                 } => {
                     self.eval(st, value, Flow::Stored);
+                    // The value a name held is dropped where another takes its
+                    // place, unless it was handed on, and the name owns the new.
+                    if let (
+                        Stmt::Assign {
+                            fields, at: None, ..
+                        },
+                        Some(ty),
+                    ) = (stmt, self.types.get(&addr(value)).cloned())
+                        && fields.is_empty()
+                        && self.holds(&ty)
+                        && !self.lent.contains_key(name)
+                        && let Some(moved) = st
+                    {
+                        if moved.own.iter().any(|o| o.name == *name) {
+                            self.record(Site::Replace(addr(stmt)), vec![name.clone()]);
+                        } else if let Some(&(pos, depth)) = self.bound.get(name) {
+                            moved.own.push(Own {
+                                name: name.clone(),
+                                pos,
+                                depth,
+                            });
+                        }
+                    }
                     if let Some(moved) = st {
                         let path: Path =
                             (name.clone(), fields.iter().map(|f| f.0.clone()).collect());
@@ -797,6 +1066,9 @@ impl<'a> Walk<'a> {
 
     /// Gives a name a new value, which is gone nowhere.
     fn bind(&mut self, st: &mut State, name: &str, lent: Lent) {
+        if !self.visible.iter().any(|(n, _)| n == name) {
+            self.visible.push((name.to_string(), self.depth));
+        }
         if let Some(frame) = self.inside.last_mut() {
             frame.own.insert(name.to_string());
         }
@@ -807,8 +1079,8 @@ impl<'a> Walk<'a> {
             .unwrap_or_default();
         if !old.is_empty() {
             self.dropped(&Some(Moved {
-                gone: Vec::new(),
                 held: old,
+                ..Moved::default()
             }));
         }
         if let Some(moved) = st {
@@ -874,17 +1146,50 @@ impl<'a> Walk<'a> {
             let ty = ty.clone();
             m.arms.iter().any(|arm| self.binds_part(&arm.pattern, &ty))
         });
-        let lent_scrutinee = self.eval(st, &m.of, if part { Flow::Bind } else { Flow::Lend });
+        // A name a pattern binds owns the part it is bound to, so a value
+        // that is matched with one is given to the arms.
+        let binds = m.arms.iter().any(|arm| binds_name(&arm.pattern));
+        let scrutinee = if part {
+            Flow::Bind
+        } else if binds && self.place(&m.of).is_none() {
+            Flow::Stored
+        } else {
+            Flow::Lend
+        };
+        let lent_scrutinee = self.eval(st, &m.of, scrutinee);
+        if let (true, Some(path), Some(moved)) = (binds, self.place(&m.of), st.as_mut()) {
+            let root = self.alias.get(&path.0).unwrap_or(&path.0).clone();
+            moved.own.retain(|o| o.name != root && o.name != path.0);
+        }
         let start = st.take();
         let mut end: State = None;
         let mut lent = None;
+        let mut ends: Vec<(&Arm, State)> = Vec::new();
         for arm in &m.arms {
             let mut arm_st = start.clone();
+            self.depth += 1;
             self.bind_pattern(&mut arm_st, &arm.pattern, &lent_scrutinee);
             if let Some(ty) = self.types.get(&addr(&m.of)) {
                 self.own_pattern(&mut arm_st, &arm.pattern, &ty.clone());
             }
             lent = lent.or(self.block(&mut arm_st, &arm.body, flow));
+            // What the pattern bound ends with the arm.
+            let dying = self.dying(&mut arm_st, self.depth);
+            self.leave();
+            self.record(Site::Arm(addr(arm)), dying);
+            ends.push((arm, arm_st));
+        }
+        // What an arm still owns that another handed on, it drops where it
+        // ends, so that every path leaves with the same names owning.
+        let kept: Vec<Own> = intersection(ends.iter().filter_map(|(_, st)| st.as_ref()));
+        for (arm, arm_st) in ends {
+            if let Some(moved) = &arm_st {
+                let extra: Vec<String> = (moved.own.iter())
+                    .filter(|o| !kept.contains(o))
+                    .map(|o| o.name.clone())
+                    .collect();
+                self.record(Site::Arm(addr(arm)), extra);
+            }
             end = join(end, arm_st);
         }
         // A `match` with no arm, or an `if` with no `else`, runs no block
@@ -902,17 +1207,40 @@ impl<'a> Walk<'a> {
             self.eval(st, &range.to, Flow::Lend);
         }
         if let Some(over) = &l.over {
-            self.eval(st, &over.value, Flow::Lend);
+            let made = self.place(&over.value).is_none()
+                && (self.types.get(&addr(&over.value))).is_some_and(|ty| self.holds(ty));
+            self.eval(
+                st,
+                &over.value,
+                if made { Flow::Stored } else { Flow::Lend },
+            );
         }
         if let Some(measure) = &l.decreases {
             self.eval(st, measure, Flow::Lend);
         }
         // The elements stay in the list, so the block is lent each one.
         let element = "this `loop`";
+        // A loop over a value that is made where it is written holds it in a
+        // name of its own until the loop ends, and what the block reads of an
+        // element it reads of that value.
+        let held = held_name(l);
+        let root = l.over.as_ref().map(|over| match self.place(&over.value) {
+            Some(path) => self.alias.get(&path.0).cloned().unwrap_or(path.0),
+            None => held.clone(),
+        });
+        if let Some(over) = &l.over
+            && self.place(&over.value).is_none()
+            && let Some(ty) = self.types.get(&addr(&over.value)).cloned()
+            && self.holds(&ty)
+        {
+            self.drops.held.insert(addr(l));
+            self.track(st, &held, over.value.pos(), &ty);
+        }
         let entry = st.clone();
         let before: Vec<Held> = entry.as_ref().map(|m| m.held.clone()).unwrap_or_default();
         let reused = self.reused.clone();
-        self.breaks.push(Vec::new());
+        self.breaks.push((self.depth + 1, Vec::new()));
+        let saved = self.drops.clone();
         // The body is read again, from what is known at the head of the loop
         // when the loop goes round, until that stops changing. What is known
         // is a set of places given away and a set of values held, `join` only
@@ -932,12 +1260,22 @@ impl<'a> Walk<'a> {
                 "what is known at a loop's head never settles"
             );
             let known = self.reused.len();
+            // Only what the last look at the body found is where a name is
+            // dropped, as it is the one made from what is known at the head
+            // when the loop goes round.
+            *self.drops = saved.clone();
+            if let Some((_, exits)) = self.breaks.last_mut() {
+                exits.clear();
+            }
             let mut round = head.clone();
             if let (Some(range), Some(_)) = (&l.range, &round) {
                 self.bind(&mut round, &range.name, None);
             }
             if let (Some(over), Some(_)) = (&l.over, &round) {
                 self.bind(&mut round, &over.name, Some(element.to_string()));
+                if let Some(root) = &root {
+                    self.alias.insert(over.name.clone(), root.clone());
+                }
             }
             self.block(&mut round, &l.body, Flow::Lend);
             let wider = join(head.clone(), round.clone());
@@ -949,8 +1287,38 @@ impl<'a> Walk<'a> {
             }
             head = wider;
         }
+        if let Some(over) = &l.over {
+            self.alias.remove(&over.name);
+        }
+        let exits = self
+            .breaks
+            .pop()
+            .map(|(_, exits)| exits)
+            .unwrap_or_default();
+        // The loop ends where a `break` leaves it, and where its range ends.
+        // A path that owns what another handed on drops it before it ends, so
+        // that every path leaves with the same names owning.
+        let natural = (l.range.is_some() || l.over.is_some()).then(|| head.clone());
+        let kept: Vec<Own> = intersection(
+            (exits.iter().map(|(moved, _)| moved))
+                .chain(natural.iter().filter_map(|st| st.as_ref())),
+        );
+        for (moved, at) in &exits {
+            let extra: Vec<String> = (moved.own.iter())
+                .filter(|o| !kept.contains(o))
+                .map(|o| o.name.clone())
+                .collect();
+            self.record(Site::Leave(*at), extra);
+        }
+        if let (Some(Some(moved)), Some(_)) = (&natural, &l.range) {
+            let extra: Vec<String> = (moved.own.iter())
+                .filter(|o| !kept.contains(o))
+                .map(|o| o.name.clone())
+                .collect();
+            self.record(Site::Done(addr(l)), extra);
+        }
         let mut after: State = None;
-        for exit in self.breaks.pop().unwrap_or_default() {
+        for (exit, _) in exits {
             after = join(after, Some(exit));
         }
         if l.range.is_some() || l.over.is_some() {
@@ -979,8 +1347,10 @@ impl<'a> Walk<'a> {
             .as_ref()
             .map(|m| m.held.iter().map(|h| (h.name.clone(), h.pos)).collect())
             .unwrap_or_default();
+        self.depth += 1;
         self.inside.push(Frame {
             outer,
+            depth: self.depth,
             ..Frame::default()
         });
         for (i, param) in l.params.iter().enumerate() {
@@ -993,6 +1363,12 @@ impl<'a> Walk<'a> {
             }
         }
         self.block(st, &l.body, Flow::Returned);
+        // What the lambda owns ends with it.
+        let dying = self.dying(st, self.depth);
+        if let Some(last) = l.body.last() {
+            self.record(Site::After(addr(last)), dying);
+        }
+        self.leave();
         // What the lambda holds ends with it.
         self.dropped(st);
         if let (Some(moved), Some(frame)) = (st.as_mut(), self.inside.last()) {
