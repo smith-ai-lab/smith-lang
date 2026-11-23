@@ -447,7 +447,11 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
     __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure("bind", bound))
   }
-  listening = __system(2, fd, 128, 0, 0, 0, 0)
+  // The system holds this many connections that nothing has accepted, or as
+  // many as it allows, and drops the next one's first packet when it holds
+  // more, which its client sends again after a second, and again after two.
+  // A wave of connections that arrives faster than they are accepted is held.
+  listening = __system(2, fd, 4096, 0, 0, 0, 0)
   if listening < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure("listen", listening))
