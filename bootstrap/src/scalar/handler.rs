@@ -158,16 +158,10 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
         .collect();
     // What is kept in the region of a handler's state is built there, in a program
     // that starts tasks, and in no other has a region.
-    let regioned: Vec<Vec<Option<Value>>> = program
+    let regioned: Vec<escape::Regioned> = program
         .functions
         .iter()
-        .map(|f| {
-            if tasks_program {
-                escape::regioned(f)
-            } else {
-                vec![None; f.types.len()]
-            }
-        })
+        .map(|f| escape::regioned_if(f, tasks_program))
         .collect();
     let uses = needing(&program, &given, &regioned, &polls, tasks_program);
     let rounds: Vec<escape::Rounds> = (program.functions.iter().enumerate())
@@ -176,7 +170,7 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
                 Op::System {
                     call: System::Allocate,
                     ..
-                } => !given[k][i.results[0].0] && regioned[k][i.results[0].0].is_none(),
+                } => !given[k][i.results[0].0] && !regioned[k].holds(i.results[0]),
                 Op::Call { function, .. } => {
                     uses[*function].results
                         && !polls[*function]
@@ -326,8 +320,8 @@ fn is_poll(f: &Function) -> bool {
 
 /// Whether what a call gives is memory that a region keeps, so that the callee
 /// builds it in the region.
-fn in_a_region(regioned: &[Option<Value>], results: &[Value]) -> bool {
-    results.iter().any(|v| regioned[v.0].is_some())
+fn in_a_region(regioned: &escape::Regioned, results: &[Value]) -> bool {
+    results.iter().any(|v| regioned.holds(*v))
 }
 
 /// Whether what a call gives is memory that the function returns, so that the
@@ -343,7 +337,7 @@ fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
 fn needing(
     program: &Program,
     given: &[Vec<bool>],
-    regioned: &[Vec<Option<Value>>],
+    regioned: &[escape::Regioned],
     polls: &[bool],
     regions: bool,
 ) -> Vec<Uses> {
@@ -409,7 +403,7 @@ struct About<'a> {
 fn with_state(
     mut f: Function,
     given: &[bool],
-    regioned: &[Option<Value>],
+    regioned: &escape::Regioned,
     rounds: &escape::Rounds,
     about: &About,
 ) -> Function {
@@ -461,7 +455,7 @@ fn with_state(
             let [next, left] = load_pair(&mut f, &mut kept, frame.expect("the frame"), at);
             now.results = Some([next, left]);
         }
-        for mut i in instructions {
+        for (at_instruction, mut i) in instructions.into_iter().enumerate() {
             match &mut i.op {
                 Op::System {
                     call: System::ArenaOpen,
@@ -637,10 +631,10 @@ fn with_state(
                 Op::System {
                     call: System::Allocate,
                     args,
-                } if regioned[i.results[0].0].is_some() => {
+                } if regioned.holds(i.results[0]) => {
                     // Memory that a region keeps is built in the stack of the
                     // region, which its frame keeps from one request to the next.
-                    let frame = regioned[i.results[0].0].expect("a region");
+                    let frame = regioned.frame_at(i.results[0], k, at_instruction);
                     let [at, left] = load_pair(&mut f, &mut kept, frame, REGION_STACK);
                     let next = fresh(&mut f);
                     i.op = Op::Call {
@@ -677,9 +671,13 @@ fn with_state(
                     // of the region, and what it builds for its temporaries is built
                     // where the function's are.
                     let callee = uses[*function];
-                    let frame = (i.results.iter())
-                        .find_map(|v| regioned[v.0])
-                        .expect("a region");
+                    let frame = regioned.frame_at(
+                        *(i.results.iter())
+                            .find(|v| regioned.holds(**v))
+                            .expect("a region"),
+                        k,
+                        at_instruction,
+                    );
                     if first && callee.temporaries {
                         let [at, left] = now.temporaries.expect("the function takes what it gives");
                         let made = fresh(&mut f);
@@ -978,7 +976,7 @@ fn jump_of(end: &End, j: usize) -> &Jump {
 fn needing_of(
     f: &Function,
     given: &[bool],
-    regioned: &[Option<Value>],
+    regioned: &escape::Regioned,
     uses: &[Uses],
     polls: &[bool],
     regions: bool,
@@ -990,7 +988,7 @@ fn needing_of(
                 call: System::Allocate,
                 ..
             } => {
-                if regioned[i.results[0].0].is_some() {
+                if regioned.holds(i.results[0]) {
                     now.regioned = true;
                 } else if given[i.results[0].0] {
                     now.results = true;

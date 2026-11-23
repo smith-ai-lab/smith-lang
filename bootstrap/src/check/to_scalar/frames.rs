@@ -674,7 +674,7 @@ impl<'a> Lowering<'a> {
                 state.extend(slots);
             }
         }
-        super::functions_calls_and_lambdas::finish_params(&mut out, later);
+        super::functions_calls_and_lambdas::finish_params(self, &mut out, later);
         for ((id, handler), map) in def.context.iter().zip(maps) {
             let below = out.handlers.len();
             out.handlers.push(Handler {
