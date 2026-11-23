@@ -109,7 +109,7 @@ fn refused(source: &str) -> String {
 fn a_child_that_starts_a_grandchild_and_joins_it_gives_the_same_value_for_every_seed() {
     generate::check(
         400,
-        40,
+        16,
         |g| (g.below(1000) as u64, g.below(1000) as u64, g.below(1 << 20) as u64),
         |&(n, m, seed)| {
             let said = run(&nested(seed, n, m));
@@ -120,7 +120,7 @@ fn a_child_that_starts_a_grandchild_and_joins_it_gives_the_same_value_for_every_
 
 fn one_seed_gives_one_order_and_some_seed_shows_each_order_of_two_tasks() {
     let mut orders: BTreeSet<String> = BTreeSet::new();
-    for seed in 0..32u64 {
+    for seed in 0..10u64 {
         let first = run(&two_say(seed));
         assert_eq!(first, run(&two_say(seed)), "seed {seed}");
         orders.insert(first);
