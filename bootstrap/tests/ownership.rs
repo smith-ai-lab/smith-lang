@@ -39,6 +39,10 @@ pub const ONCE: &[Test] = &[
         a_function_type_marks_a_parameter_take_and_its_lambda_is_held_to_it,
     ),
     (
+        "a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_loop",
+        a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_loop,
+    ),
+    (
         "without_copy_and_without_discard_are_refused_for_what_is_not_a_type_of_the_program",
         without_copy_and_without_discard_are_refused_for_what_is_not_a_type_of_the_program,
     ),
@@ -1044,4 +1048,72 @@ fn main() ! alloc {{
         found.iter().any(|e| e.pos == at && e.message.contains("lent")),
         "{found:?} does not refuse the place {at:?} for {returned}"
     );
+}
+
+/// A program of `PRELUDE` with `body` as the function `f`, in which `$` is just
+/// before the call that gives `v` away and `@` is just before the use after the
+/// loop. It gives the program and the two places.
+fn broken_out(body: &str) -> (String, Pos, Option<Pos>) {
+    // A loop with no range ends only by a `break`, and says so in the effects.
+    let effects = if body.contains("loop {") { " ! diverge" } else { "" };
+    let head = format!("{PRELUDE}\nfn f(v: take Holder, c: bool, d: Dir) -> u64{effects} {{\n");
+    let source = format!("{head}{body}}}\n\nfn main(){effects} {{\n  r = f(Holder(key: Key(secret: 1), count: 2), true, Dir.north)\n}}\n");
+    let mut given = None;
+    let mut used = None;
+    let mut clean = String::new();
+    let (mut line, mut col) = (1usize, 1usize);
+    for ch in source.chars() {
+        match ch {
+            '$' => given = Some(Pos { line, col }),
+            '@' => used = Some(Pos { line, col }),
+            _ => {
+                clean.push(ch);
+                if ch == '\n' {
+                    line += 1;
+                    col = 1;
+                } else {
+                    col += 1;
+                }
+            }
+        }
+    }
+    (clean, given.expect("a give"), used)
+}
+
+/// A value without `Copy` that a path gives away and leaves a `loop` by `break`
+/// on is gone after the loop, as it is on every path that leaves the loop, and
+/// what a look at the loop's body that is made later finds does not take that
+/// from it: a use after the loop is refused, naming the place it was given away,
+/// and a loop whose `break` is reached only where the value was not given away
+/// leaves it whole.
+fn a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_loop() {
+    let refused = [
+        // The program a seed found: the path that breaks gives `v` away, and the
+        // path that does not gives a field of it, so a look made later reads `v`
+        // given away already.
+        "  loop i in 0..3 {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    0\n  }\n  n4 = @v.count\n  0\n",
+        // A `break` in an arm of a `match`, and a field given away in the others.
+        "  loop i in 0..3 {\n    match d {\n      .north {\n        n2 = sink_holder($v)\n        break\n      }\n      .south {\n        n3 = sink_key(v.key)\n        break\n      }\n      .east {\n        n4 = sink_key(v.key)\n        0\n      }\n    }\n  }\n  n5 = @v.count\n  0\n",
+        // A `break` of a loop inside a loop, read in the loop around it.
+        "  loop i in 0..3 {\n    loop j in 0..3 {\n      if c {\n        n2 = sink_holder($v)\n        break\n      }\n      n3 = sink_key(v.key)\n      0\n    }\n    n4 = @v.count\n    break\n  }\n  0\n",
+        // A loop with no range, which only a `break` ends.
+        "  loop {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    0\n  }\n  n4 = @v.count\n  0\n",
+    ];
+    let mut missed = Vec::new();
+    for (k, body) in refused.iter().enumerate() {
+        let (source, given, used) = broken_out(body);
+        let used = used.expect("a use");
+        let found = errors(&source);
+        let at: Vec<&Error> = found.iter().filter(|e| e.pos == used).collect();
+        let names = format!("after it was given away at {}", named(given));
+        if at.len() != 1 || !at[0].message.contains(&names) {
+            missed.push(format!("case {k}: {found:?}\n{source}"));
+        }
+    }
+    assert!(missed.is_empty(), "{}", missed.join("\n"));
+    // The path that breaks gives nothing away, and the path that goes on does,
+    // on a path that then returns, so what is read after the loop is whole.
+    let accepted = "  loop i in 0..3 {\n    if c {\n      break\n    }\n    return sink_holder($v)\n  }\n  n4 = v.count\n  0\n";
+    let (source, ..) = broken_out(accepted);
+    assert!(errors(&source).is_empty(), "{:?}\n{source}", errors(&source));
 }
