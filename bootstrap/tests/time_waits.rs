@@ -18,6 +18,10 @@ use crate::targets;
 
 pub const MACHINE: &[Test] = &[
     (
+        "a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done",
+        a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done,
+    ),
+    (
         "a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for",
         a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for,
     ),
@@ -270,6 +274,53 @@ fn main(args: List[str]) ! console, alloc, time, diverge {
   print(\"done {wrapping_sub(now(), before)}\")
 }
 ";
+
+/// A wait of the largest number of milliseconds, begun when the clock is past 0,
+/// is a moment that is past the largest number, which is the largest number and
+/// not a moment that has gone: a sum that wrapped would wake the task at once,
+/// before the short one.
+fn a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a_millisecond_is_done() {
+    // Which task runs first when both may is what the seed picks, so the seeds
+    // are many: a sum that wrapped wakes the long one with the short one, and
+    // some seed runs it before the end.
+    for seed in 0..10 {
+        let source = format!(
+            "use std.bits (u64)
+use std.console (console, print)
+use std.task (join, spawn, task, test_scheduler)
+use std.time (sleep, time)
+
+fn long() -> u64 ! console, time, alloc, task {{
+  sleep(5)
+  sleep(18446744073709551615)
+  print(\"long woke\")
+  0
+}}
+
+fn short() -> u64 ! console, time, alloc, task {{
+  sleep(10)
+  print(\"short\")
+  1
+}}
+
+fn main() ! console, alloc, time, diverge {{
+  with test_scheduler({seed})
+  a = spawn {{ long() }}
+  b = spawn {{ short() }}
+  join(b)
+  print(\"done\")
+}}
+"
+        );
+        for target in kernel() {
+            let (lines, _) = run(target, &source, &[], |_| {});
+            if targets::fingerprinting() {
+                continue;
+            }
+            assert_eq!(lines, ["short", "done"], "seed {seed} on {}", target.name());
+        }
+    }
+}
 
 fn under_the_scheduler_of_a_test_a_thousand_sleeps_wake_in_the_order_of_their_times_and_take_no_time() {
     for target in kernel() {
