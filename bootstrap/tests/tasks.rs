@@ -72,6 +72,10 @@ pub const ONCE: &[Test] = &[
         "a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken",
         a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken,
     ),
+    (
+        "a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is",
+        a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[(
@@ -368,4 +372,32 @@ fn a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken() {
     assert_eq!(run(&once("take ")), "seven\n");
     let errors = refused(&once(""));
     assert!(errors.contains("`t` is lent to `wait`"), "{errors}");
+}
+
+/// `join(spawn { e })` gave "every task waits, and none can run": the state a
+/// scheduler holds, which `spawn` changes, was read for the call of `join`
+/// before its argument was worked out, so `join` was given the state without
+/// the child. A child started where it is joined, as an argument of any call or
+/// a part of any expression, gives what the same program gives with the handle
+/// bound first, under a group and under a scheduler of a test of any seed.
+fn a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is() {
+    generate::check(1030, 3, |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64), |&(a, b, seed)| {
+        let sum = a + b;
+        let shapes = [
+            ("fn pair(x: take Task[u64], y: take Task[u64]) -> u64 ! task {{\n  wrapping_add(join(x), join(y))\n}}\n\n", format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
+            ("", format!("wrapping_add(join(spawn {{ num({a}) }}), join(spawn {{ num({b}) }}))"), sum),
+            ("", format!("join(spawn {{ num({a}) }})"), a),
+            ("fn twice(x: take Task[u64]) -> u64 ! task {{\n  wrapping_add(join(x), 1)\n}}\n\n", format!("twice(spawn {{ join(spawn {{ num({b}) }}) }})"), b + 1),
+        ];
+        for (items, call, expected) in shapes {
+            for opening in ["with tasks()".to_string(), format!("with test_scheduler({seed})")] {
+                let source = program(&format!(
+                    "fn num(n: u64) -> u64 {{\n  n\n}}\n\n{}fn run() -> u64 ! alloc, diverge {{\n  {opening}\n  v: u64 = {call}\n  v\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n",
+                    items.replace("{{", "{").replace("}}", "}")
+                ))
+                .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks, test_scheduler)");
+                assert_eq!(run(&source), format!("{expected}\n"), "for {source}");
+            }
+        }
+    });
 }

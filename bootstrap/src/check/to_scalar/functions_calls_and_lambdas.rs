@@ -1011,7 +1011,7 @@ impl<'a> Lowering<'a> {
         if handled.is_empty() {
             return Prepared {
                 function: self.place(Body::Copy(instance.clone())),
-                extra: Vec::new(),
+                reads: Vec::new(),
                 slots: Vec::new(),
             };
         }
@@ -1037,7 +1037,7 @@ impl<'a> Lowering<'a> {
                 .map(|h| (h.id, h.def.clone().expect("made")))
                 .collect()
         });
-        let mut extra = Vec::new();
+        let mut reads = Vec::new();
         let mut slots = Vec::new();
         let order = self.state_last(out.handlers[..upto].iter().map(|h| h.effect));
         for at in order {
@@ -1050,7 +1050,7 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .rposition(|b| b.name == c.name)
                         .expect("a name the functions of the handler use");
-                    extra.extend(out.frames[frame][at].values.iter().copied());
+                    reads.push((frame, at));
                     if c.assigned {
                         slots.push(Slot {
                             frame,
@@ -1064,7 +1064,7 @@ impl<'a> Lowering<'a> {
         let function = self.place(Body::Under(instance.clone(), ids));
         Prepared {
             function,
-            extra,
+            reads,
             slots,
         }
     }
@@ -1100,7 +1100,7 @@ impl<'a> Lowering<'a> {
     fn copy_without_handlers(&mut self, instance: &Instance) -> Prepared {
         Prepared {
             function: self.place(Body::Copy(instance.clone())),
-            extra: Vec::new(),
+            reads: Vec::new(),
             slots: Vec::new(),
         }
     }
@@ -1115,7 +1115,9 @@ impl<'a> Lowering<'a> {
         mut args: Vec<form::Value>,
         gives: &Ty,
     ) -> Vec<form::Value> {
-        args.extend(prepared.extra);
+        for &(frame, at) in &prepared.reads {
+            args.extend(out.frames[frame][at].values.iter().copied());
+        }
         let mut types = self.scalars(gives);
         let own = types.len();
         for slot in &prepared.slots {
