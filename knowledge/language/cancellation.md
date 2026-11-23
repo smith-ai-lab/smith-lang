@@ -2,7 +2,10 @@
 type: specification
 title: Cancellation
 description: Ending a group's block is the one way to cancel a task, and a cancelled task ends at once if it is waiting and at its next suspension if it is running.
-status: planned
+status: partial
+built:
+  - "when the block of a scheduler ends, in a native executable and under `test_scheduler`, each task that is still in its group is ended and the frame and the stack it held go back to the pool, the one started last first, so a child is ended before the task that started it, and a block that leaves children waiting for ever, 1,000 times over, asks the system for the memory it asks for 20 times over"
+  - "not built: a task that is running and ends at its next suspension, the ending of the values a task held, a group opened inside a task that a scheduler runs, which ends its own children, and the block waiting for the children it cancelled"
 ---
 
 # Cancellation
