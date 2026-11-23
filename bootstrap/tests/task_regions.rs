@@ -146,6 +146,10 @@ pub const ONCE: &[Test] = &[
         a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_after_the_call_and_a_program_with_no_task_never_does,
     ),
     (
+        "a_task_that_waits_inside_a_loop_over_a_value_looks_for_the_request_to_end_in_the_block_of_the_loop",
+        a_task_that_waits_inside_a_loop_over_a_value_looks_for_the_request_to_end_in_the_block_of_the_loop,
+    ),
+    (
         "children_that_wait_when_the_block_that_started_them_ends_give_their_memory_back_for_20_rounds_as_for_1000",
         children_that_wait_when_the_block_that_started_them_ends_give_their_memory_back_for_20_rounds_as_for_1000,
     ),
@@ -987,8 +991,13 @@ fn children_that_wait_when_the_block_that_started_them_ends_give_their_memory_ba
 /// and what the poll of a caller, which only copies the bit to its callee, does
 /// not.
 fn reads_the_request(program: &scalar::Program) -> bool {
+    reads_the_request_in(program, "")
+}
+
+/// `reads_the_request` for the functions whose name has `part` in it.
+fn reads_the_request_in(program: &scalar::Program, part: &str) -> bool {
     use scalar::{Binary, Constant, Op};
-    program.functions.iter().any(|f| {
+    program.functions.iter().filter(|f| f.name.contains(part)).any(|f| {
         let all = || f.blocks.iter().flat_map(|b| &b.instructions);
         let bits: std::collections::HashSet<_> = all()
             .filter(|i| matches!(i.op, Op::Constant(Constant::Int(n)) if n == scalar::CANCEL))
@@ -1019,4 +1028,19 @@ fn a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_a
     let none = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn calls(n: u64) -> u64 {\n  wrapping_add(n, 1)\n}\n\nfn main() ! console, alloc {\n  print(\"{calls(5)}\")\n}\n";
     let program = lower(none.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert!(!reads_the_request(&program));
+}
+
+/// A task that waits in the block of a loop over a value, with nothing outside
+/// the loop that waits, has the look for the request to end in the block, which
+/// answers `.stop` when the task has been asked to, so the loop does not go on
+/// to the next element. Without it nothing in the function reads the request,
+/// and a task that was asked to end would go on through the whole list.
+fn a_task_that_waits_inside_a_loop_over_a_value_looks_for_the_request_to_end_in_the_block_of_the_loop()
+ {
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn total(xs: List[u64]) -> u64 ! task, alloc {\n  var sum: u64 = 0\n  loop x in xs {\n    test_ready(x)\n    sum = wrapping_add(sum, x)\n  }\n  sum\n}\n\nfn run() -> u64 ! diverge, alloc {\n  with test_scheduler_with_io(3, [1, 2, 3])\n  xs: List[u64] = [1, 2, 3]\n  a = spawn { total(xs) }\n  join(a)\n}\n\nfn main() ! console, alloc, diverge {\n  print(\"{run()}\")\n}\n";
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(scalar::check(&program), Ok(()));
+    assert!(reads_the_request_in(&program, "total"));
+    let (said, _) = asked(source);
+    assert_eq!(said, "6\n");
 }
