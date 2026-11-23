@@ -1570,7 +1570,7 @@ impl Lowering<'_> {
             | System::RegionKeep => {
                 unreachable!("an arena is gone once the stacks of `alloc` are passed")
             }
-            System::Suspend => {
+            System::Suspend | System::Cancelled => {
                 unreachable!("a suspension is gone once the state machines are made")
             }
             System::Exit => {

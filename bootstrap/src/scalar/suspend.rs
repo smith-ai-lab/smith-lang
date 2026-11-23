@@ -127,6 +127,16 @@ pub const SCHEDULER_AT: u64 = 48;
 /// Where in the header the pair of the stack is.
 pub const STACK_AT: u64 = 16;
 
+/// The bit of the state word of a frame, which is the second of the four a
+/// scheduler keeps its queues in, that says the task has been asked to end. The
+/// scheduler sets it in the header of the task's own frame, and the poll of each
+/// function that the task is in the middle of puts it in the header of the frame
+/// of the function it polls, so each function reads it from its own frame.
+pub const CANCEL: u64 = 16;
+
+/// Where the word that holds the bit is, in any frame.
+pub const CANCEL_AT: u64 = SCHEDULER_AT + 8;
+
 const STATUS: Type = Type::Int(Bits::B8);
 const WORD: Type = Type::Int(Bits::B64);
 
@@ -143,7 +153,7 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
     let suspends = suspending(&program, frames.starters.iter().map(|s| s.function));
     if suspends.is_empty() {
         return Ok(Suspended {
-            program,
+            program: never_cancelled(program),
             tasks: Vec::new(),
             poll_any: None,
         });
@@ -205,14 +215,36 @@ pub fn suspend_frames(program: Program, frames: &Frames) -> Result<Suspended, St
         }
     };
     Ok(Suspended {
-        program: Program {
+        program: never_cancelled(Program {
             data: program.data,
             functions,
             main: program.main,
-        },
+        }),
         tasks: list,
         poll_any,
     })
+}
+
+/// The program with every `System::Cancelled` that is left, which is each one in
+/// a function that is not a state machine, made the constant 0: nothing asks
+/// such a function to end, so a program that starts no task is as it was.
+fn never_cancelled(mut program: Program) -> Program {
+    for f in &mut program.functions {
+        for block in &mut f.blocks {
+            for ins in &mut block.instructions {
+                if matches!(
+                    ins.op,
+                    Op::System {
+                        call: System::Cancelled,
+                        ..
+                    }
+                ) {
+                    ins.op = Op::Constant(Constant::Int(0));
+                }
+            }
+        }
+    }
+    program
 }
 
 /// Where the values a function gives are in its frame, in the order it gives
@@ -706,6 +738,37 @@ impl<'a> Machine<'a> {
                             at: ins.at,
                         });
                     }
+                    // Whether the task has been asked to end is the bit of the
+                    // frame's own header, as the poll that runs the function left
+                    // it.
+                    Op::System {
+                        call: System::Cancelled,
+                        ..
+                    } => {
+                        let word = self.load(at, CANCEL_AT, WORD);
+                        let mask = self.word(at, CANCEL);
+                        let bit = self.emit(
+                            at,
+                            Op::Binary {
+                                op: Binary::And,
+                                a: word,
+                                b: mask,
+                            },
+                            &[WORD],
+                            ins.at,
+                        )[0];
+                        let four = self.word(at, CANCEL.trailing_zeros() as u64);
+                        self.blocks[at].instructions.push(Instruction {
+                            results: ins.results.clone(),
+                            op: Op::Binary {
+                                op: Binary::ShiftRightU,
+                                a: bit,
+                                b: four,
+                            },
+                            at: ins.at,
+                        });
+                        self.keep(at, &ins.results);
+                    }
                     Op::System {
                         call: System::Suspend,
                         args,
@@ -747,6 +810,20 @@ impl<'a> Machine<'a> {
                             block: polls,
                             args: args[own..].to_vec(),
                         });
+                        // The callee is asked to end when this function is.
+                        let word = self.load(polls, CANCEL_AT, WORD);
+                        let mask = self.word(polls, CANCEL);
+                        let bit = self.emit(
+                            polls,
+                            Op::Binary {
+                                op: Binary::And,
+                                a: word,
+                                b: mask,
+                            },
+                            &[WORD],
+                            ins.at,
+                        )[0];
+                        self.save(polls, offset + CANCEL_AT, bit);
                         let callee = self.within(polls, offset);
                         let mut types = self.through.to_vec();
                         types.extend([STATUS, WORD, WORD]);

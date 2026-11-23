@@ -26,6 +26,14 @@ pub const ONCE: &[Test] = &[
         the_state_of_a_scheduler_goes_through_each_poll_and_no_frame_saves_it,
     ),
     (
+        "a_task_asked_to_end_leaves_by_the_exit_of_the_wait_it_is_in_and_each_function_it_is_in_leaves_by_its_own",
+        a_task_asked_to_end_leaves_by_the_exit_of_the_wait_it_is_in_and_each_function_it_is_in_leaves_by_its_own,
+    ),
+    (
+        "a_function_that_is_not_a_state_machine_is_never_asked_to_end",
+        a_function_that_is_not_a_state_machine_is_never_asked_to_end,
+    ),
+    (
         "a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave",
         a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave,
     ),
@@ -725,5 +733,196 @@ fn a_task_that_calls_one_that_does_not_wait_goes_on_with_the_state_it_gave() {
         assert_eq!(got, vec![x + x], "x {x}");
         assert_eq!(waited.len(), waits, "x {x}");
         assert_eq!(waiting, waits, "x {x}");
+    }
+}
+
+/// A function that waits twice, and after each wait leaves by an exit of its own
+/// when the task has been asked to end: it gives 111 after the first wait and 222
+/// after the second, and what it gave and the state when it is not asked to.
+fn leaves_when_asked() -> Function {
+    let mut b = Builder::new();
+    let [x, state] = b.params(&[LONG, LONG]) [..] else {
+        unreachable!()
+    };
+    let kind = b.int(Bits::B64, 7);
+    let first = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, x, state],
+        },
+        &[LONG],
+    )[0];
+    let asked = b.emit(
+        Op::System {
+            call: System::Cancelled,
+            args: vec![],
+        },
+        &[LONG],
+    )[0];
+    let zero = b.int(Bits::B64, 0);
+    let not_asked = b.compare(Compare::Equal, asked, zero);
+    let (stop, _) = b.block(&[]);
+    let (go, _) = b.block(&[]);
+    b.switch(not_asked, vec![(stop, vec![]), (go, vec![])]);
+    b.at(stop);
+    let ended = b.int(Bits::B64, 111);
+    b.ret(vec![ended, first]);
+    b.at(go);
+    let kind = b.int(Bits::B64, 8);
+    let second = b.emit(
+        Op::System {
+            call: System::Suspend,
+            args: vec![kind, x, first],
+        },
+        &[LONG],
+    )[0];
+    let asked = b.emit(
+        Op::System {
+            call: System::Cancelled,
+            args: vec![],
+        },
+        &[LONG],
+    )[0];
+    let zero = b.int(Bits::B64, 0);
+    let not_asked = b.compare(Compare::Equal, asked, zero);
+    let (stop, _) = b.block(&[]);
+    let (go, _) = b.block(&[]);
+    b.switch(not_asked, vec![(stop, vec![]), (go, vec![])]);
+    b.at(stop);
+    let ended = b.int(Bits::B64, 222);
+    b.ret(vec![ended, second]);
+    b.at(go);
+    let five = b.int(Bits::B64, 5);
+    let sum = b.binary(Binary::Add, x, second);
+    let sum = b.binary(Binary::Add, sum, five);
+    b.ret(vec![sum, second]);
+    b.finish(&[LONG, LONG])
+}
+
+/// A function that calls it and leaves by an exit of its own, giving 333, when
+/// the task has been asked to end, as it must even if the call went on to its end.
+fn calls_and_leaves_when_asked() -> Function {
+    let mut b = Builder::new();
+    let [x, state] = b.params(&[LONG, LONG]) [..] else {
+        unreachable!()
+    };
+    let made = b.call(0, vec![x, state], &[LONG, LONG]);
+    let asked = b.emit(
+        Op::System {
+            call: System::Cancelled,
+            args: vec![],
+        },
+        &[LONG],
+    )[0];
+    let zero = b.int(Bits::B64, 0);
+    let not_asked = b.compare(Compare::Equal, asked, zero);
+    let (stop, _) = b.block(&[]);
+    let (go, _) = b.block(&[]);
+    b.switch(not_asked, vec![(stop, vec![]), (go, vec![])]);
+    b.at(stop);
+    let ended = b.int(Bits::B64, 333);
+    b.ret(vec![ended, made[1]]);
+    b.at(go);
+    let thousand = b.int(Bits::B64, 1000);
+    let sum = b.binary(Binary::Add, made[0], thousand);
+    b.ret(vec![sum, made[1]]);
+    b.finish(&[LONG, LONG])
+}
+
+/// A task that is asked to end after its first wait, or its second, or before it
+/// starts, goes on from the wait it is in by the exit that follows it, and each
+/// function that the task is the middle of leaves by its own exit, the innermost
+/// first, however far in the chain it is asked: the bit is in the header of the
+/// frame of the task, and each poll gives it to the frame of what it polls. A
+/// task that is not asked goes on as it did, and each wait it makes is one wait.
+fn a_task_asked_to_end_leaves_by_the_exit_of_the_wait_it_is_in_and_each_function_it_is_in_leaves_by_its_own() {
+    let mut main = Builder::new();
+    main.ret(vec![]);
+    let program = Program {
+        data: Vec::new(),
+        functions: vec![leaves_when_asked(), calls_and_leaves_when_asked(), main.finish(&[])],
+        main: 2,
+    };
+    assert_eq!(scalar::check(&program), Ok(()));
+    let frames = scalar::Frames {
+        poll_any: None,
+        starters: Vec::new(),
+        through: vec![LONG],
+    };
+    let made = scalar::suspend_frames(program, &frames).expect("no call reaches itself");
+    assert_eq!(scalar::check(&made.program), Ok(()));
+    let poll_any = made.poll_any.expect("a function waits");
+    let run = |start: usize, after: Option<usize>| {
+        let task = made.tasks.iter().find(|t| t.start == start).expect("a task");
+        let mut state = vec![1u64];
+        let (got, waited, waits) = scalar::poll_cancelling(
+            &made.program,
+            poll_any,
+            task,
+            &[2],
+            &mut state,
+            &mut |_| {},
+            &mut |_, _| false,
+            after,
+        );
+        let kinds: Vec<u64> = waited.iter().map(|w| w.kind).collect();
+        (got, kinds, waits)
+    };
+    // The inner function by itself, which is the task, with the state 1 after
+    // each wait, and 2 + 1 + 5 when it is not asked.
+    assert_eq!(run(0, None), (vec![8], vec![7, 8], 2));
+    assert_eq!(run(0, Some(0)), (vec![111], vec![7], 1));
+    assert_eq!(run(0, Some(1)), (vec![111], vec![7], 1));
+    assert_eq!(run(0, Some(2)), (vec![222], vec![7, 8], 2));
+    // The caller of it, which gives what it gave plus 1000 when it is not asked,
+    // and 333 whichever wait the inner function is in.
+    assert_eq!(run(1, None), (vec![1008], vec![7, 8], 2));
+    assert_eq!(run(1, Some(0)), (vec![333], vec![7], 1));
+    assert_eq!(run(1, Some(1)), (vec![333], vec![7], 1));
+    assert_eq!(run(1, Some(2)), (vec![333], vec![7, 8], 2));
+}
+
+/// A function that is not made a state machine reads the question as no, whether
+/// or not another function of the program is, so a program that starts no task
+/// has no such instruction left and its executable is as it was.
+fn a_function_that_is_not_a_state_machine_is_never_asked_to_end() {
+    let mut b = Builder::new();
+    let asked = b.emit(
+        Op::System {
+            call: System::Cancelled,
+            args: vec![],
+        },
+        &[LONG],
+    )[0];
+    b.ret(vec![asked]);
+    let plain = b.finish(&[LONG]);
+    let ended = || {
+        let mut main = Builder::new();
+        main.ret(vec![]);
+        main.finish(&[])
+    };
+    for functions in [
+        vec![plain.clone(), ended()],
+        vec![plain, leaves_when_asked(), ended()],
+    ] {
+        let main = functions.len() - 1;
+        let program = Program {
+            data: Vec::new(),
+            functions,
+            main,
+        };
+        let frames = scalar::Frames {
+            poll_any: None,
+            starters: Vec::new(),
+            through: vec![LONG],
+        };
+        let made = scalar::suspend_frames(program, &frames).expect("no call reaches itself");
+        let asks = made.program.functions[0].blocks.iter().any(|b| {
+            b.instructions
+                .iter()
+                .any(|i| matches!(i.op, Op::System { call: System::Cancelled, .. }))
+        });
+        assert!(!asks);
+        assert_eq!(scalar::check(&made.program), Ok(()));
     }
 }
