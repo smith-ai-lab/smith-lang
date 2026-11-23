@@ -77,6 +77,10 @@ pub const ONCE: &[Test] = &[
         every_executable_uses_only_thin_wrappers_over_the_kernel,
     ),
     (
+        "a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without",
+        a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without,
+    ),
+    (
         "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
         a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls,
     ),
@@ -1337,4 +1341,20 @@ fn a_test_that_does_not_depend_on_the_machine_may_not_run_an_executable_the_fing
         message.contains("not of the group that depends on the machine"),
         "{message}"
     );
+}
+
+/// A program that opens a group and asks for no network or clock waits for the
+/// system in `kqueue` on macOS, so it imports `_kqueue` and `_kevent`, and no
+/// other target is refused it for the calls it does not have.
+fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without() {
+    let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() ! console, alloc {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
+    for target in buildable() {
+        let bytes = compile(source.as_bytes(), target).unwrap_or_else(|e| panic!("{}: {e:?}", target.name()));
+        if target.name().starts_with("macos") {
+            let (_, symbols) = mach_o_imports(&bytes);
+            for wrapper in ["_kqueue", "_kevent"] {
+                assert!(symbols.iter().any(|s| s == wrapper), "{} does not import {wrapper}", target.name());
+            }
+        }
+    }
 }

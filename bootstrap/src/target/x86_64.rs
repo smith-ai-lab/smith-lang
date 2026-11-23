@@ -1083,7 +1083,12 @@ pub trait System {
     fn raw(asm: &mut Asm, call: Raw) {
         // The calls only Linux has are asked where a scheduler is built for
         // every machine, and are never run where there is none: they give minus
-        // the number of the error for a call the kernel does not have.
+        // the number of the error for a call the kernel does not have, and the
+        // kernel is none that the program is built for, which is 0.
+        if call == Raw::Kind {
+            asm.mov32(RAX, 0);
+            return;
+        }
         assert!(
             matches!(
                 call,
