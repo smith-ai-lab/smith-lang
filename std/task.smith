@@ -182,6 +182,14 @@ fn is_timed_out(n: u64) -> bool { bits(n, 32) != 0 }
 
 fn deadline(n: u64) -> u64 { __word(n, 3) }
 
+// That the task has been asked to end, by its parent that ended or by the end of
+// the block it was started in, and that it has run at least once. The bit that
+// asks is the one the compiler writes where a child is dropped by a task that
+// ends, and the one each function of the task reads, `CANCEL` of the compiler.
+fn is_cancelled(n: u64) -> bool { bits(n, 64) != 0 }
+
+fn has_started(n: u64) -> bool { bits(n, 128) != 0 }
+
 // Whether a task of the chain that begins at `first` waits for the task, which
 // then keeps its frame, since the one that waits reads it ended from there.
 fn is_waited_for(first: u64, n: u64) -> bool {
@@ -205,6 +213,8 @@ fn reap(first: u64) -> u64 {
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     next = after(at)
+    // A task asked to end that never ran has nothing to end.
+    if is_cancelled(at) and not has_started(at) and not has_ended(at) { ended(at) }
     if has_ended(at) and is_detached(at) and not is_waited_for(head, at) {
       head = leave(head, at)
       __drop(__frame_at(at))
@@ -272,7 +282,9 @@ fn leave(first: u64, n: u64) -> u64 {
 // Whether the task may run: it has not ended, it does not wait for a descriptor,
 // and the task it waits for, if it waits for one, has ended.
 fn runnable(n: u64) -> bool {
-  if has_ended(n) or waits_for_descriptor(n) or waits_for_time(n) { return false }
+  if has_ended(n) { return false }
+  if is_cancelled(n) { return has_started(n) }
+  if waits_for_descriptor(n) or waits_for_time(n) { return false }
   if waits_for_task(n) { has_ended(on(n)) } else { true }
 }
 
@@ -405,7 +417,22 @@ fn waits_on_time(n: u64, moment: u64) {
 
 // The task goes on when it is run again, so it waits for nothing then.
 fn runs_again(n: u64) {
-  __set_word(n, 1, wrapping_sub(state(n), bits(n, 2)))
+  var made = wrapping_sub(state(n), bits(n, 2))
+  if not has_started(n) { made = wrapping_add(made, 128) }
+  __set_word(n, 1, made)
+}
+
+// Asks every task of the chain that begins at `first` that has not ended, but the
+// one the block is of, to end.
+fn ask_rest(first: u64, root: u64) {
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if at != root and not has_ended(at) and not is_cancelled(at) {
+      __set_word(at, 1, wrapping_add(state(at), 64))
+    }
+    at = after(at)
+  }
 }
 
 // A scheduler for tests. It starts nothing until a task is waited for, and runs
@@ -504,6 +531,27 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             }
             __consume(f)
           }
+        }
+      }
+      // The tasks still in the group are asked to end, and each one that has run
+      // leaves by the exits of the functions it is in, the one started last first,
+      // so a child ends before its parent. One that never ran has nothing to end.
+      ask_rest(first, top)
+      loop round in 0..9223372036854775807 {
+        other = pending(first, top)
+        if other == 0 { break }
+        if has_started(other) {
+          f = __frame_at(other)
+          match __poll(f) {
+            .done { ended(other) }
+            .waiting(w) {
+              __eprint("a task that was asked to end waits again")
+              __end(1)
+            }
+          }
+          __consume(f)
+        } else {
+          ended(other)
         }
       }
       cancel_rest(first, top)
@@ -756,6 +804,9 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
           }
           .some(k) {
             n = nth_runnable(first, k)
+            // A task that was asked to end stops waiting for what it waited for.
+            if is_cancelled(n) and waits_for_descriptor(n) { parked = wrapping_sub(parked, 1) }
+            if is_cancelled(n) { woken_by(n, false) }
             runs_again(n)
             current = n
             f = __frame_at(n)
@@ -796,6 +847,27 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             }
             __consume(f)
           }
+        }
+      }
+      // The tasks still in the group are asked to end, and each one that has run
+      // leaves by the exits of the functions it is in, the one started last first,
+      // so a child ends before its parent. One that never ran has nothing to end.
+      ask_rest(first, top)
+      loop round in 0..9223372036854775807 {
+        other = pending(first, top)
+        if other == 0 { break }
+        if has_started(other) {
+          f = __frame_at(other)
+          match __poll(f) {
+            .done { ended(other) }
+            .waiting(w) {
+              __eprint("a task that was asked to end waits again")
+              __end(1)
+            }
+          }
+          __consume(f)
+        } else {
+          ended(other)
         }
       }
       cancel_rest(first, top)

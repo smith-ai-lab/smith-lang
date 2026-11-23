@@ -142,6 +142,10 @@ pub const ONCE: &[Test] = &[
         a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more,
     ),
     (
+        "a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_block_ends_each_task_by_its_exit",
+        a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_block_ends_each_task_by_its_exit,
+    ),
+    (
         "a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_after_the_call_and_a_program_with_no_task_never_does",
         a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_after_the_call_and_a_program_with_no_task_never_does,
     ),
@@ -1020,4 +1024,41 @@ fn a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_a
     let none = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn calls(n: u64) -> u64 {\n  wrapping_add(n, 1)\n}\n\nfn main() ! console, alloc {\n  print(\"{calls(5)}\")\n}\n";
     let program = lower(none.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert!(!reads_the_request(&program));
+}
+
+/// Whether a function of the program stores the two bits that drop a child of a
+/// task that ends: that its handle is dropped, and that it is asked to end.
+fn asks_a_child_to_end(program: &scalar::Program) -> bool {
+    use scalar::{Constant, Op};
+    let both = 8 | scalar::CANCEL;
+    program.functions.iter().any(|f| {
+        (f.blocks.iter().flat_map(|b| &b.instructions))
+            .any(|i| matches!(i.op, Op::Constant(Constant::Int(n)) if n == both))
+    })
+}
+
+/// A task that holds the handle of a child that waits, and waits itself, is
+/// ended when the block of the scheduler ends: it leaves by its exit, which asks
+/// the child to end, and the child leaves by its own. Nothing is run after the
+/// wait that each is in, whatever the order the scheduler ran them in, and the
+/// block gives what its first task gave. A group of a program that holds no
+/// child that waits has no such mark.
+fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_block_ends_each_task_by_its_exit()
+{
+    let source = |seed: u64| {
+        format!(
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 ! task {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 ! task, console {{\n  spawn {{ waits(n) }}\n  spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 ! task, console {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 ! diverge, console {{\n  with test_scheduler_with_io({seed}, [])\n  spawn {{ parent(7) }}\n  spawn {{ waits(8) }}\n  3\n}}\n\nfn main() ! console, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+        )
+    };
+    for seed in 0..8u64 {
+        let text = source(seed);
+        let program = lower(text.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {text}"));
+        assert_eq!(scalar::check(&program), Ok(()), "for {text}");
+        assert!(asks_a_child_to_end(&program), "for {text}");
+        let (said, _) = asked(&text);
+        assert_eq!(said, "3\n", "seed {seed}");
+    }
+    let none = "use std.bits (u64)\nuse std.console (console, print)\n\nfn main() ! console {\n  print(\"{3}\")\n}\n";
+    let program = lower(none.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    assert!(!asks_a_child_to_end(&program));
 }

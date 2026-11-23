@@ -75,6 +75,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         poll_any: None,
         polling: HashMap::new(),
         detaches: Vec::new(),
+        asking: false,
         defining_frame: false,
         made_frame: None,
         through: None,
@@ -97,7 +98,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
             // Its types are those of the scheduler's state, which a program
             // that is lowered later may be the first to name.
             Body::PollAny => frames::poll_any_stub(&[]),
-            Body::Detach(ty) => lowering.detach_function(&ty),
+            Body::Detach(ty, asked) => lowering.detach_function(&ty, asked),
         });
     }
     if let Some(at) = lowering.poll_any {
@@ -160,7 +161,7 @@ enum Body {
     PollAny,
     /// The function that detaches each child a value of the type holds, which
     /// the compiler writes for the type as it writes `<eq[T]>`.
-    Detach(Ty),
+    Detach(Ty, bool),
 }
 
 struct Lowering<'a> {
@@ -193,7 +194,10 @@ struct Lowering<'a> {
     made_frame: Option<usize>,
     /// The function that detaches the children a value of each type holds, by
     /// its place among the program's functions.
-    detaches: Vec<(Ty, usize)>,
+    detaches: Vec<(Ty, bool, usize)>,
+    /// Whether a child that is dropped is asked to end, as it is where a task that
+    /// is asked to end leaves, and not only detached.
+    asking: bool,
     /// The types of the state of the scheduler that polls the frames, once a
     /// program polls one under a handler that holds state.
     through: Option<Vec<form::Type>>,
@@ -230,6 +234,9 @@ struct Out<'a> {
     /// The functions and lambdas being lowered, the innermost last, each
     /// with the blocks that leave it by a `return`, and the values they give.
     returns: Vec<Returns>,
+    /// The calls being lowered, innermost last, by address, which say where the
+    /// exit after a call that may suspend drops what the function owns.
+    sites: Vec<usize>,
     /// The blocks that follow a `return`, which nothing reaches.
     dead: Vec<usize>,
     /// How many exits for a task that is asked to end have been written.
@@ -539,6 +546,7 @@ impl<'a> Out<'a> {
             current: 0,
             loops: Vec::new(),
             returns: Vec::new(),
+            sites: Vec::new(),
             dead: Vec::new(),
             exits: 0,
             place: form::Place::NONE,
@@ -1265,9 +1273,9 @@ impl<'a> Lowering<'a> {
                 .find(|(k, _)| k == kind)
                 .map(|&(_, at)| at),
             Body::PollAny => self.poll_any,
-            Body::Detach(ty) => (self.detaches.iter())
-                .find(|(t, _)| t == ty)
-                .map(|&(_, at)| at),
+            Body::Detach(ty, asked) => (self.detaches.iter())
+                .find(|(t, a, _)| t == ty && a == asked)
+                .map(|&(_, _, at)| at),
             Body::Lambda(_) | Body::Starter(_) => None,
         };
         found.unwrap_or_else(|| self.add(body))
@@ -1285,7 +1293,7 @@ impl<'a> Lowering<'a> {
             }
             Body::Runtime(kind) => self.runtimes.push((kind.clone(), at)),
             Body::PollAny => self.poll_any = Some(at),
-            Body::Detach(ty) => self.detaches.push((ty.clone(), at)),
+            Body::Detach(ty, asked) => self.detaches.push((ty.clone(), *asked, at)),
             Body::Lambda(_) | Body::Starter(_) => {}
         }
         self.bodies.push(body);
@@ -1498,7 +1506,7 @@ impl<'a> Lowering<'a> {
         if self.holds_none(ty) {
             return;
         }
-        let function = self.place(Body::Detach(ty.clone()));
+        let function = self.place(Body::Detach(ty.clone(), self.asking));
         out.emit(
             form::Op::Call {
                 function,
@@ -1512,10 +1520,12 @@ impl<'a> Lowering<'a> {
     /// which takes its scalars. It follows the type as deep as it goes, by the
     /// function it calls for each part, which a type that holds itself calls
     /// for its own.
-    fn detach_function(&mut self, ty: &Ty) -> form::Function {
+    fn detach_function(&mut self, ty: &Ty, asked: bool) -> form::Function {
+        let before = std::mem::replace(&mut self.asking, asked);
         let mut out = Out::new();
         let values = out.params(&self.scalars(ty));
         self.detach_parts(&mut out, ty, &values);
+        self.asking = before;
         out.blocks[out.current].end = form::End::Return(Vec::new());
         form::Function {
             types: out.types,
@@ -1644,7 +1654,14 @@ impl<'a> Lowering<'a> {
         let by = out.int(form::Bits::B64, form::SCHEDULER_AT as i128 + 8);
         let address = out.binary(form::Binary::Add, frame, by);
         let state = out.emit(form::Op::Load { ty: word, address }, vec![word])[0];
-        let mark = out.int(form::Bits::B64, 8);
+        let mark = out.int(
+            form::Bits::B64,
+            if self.asking {
+                8 | form::CANCEL as i128
+            } else {
+                8
+            },
+        );
         let marked = out.binary(form::Binary::Or, state, mark);
         out.emit(
             form::Op::Store {
@@ -1867,7 +1884,14 @@ impl<'a> Lowering<'a> {
         // follows it in the expression it is part of is placed there again.
         let outer = out.place;
         out.place = self.place_of(out, expr.pos());
+        let call = matches!(expr, Expr::Call(_));
+        if call {
+            out.sites.push(addr(expr));
+        }
         let (ty, values) = self.as_written(out, expr, env);
+        if call {
+            out.sites.pop();
+        }
         // A value that is made and then only looked at is dropped.
         if self.typed.drops.temps.contains(&addr(expr)) {
             self.drop_value(out, &ty, &values);

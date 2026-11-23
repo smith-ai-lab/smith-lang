@@ -1378,6 +1378,13 @@ impl<'a> Lowering<'a> {
         let not_asked = out.compare(form::Compare::Equal, asked, none);
         let blocks = out.switch(not_asked, 2);
         out.current = blocks[0];
+        // What the function owns that may hold a child is asked to end, as the
+        // children of a task that ends are.
+        if let Some(&site) = out.sites.last() {
+            let before = std::mem::replace(&mut self.asking, true);
+            self.drop_at(out, crate::check::ownership::Site::Cancel(site));
+            self.asking = before;
+        }
         let zeros = self.zeros(out, &gives);
         self.leave(out, zeros);
         // What `leave` makes to follow the exit is reached by nothing, and goes
