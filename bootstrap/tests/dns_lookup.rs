@@ -18,6 +18,11 @@ use smith::target::Target;
 use crate::Test;
 use crate::targets;
 
+pub const ONCE: &[Test] = &[(
+    "a_nameserver_gets_a_port_that_is_free_for_both_udp_and_tcp_when_the_first_port_is_held_for_tcp",
+    a_nameserver_gets_a_port_that_is_free_for_both_udp_and_tcp_when_the_first_port_is_held_for_tcp,
+)];
+
 pub const MACHINE: &[Test] = &[
     (
         "a_name_in_the_hosts_file_is_found_with_no_question_asked_and_with_no_regard_for_case",
@@ -185,6 +190,28 @@ fn run(
     run_in("group", target, name, hosts, options, answers)
 }
 
+/// How many ports are tried for a pair before the test gives up.
+const PAIR_TRIES: usize = 20;
+
+/// A UDP socket and a TCP listener on one port of 127.0.0.1, which a nameserver
+/// is asked on by either kind. The port is the one the system gives the UDP
+/// socket, and another test may already hold it for TCP, so a port whose TCP
+/// side is taken is dropped and another is asked for. `after_udp` is called
+/// with each port the system gives, between the two binds.
+fn bind_pair(mut after_udp: impl FnMut(u16)) -> (UdpSocket, TcpListener) {
+    for _ in 0..PAIR_TRIES {
+        let udp = UdpSocket::bind("127.0.0.1:0").unwrap();
+        let port = udp.local_addr().unwrap().port();
+        after_udp(port);
+        match TcpListener::bind(("127.0.0.1", port)) {
+            Ok(tcp) => return (udp, tcp),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {}
+            Err(e) => panic!("the TCP listener of a nameserver could not be bound: {e}"),
+        }
+    }
+    panic!("no port of 127.0.0.1 was free for both UDP and TCP in {PAIR_TRIES} tries");
+}
+
 /// `run` for a program that does the lookup as `mode` says: in a task of a group,
 /// in a task of a group beside a task that ticks, or with no group at all.
 fn run_in(
@@ -199,10 +226,9 @@ fn run_in(
     if targets::fingerprinting() {
         return Run { lines: Vec::new(), names: Vec::new(), questions: 0 };
     }
-    let udp = UdpSocket::bind("127.0.0.1:0").unwrap();
+    let (udp, tcp) = bind_pair(|_| {});
     let port = udp.local_addr().unwrap().port();
     udp.set_read_timeout(Some(Duration::from_millis(10))).unwrap();
-    let tcp = TcpListener::bind(("127.0.0.1", port)).unwrap();
     tcp.set_nonblocking(true).unwrap();
     let mut server = Server { udp, other: UdpSocket::bind("127.0.0.1:0").unwrap(), tcp, asked: Vec::new() };
     let dir = crate::scratch::path("dns");
@@ -450,4 +476,21 @@ fn a_lookup_in_a_task_lets_the_other_tasks_run_while_it_waits_and_one_with_no_gr
         });
         assert_eq!(said.lines, ["10.0.0.7"], "{}", target.name());
     }
+}
+
+/// The first UDP port the system gives is held for TCP by something else, as
+/// another test may hold it, and the pair is still bound, on another port.
+fn a_nameserver_gets_a_port_that_is_free_for_both_udp_and_tcp_when_the_first_port_is_held_for_tcp() {
+    let mut held = None;
+    let mut first = 0;
+    let (udp, tcp) = bind_pair(|port| {
+        if held.is_none() {
+            first = port;
+            held = Some(TcpListener::bind(("127.0.0.1", port)).unwrap());
+        }
+    });
+    assert!(held.is_some(), "the port the first bind gave was held");
+    let port = udp.local_addr().unwrap().port();
+    assert_ne!(port, first, "the pair is on the port that is held for TCP");
+    assert_eq!(tcp.local_addr().unwrap().port(), port, "the two are on different ports");
 }
