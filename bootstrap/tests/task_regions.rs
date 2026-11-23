@@ -1058,7 +1058,7 @@ fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_blo
         let (said, _) = asked(&text);
         assert_eq!(said, "3\n", "seed {seed}");
     }
-    let none = "use std.bits (u64)\nuse std.console (console, print)\n\nfn main() ! console {\n  print(\"{3}\")\n}\n";
+    let none = "use std.bits (u64)\nuse std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"{3}\")\n}\n";
     let program = lower(none.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert!(!asks_a_child_to_end(&program));
 }
