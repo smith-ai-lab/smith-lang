@@ -977,7 +977,7 @@ fn a_function_type_marks_a_parameter_take_and_its_lambda_is_held_to_it() {
 
 fn without_copy_and_without_discard_are_refused_for_what_is_not_a_type_of_the_program() {
     // A type of the program has either taken away, and a trait the compiler
-    // gives no such thing to is refused as before.
+    // gives no such thing to is refused.
     let ok = "use std.bits (u64)
 
 struct Key {

@@ -467,8 +467,7 @@ fn dropped_children(count: u64, seed: u64, how: &str) -> String {
     )
 }
 
-/// Each of a hundred children would keep 4 KB of list and more, and a child that is never
-/// joined used to keep it until the program ended. A handle that is dropped gives
+/// Each of a hundred children would keep 4 KB of list and more. A handle that is dropped gives
 /// the child's memory back when the child has ended, whether it was dropped before
 /// the child ended or after, which the seeds of the scheduler pick between.
 fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read() {
