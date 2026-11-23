@@ -38,6 +38,22 @@ pub const ONCE: &[Test] = &[
         a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region,
     ),
     (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_1_of_4",
+        the_whole_state_of_generated_handlers_matches_a_model_part_1,
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_2_of_4",
+        the_whole_state_of_generated_handlers_matches_a_model_part_2,
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_3_of_4",
+        the_whole_state_of_generated_handlers_matches_a_model_part_3,
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_4_of_4",
+        the_whole_state_of_generated_handlers_matches_a_model_part_4,
+    ),
+    (
         "a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends",
         a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends,
     ),
@@ -257,10 +273,16 @@ fn keeping[T](body: fn() -> T ! keep) -> T ! alloc {
 fn a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_the_region_as_a_list_is() {
     generate::check(1046, 3, |g| (g.below(8) as u64, 1 + g.below(90) as u64), |&(seed, v)| {
         let source = program(&format!(
-            "{BUILD}{KEEPING}fn fill(v: u64) -> u64 ! keep {{\n  loop i in 0..20 {{ add(wrapping_add(v, i)) }}\n  v\n}}\n\nfn run() -> (str, Box, Held) ! alloc, diverge {{\n  with keeping()\n  with test_scheduler({seed})\n  a = spawn {{ fill({v}) }}\n  n = spawn {{ noise(1) }}\n  join(a)\n  join(n)\n  c = spawn {{ noise(2) }}\n  join(c)\n  d = spawn {{ noise(3) }}\n  join(d)\n  e = spawn {{ noise(4) }}\n  join(e)\n  f = spawn {{ noise(5) }}\n  join(f)\n  (said(), boxed(), held())\n}}\n\nfn main() ! console, alloc, diverge {{\n  (t, b, h) = run()\n  zs = build(400, 1)\n  print(\"{{t}} {{b.name}} {{b.items.size}}\")\n  match h {{\n    .nothing {{ print(\"none\") }}\n    .some(xs) {{ print(\"held {{xs.size}} {{zs.size}}\") }}\n  }}\n}}\n"
+            "{BUILD}{KEEPING}fn fill(v: u64) -> u64 ! keep {{\n  loop i in 0..20 {{ add(wrapping_add(v, i)) }}\n  v\n}}\n\nfn run() -> (str, Box, Held) ! alloc, diverge {{\n  with keeping()\n  with test_scheduler({seed})\n  a = spawn {{ fill({v}) }}\n  n = spawn {{ noise(1) }}\n  join(a)\n  join(n)\n  c = spawn {{ noise(2) }}\n  join(c)\n  d = spawn {{ noise(3) }}\n  join(d)\n  e = spawn {{ noise(4) }}\n  join(e)\n  f = spawn {{ noise(5) }}\n  join(f)\n  (said(), boxed(), held())\n}}\n\nfn main() ! console, alloc, diverge {{\n  (t, b, h) = run()\n  zs = build(400, 1)\n  print(\"{{t}} {{b.name}} {{b.items.size}} {{total(b.items)}}\")\n  match h {{\n    .nothing {{ print(\"none\") }}\n    .some(xs) {{ print(\"held {{xs.size}} {{total(xs)}} {{zs.size}}\") }}\n  }}\n}}\n"
         ));
         let numbers: Vec<String> = (0..20).map(|i| (v + i).to_string()).collect();
-        let expected = format!("{} b{} 20\nheld 2 400\n", numbers.iter().map(|n| format!("{n},")).collect::<String>(), numbers.concat());
+        let expected = format!(
+            "{} b{} 20 {}\nheld 2 {} 400\n",
+            numbers.iter().map(|n| format!("{n},")).collect::<String>(),
+            numbers.concat(),
+            (0..20).map(|i| v + i).sum::<u64>(),
+            2 * v + 39
+        );
         assert_eq!(run(&source), expected, "for {source}");
     });
 }
@@ -277,6 +299,186 @@ fn a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_ke
         let expected = format!("2 {} {}\n", built(40, k) + built(50, k), built(400, 3));
         assert_eq!(run(&source), expected, "for {source}");
     });
+}
+
+/// What a child of a generated program does to the state of the handler `STORE`.
+#[derive(Clone, Debug)]
+enum Act {
+    /// Builds a list and gives it to `put`, which pushes it onto a list of lists.
+    Put(u64, u64),
+    /// Calls `grow`, which builds a list in a loop of its own and pushes it.
+    Grow(u64, u64),
+    /// Builds a list and gives it, with a number, to `pair`, which pushes a struct
+    /// that holds both.
+    Pair(u64, u64, u64),
+    /// Pushes a number onto a list of numbers.
+    Note(u64),
+    /// Builds a list that nothing keeps, over what an earlier child gave back.
+    Noise(u64),
+}
+
+/// A handler that keeps three states that hold memory, and the operations that
+/// store a value built by the caller, a value built by the operation in a loop
+/// before it is stored, a struct that holds a list, and a number.
+const STORE: &str = "struct Pair {
+  items: List[u64]
+  tag: u64
+}
+
+effect store {
+  fn put(xs: take List[u64])
+  fn grow(n: u64, k: u64)
+  fn pair(xs: take List[u64], tag: u64)
+  fn note(v: u64)
+  fn shelved() -> List[List[u64]] ! alloc
+  fn pairs() -> List[Pair] ! alloc
+  fn noted() -> List[u64] ! alloc
+}
+
+fn storing[T](body: fn() -> T ! store) -> T ! alloc {
+  var shelves: List[List[u64]] = []
+  var held: List[Pair] = []
+  var notes: List[u64] = []
+  store(
+    put: fn(xs) {
+      shelves = push(shelves, xs)
+    },
+    grow: fn(n, k) {
+      var acc: List[u64] = []
+      loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, i), k)) }
+      shelves = push(shelves, acc)
+    },
+    pair: fn(xs, tag) {
+      held = push(held, Pair(items: xs, tag: tag))
+    },
+    note: fn(v) {
+      notes = push(notes, v)
+    },
+    shelved: {
+      shelves
+    },
+    pairs: {
+      held
+    },
+    noted: {
+      notes
+    },
+    body: body,
+  )
+}
+
+";
+
+/// What the state holds after a program of children has run, as sums that do not
+/// depend on the order the children ran in, and that read every number kept.
+fn model(children: &[Vec<Act>]) -> String {
+    let (mut shelves, mut shelf, mut pairs, mut pair, mut notes, mut note) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+    for act in children.iter().flatten() {
+        match *act {
+            Act::Put(n, k) | Act::Grow(n, k) => {
+                shelves += 1;
+                shelf += n * 1_000_003 + built(n, k);
+            }
+            Act::Pair(n, k, tag) => {
+                pairs += 1;
+                pair += tag * 7919 + n * 1_000_003 + built(n, k);
+            }
+            Act::Note(v) => {
+                notes += 1;
+                note += v * 31;
+            }
+            Act::Noise(_) => {}
+        }
+    }
+    format!("{shelves} {shelf} {pairs} {pair} {notes} {note} {}", built(400, 3))
+}
+
+fn child(at: usize, acts: &[Act]) -> String {
+    let mut s = format!("fn child{at}() -> u64 ! store, alloc {{\n");
+    for (i, act) in acts.iter().enumerate() {
+        s += &match *act {
+            Act::Put(n, k) => format!("  xs{i} = build({n}, {k})\n  put(xs{i})\n"),
+            Act::Grow(n, k) => format!("  grow({n}, {k})\n"),
+            Act::Pair(n, k, tag) => format!("  xs{i} = build({n}, {k})\n  pair(xs{i}, {tag})\n"),
+            Act::Note(v) => format!("  note({v})\n"),
+            Act::Noise(k) => format!("  junk{i} = noise({k})\n"),
+        };
+    }
+    s + "  1\n}\n\n"
+}
+
+fn generated(seed: u64, children: &[Vec<Act>]) -> String {
+    let mut s = format!("{BUILD}{STORE}");
+    for (at, acts) in children.iter().enumerate() {
+        s += &child(at, acts);
+    }
+    s += "fn run() -> (List[List[u64]], List[Pair], List[u64]) ! alloc, diverge {\n  with storing()\n";
+    s += &format!("  with test_scheduler({seed})\n");
+    for at in 0..children.len() {
+        s += &format!("  t{at} = spawn {{ child{at}() }}\n");
+    }
+    for at in 0..children.len() {
+        s += &format!("  join(t{at})\n");
+    }
+    // Others build over what the children gave back before the state is read.
+    s += "  n1 = spawn { noise(11) }\n  join(n1)\n  n2 = spawn { noise(12) }\n  join(n2)\n";
+    s += "  (shelved(), pairs(), noted())\n}\n\n";
+    s += "fn main() ! console, alloc, diverge {\n  (shelves, held, notes) = run()\n  zs = build(400, 3)\n";
+    s += "  var shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
+    s += "  var pair: u64 = 0\n  loop i in 0..held.size {\n    p = held[i]\n    pair = wrapping_add(pair, wrapping_add(wrapping_mul(p.tag, 7919), wrapping_add(wrapping_mul(p.items.size, 1000003), total(p.items))))\n  }\n";
+    s += "  var note: u64 = 0\n  loop i in 0..notes.size { note = wrapping_add(note, wrapping_mul(notes[i], 31)) }\n";
+    s += "  print(\"{shelves.size} {shelf} {held.size} {pair} {notes.size} {note} {total(zs)}\")\n}\n";
+    program(&s)
+}
+
+fn generate_children(g: &mut generate::Gen) -> (u64, Vec<Vec<Act>>) {
+    let seed = g.below(16) as u64;
+    let count = 1 + g.below(4);
+    let children = (0..count)
+        .map(|_| {
+            let acts = 1 + g.below(4);
+            (0..acts)
+                .map(|_| {
+                    let (n, k) = (1 + g.below(60) as u64, g.below(50) as u64);
+                    match g.below(5) {
+                        0 => Act::Put(n, k),
+                        1 => Act::Grow(n, k),
+                        2 => Act::Pair(n, k, 1 + g.below(30) as u64),
+                        3 => Act::Note(1 + g.below(500) as u64),
+                        _ => Act::Noise(k),
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    (seed, children)
+}
+
+/// Children of any shape store, under the scheduler of a test of any seed, what
+/// they built before the operation, what they built in the operation in a loop,
+/// a struct that holds a list, and a number, and after other children have built
+/// over what they gave back the whole state is what a model says.
+fn the_whole_state_of_generated_handlers_matches_a_model(part: u64) {
+    generate::check_part(1048, 48, part, 4, generate_children, |(seed, children)| {
+        let source = generated(*seed, children);
+        assert_eq!(run(&source), format!("{}\n", model(children)), "for {source}");
+    });
+}
+
+fn the_whole_state_of_generated_handlers_matches_a_model_part_1() {
+    the_whole_state_of_generated_handlers_matches_a_model(0);
+}
+
+fn the_whole_state_of_generated_handlers_matches_a_model_part_2() {
+    the_whole_state_of_generated_handlers_matches_a_model(1);
+}
+
+fn the_whole_state_of_generated_handlers_matches_a_model_part_3() {
+    the_whole_state_of_generated_handlers_matches_a_model(2);
+}
+
+fn the_whole_state_of_generated_handlers_matches_a_model_part_4() {
+    the_whole_state_of_generated_handlers_matches_a_model(3);
 }
 
 /// A block that installs the handler, with children that push to it, is run for
