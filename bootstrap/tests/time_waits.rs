@@ -18,6 +18,10 @@ use crate::targets;
 
 pub const MACHINE: &[Test] = &[
     (
+        "a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for",
+        a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for,
+    ),
+    (
         "two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them",
         two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them,
     ),
@@ -93,6 +97,35 @@ fn nap(ms: u64) -> u64 ! console, time, alloc, task {
   ms
 }
 ";
+
+/// The clock says the milliseconds that have gone whole, so a wake that is
+/// rounded down comes up to a millisecond early, half of one on average: 2,000
+/// sleeps of a millisecond, one after another, take at least 2,000 milliseconds
+/// by the clock of the test, and about 1,000 when each is woken early.
+fn a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for() {
+    let source = "use std.console (console, print)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+
+fn main() ! console, alloc, time {
+  loop i in 0..2000 {
+    with tasks()
+    t = spawn { sleep(1) }
+    join(t)
+  }
+  print(\"slept\")
+}
+";
+    for target in kernel() {
+        let (lines, took) = run(target, source, &[], |_| {});
+        if targets::fingerprinting() {
+            continue;
+        }
+        assert_eq!(lines, ["slept"], "{}", target.name());
+        assert!(took >= Duration::from_millis(2000), "{took:?} on {}", target.name());
+        assert!(took < Duration::from_secs(20), "{took:?} on {}", target.name());
+    }
+}
 
 fn two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them() {
     let source = format!(

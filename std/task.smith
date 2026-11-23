@@ -597,6 +597,11 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
   n
 }
 
+// A moment that a task waits until, on this clock, is one more than the clock says
+// and the time asked for, since the clock says the milliseconds that have gone whole, and a
+// task that was woken at the moment would otherwise be woken up to a millisecond
+// before the time it asked for.
+
 // The milliseconds the clock of the system says, which only goes forward: the
 // monotonic clock, 1 on Linux and 6 on macOS.
 fn read_clock() -> u64 ! alloc {
@@ -776,19 +781,19 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
                     waits_on_descriptor(n, h.number)
                     parked = wrapping_add(parked, 1)
                   }
-                  .time(t) { waits_on_time(n, wrapping_add(read_clock(), t)) }
+                  .time(t) { waits_on_time(n, wrapping_add(wrapping_add(read_clock(), t), 1)) }
                   .read_by(h) {
                     if ep < 0 { ep = make_queue() }
                     register_wait(ep, h.number, false)
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(read_clock(), by))
+                    waits_on_time(n, wrapping_add(wrapping_add(read_clock(), by), 1))
                     parked = wrapping_add(parked, 1)
                   }
                   .write_by(h) {
                     if ep < 0 { ep = make_queue() }
                     register_wait(ep, h.number, true)
                     waits_on_descriptor(n, h.number)
-                    waits_on_time(n, wrapping_add(read_clock(), by))
+                    waits_on_time(n, wrapping_add(wrapping_add(read_clock(), by), 1))
                     parked = wrapping_add(parked, 1)
                   }
                 }
