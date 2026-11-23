@@ -156,7 +156,7 @@ fn a_push_that_has_room_is_20_instructions_or_fewer_in_a_loop_on_x86_64() {
 /// after it, which asks for memory, so that the branch to the last block is longer than the 1 MB a
 /// conditional branch of arm64 reaches. It ends with the status of the block
 /// the choice went to.
-fn far_choice() -> scalar::Program {
+pub fn far_choice() -> scalar::Program {
     let long = Type::Int(Bits::B64);
     let mut b = Builder::new();
     let (padding, _) = b.block(&[]);
@@ -196,11 +196,6 @@ fn far_choice() -> scalar::Program {
 /// choice went to.
 /// Whether the target writes an executable for arm64.
 fn far_choice_on(target: Target) -> bool {
-    // A module is no executable for arm64, and one of this function has more
-    // locals than an engine takes, so it is not built.
-    if !target.is_machine_code() {
-        return false;
-    }
     let program = far_choice();
     let said = scalar::run(&program);
     assert_eq!(said.status, 3);

@@ -490,6 +490,173 @@ fn status() -> Body {
     }
 }
 
+/// How many locals, parameters among them, a function may have: the most that
+/// engines take, as V8 does.
+const LOCALS: u32 = 50_000;
+
+fn kind_number(kind: Kind) -> usize {
+    match kind {
+        Kind::I32 => 0,
+        Kind::I64 => 1,
+        Kind::F32 => 2,
+        Kind::F64 => 3,
+    }
+}
+
+/// Which local, among those of its kind that the function needs, each class of
+/// values has, and how many of each kind that is. A class is the values whose
+/// place is one, as `same` says. Two classes have the same local when neither
+/// is alive where the other is made or read, by the places where each is alive,
+/// taken from the first to the last, which is more than it is, and so never
+/// too little. The parameters of the function keep the places they have.
+fn reuse(f: &Function, same: &[usize], fixed: &[u32]) -> (Vec<u32>, [u32; 4]) {
+    let values = f.types.len();
+    // The place of the start of each block, of each of its instructions, and
+    // of its end, in the order of the blocks.
+    let mut start = Vec::with_capacity(f.blocks.len());
+    let mut at = 0;
+    for block in &f.blocks {
+        start.push(at);
+        at += block.instructions.len() + 2;
+    }
+    let end = |b: usize| start[b] + f.blocks[b].instructions.len() + 1;
+    let (mut first, mut last) = (vec![usize::MAX; values], vec![0; values]);
+    let mut touch = |v: Value, place: usize| {
+        let class = same[v.0];
+        first[class] = first[class].min(place);
+        last[class] = last[class].max(place);
+    };
+    // The classes a block reads before it makes them, which are alive when it
+    // begins, and those it makes, which are not alive before.
+    let mut read = vec![Vec::new(); f.blocks.len()];
+    let mut made = vec![Vec::new(); f.blocks.len()];
+    let mut seen = vec![usize::MAX; values];
+    for (b, block) in f.blocks.iter().enumerate() {
+        let mut defined = std::collections::HashSet::new();
+        for p in &block.params {
+            touch(*p, start[b]);
+            defined.insert(same[p.0]);
+            made[b].push(same[p.0]);
+        }
+        let mut reads = |v: Value, place: usize, defined: &std::collections::HashSet<usize>| {
+            if !defined.contains(&same[v.0]) && seen[same[v.0]] != b {
+                seen[same[v.0]] = b;
+                read[b].push(same[v.0]);
+            }
+            let _ = place;
+        };
+        for (i, instruction) in block.instructions.iter().enumerate() {
+            let place = start[b] + 1 + i;
+            for v in instruction.op.operands() {
+                touch(v, place);
+                reads(v, place, &defined);
+            }
+            for r in &instruction.results {
+                touch(*r, place);
+                defined.insert(same[r.0]);
+                made[b].push(same[r.0]);
+            }
+        }
+        let place = end(b);
+        for v in block.end.operands() {
+            touch(v, place);
+            reads(v, place, &defined);
+        }
+        // A jump writes the parameters of the block it goes to, where it ends.
+        for jump in block.end.jumps() {
+            for p in &f.blocks[jump.block].params {
+                touch(*p, place);
+            }
+        }
+    }
+    // The classes alive at the start and at the end of each block: those it
+    // reads before it makes them, and those a block it goes to has alive at its
+    // start that it does not make there.
+    let alive_in = liveness(f, same, &read, &made);
+    for (b, (inside, outside)) in alive_in.iter().enumerate() {
+        for &class in inside {
+            first[class] = first[class].min(start[b]);
+            last[class] = last[class].max(start[b]);
+        }
+        for &class in outside {
+            first[class] = first[class].min(end(b));
+            last[class] = last[class].max(end(b));
+        }
+    }
+    let mut slot = vec![u32::MAX; values];
+    let mut counts = [0u32; 4];
+    for here in [Kind::I32, Kind::I64, Kind::F32, Kind::F64] {
+        let mut classes: Vec<usize> = (0..values)
+            .filter(|&v| {
+                same[v] == v
+                    && fixed[v] == u32::MAX
+                    && first[v] != usize::MAX
+                    && kind(f.types[v]) == here
+            })
+            .collect();
+        classes.sort_by_key(|&v| (first[v], v));
+        let mut busy = std::collections::BinaryHeap::new();
+        let mut free: Vec<u32> = Vec::new();
+        let count = &mut counts[kind_number(here)];
+        for v in classes {
+            while let Some(&std::cmp::Reverse((over, freed))) = busy.peek() {
+                if over >= first[v] {
+                    break;
+                }
+                busy.pop();
+                free.push(freed);
+            }
+            let chosen = free.pop().unwrap_or_else(|| {
+                *count += 1;
+                *count - 1
+            });
+            slot[v] = chosen;
+            busy.push(std::cmp::Reverse((last[v], chosen)));
+        }
+    }
+    (slot, counts)
+}
+
+/// For each block, the classes alive when it begins and those alive when it
+/// ends, by what each block reads before it makes it and what it makes. A class
+/// is alive at the end of a block when a block it goes to has it alive at its
+/// start, and at its start when the block reads it before it makes it or
+/// when it is alive at its end and the block does not make it.
+fn liveness(
+    f: &Function,
+    _same: &[usize],
+    read: &[Vec<usize>],
+    made: &[Vec<usize>],
+) -> Vec<(Vec<usize>, Vec<usize>)> {
+    let blocks = f.blocks.len();
+    let mut inside: Vec<std::collections::BTreeSet<usize>> =
+        read.iter().map(|r| r.iter().copied().collect()).collect();
+    let made: Vec<std::collections::HashSet<usize>> =
+        made.iter().map(|m| m.iter().copied().collect()).collect();
+    let mut outside: Vec<std::collections::BTreeSet<usize>> = vec![Default::default(); blocks];
+    loop {
+        let mut changed = false;
+        for b in (0..blocks).rev() {
+            for jump in f.blocks[b].end.jumps() {
+                let wanted: Vec<usize> = inside[jump.block].iter().copied().collect();
+                for class in wanted {
+                    if outside[b].insert(class) && !made[b].contains(&class) {
+                        changed |= inside[b].insert(class);
+                    }
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    inside
+        .into_iter()
+        .zip(outside)
+        .map(|(i, o)| (i.into_iter().collect(), o.into_iter().collect()))
+        .collect()
+}
+
 /// The signature and the body of a function of the form.
 fn lower(f: &Function, context: &Context) -> (Signature, Body) {
     let shape = structure::analyze(f);
@@ -526,6 +693,9 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
     for (place, p) in params.iter().enumerate() {
         local[p.0] = place as u32;
     }
+    // The values that are alive at once are the ones that need a local each, so
+    // a value gets the local of one that is dead by the time it is made.
+    let (slot, counts) = reuse(f, &same, &local);
     // A function whose blocks are not written as loops keeps the number of the
     // block to run in a local, which comes first of the locals of 32 bits,
     // which come before those of 64.
@@ -538,10 +708,11 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
         if here == Kind::I32 && numbered {
             next += 1;
         }
+        let first = next;
+        next += counts[kind_number(here)];
         for (v, ty) in f.types.iter().enumerate() {
-            if local[v] == u32::MAX && same[v] == v && kind(*ty) == here {
-                local[v] = next;
-                next += 1;
+            if local[v] == u32::MAX && same[v] == v && slot[v] != u32::MAX && kind(*ty) == here {
+                local[v] = first + slot[v];
             }
         }
         if next > before {
@@ -568,6 +739,16 @@ fn lower(f: &Function, context: &Context) -> (Signature, Body) {
         locals.push((1, Kind::I32));
         Taken { sp, total, offsets }
     });
+    if next > LOCALS {
+        let name = if f.name.is_empty() {
+            "<unnamed>"
+        } else {
+            &f.name
+        };
+        panic!(
+            "wasm does not build function {name}: it needs {next} locals, as many values are alive at once, and an engine takes {LOCALS}"
+        );
+    }
     let mut lowering = Lowering {
         f,
         context,
