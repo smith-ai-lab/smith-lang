@@ -27,20 +27,28 @@ pub const MACHINE: &[Test] = &[
         listen_returns_when_it_is_closed_after_one_connection,
     ),
     (
-        "listen_returns_when_it_is_closed_after_two_connections_part_1_of_2",
-        listen_returns_when_it_is_closed_after_two_connections_part_1_of_2,
+        "listen_returns_when_it_is_closed_after_two_connections_part_1_of_3",
+        listen_returns_when_it_is_closed_after_two_connections_part_1_of_3,
     ),
     (
-        "listen_returns_when_it_is_closed_after_two_connections_part_2_of_2",
-        listen_returns_when_it_is_closed_after_two_connections_part_2_of_2,
+        "listen_returns_when_it_is_closed_after_two_connections_part_2_of_3",
+        listen_returns_when_it_is_closed_after_two_connections_part_2_of_3,
     ),
     (
-        "listen_returns_when_it_is_closed_after_three_connections_part_1_of_2",
-        listen_returns_when_it_is_closed_after_three_connections_part_1_of_2,
+        "listen_returns_when_it_is_closed_after_two_connections_part_3_of_3",
+        listen_returns_when_it_is_closed_after_two_connections_part_3_of_3,
     ),
     (
-        "listen_returns_when_it_is_closed_after_three_connections_part_2_of_2",
-        listen_returns_when_it_is_closed_after_three_connections_part_2_of_2,
+        "listen_returns_when_it_is_closed_after_three_connections_part_1_of_3",
+        listen_returns_when_it_is_closed_after_three_connections_part_1_of_3,
+    ),
+    (
+        "listen_returns_when_it_is_closed_after_three_connections_part_2_of_3",
+        listen_returns_when_it_is_closed_after_three_connections_part_2_of_3,
+    ),
+    (
+        "listen_returns_when_it_is_closed_after_three_connections_part_3_of_3",
+        listen_returns_when_it_is_closed_after_three_connections_part_3_of_3,
     ),
 ];
 
@@ -214,20 +222,28 @@ fn listen_returns_when_it_is_closed_after_one_connection() {
     listens(1, &[None, Some(0), Some(4)]);
 }
 
-fn listen_returns_when_it_is_closed_after_two_connections_part_1_of_2() {
-    listens(2, &[None, Some(0), Some(1), Some(2)]);
+fn listen_returns_when_it_is_closed_after_two_connections_part_1_of_3() {
+    listens(2, &[None, Some(0), Some(1)]);
 }
 
-fn listen_returns_when_it_is_closed_after_two_connections_part_2_of_2() {
-    listens(2, &[Some(3), Some(5), Some(6), Some(7)]);
+fn listen_returns_when_it_is_closed_after_two_connections_part_2_of_3() {
+    listens(2, &[Some(2), Some(3), Some(5)]);
 }
 
-fn listen_returns_when_it_is_closed_after_three_connections_part_1_of_2() {
-    listens(3, &[None, Some(0), Some(1), Some(7)]);
+fn listen_returns_when_it_is_closed_after_two_connections_part_3_of_3() {
+    listens(2, &[Some(6), Some(7)]);
 }
 
-fn listen_returns_when_it_is_closed_after_three_connections_part_2_of_2() {
-    listens(3, &[Some(2), Some(3), Some(4), Some(5)]);
+fn listen_returns_when_it_is_closed_after_three_connections_part_1_of_3() {
+    listens(3, &[None, Some(0), Some(1)]);
+}
+
+fn listen_returns_when_it_is_closed_after_three_connections_part_2_of_3() {
+    listens(3, &[Some(2), Some(3), Some(4)]);
+}
+
+fn listen_returns_when_it_is_closed_after_three_connections_part_3_of_3() {
+    listens(3, &[Some(5), Some(7)]);
 }
 
 /// `quiet` waits for tasks that no handle names, which a program is not given: it
