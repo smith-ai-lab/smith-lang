@@ -55,12 +55,55 @@ pub const READ_FILE: usize = 5;
 /// predict and always succeeds.
 const PRNG_DLL: &[u8] = b"bcryptprimitives.dll";
 const PRNG: &str = "ProcessPrng";
+/// The library of the sockets, which only a program that carries `net` asks
+/// the loader for, and the functions of it that such a program calls, in the
+/// order of their slots. They are the thin wrappers over the system's sockets:
+/// `WSAStartup`, which a program calls once before its first operation of `net`,
+/// `WSAGetLastError`, which says why a call refused, and one for each call of
+/// the kernel that `net` asks for.
+const SOCKETS_DLL: &[u8] = b"WS2_32.dll";
+const SOCKETS: [&str; 12] = [
+    "WSAStartup",
+    "WSAGetLastError",
+    "socket",
+    "bind",
+    "listen",
+    "accept",
+    "connect",
+    "getsockname",
+    "setsockopt",
+    "sendto",
+    "recvfrom",
+    "closesocket",
+];
+pub const WSA_STARTUP: usize = 0;
+pub const WSA_GET_LAST_ERROR: usize = 1;
+pub const SOCKET: usize = 2;
+pub const BIND: usize = 3;
+pub const LISTEN: usize = 4;
+pub const ACCEPT: usize = 5;
+pub const CONNECT: usize = 6;
+pub const GET_SOCK_NAME: usize = 7;
+pub const SET_SOCK_OPT: usize = 8;
+pub const SEND_TO: usize = 9;
+pub const RECV_FROM: usize = 10;
+pub const CLOSE_SOCKET: usize = 11;
+/// The slot of a function of `WS2_32.dll`. A program that carries `net` imports
+/// every symbol of `KERNEL32.dll`, so the library of sockets is the second, after
+/// the slot that ends the first.
+pub const fn socket_slot(function: usize) -> usize {
+    IMPORTS.len() + 1 + function
+}
 /// `ProcessPrng`'s slot in the import address table, which follows the slots
-/// of `KERNEL32.dll` and the one that ends them. A program that asks for it
-/// imports the first five symbols of `KERNEL32.dll`, and `ReadFile` too when
-/// it reads standard input.
-pub const fn process_prng(reads: bool) -> usize {
-    if reads {
+/// of `KERNEL32.dll` and the one that ends them, and, in a program that
+/// carries `net`, those of `WS2_32.dll` and the one that ends them. A program that
+/// asks for it imports the first five symbols of `KERNEL32.dll`, and
+/// `ReadFile` too when it reads standard input, and all of them when it
+/// carries `net`.
+pub const fn process_prng(reads: bool, net: bool) -> usize {
+    if net {
+        IMPORTS.len() + 1 + SOCKETS.len() + 1
+    } else if reads {
         IMPORTS.len() + 1
     } else {
         IMPORTS.len()
@@ -73,6 +116,8 @@ pub struct Needs {
     pub kernel: &'static [&'static str],
     /// Whether it imports `ProcessPrng`.
     pub prng: bool,
+    /// Whether it imports the sockets of `WS2_32.dll`.
+    pub net: bool,
 }
 
 /// The symbols a program imports: `VirtualAlloc` only if it asks for memory,
@@ -80,9 +125,17 @@ pub struct Needs {
 /// which asks for memory too, and `ProcessPrng` only if it asks for random
 /// bytes, which asks for memory to say that it could not get them, and so
 /// imports the first five, and `ReadFile` only if it reads standard input,
-/// which asks for memory to hold what it reads, and so imports all.
-pub fn imports(allocates: bool, takes_arguments: bool, entropy: bool, reads: bool) -> Needs {
-    let kernel: &'static [&'static str] = if reads {
+/// which asks for memory to hold what it reads, and so imports all. The
+/// sockets are asked of `WS2_32.dll` only by a program that carries `net`,
+/// which asks for memory to build what it reads, and so imports all.
+pub fn imports(
+    allocates: bool,
+    takes_arguments: bool,
+    entropy: bool,
+    reads: bool,
+    net: bool,
+) -> Needs {
+    let kernel: &'static [&'static str] = if reads || net {
         &IMPORTS
     } else if takes_arguments || entropy {
         &IMPORTS[..5]
@@ -94,6 +147,7 @@ pub fn imports(allocates: bool, takes_arguments: bool, entropy: bool, reads: boo
     Needs {
         kernel,
         prng: entropy,
+        net,
     }
 }
 
@@ -300,72 +354,84 @@ fn section_header(out: &mut Vec<u8>, section: &Section) {
     put32(out, section.characteristics);
 }
 
+/// A library the program imports, and the symbols of it.
+struct Library {
+    dll: &'static [u8],
+    symbols: Vec<&'static str>,
+}
+
 /// The import directory, with one entry for `KERNEL32.dll`, one for the
-/// library of `ProcessPrng` when it is needed, and one that ends it; the lookup
-/// tables, then the address tables, which follow one another so that a slot
-/// of the second is counted on from the first, each a slot for every symbol
-/// and one that ends it; then each symbol's hint and name, and the libraries'
-/// names. `rva` is where the section is in memory.
+/// library of the sockets when a program carries `net`, one for the library of
+/// `ProcessPrng` when it is needed, and one that ends it; the lookup tables, then
+/// the address tables, which follow one another so that a slot of one is
+/// counted on from the one before, each a slot for every symbol and one that
+/// ends it; then each symbol's hint and name, and the libraries' names. `rva` is
+/// where the section is in memory.
 fn import_tables(rva: u32, needs: &Needs) -> Imports {
-    let libraries = 1 + u32::from(needs.prng);
-    let directory_size = (libraries + 1) * 20;
-    let first_size = 8 * (needs.kernel.len() as u32 + 1);
-    let second_size = if needs.prng { 16 } else { 0 };
-    // The tables of 8-byte entries begin on a multiple of 8, which the three
-    // entries of the directory, 60 bytes, do not leave.
-    let lookup = directory_size.next_multiple_of(8);
-    let second_lookup = lookup + first_size;
-    let iat = second_lookup + second_size;
-    let second_iat = iat + first_size;
-    let names_start = second_iat + second_size;
-    let mut names = Vec::new();
-    let mut name_offsets = Vec::new();
-    let symbols: Vec<&str> = needs
-        .kernel
-        .iter()
-        .copied()
-        .chain(needs.prng.then_some(PRNG))
-        .collect();
-    for name in &symbols {
-        name_offsets.push(names_start + names.len() as u32);
-        names.extend_from_slice(&[0, 0]); // no hint
-        names.extend_from_slice(name.as_bytes());
-        names.push(0);
-        if names.len() % 2 == 1 {
-            names.push(0);
-        }
+    let mut libraries = vec![Library {
+        dll: DLL,
+        symbols: needs.kernel.to_vec(),
+    }];
+    if needs.net {
+        libraries.push(Library {
+            dll: SOCKETS_DLL,
+            symbols: SOCKETS.to_vec(),
+        });
     }
-    let dll = names_start + names.len() as u32;
-    names.extend_from_slice(DLL);
-    names.push(0);
-    let second_dll = names_start + names.len() as u32;
     if needs.prng {
-        names.extend_from_slice(PRNG_DLL);
+        libraries.push(Library {
+            dll: PRNG_DLL,
+            symbols: vec![PRNG],
+        });
+    }
+    let directory_size = (libraries.len() as u32 + 1) * 20;
+    let sizes: Vec<u32> = libraries
+        .iter()
+        .map(|l| 8 * (l.symbols.len() as u32 + 1))
+        .collect();
+    let total: u32 = sizes.iter().sum();
+    // The tables of 8-byte entries begin on a multiple of 8.
+    let lookup = directory_size.next_multiple_of(8);
+    let iat = lookup + total;
+    let names_start = iat + total;
+    let mut names = Vec::new();
+    let mut name_offsets: Vec<Vec<u32>> = Vec::new();
+    for library in &libraries {
+        let mut offsets = Vec::new();
+        for name in &library.symbols {
+            offsets.push(names_start + names.len() as u32);
+            names.extend_from_slice(&[0, 0]); // no hint
+            names.extend_from_slice(name.as_bytes());
+            names.push(0);
+            if names.len() % 2 == 1 {
+                names.push(0);
+            }
+        }
+        name_offsets.push(offsets);
+    }
+    let mut dll_names = Vec::new();
+    for library in &libraries {
+        dll_names.push(names_start + names.len() as u32);
+        names.extend_from_slice(library.dll);
         names.push(0);
     }
 
     let mut bytes = Vec::new();
-    put32(&mut bytes, rva + lookup);
-    put32(&mut bytes, 0); // no time stamp
-    put32(&mut bytes, 0); // no forwarders
-    put32(&mut bytes, rva + dll);
-    put32(&mut bytes, rva + iat);
-    if needs.prng {
-        put32(&mut bytes, rva + second_lookup);
-        put32(&mut bytes, 0);
-        put32(&mut bytes, 0);
-        put32(&mut bytes, rva + second_dll);
-        put32(&mut bytes, rva + second_iat);
+    let mut at = 0;
+    for ((size, dll), _) in sizes.iter().zip(&dll_names).zip(&libraries) {
+        put32(&mut bytes, rva + lookup + at);
+        put32(&mut bytes, 0); // no time stamp
+        put32(&mut bytes, 0); // no forwarders
+        put32(&mut bytes, rva + dll);
+        put32(&mut bytes, rva + iat + at);
+        at += size;
     }
     bytes.resize(lookup as usize, 0);
-    let kernel_count = needs.kernel.len();
     for _ in 0..2 {
-        for offset in &name_offsets[..kernel_count] {
-            put64(&mut bytes, u64::from(rva + offset));
-        }
-        put64(&mut bytes, 0);
-        if needs.prng {
-            put64(&mut bytes, u64::from(rva + name_offsets[kernel_count]));
+        for offsets in &name_offsets {
+            for offset in offsets {
+                put64(&mut bytes, u64::from(rva + offset));
+            }
             put64(&mut bytes, 0);
         }
     }
@@ -373,7 +439,7 @@ fn import_tables(rva: u32, needs: &Needs) -> Imports {
     Imports {
         bytes,
         iat,
-        iat_size: first_size + second_size,
+        iat_size: total,
         directory_size,
     }
 }

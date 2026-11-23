@@ -74,12 +74,22 @@ pub const MACHINE: &[Test] = &[
     ),
 ];
 
-/// The targets that build the program: those that talk to the kernel.
+/// The targets that build the program: those that talk to the kernel, which
+/// on Windows is the network through `WS2_32.dll`, and not the clock.
 fn kernel() -> Vec<Target> {
     targets::runnable()
         .into_iter()
-        .filter(|t| t.name().starts_with("linux") || t.name().starts_with("macos"))
+        .filter(|t| {
+            t.name().starts_with("linux")
+                || t.name().starts_with("macos")
+                || t.name().starts_with("windows")
+        })
         .collect()
+}
+
+/// The targets that build the clock: those of Linux and macOS.
+fn clock() -> Vec<Target> {
+    kernel().into_iter().filter(|t| !t.name().starts_with("windows")).collect()
 }
 
 /// The program, built once for `target`.
@@ -89,6 +99,17 @@ fn program(target: Target) -> &'static [u8] {
     let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
     cell.get_or_init(|| {
         let source = include_str!("net_program.smith");
+        targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+    })
+}
+
+/// The program that tells the time, built once for `target`.
+fn time_program(target: Target) -> &'static [u8] {
+    static X64: OnceLock<Vec<u8>> = OnceLock::new();
+    static ARM64: OnceLock<Vec<u8>> = OnceLock::new();
+    let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
+    cell.get_or_init(|| {
+        let source = include_str!("time_program.smith");
         targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
     })
 }
@@ -111,10 +132,15 @@ impl Started {
     /// Starts the program for `target` with the words, as the test's own
     /// process. Its standard output is a pipe the test reads a line at a time.
     fn new(target: Target, words: &[&str]) -> Started {
+        Started::of(program(target), words)
+    }
+
+    /// Starts the executable `bytes` with the words.
+    fn of(bytes: &[u8], words: &[&str]) -> Started {
         let dir = crate::scratch::path("net");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("program");
-        crate::executable::write(&path, program(target));
+        crate::executable::write(&path, bytes);
         let mut child = Command::new(&path)
             .args(words)
             .stdout(Stdio::piped())
@@ -302,13 +328,20 @@ fn a_port_nothing_listens_at_a_port_in_use_and_a_write_after_the_close_are_each_
 }
 
 /// A port of an address the machine does not hold is refused by the system with
-/// "the address is not available", which is 99 on Linux and 49 on macOS.
+/// "the address is not available", which is 99 on Linux, 49 on macOS, and 10049
+/// on Windows.
 fn a_failed_call_holds_its_name_and_the_systems_error_number() {
     for target in kernel() {
         if !runs(target) {
             continue;
         }
-        let number = if target.name().starts_with("macos") { 49 } else { 99 };
+        let number = if target.name().starts_with("macos") {
+            49
+        } else if target.name().starts_with("windows") {
+            10049
+        } else {
+            99
+        };
         let mut run = Started::new(target, &["elsewhere", "9"]);
         assert_eq!(
             run.line(),
@@ -320,15 +353,16 @@ fn a_failed_call_holds_its_name_and_the_systems_error_number() {
 }
 
 fn now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given() {
-    for target in kernel() {
-        if !runs(target) {
+    for target in clock() {
+        targets::record(target, &[time_program(target)]);
+        if targets::fingerprinting() {
             continue;
         }
         let before = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
-        let mut run = Started::new(target, &["clock"]);
+        let mut run = Started::of(time_program(target), &[]);
         let line = run.line().unwrap();
         let after = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -466,10 +500,24 @@ fn main() ! console, alloc {
 }
 ";
 
+/// A target that has no network refuses a program that carries `net`, and a
+/// target that has no clock, which is Windows too, one that carries `time`, each
+/// naming itself.
 fn a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them_naming_itself() {
     let program = lower(include_str!("net_program.smith").as_bytes()).unwrap();
-    assert!(program.asks_the_kernel());
+    assert!(program.asks_the_network() && !program.asks_the_clock());
+    let timed = lower(include_str!("time_program.smith").as_bytes()).unwrap();
+    assert!(timed.asks_the_clock() && !timed.asks_the_network());
     for &target in Target::ALL.iter() {
+        if target.name().starts_with("windows") {
+            let refused = std::panic::catch_unwind(|| target.emit(&timed));
+            let message = match refused {
+                Ok(_) => panic!("{} built a program that carries time", target.name()),
+                Err(why) => why.downcast_ref::<String>().cloned().unwrap_or_default(),
+            };
+            assert!(message.contains(target.name()), "{message}");
+            continue;
+        }
         if target.name().starts_with("linux") || target.name().starts_with("macos") {
             continue;
         }

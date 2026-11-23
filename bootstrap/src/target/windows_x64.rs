@@ -4,12 +4,16 @@
 
 use super::Part;
 use super::pe::{
-    self, EXIT_PROCESS, GET_COMMAND_LINE, GET_STD_HANDLE, MEM_COMMIT_RESERVE, MOST_PER_WRITE,
-    Machine, PAGE_READWRITE, READ_FILE, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
-    VIRTUAL_ALLOC, WRITE_FILE, process_prng,
+    self, ACCEPT, BIND, CLOSE_SOCKET, CONNECT, EXIT_PROCESS, GET_COMMAND_LINE, GET_SOCK_NAME,
+    GET_STD_HANDLE, LISTEN, MEM_COMMIT_RESERVE, MOST_PER_WRITE, Machine, PAGE_READWRITE, READ_FILE,
+    RECV_FROM, SEND_TO, SET_SOCK_OPT, SOCKET, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
+    STD_OUTPUT_HANDLE, VIRTUAL_ALLOC, WRITE_FILE, WSA_GET_LAST_ERROR, WSA_STARTUP, process_prng,
+    socket_slot,
 };
-use super::x86_64::{self, Asm, Place, R8, R9, RAX, RBX, RCX, RDI, RDX, RSI, Reg, System, Z};
-use crate::scalar::{Program, Stream};
+use super::x86_64::{
+    self, Asm, NE, Place, R8, R9, R10, RAX, RBX, RCX, RDI, RDX, RSI, Reg, System, Z,
+};
+use crate::scalar::{Program, Raw, Stream};
 
 const MACHINE: Machine = Machine {
     machine: 0x8664, // x86-64
@@ -32,10 +36,13 @@ const RBX_AT: u32 = 48;
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = if program.reads() {
-        x86_64::code::<Windows<true>>(program)
+    let net = program.asks_the_network();
+    let (asm, data, parts) = if net {
+        x86_64::code::<Windows<true, true>>(program)
+    } else if program.reads() {
+        x86_64::code::<Windows<true, false>>(program)
     } else {
-        x86_64::code::<Windows<false>>(program)
+        x86_64::code::<Windows<false, false>>(program)
     };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = pe::imports(
@@ -43,6 +50,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.takes_arguments(),
         program.asks_for_entropy(),
         program.reads(),
+        net,
     );
     let mut at = 0;
     let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
@@ -53,10 +61,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
 }
 
 /// Whether the program reads standard input, which moves the slot of
-/// `ProcessPrng`.
-struct Windows<const READS: bool>;
+/// `ProcessPrng`, and whether it carries `net`, which asks for the sockets
+/// of `WS2_32.dll` and moves it again.
+struct Windows<const READS: bool, const NET: bool>;
 
-impl<const READS: bool> System for Windows<READS> {
+impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
     const RESERVED: u32 = RESERVED;
     const STACK_BY_PAGE: bool = true;
     /// rsi and rdi, which calls preserve.
@@ -143,7 +152,7 @@ impl<const READS: bool> System for Windows<READS> {
         let end = asm.label();
         asm.mov(RCX, RDI);
         asm.mov(RDX, RSI);
-        asm.call_slot(process_prng(READS));
+        asm.call_slot(process_prng(READS, NET));
         asm.test32(RAX);
         asm.jcc(Z, refused);
         asm.mov32(RAX, 0);
@@ -156,6 +165,74 @@ impl<const READS: bool> System for Windows<READS> {
     fn end(asm: &mut Asm) {
         asm.mov(RCX, RDI);
         asm.call_slot(EXIT_PROCESS);
+    }
+
+    /// Asks the system's sockets to start, once, before the first operation of
+    /// `net`: `WSAStartup(0x0202, &data)`, with room on the stack for the
+    /// 408 bytes it writes, after the 32 the callee may use.
+    fn start(asm: &mut Asm) {
+        if NET {
+            asm.reserve_stack(512);
+            asm.mov32(RCX, 0x0202);
+            asm.stack_address(RDX, 32);
+            asm.call_slot(socket_slot(WSA_STARTUP));
+            asm.release_stack(512);
+        }
+    }
+
+    /// The kernel for a program that carries `net` is Windows's, which is 2.
+    /// A call is a function of `WS2_32.dll`, which takes its words as Windows
+    /// does: in rcx, rdx, r8, and r9, and then on the stack above the 32 bytes
+    /// the callee may use. A call that refuses gives -1, and `WSAGetLastError`
+    /// says why, which the call gives as minus the number. A call that gives an
+    /// `int` leaves the high half of rax as it likes, so the low half is made a
+    /// 64-bit number first. Those that give a socket give 64 bits.
+    fn raw(asm: &mut Asm, call: Raw) {
+        if call == Raw::Kind {
+            asm.mov32(RAX, if NET { 2 } else { 0 });
+            return;
+        }
+        let (function, int) = match call {
+            Raw::Socket => (SOCKET, false),
+            Raw::Accept => (ACCEPT, false),
+            Raw::Bind => (BIND, true),
+            Raw::Listen => (LISTEN, true),
+            Raw::Connect => (CONNECT, true),
+            Raw::GetSockName => (GET_SOCK_NAME, true),
+            Raw::SetSockOpt => (SET_SOCK_OPT, true),
+            Raw::SendTo => (SEND_TO, true),
+            Raw::RecvFrom => (RECV_FROM, true),
+            Raw::Close => (CLOSE_SOCKET, true),
+            _ => {
+                // The calls of the other kernels are asked where a scheduler is
+                // built for every machine, and are never run here.
+                assert!(
+                    !matches!(call, Raw::ClockGetTime | Raw::NanoSleep),
+                    "a target that has no such call refuses the program before it is built"
+                );
+                asm.mov64(RAX, -38i64 as u64);
+                return;
+            }
+        };
+        // The words are in rdi, rsi, rdx, r10, r8, and r9.
+        asm.store(Place::Frame(40), R9, 8);
+        asm.store(Place::Frame(32), R8, 8);
+        asm.mov(R9, R10);
+        asm.mov(R8, RDX);
+        asm.mov(RDX, RSI);
+        asm.mov(RCX, RDI);
+        asm.call_slot(socket_slot(function));
+        if int {
+            asm.sign_extend32(RAX, RAX);
+        }
+        let given = asm.label();
+        asm.cmp_imm8(RAX, -1);
+        asm.jcc(NE, given);
+        asm.call_slot(socket_slot(WSA_GET_LAST_ERROR));
+        asm.sign_extend32(RCX, RAX);
+        asm.mov32(RAX, 0);
+        asm.sub(RAX, RCX);
+        asm.bind(given);
     }
 
     /// Reserves and commits fresh pages. A failure gives no address.

@@ -3,7 +3,6 @@ use std.deserialize (ReadError)
 use std.fromtext (from_text)
 use std.list (append, freeze, push)
 use std.net (Address, Connection, NetError, accept, bind, close, connect, listen, net, read, receive, write)
-use std.time (now, sleep, time)
 use std.utf8 (utf8)
 
 fn name(e: NetError) -> str {
@@ -128,19 +127,12 @@ fn at(port: str, then: fn(0..65536)) ! console {
   }
 }
 
-fn main(args: List[str]) ! console, net, time, alloc {
+fn main(args: List[str]) ! console, net, alloc {
   if args.size == 0 {
     print("usage")
     return
   }
   mode = args[0]
-  if mode == "clock" {
-    before = now()
-    sleep(150)
-    after = now()
-    print("{before} {after}")
-    return
-  }
   if args.size < 2 {
     print("usage")
     return
