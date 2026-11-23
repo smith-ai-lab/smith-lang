@@ -630,6 +630,7 @@ impl<'a> Lowering<'a> {
                     OpenAt,
                     Read,
                     GetRandom,
+                    CloseQueue,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);

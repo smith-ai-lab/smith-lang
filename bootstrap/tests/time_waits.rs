@@ -30,6 +30,10 @@ pub const MACHINE: &[Test] = &[
         a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for,
     ),
     (
+        "a_thousand_groups_one_after_another_each_close_the_queue_they_made",
+        a_thousand_groups_one_after_another_each_close_the_queue_they_made,
+    ),
+    (
         "two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them",
         two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them,
     ),
@@ -62,6 +66,12 @@ fn kernel() -> Vec<Target> {
 /// Runs the program for the target with the words and gives the lines it
 /// printed, and how long it took, from outside.
 fn run(target: Target, source: &str, words: &[&str], during: impl FnOnce(&mut BufReader<std::process::ChildStdout>)) -> (Vec<String>, Duration) {
+    run_with(target, source, words, None, during)
+}
+
+/// As `run`, with at most `limit` descriptors open at once in the program, and
+/// in no other process.
+fn run_with(target: Target, source: &str, words: &[&str], limit: Option<u32>, during: impl FnOnce(&mut BufReader<std::process::ChildStdout>)) -> (Vec<String>, Duration) {
     let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
     targets::record(target, &[&bytes]);
     if targets::fingerprinting() {
@@ -72,13 +82,24 @@ fn run(target: Target, source: &str, words: &[&str], during: impl FnOnce(&mut Bu
     let path = dir.join("program");
     crate::executable::write(&path, &bytes);
     let started = Instant::now();
-    let mut child = Command::new(&path)
+    let mut command = match limit {
+        None => Command::new(&path),
+        Some(limit) => {
+            let mut sh = Command::new("sh");
+            sh.arg("-c").arg(format!("ulimit -n {limit}; exec \"$0\" \"$@\"")).arg(&path);
+            sh
+        }
+    };
+    let mut child = command
         .args(words)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    std::fs::remove_dir_all(&dir).ok();
+    // The shell of a limited run starts the program after the spawn.
+    if limit.is_none() {
+        std::fs::remove_dir_all(&dir).ok();
+    }
     let mut lines = BufReader::new(child.stdout.take().unwrap());
     during(&mut lines);
     let mut rest = String::new();
@@ -88,6 +109,7 @@ fn run(target: Target, source: &str, words: &[&str], during: impl FnOnce(&mut Bu
         rest.clear();
     }
     let status = child.wait().unwrap();
+    std::fs::remove_dir_all(&dir).ok();
     assert!(status.success(), "{} ended with {status}", target.name());
     (all, started.elapsed())
 }
@@ -132,6 +154,31 @@ fn main() ! console, alloc, time {
         assert_eq!(lines, ["slept"], "{}", target.name());
         assert!(took >= Duration::from_millis(2000), "{took:?} on {}", target.name());
         assert!(took < Duration::from_secs(20), "{took:?} on {}", target.name());
+    }
+}
+
+/// 2,000 groups, each of which waits and so makes a queue, run where only 64
+/// descriptors may be open: it ends only if each group closes its queue.
+fn a_thousand_groups_one_after_another_each_close_the_queue_they_made() {
+    let source = "use std.console (console, print)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+
+fn main() ! console, alloc, time {
+  loop i in 0..2000 {
+    with tasks()
+    t = spawn { sleep(1) }
+    join(t)
+  }
+  print(\"slept\")
+}
+";
+    for target in kernel() {
+        let (lines, _) = run_with(target, source, &[], Some(64), |_| {});
+        if targets::fingerprinting() {
+            continue;
+        }
+        assert_eq!(lines, ["slept"], "{}", target.name());
     }
 }
 
