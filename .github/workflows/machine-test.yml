@@ -30,8 +30,13 @@ jobs:
         env:
           SMITH_HASHES: ${{ runner.temp }}/case-hashes/case-hashes
         # A server of a thousand connections, and the test that connects to it, each
-        # hold a thousand descriptors, and macOS gives a process 256 until it is asked.
+        # hold a thousand descriptors, and macOS gives a process 256 until it is asked, and
+        # holds 128 connections that nothing has accepted until it is told to hold more, as
+        # a wave of a thousand needs.
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 10240 || true; fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            ulimit -n 10240 || true
+            sudo sysctl -w kern.ipc.somaxconn=4096 || true
+          fi
           cargo test --locked -- --group=machine

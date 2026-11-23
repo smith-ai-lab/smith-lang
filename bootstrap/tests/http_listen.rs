@@ -690,7 +690,9 @@ fn connections_that_nothing_accepts_are_all_held_by_the_system() {
         })
         .and_then(|n| n.trim().parse().ok())
         .unwrap_or(128);
-    let count = 1000.min(queue);
+    // The probe that found the server up is held too, and is one the system has
+    // given its place to.
+    let count = 1000.min(queue.saturating_sub(2));
     let dir = crate::scratch::path("http_listen_queue");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("program");
