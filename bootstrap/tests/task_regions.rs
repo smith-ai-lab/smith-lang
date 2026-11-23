@@ -1047,7 +1047,7 @@ fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_blo
 {
     let source = |seed: u64| {
         format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 ! task {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 ! task, console {{\n  spawn {{ waits(n) }}\n  spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 ! task, console {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 ! diverge, console {{\n  with test_scheduler_with_io({seed}, [])\n  spawn {{ parent(7) }}\n  spawn {{ waits(8) }}\n  3\n}}\n\nfn main() ! console, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 ! task, console, alloc {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 ! task, console, alloc {{\n  spawn {{ waits(n) }}\n  spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 ! task, console, alloc {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 ! diverge, console, alloc {{\n  with test_scheduler_with_io({seed}, [])\n  spawn {{ parent(7) }}\n  spawn {{ waits(8) }}\n  3\n}}\n\nfn main() ! console, diverge, alloc {{\n  print(\"{{run()}}\")\n}}\n"
         )
     };
     for seed in 0..8u64 {
