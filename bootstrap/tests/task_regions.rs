@@ -57,12 +57,25 @@ pub const ONCE: &[Test] = &[
         ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_of_one,
     ),
     (
+        "a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read",
+        a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read,
+    ),
+    (
+        "a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined",
+        a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined,
+    ),
+    (
         "a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more",
         a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more,
     ),
 ];
 
-pub const MACHINE: &[Test] = &[(
+pub const MACHINE: &[Test] = &[
+    (
+        "every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped",
+        every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped,
+    ),
+    (
     "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back",
     every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back,
 )];
@@ -360,4 +373,62 @@ fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_an
     // each held a piece of 4 KB would ask for two chunks more, and a hundred that
     // hold a frame and 64 bytes ask for no more than one.
     assert!(more.saturating_sub(few) <= scalar::pool::CHUNK as usize, "{few} bytes for 100 children, {more} for 200");
+}
+
+/// A loop that starts a child in each round, each building a list of 1,000 numbers
+/// and adding them up, and does not keep the handle: as a statement of its own,
+/// or bound to a name that nothing reads. The handle is `how`.
+fn dropped_children(count: u64, seed: u64, how: &str) -> String {
+    format!(
+        "{USES}{LISTS}fn rounds(n: u64) -> u64 ! task, alloc {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    sum = wrapping_add(sum, 1)\n  }}\n  sum\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+    )
+}
+
+/// Each of a hundred children would keep 4 KB of list and more, and a child that is never
+/// joined used to keep it until the program ended. A handle that is dropped gives
+/// the child's memory back when the child has ended, whether it was dropped before
+/// the child ended or after, which the seeds of the scheduler pick between.
+fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read() {
+    let kept = |how: &str, seed: u64| {
+        let (few_said, few) = asked(&dropped_children(10, seed, how));
+        let (many_said, more) = asked(&dropped_children(100, seed, how));
+        assert_eq!((few_said.as_str(), many_said.as_str()), ("10\n", "100\n"), "{how}");
+        more.saturating_sub(few)
+    };
+    for seed in [1, 2] {
+        for how in ["spawn { total(build(500)) }", "t = spawn { total(build(500)) }"] {
+            let more = kept(how, seed);
+            // 90 more children, each of 4 KB of list and the pieces it grew in, would
+            // be 800 KB of chunks, which is three more.
+            assert!(more <= scalar::pool::CHUNK as usize, "{more} bytes more for 90 children, `{how}`, seed {seed}");
+        }
+    }
+}
+
+/// A handle that is read is the program's to join, so what it holds is not given
+/// back until it is joined: the same loop, which joins each child after the next
+/// one starts, gives the right sums.
+fn a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined() {
+    let source = format!(
+        "{USES}{LISTS}fn run() -> u64 ! alloc, diverge {{\n  with test_scheduler(3)\n  a = spawn {{ total(build(100)) }}\n  b = spawn {{ total(build(200)) }}\n  c = spawn {{ total(build(300)) }}\n  x = join(c)\n  y = join(a)\n  z = join(b)\n  wrapping_add(x, wrapping_add(y, z))\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+    );
+    let (said, _) = asked(&source);
+    let sum = |n: u64| n * (n - 1) / 2;
+    assert_eq!(said, format!("{}\n", sum(100) + sum(200) + sum(300)));
+}
+
+fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped() {
+    let targets = runnable();
+    for (source, wanted) in [
+        (dropped_children(100, 2, "t = spawn { total(build(50)) }"), "100\n"),
+        (dropped_children(3_000, 1, "spawn { total(build(100)) }"), "3000\n"),
+    ] {
+        let said = scalar::Outcome {
+            status: 0,
+            stdout: wanted.as_bytes().to_vec(),
+        };
+        for &target in &targets {
+            runs_as(source.as_bytes(), target, &said);
+        }
+    }
 }

@@ -76,6 +76,10 @@ pub const MACHINE: &[Test] = &[
         a_thousand_connections_open_at_once_are_each_answered,
     ),
     (
+        "a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first",
+        a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first,
+    ),
+    (
         "the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given",
         the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given,
     ),
@@ -587,6 +591,23 @@ fn a_thousand_connections_open_at_once_are_each_answered() {
         let mut client = server.connect();
         client.send(get("/users/7").as_bytes());
         assert_eq!(client.reply().status, 200);
+    }
+}
+
+/// A child that is never joined gives its frame and its stack back to the pool
+/// when it ends, so a connection served is not kept by the server.
+fn a_second_wave_of_a_thousand_connections_asks_the_system_for_no_more_than_the_first() {
+    for target in kernel() {
+        if !runs(target) || !target.name().starts_with("linux") {
+            continue;
+        }
+        let server = Started::new(target);
+        a_wave(&server, 1000);
+        let before = address_space(server.child.id()).unwrap();
+        a_wave(&server, 1000);
+        let after = address_space(server.child.id()).unwrap();
+        // A wave that is open at once holds the same pieces the one before did.
+        assert!(after <= before + 1024, "{target:?}: {before} KB to {after} KB", target = target.name());
     }
 }
 

@@ -8,7 +8,8 @@ built:
   - "a task has memory of its own, in pieces of a pool that start at 64 bytes and double, so a task that waits with nothing built holds its frame and 64 bytes and `with arena()` in a task frees its block whole at its end even when the block waits, and a joined task gives its frame back to the pool when it is joined, and its stack too when its result holds no address, so 10,000 children one after another ask the system for what one does"
   - "a result that holds an address is not copied at `join`: the child's stack becomes the parent's, and is freed when the memory the parent built in its place would have been, so 10,000 children that each give a list, joined one after another, ask the system for what one does, and a list a function gives up to its caller is read there as it was built"
   - "a server of `listen` serves each connection in a task of its own, with `with arena()` around each request, so the memory of a request is freed whole when it is answered even though it waited for the connection"
-  - "not built: a child that is never joined giving its memory back, so a server keeps the frame and the stack of each connection it has served, about 20 KB of resident memory for a connection that is open and more of address space"
+  - "a child whose handle is dropped, as the value of a statement that is not the last of its block or as a name that nothing reads, gives its frame and its stack back to the pool when it ends, or at once if it has, so a second wave of 1,000 connections to a server asks the system for no more than the first"
+  - "not built: a drop that depends on the path, as a handle joined on one branch and not on the other, and a handle in a struct, a list, or a tuple that is dropped, each of which keeps the child's memory until the program ends"
 ---
 
 # Memory of a task

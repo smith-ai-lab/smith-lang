@@ -402,6 +402,14 @@ enum Func<'a> {
     Each(&'a Loop, usize, Vec<Ty>),
 }
 
+/// Whether the statements read the name anywhere in them, in a block or a
+/// lambda too.
+fn reads(stmts: &[Stmt], name: &str) -> bool {
+    crate::check::exprs(crate::check::values(stmts))
+        .into_iter()
+        .any(|e| matches!(e, Expr::Name { name: n, .. } if n == name))
+}
+
 /// The names of the statements, and of what they hold, that an array is read or
 /// assigned through at an index that is not a number written out, which are
 /// the ones whose array is kept in the frame.
@@ -1323,11 +1331,53 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    /// Whether a type is `Task[T]` of `std.task`.
+    fn is_task(&self, ty: &Ty) -> bool {
+        matches!(ty, Ty::Struct(s, _) if Some(*s) == self.typed.defs.task)
+    }
+
+    /// Marks the child with the number `number` as detached, in the word of its
+    /// frame that its scheduler keeps its state in, so that the scheduler gives
+    /// its frame and its stack back to the pool once it has ended, or at once if
+    /// it has. It is `__set_word(number, 1, __word(number, 1) | 8)`.
+    fn detach(&mut self, out: &mut Out<'a>, number: form::Value) {
+        let word = form::Type::Int(form::Bits::B64);
+        let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+        out.emit(
+            form::Op::Store {
+                ty: word,
+                address: slot,
+                value: number,
+            },
+            Vec::new(),
+        );
+        let frame = out.emit(
+            form::Op::Load {
+                ty: form::Type::Address,
+                address: slot,
+            },
+            vec![form::Type::Address],
+        )[0];
+        let by = out.int(form::Bits::B64, form::SCHEDULER_AT as i128 + 8);
+        let address = out.binary(form::Binary::Add, frame, by);
+        let state = out.emit(form::Op::Load { ty: word, address }, vec![word])[0];
+        let mark = out.int(form::Bits::B64, 8);
+        let marked = out.binary(form::Binary::Or, state, mark);
+        out.emit(
+            form::Op::Store {
+                ty: word,
+                address,
+                value: marked,
+            },
+            Vec::new(),
+        );
+    }
+
     /// Lowers the statements of a block, and gives the values of the last
     /// if it is an expression.
     fn block(&mut self, out: &mut Out<'a>, stmts: &'a [Stmt], env: &[Ty]) -> Vec<form::Value> {
         let mut result = Vec::new();
-        for stmt in stmts {
+        for (k, stmt) in stmts.iter().enumerate() {
             let outer = out.place;
             out.place = self.place_of(
                 out,
@@ -1338,7 +1388,9 @@ impl<'a> Lowering<'a> {
                 },
             );
             result = match stmt {
-                Stmt::Define { name, value, .. } => {
+                Stmt::Define {
+                    name, value, var, ..
+                } => {
                     // A name stands for the values it is bound to, so a
                     // binding needs no instruction of its own. A block runs
                     // its statements once each, in order, so an assignment
@@ -1348,6 +1400,10 @@ impl<'a> Lowering<'a> {
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
                     let (ty, value) = self.expr(out, value, env);
                     self.defining_frame = false;
+                    // A handle that nothing reads again is dropped here.
+                    if !*var && self.is_task(&ty) && !reads(&stmts[k + 1..], name) {
+                        self.detach(out, value[0]);
+                    }
                     let made = self.made_frame.take();
                     match out.find(name) {
                         Some(at) => out.assign(at, value),
@@ -1457,7 +1513,15 @@ impl<'a> Lowering<'a> {
                     self.bind(out, pattern, &ty, value);
                     Vec::new()
                 }
-                Stmt::Expr(value) => self.expr(out, value, env).1,
+                Stmt::Expr(value) => {
+                    let (ty, values) = self.expr(out, value, env);
+                    // The value of a statement that is not the last is dropped,
+                    // and a handle that is dropped detaches its child.
+                    if k + 1 < stmts.len() && self.is_task(&ty) {
+                        self.detach(out, values[0]);
+                    }
+                    values
+                }
             };
             out.place = outer;
         }
