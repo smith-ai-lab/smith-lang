@@ -421,6 +421,10 @@ pub enum Raw {
     OpenAt,
     /// `read(descriptor, bytes, count)`.
     Read,
+    /// `getrandom(bytes, count, flags)`, which fills the bytes with ones that
+    /// nobody can predict. Only Linux has it, and the lookup of a host name asks
+    /// for the ids of its queries with it.
+    GetRandom,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1228,6 +1232,7 @@ impl Program {
                             | Raw::Close
                             | Raw::OpenAt
                             | Raw::Read
+                            | Raw::GetRandom
                     ),
                     ..
                 }

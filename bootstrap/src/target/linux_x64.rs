@@ -121,6 +121,7 @@ impl System for Linux {
             Raw::SetSockOpt => 54,
             Raw::Close => 3,
             Raw::Read => 0,
+            Raw::GetRandom => 318,
             Raw::OpenAt => 257,
             Raw::NanoSleep => 35,
             Raw::ClockGetTime | Raw::Now => 228,

@@ -1,8 +1,9 @@
 use std.bits (u64)
 use std.console (console, print)
 use std.deserialize (ReadError)
-use std.entropy (entropy)
 use std.fromtext (from_text)
+use std.int (wrapping_add)
+use std.list (push)
 use std.net (NetError, resolve)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
@@ -17,11 +18,23 @@ fn written(address: List[Byte]) -> str ! alloc {
   line
 }
 
+// The bytes that a test gives for the ids of the queries, which are 1, 2, 3, and
+// so on, so that the test knows each id.
+fn counting(bytes: take List[Byte]) -> List[Byte] ! alloc {
+  var made: List[Byte] = []
+  var next: Byte = 0
+  loop i in 0..bytes.size {
+    next = wrapping_add(next, 1)
+    made = push(made, next)
+  }
+  made
+}
+
 // What `resolve` gives for the name, which the test's nameserver answers at the
 // port: each address on a line of its own, or the kind of the failure and what
 // it says.
-fn look(name: str, hosts: str, resolv: str, port: 0..65536) ! console, alloc, entropy, task {
-  match resolve(name, hosts, resolv, port) {
+fn look(name: str, hosts: str, resolv: str, port: 0..65536) ! console, alloc, task {
+  match resolve(name, hosts, resolv, port, fn(bytes) { counting(bytes) }) {
     .ok(found) {
       loop i in 0..found.size { print(written(found[i])) }
     }
@@ -46,7 +59,7 @@ fn ticker() -> u64 ! console, time, alloc, task {
   0
 }
 
-fn main(args: List[str]) ! console, alloc, entropy, task, time {
+fn main(args: List[str]) ! console, alloc, task, time {
   if args.size < 4 {
     print("usage")
     return

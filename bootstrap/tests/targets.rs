@@ -81,6 +81,10 @@ pub const ONCE: &[Test] = &[
         a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without,
     ),
     (
+        "a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup",
+        a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup,
+    ),
+    (
         "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions",
         a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
     ),
@@ -1397,27 +1401,42 @@ fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_on
         let name = target.name();
         let bytes = compile(source.as_bytes(), target).unwrap();
         let (libraries, symbols) = pe_imports(&bytes);
-        // The lookup of a host name asks for random bytes for the ids of its queries,
-        // which a program that carries `net` links `ProcessPrng` for, though a
-        // lookup is not built for Windows yet.
-        assert_eq!(
-            libraries,
-            ["KERNEL32.dll", "WS2_32.dll", "bcryptprimitives.dll"],
-            "{name} links what it needs"
-        );
+        assert_eq!(libraries, ["KERNEL32.dll", "WS2_32.dll"], "{name} links what it needs");
         for function in SOCKET_FUNCTIONS {
             assert!(symbols.iter().any(|s| s == function), "{name} does not import {function}");
         }
         for symbol in &symbols {
             assert!(
                 KERNEL32_THIN_WRAPPERS.contains(&symbol.as_str())
-                    || SOCKET_FUNCTIONS.contains(&symbol.as_str())
-                    || symbol == "ProcessPrng",
+                    || SOCKET_FUNCTIONS.contains(&symbol.as_str()),
                 "{name} imports {symbol}, which is neither a thin wrapper nor a socket function"
             );
         }
         let plain = compile(HELLO.as_bytes(), target).unwrap();
         let (libraries, _) = pe_imports(&plain);
         assert_eq!(libraries, ["KERNEL32.dll"], "{name}: a program with no net asks for no sockets");
+    }
+}
+
+/// The ids of the queries of a lookup are `getrandom` of Linux, and a program
+/// that carries `net` has the call only where `connect` can reach a lookup: one
+/// that only listens has no such call, and neither has a program with no `net`.
+fn a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup() {
+    let connects = "use std.console (console, print)\nuse std.net (NetError, connect, net)\n\nfn go(host: str) -> Result[(), NetError] ! net, alloc {\n  with c = connect(host, 80)\n  .ok(())\n}\n\nfn main() ! console, net, alloc {\n  match go(\"a.test\") {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
+    let listens = "use std.console (console, print)\nuse std.net (NetError, listen, net)\n\nfn go() -> Result[(), NetError] ! net, alloc {\n  with l = listen(\"127.0.0.1\", 8080)\n  .ok(())\n}\n\nfn main() ! console, net, alloc {\n  match go() {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
+    // `mov eax, 318` and `syscall` on x86-64, and `mov w8, 278` and `svc 0` on arm64.
+    let has = |bytes: &[u8], call: &[u8]| bytes.windows(call.len()).any(|w| w == call);
+    let linux: Vec<Target> = buildable().into_iter().filter(|t| t.name().starts_with("linux")).collect();
+    assert!(!linux.is_empty());
+    for target in linux {
+        let call: &[u8] = if target.name().ends_with("arm64") {
+            &[0xC8, 0x22, 0x80, 0x52, 0x01, 0x00, 0x00, 0xD4]
+        } else {
+            &[0xB8, 0x3E, 0x01, 0x00, 0x00, 0x0F, 0x05]
+        };
+        let name = target.name();
+        assert!(has(&compile(connects.as_bytes(), target).unwrap(), call), "{name}: a program that connects asks for random bytes");
+        assert!(!has(&compile(listens.as_bytes(), target).unwrap(), call), "{name}: a program that only listens asks for none");
+        assert!(!has(&compile(HELLO.as_bytes(), target).unwrap(), call), "{name}: a program with no net asks for none");
     }
 }
