@@ -73,6 +73,10 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         starters: Vec::new(),
         poll_any: None,
         defining_frame: false,
+        live: HashSet::new(),
+        entry: None,
+        pending_match: None,
+        floor: (0, 0),
         made_frame: None,
         through: None,
         errors: Vec::new(),
@@ -180,6 +184,13 @@ struct Lowering<'a> {
     /// call of `__frame` may be, and the lambda it made a frame of when it was.
     defining_frame: bool,
     made_frame: Option<usize>,
+    /// What the handles that are dropped need: the names read after the
+    /// statement being lowered by the blocks around it, what the next block
+    /// is entered with, and the names a block drops by the place it began at.
+    live: HashSet<String>,
+    entry: Option<Entry>,
+    pending_match: Option<MatchContext>,
+    floor: (usize, usize),
     /// The types of the state of the scheduler that polls the frames, once a
     /// program polls one under a handler that holds state.
     through: Option<Vec<form::Type>>,
@@ -400,6 +411,22 @@ enum Func<'a> {
     /// the types that stand for the type parameters of the definition it is
     /// written in: the function `each` is given.
     Each(&'a Loop, usize, Vec<Ty>),
+}
+
+/// The names the statements read, in a block or a lambda too.
+fn names_read(stmts: &[Stmt]) -> HashSet<String> {
+    names_read_in(&crate::check::values(stmts).cloned().collect::<Vec<_>>())
+}
+
+/// The names the expressions read.
+fn names_read_in(exprs: &[Expr]) -> HashSet<String> {
+    crate::check::exprs(exprs)
+        .into_iter()
+        .filter_map(|e| match e {
+            Expr::Name { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Whether the statements read the name anywhere in them, in a block or a
@@ -1025,6 +1052,53 @@ struct Row<'p> {
     binds: Vec<(String, Ty, Vec<form::Value>)>,
 }
 
+/// What a block that is an arm of a `match` or the body of a loop is entered
+/// with: the names that die in the statement the arm is in and that a path
+/// through the arm does not read, which it drops where it begins, and whether
+/// the value it gives is thrown away.
+#[derive(Clone, Default)]
+struct Entry {
+    dying: Vec<String>,
+    discard: bool,
+    /// Whether the block is an arm, which the names of the block around it are
+    /// the names of.
+    arm: bool,
+}
+
+/// What the statement a `match` is the value of says about its arms.
+#[derive(Clone)]
+struct MatchContext {
+    dying: Vec<String>,
+    discard: bool,
+    /// The names read after the statement.
+    live: HashSet<String>,
+}
+
+/// Where a child is in a value that is dropped.
+enum Dropped {
+    /// The number of a child, at a place among the scalars of the value.
+    Number(usize),
+    /// A list, whose address and length are at a place among the scalars, and
+    /// the type of its elements, each of which holds children.
+    List(usize, Ty),
+    /// An enum, whose case is at a place among the scalars, and the places of
+    /// the children that one case holds, counted from where the enum begins.
+    Case(usize, usize, Vec<usize>),
+}
+
+impl Dropped {
+    /// The same child, in a value that has `by` scalars before it.
+    fn shifted(self, by: usize) -> Dropped {
+        match self {
+            Dropped::Number(at) => Dropped::Number(at + by),
+            Dropped::List(at, of) => Dropped::List(at + by, of),
+            Dropped::Case(at, case, numbers) => {
+                Dropped::Case(at + by, case, numbers.into_iter().map(|n| n + by).collect())
+            }
+        }
+    }
+}
+
 /// What every block of a `match` being lowered shares: its blocks, the types
 /// that stand for the type parameters, the types of what it gives, and how
 /// many names each frame held before it.
@@ -1035,6 +1109,7 @@ struct Arms<'a, 'p> {
     before: Vec<usize>,
     /// What the names defined before it stood for when it began.
     was: &'p [Vec<Vec<form::Value>>],
+    context: Option<MatchContext>,
 }
 
 impl<'a> Lowering<'a> {
@@ -1331,11 +1406,6 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// Whether a type is `Task[T]` of `std.task`.
-    fn is_task(&self, ty: &Ty) -> bool {
-        matches!(ty, Ty::Struct(s, _) if Some(*s) == self.typed.defs.task)
-    }
-
     /// Marks the child with the number `number` as detached, in the word of its
     /// frame that its scheduler keeps its state in, so that the scheduler gives
     /// its frame and its stack back to the pool once it has ended, or at once if
@@ -1373,9 +1443,255 @@ impl<'a> Lowering<'a> {
         );
     }
 
+    /// Where the children are that a value of the type holds, as the places of
+    /// their numbers among its scalars, and the lists of them, which are read
+    /// when the value is dropped. `None` when it holds some where the lowering
+    /// cannot say, which is in an enum, or in a list in a list or in an element
+    /// of a list.
+    fn dropped(&self, ty: &Ty, in_list: bool, depth: usize) -> Option<Vec<Dropped>> {
+        if depth > 8 {
+            return self.holds_none(ty, 0).then(Vec::new);
+        }
+        let defs = self.typed.defs;
+        match ty {
+            Ty::Struct(s, _) if Some(*s) == defs.task => Some(vec![Dropped::Number(0)]),
+            Ty::Struct(s, args) => {
+                let mut at = 0;
+                let mut all = Vec::new();
+                for f in &defs.fields[*s] {
+                    let field = f.subst(args);
+                    all.extend(
+                        self.dropped(&field, in_list, depth + 1)?
+                            .into_iter()
+                            .map(|d| d.shifted(at)),
+                    );
+                    at += self.size(&field);
+                }
+                Some(all)
+            }
+            Ty::Tuple(items) => {
+                let mut at = 0;
+                let mut all = Vec::new();
+                for t in items {
+                    all.extend(
+                        self.dropped(t, in_list, depth + 1)?
+                            .into_iter()
+                            .map(|d| d.shifted(at)),
+                    );
+                    at += self.size(t);
+                }
+                Some(all)
+            }
+            Ty::Array(items, n) => {
+                let size = self.size(&items[0]);
+                let mut all = Vec::new();
+                for k in 0..*n as usize {
+                    all.extend(
+                        self.dropped(&items[0], in_list, depth + 1)?
+                            .into_iter()
+                            .map(|d| d.shifted(k * size)),
+                    );
+                }
+                Some(all)
+            }
+            Ty::List(of) if !in_list && !self.holds_none(&of[0], 0) => {
+                // Each element is read when the list is dropped, and what it
+                // holds is numbers only.
+                self.dropped(&of[0], true, depth + 1)?;
+                Some(vec![Dropped::List(0, of[0].clone())])
+            }
+            Ty::Enum(e, args) if !self.holds_none(ty, 0) => {
+                // The children of each case are those of the case that the
+                // value is, which is known when it is dropped.
+                let layout = self.layout(*e, args);
+                let mut all = Vec::new();
+                for (k, held) in defs.cases[*e].iter().enumerate() {
+                    let Some(held) = held else {
+                        continue;
+                    };
+                    let held = held.subst(args);
+                    if self.holds_none(&held, 0) {
+                        continue;
+                    }
+                    let mut numbers = Vec::new();
+                    for d in self.dropped(&held, true, depth + 1)? {
+                        let Dropped::Number(i) = d else {
+                            return None;
+                        };
+                        numbers.push(1 + layout.cases[k][i]);
+                    }
+                    all.push(Dropped::Case(0, k, numbers));
+                }
+                Some(all)
+            }
+            Ty::Enum(..) | Ty::List(_) => self.holds_none(ty, 0).then(Vec::new),
+            _ => Some(Vec::new()),
+        }
+    }
+
+    /// Whether no part of a value of the type is a child.
+    fn holds_none(&self, ty: &Ty, depth: usize) -> bool {
+        let defs = self.typed.defs;
+        if depth > 8 {
+            return false;
+        }
+        match ty {
+            Ty::Struct(s, _) if Some(*s) == defs.task => false,
+            Ty::Struct(s, args) => {
+                (defs.fields[*s].iter()).all(|f| self.holds_none(&f.subst(args), depth + 1))
+            }
+            Ty::Tuple(items) => items.iter().all(|t| self.holds_none(t, depth + 1)),
+            Ty::Array(items, _) | Ty::List(items) => self.holds_none(&items[0], depth + 1),
+            Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
+                .all(|t| self.holds_none(&t.subst(args), depth + 1)),
+            _ => true,
+        }
+    }
+
+    /// What the arms of the `match` that is the value of statement `k` of a block
+    /// need to drop the children that die there: the names of the block, or the
+    /// blocks it is an arm of, that hold children, that the statement reads
+    /// somewhere but not in what it matches on, and that nothing reads after it.
+    fn match_context(
+        &self,
+        out: &Out<'a>,
+        stmts: &'a [Stmt],
+        k: usize,
+        m: &'a Match,
+        live_out: &HashSet<String>,
+        discard: bool,
+    ) -> MatchContext {
+        let mut live = names_read(&stmts[k + 1..]);
+        live.extend(live_out.iter().cloned());
+        let read = names_read(&stmts[k..k + 1]);
+        let matched = names_read_in(std::slice::from_ref(&m.of));
+        let mut dying = Vec::new();
+        if let Some(frame) = out.frames.get(self.floor.0) {
+            for (at, bound) in frame.iter().enumerate().skip(self.floor.1) {
+                let name = &bound.name;
+                let supported = !self.holds_none(&bound.ty, 0)
+                    && bound.home.is_none()
+                    && self.dropped(&bound.ty, false, 0).is_some();
+                if supported
+                    && read.contains(name)
+                    && !matched.contains(name)
+                    && !live.contains(name)
+                    && out.frames[self.floor.0]
+                        .iter()
+                        .rposition(|b| &b.name == name)
+                        == Some(at)
+                    && !dying.contains(name)
+                {
+                    dying.push(name.clone());
+                }
+            }
+        }
+        MatchContext {
+            dying,
+            discard,
+            live,
+        }
+    }
+
+    /// Detaches each child a value holds, when the value is dropped.
+    fn drop_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
+        let Some(found) = self.dropped(ty, false, 0) else {
+            return;
+        };
+        for d in found {
+            match d {
+                Dropped::Number(at) => self.detach(out, values[at]),
+                Dropped::Case(at, case, numbers) => {
+                    // A child is detached when the enum is the case that holds
+                    // it, and otherwise the mark goes to a frame that nothing
+                    // reads.
+                    let tag = values[at];
+                    let ty = out.types[tag.0];
+                    let form::Type::Int(bits) = ty else {
+                        continue;
+                    };
+                    let want = out.int(bits, case as i128);
+                    let is = out.compare(form::Compare::Equal, tag, want);
+                    let scratch =
+                        out.emit(form::Op::Frame { bytes: 128 }, vec![form::Type::Address])[0];
+                    let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+                    out.emit(
+                        form::Op::Store {
+                            ty: form::Type::Address,
+                            address: slot,
+                            value: scratch,
+                        },
+                        Vec::new(),
+                    );
+                    let word = form::Type::Int(form::Bits::B64);
+                    let nowhere = out.emit(
+                        form::Op::Load {
+                            ty: word,
+                            address: slot,
+                        },
+                        vec![word],
+                    )[0];
+                    for n in numbers {
+                        let target = out.choose(is, values[n], nowhere);
+                        self.detach(out, target);
+                    }
+                }
+                Dropped::List(at, of) => {
+                    let scalars = self.scalars(&of);
+                    let (places, stride) = form::element(&scalars);
+                    let Some(numbers) = self.dropped(&of, true, 0) else {
+                        continue;
+                    };
+                    let offsets = numbers
+                        .into_iter()
+                        .filter_map(|d| match d {
+                            Dropped::Number(i) => Some(places[i]),
+                            Dropped::List(..) | Dropped::Case(..) => None,
+                        })
+                        .collect();
+                    self.call_runtime(
+                        out,
+                        Runtime::Detach { stride, offsets },
+                        vec![values[at], values[at + 1]],
+                        Vec::new(),
+                    );
+                }
+            }
+        }
+    }
+
+    /// Drops the name, which holds children that nothing will join.
+    fn drop_name(&mut self, out: &mut Out<'a>, name: &str) {
+        let Some(at) = out.find(name) else {
+            return;
+        };
+        let ty = out.names()[at].ty.clone();
+        if self.holds_none(&ty, 0) || out.names()[at].home.is_some() {
+            return;
+        }
+        let values = out.names()[at].values.clone();
+        self.drop_value(out, &ty, &values);
+    }
+
     /// Lowers the statements of a block, and gives the values of the last
     /// if it is an expression.
     fn block(&mut self, out: &mut Out<'a>, stmts: &'a [Stmt], env: &[Ty]) -> Vec<form::Value> {
+        let entry = self.entry.take();
+        // What is read after the statement this block is in, which a name that
+        // is dropped here is not among.
+        let live_out = std::mem::take(&mut self.live);
+        let discard_block = entry.as_ref().is_some_and(|e| e.discard);
+        let outer_floor = self.floor;
+        if !entry.as_ref().is_some_and(|e| e.arm) {
+            self.floor = (out.at, out.frames[out.at].len());
+        }
+        if let Some(entry) = &entry {
+            for name in &entry.dying {
+                if !reads(stmts, name) {
+                    self.drop_name(out, name);
+                }
+            }
+        }
         let mut result = Vec::new();
         for (k, stmt) in stmts.iter().enumerate() {
             let outer = out.place;
@@ -1398,11 +1714,20 @@ impl<'a> Lowering<'a> {
                     // on, and a name bound to the old ones keeps them.
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
+                    if let Expr::Match(m) = value {
+                        self.pending_match =
+                            Some(self.match_context(out, stmts, k, m, &live_out, false));
+                    }
                     let (ty, value) = self.expr(out, value, env);
+                    self.pending_match = None;
                     self.defining_frame = false;
-                    // A handle that nothing reads again is dropped here.
-                    if !*var && self.is_task(&ty) && !reads(&stmts[k + 1..], name) {
-                        self.detach(out, value[0]);
+                    // A name that nothing reads again is dropped here, with the
+                    // children it holds.
+                    if !*var
+                        && !self.holds_none(&ty, 0)
+                        && !names_read(&stmts[k + 1..]).contains(name.as_str())
+                    {
+                        self.drop_value(out, &ty, &value);
                     }
                     let made = self.made_frame.take();
                     match out.find(name) {
@@ -1514,17 +1839,28 @@ impl<'a> Lowering<'a> {
                     Vec::new()
                 }
                 Stmt::Expr(value) => {
+                    let last = k + 1 == stmts.len();
+                    let matched = matches!(value, Expr::Match(_));
+                    if let Expr::Match(m) = value {
+                        let discard = !last || discard_block;
+                        self.pending_match =
+                            Some(self.match_context(out, stmts, k, m, &live_out, discard));
+                    }
                     let (ty, values) = self.expr(out, value, env);
-                    // The value of a statement that is not the last is dropped,
-                    // and a handle that is dropped detaches its child.
-                    if k + 1 < stmts.len() && self.is_task(&ty) {
-                        self.detach(out, values[0]);
+                    self.pending_match = None;
+                    // The value of a statement that is not the last of its block,
+                    // or of the last of a block whose value is thrown away, is
+                    // dropped, and the children it holds are detached. The arms
+                    // of a `match` drop what they give themselves.
+                    if (!last || discard_block) && !matched && !self.holds_none(&ty, 0) {
+                        self.drop_value(out, &ty, &values);
                     }
                     values
                 }
             };
             out.place = outer;
         }
+        self.floor = outer_floor;
         result
     }
 
@@ -2009,6 +2345,10 @@ impl<'a> Lowering<'a> {
             out.define(name, Ty::Int(t), vec![params[0]]);
         }
         out.loops.push(round);
+        self.entry = Some(Entry {
+            discard: true,
+            ..Entry::default()
+        });
         self.block(out, &l.body, env);
         let round = out.loops.pop().expect("pushed");
         out.names_mut().truncate(names);
@@ -2213,6 +2553,7 @@ impl<'a> Lowering<'a> {
         ty: &Ty,
         env: &[Ty],
     ) -> Vec<form::Value> {
+        let context = self.pending_match.take();
         if let Some(values) = self.after_block(out, m, env) {
             return values;
         }
@@ -2234,6 +2575,7 @@ impl<'a> Lowering<'a> {
             types: types.clone(),
             before,
             was: &was,
+            context,
         };
         let rows = (m.arms.iter().enumerate())
             .map(|(arm, a)| Row {
@@ -2580,9 +2922,24 @@ impl<'a> Lowering<'a> {
 
     /// The block a row leads to, with the names it binds, which ends a leaf.
     fn leaf(&mut self, out: &mut Out<'a>, arms: &Arms<'a, '_>, row: Row) -> Leaf {
+        // What the pattern binds is the arm's, and is dropped where the arm begins
+        // if it holds children that nothing in the arm reads.
+        let mut entry = Entry {
+            arm: true,
+            ..Entry::default()
+        };
+        if let Some(context) = &arms.context {
+            entry.dying.clone_from(&context.dying);
+            entry.discard = context.discard;
+            self.live.clone_from(&context.live);
+        }
         for (name, ty, value) in row.binds {
+            if !self.holds_none(&ty, 0) {
+                entry.dying.push(name.clone());
+            }
             out.define(&name, ty, value);
         }
+        self.entry = Some(entry);
         let gives = self.block(out, &arms.arms[row.arm].body, arms.env);
         let names = self.names(out, arms);
         // A block defines names and assigns to those before it, and nothing
