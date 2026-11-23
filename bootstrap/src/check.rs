@@ -2142,6 +2142,27 @@ fn check_library_part(library: &Library, part: usize, parts: usize) -> Vec<Error
     found
 }
 
+/// The names of the modules of the standard library where what a program that
+/// reads the module in pieces takes the compiler to hold is not what the module
+/// read whole holds, which is so when `may_be_wrapper` lets a wrapper by.
+pub fn modules_whose_held_names_differ() -> Vec<String> {
+    let library = Library::standard();
+    let held = |name: &str, whole: bool| {
+        let mut resolver = Resolver::new(&library);
+        resolver.whole = whole;
+        let slot = resolver.module(name, Pos::START);
+        let mut held: Vec<String> = slot
+            .map(|slot| resolver.read[slot].held.iter().cloned().collect())
+            .unwrap_or_default();
+        held.sort();
+        held
+    };
+    (library.modules.iter())
+        .map(|(name, _)| format!("std.{name}"))
+        .filter(|name| held(name, false) != held(name, true))
+        .collect()
+}
+
 /// The errors, or else the warnings, found in reading a module and the
 /// modules it imports: what its syntax and its `use` lines say, and where its
 /// `impl`s are. Nothing is built, so what no `main` reaches is not checked.

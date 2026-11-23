@@ -17,6 +17,10 @@ pub const ONCE: &[Test] = &[
         a_module_costs_what_the_program_reaches_of_it_and_not_what_it_holds,
     ),
     (
+        "a_function_that_wraps_what_the_compiler_builds_is_held_however_it_is_written",
+        a_function_that_wraps_what_the_compiler_builds_is_held_however_it_is_written,
+    ),
+    (
         "a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_library",
         a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_library,
     ),
@@ -172,4 +176,9 @@ fn a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_li
 fn every_module_of_the_standard_library_checks_whole(part: usize) {
     let errors = smith::check_standard_library_part(part, 3);
     assert!(errors.is_empty(), "{errors:?}");
+}
+
+fn a_function_that_wraps_what_the_compiler_builds_is_held_however_it_is_written() {
+    let differ = smith::modules_whose_held_names_differ();
+    assert!(differ.is_empty(), "{differ:?}");
 }
