@@ -51,6 +51,11 @@ without Copy for Task
 pub effect task {
   pub fn start(work: take Frame) -> u64
   pub fn finish(child: u64) -> Frame
+  // For the library alone, which a program that calls it is refused: waits until
+  // every task other than the one that asks has ended, the ones that were started
+  // after it asked too, which is how a server that is shut down serves the
+  // connections it has.
+  pub fn quiet()
 }
 
 // Runs a frame to its end. The system's scheduler waits for nothing yet, so a
@@ -81,6 +86,10 @@ fn system_finish(number: u64) -> Frame {
   at
 }
 
+// The system's scheduler runs each child to its end where it starts it, so nothing
+// is left to wait for.
+fn system_quiet() { }
+
 // A group. Where a scheduler is in force it hands each child to that one, and
 // where none is it is the scheduler of its children, which runs them until they
 // all wait and then waits for the system with `epoll`, so that a task that waits
@@ -93,6 +102,7 @@ pub fn tasks[T](body: take fn() -> T ! task) -> T ! task {
       // as the scheduler in force knows it.
       start: fn(work) { start(__frame_at(__address(work))) },
       finish: fn(child) { finish(child) },
+      quiet: { quiet() },
       body: body,
     )
   } else {
@@ -144,6 +154,19 @@ fn waits_for_descriptor(n: u64) -> bool { bits(n, 4) != 0 }
 
 fn is_detached(n: u64) -> bool { bits(n, 8) != 0 }
 
+// Whether a task of the chain that begins at `first` waits for the task, which
+// then keeps its frame, since the one that waits reads it ended from there.
+fn is_waited_for(first: u64, n: u64) -> bool {
+  var found = false
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if waits_for_task(at) and on(at) == n { found = true }
+    at = after(at)
+  }
+  found
+}
+
 // Gives back the frame and the stack of every task that has ended and whose
 // handle was dropped, which the compiler marks in the state of the task where
 // the handle is dropped, and takes each out of the chain that begins at
@@ -154,13 +177,29 @@ fn reap(first: u64) -> u64 {
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     next = after(at)
-    if has_ended(at) and is_detached(at) {
+    if has_ended(at) and is_detached(at) and not is_waited_for(head, at) {
       head = leave(head, at)
       __drop(__frame_at(at))
     }
     at = next
   }
   head
+}
+
+// The first task of the chain that begins at `first` that has not ended and is
+// not `except`, or none.
+fn pending(first: u64, except: u64) -> u64 {
+  var at = first
+  var found: u64 = 0
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    if not has_ended(at) and at != except {
+      found = at
+      break
+    }
+    at = after(at)
+  }
+  found
 }
 
 // Puts a task first in the chain of those started, and gives its number.
@@ -273,6 +312,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
   var first: u64 = 0
   var next: u64 = 0
   var rng: u64 = seed
+  var current: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -284,6 +324,13 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
       first = leave(first, child)
       f = __frame_at(child)
       f
+    },
+    quiet: {
+      loop round in 0..9223372036854775807 {
+        other = pending(first, current)
+        if other == 0 { break }
+        __wait(.task(other))
+      }
     },
     body: {
       root = __frame(body)
@@ -307,6 +354,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
           .some(k) {
             n = nth_runnable(first, k)
             runs_again(n)
+            current = n
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }
@@ -449,6 +497,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
   var parked: u64 = 0
   var ep: i64 = -1
   var turn: u64 = 0
+  var current: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -460,6 +509,13 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       first = leave(first, child)
       f = __frame_at(child)
       f
+    },
+    quiet: {
+      loop round in 0..9223372036854775807 {
+        other = pending(first, current)
+        if other == 0 { break }
+        __wait(.task(other))
+      }
     },
     body: {
       root = __frame(body)
@@ -487,6 +543,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
           .some(k) {
             n = nth_runnable(first, k)
             runs_again(n)
+            current = n
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }

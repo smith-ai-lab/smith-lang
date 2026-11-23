@@ -759,6 +759,23 @@ impl<'a> Checker<'a> {
             });
         if let Some(f) = named.or_else(|| defs.function(call.name_pos, name)) {
             let sig = &defs.signatures[f];
+            // `quiet` waits for tasks that no handle names, which the language
+            // does not give a program: it is for the servers of the library.
+            if name == "quiet"
+                && defs.is_operation(f)
+                && of_std(defs.file.functions[f].pos)
+                && !of_std(call.pos)
+            {
+                self.errors.push(
+                    Error::new(
+                        call.name_pos,
+                        "`quiet` is for the library, since a program waits for a task by its handle",
+                    )
+                    .with_fix("`join` the handle of each task that is waited for"),
+                );
+                self.refusals += 1;
+                return self.unknown_call(body, call);
+            }
             if named.is_some() {
                 self.named_calls.insert(addr(call), f);
                 if call.args.len() < sig.params.len() {
