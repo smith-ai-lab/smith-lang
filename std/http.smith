@@ -10,7 +10,7 @@ use std.json (In, json_ended, json_in, to_json)
 use std.list (append, copy, freeze, push)
 use std.net (Connection, Listener, NetError, accept, close, listen_on, net, read, stop, write)
 use std.serialize (Serialize)
-use std.task (spawn, tasks)
+use std.task (quiet, spawn, tasks)
 use std.utf8 (utf8)
 
 pub struct Request {
@@ -1130,6 +1130,17 @@ fn open(port: 0..65536) -> Result[Listener, NetError] ! net {
   }
 }
 
+// Whether the error says that the listener is closed, which ends the serving.
+fn is_closed(e: NetError) -> bool {
+  match e {
+    .closed { true }
+    .unknown_host(host) { false }
+    .refused { false }
+    .in_use { false }
+    .failed(what) { false }
+  }
+}
+
 // Serves each connection in a task of its own on Linux, so that a connection
 // that says nothing holds up no other: the tasks wait in the scheduler, which
 // holds no thread for a task that waits. On macOS the handler of `net` blocks
@@ -1153,7 +1164,14 @@ fn serve_in_tasks[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
           close(c)
         }
       }
-      .err(e) { }
+      .err(e) {
+        if is_closed(e) {
+          // The listener is closed: the connections taken are served, and then
+          // `listen` returns.
+          quiet()
+          break
+        }
+      }
     }
   }
 }
@@ -1167,7 +1185,9 @@ fn serve_one_at_a_time[T](l: Listener, body: fn() -> T ! http) ! net, alloc, div
         serve_connection(c, body)
         close(c)
       }
-      .err(e) { }
+      .err(e) {
+        if is_closed(e) { break }
+      }
     }
   }
 }
