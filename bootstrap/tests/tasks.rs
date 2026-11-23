@@ -17,12 +17,20 @@ pub const ONCE: &[Test] = &[
         fetch_one_and_fetch_both_give_what_the_page_says_under_a_handler_of_fetch,
     ),
     (
-        "each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends",
-        each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends,
+        "each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends_part_1_of_2",
+        || each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends(0),
     ),
     (
-        "an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn",
-        an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn,
+        "each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends_part_2_of_2",
+        || each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends(1),
+    ),
+    (
+        "an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn_part_1_of_2",
+        || an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn(0),
+    ),
+    (
+        "an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn_part_2_of_2",
+        || an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn(1),
     ),
     (
         "a_task_holds_its_value_where_only_join_reads_it",
@@ -57,8 +65,12 @@ pub const ONCE: &[Test] = &[
         a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not,
     ),
     (
-        "a_child_runs_under_the_handlers_in_force_where_it_was_spawned",
-        a_child_runs_under_the_handlers_in_force_where_it_was_spawned,
+        "a_child_runs_under_the_handlers_in_force_where_it_was_spawned_part_1_of_2",
+        || a_child_runs_under_the_handlers_in_force_where_it_was_spawned(0),
+    ),
+    (
+        "a_child_runs_under_the_handlers_in_force_where_it_was_spawned_part_2_of_2",
+        || a_child_runs_under_the_handlers_in_force_where_it_was_spawned(1),
     ),
     (
         "a_child_under_a_handler_that_holds_state_reads_and_changes_it",
@@ -73,8 +85,16 @@ pub const ONCE: &[Test] = &[
         a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken,
     ),
     (
-        "a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is",
-        a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is,
+        "a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is_part_1_of_3",
+        || a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is(0),
+    ),
+    (
+        "a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is_part_2_of_3",
+        || a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is(1),
+    ),
+    (
+        "a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is_part_3_of_3",
+        || a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is(2),
     ),
 ];
 
@@ -135,8 +155,8 @@ fn counting(spawned: usize, joined: usize) -> String {
 
 /// A child that is joined runs exactly once, no child runs twice, and nothing
 /// runs after the block, so the last line is the one the program says after it.
-fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
-    generate::check(330, 24, |g| {
+fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends(part: u64) {
+    generate::check_part(330, 24, part, 2, |g| {
         let spawned = 1 + g.below(5);
         (spawned, g.below(spawned + 1))
     }, |&(spawned, joined)| {
@@ -159,8 +179,8 @@ fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
 }
 
 /// `fetch_twice`, `snapshot`, and a function that gives what a child read.
-fn an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn() {
-    generate::check(331, 20, |g| (g.below(1000) as u64, 1 + g.below(1000) as u64), |&(a, b)| {
+fn an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn(part: u64) {
+    generate::check_part(331, 20, part, 2, |g| (g.below(1000) as u64, 1 + g.below(1000) as u64), |&(a, b)| {
         let source = program(&format!(
             "fn snapshot() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\nfn twice(x: str) -> (u64, u64) {{\n  with tasks()\n  ta = spawn {{ wrapping_add(x.size, 1) }}\n  tb = spawn {{ wrapping_mul(x.size, 2) }}\n  (join(ta), join(tb))\n}}\n\nfn main() ! console, alloc {{\n  (p, q) = twice(\"abc\")\n  print(\"{{snapshot()}} {{p}} {{q}}\")\n}}\n"
         ));
@@ -281,8 +301,8 @@ const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](bo
 
 /// A child reads the clock that was in force where it was spawned, which a
 /// handler that holds no state gives it.
-fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
-    generate::check(332, 20, |g| (1 + g.below(4), g.below(1000) as u64), |&(children, tick)| {
+fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned(part: u64) {
+    generate::check_part(332, 20, part, 2, |g| (1 + g.below(4), g.below(1000) as u64), |&(children, tick)| {
         let mut s = format!("{CLOCK}fn readings() -> List[u64] ! alloc {{\n  with fixed({tick})\n  with tasks()\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ now() }}\n");
@@ -378,8 +398,8 @@ fn a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken() {
 /// the child. A child started where it is joined, as an argument of any call or
 /// a part of any expression, gives what the same program gives with the handle
 /// bound first, under a group and under a scheduler of a test of any seed.
-fn a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is() {
-    generate::check(1030, 3, |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64), |&(a, b, seed)| {
+fn a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is(part: u64) {
+    generate::check_part(1030, 3, part, 3, |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64), |&(a, b, seed)| {
         let sum = a + b;
         let shapes = [
             ("fn pair(x: take Task[u64], y: take Task[u64]) -> u64 ! task {{\n  wrapping_add(join(x), join(y))\n}}\n\n", format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
