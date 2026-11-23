@@ -1557,7 +1557,12 @@ impl Lowering<'_> {
             | System::TaskRelease
             | System::TaskFrame
             | System::TaskFree
-            | System::TaskMove => {
+            | System::TaskMove
+            | System::RegionNew
+            | System::RegionFree
+            | System::RegionMove
+            | System::RegionOpen
+            | System::RegionClose => {
                 unreachable!("an arena is gone once the stacks of `alloc` are passed")
             }
             System::Suspend => {

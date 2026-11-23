@@ -1246,9 +1246,18 @@ impl Machine<'_> {
                         vec![Word::Address(at)]
                     }
                     Op::System {
-                        call: System::ArenaOpen | System::ArenaClose,
+                        call:
+                            System::ArenaOpen
+                            | System::ArenaClose
+                            | System::RegionNew
+                            | System::RegionFree
+                            | System::RegionMove
+                            | System::RegionOpen
+                            | System::RegionClose,
                         ..
-                    } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
+                    } => unreachable!(
+                        "an arena or a region is gone once the stacks of `alloc` are passed"
+                    ),
                     Op::System {
                         call: System::Exit,
                         args,

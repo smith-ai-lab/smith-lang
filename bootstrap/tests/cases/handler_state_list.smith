@@ -1,0 +1,32 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.list (push)
+
+effect log {
+  fn note(v: u64)
+  fn all() -> List[u64] ! alloc
+}
+
+fn recording[T](body: fn() -> T ! log) -> T ! alloc {
+  var seen: List[u64] = []
+  log(
+    note: fn(v) {
+      seen = push(seen, v)
+    },
+    all: {
+      seen
+    },
+    body: body,
+  )
+}
+
+fn run() -> List[u64] ! alloc {
+  with recording()
+  note(1)
+  note(2)
+  all()
+}
+
+fn main() ! console, alloc {
+  print("{run()}")
+}

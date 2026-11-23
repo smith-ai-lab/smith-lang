@@ -65,10 +65,6 @@ pub const ONCE: &[Test] = &[
         a_child_under_a_handler_that_holds_state_reads_and_changes_it,
     ),
     (
-        "a_child_under_a_handler_whose_state_holds_memory_is_refused_as_not_built_yet",
-        a_child_under_a_handler_whose_state_holds_memory_is_refused_as_not_built_yet,
-    ),
-    (
         "a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents",
         a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents,
     ),
@@ -309,20 +305,6 @@ fn a_child_under_a_handler_that_holds_state_reads_and_changes_it() {
         "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  u = spawn {{ now() }}\n  wrapping_add(wrapping_mul(join(t), 10), join(u))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{readings()}}\")\n}}\n"
     ));
     assert_eq!(run(&source), "12\n");
-}
-
-/// What an operation stores in a handler's state is built where it runs, which
-/// is the stack of the child that called it, and is given back when that child
-/// ends, so a child under a handler whose state holds a list is refused until
-/// the state has a region of its own, and is never built to read memory that
-/// was given back.
-fn a_child_under_a_handler_whose_state_holds_memory_is_refused_as_not_built_yet() {
-    let source = program(
-        "effect log {\n  fn note(v: u64)\n  fn count() -> u64\n}\n\nfn recording[T](body: fn() -> T ! log) -> T ! alloc {\n  var seen: List[u64] = []\n  log(\n    note: fn(v) { seen = push(seen, v) },\n    count: { seen.size },\n    body: body,\n  )\n}\n\nfn total() -> u64 ! alloc {\n  with recording()\n  with tasks()\n  a = spawn { note(1) }\n  b = spawn { note(2) }\n  join(a)\n  join(b)\n  count()\n}\n\nfn main() ! console, alloc {\n  print(\"{total()}\")\n}\n",
-    );
-    let errors = refused(&source);
-    assert!(errors.contains("under a handler whose state holds memory"), "{errors}");
-    assert!(errors.contains("unbuilt: true"), "{errors}");
 }
 
 /// The system is asked for the same memory however many children a program

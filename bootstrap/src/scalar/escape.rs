@@ -22,13 +22,28 @@ use super::{Bits, Constant, End, Function, Instruction, Op, System, Type, Value}
 
 /// For each value of the function, whether it is in a group that the function
 /// gives back through an address it returns.
-pub fn given_back(f: &Function) -> Vec<bool> {
+pub fn given_back(f: &Function, regions: bool) -> Vec<bool> {
     let (mut groups, constant) = grouped(f);
     let mut back = vec![false; f.types.len()];
     for block in &f.blocks {
         if let End::Return(values) = &block.end {
             for v in values.iter().filter(|v| f.types[v.0] == Type::Address) {
                 back[groups.find(v.0)] = true;
+            }
+        }
+    }
+    // What a window of a region keeps is built in the region, which is where a
+    // function builds what it returns, so it is given back as that is.
+    if regions {
+        for i in f.blocks.iter().flat_map(|b| &b.instructions) {
+            if let Op::System {
+                call: System::RegionClose,
+                args,
+            } = &i.op
+            {
+                for v in args[2..].iter().filter(|v| f.types[v.0] == Type::Address) {
+                    back[groups.find(v.0)] = true;
+                }
             }
         }
     }

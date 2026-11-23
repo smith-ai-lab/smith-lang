@@ -44,6 +44,14 @@ const TRAILER_RECORDS: u64 = 24;
 /// The bit of a request's count that asks only for what the piece has room for.
 pub const TRY: u64 = 1 << 63;
 
+/// The bytes of the frame of a region: the two words of a header, the words that
+/// say where its stack is and where it started, and the four that a scheduler
+/// keeps its queues in, which a task's frame has and a region's does not use.
+const REGION_BYTES: u64 = 80;
+
+/// Where in the frame of a region the pair of its stack is.
+const REGION_STACK: u64 = 16;
+
 const NEXT: Type = Type::Address;
 const LEFT: Type = Type::Int(Bits::B64);
 /// The values of one stack, in the order they are passed.
@@ -141,11 +149,11 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
             if forced[k] {
                 vec![true; f.types.len()]
             } else {
-                escape::given_back(f)
+                escape::given_back(f, tasks_program)
             }
         })
         .collect();
-    let uses = needing(&program, &given, &polls);
+    let uses = needing(&program, &given, &polls, tasks_program);
     let rounds: Vec<escape::Rounds> = (program.functions.iter().enumerate())
         .map(|(k, f)| {
             escape::rounds(f, &|i| match &i.op {
@@ -186,6 +194,7 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
                         first: k == program.main,
                         root: roots.iter().find(|(r, _)| *r == k).map(|(_, at)| *at),
                         me_index: k,
+                        tasks: tasks_program,
                     },
                 )
             } else {
@@ -262,7 +271,10 @@ fn pooled_functions(program: &Program) -> Vec<bool> {
                         call: System::Allocate
                             | System::TaskFrame
                             | System::TaskFree
-                            | System::TaskMove,
+                            | System::TaskMove
+                            | System::RegionNew
+                            | System::RegionFree
+                            | System::RegionMove,
                         ..
                     }
                 )
@@ -304,12 +316,12 @@ fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
 
 /// Which stacks each function takes, which is what it needs where it asks the
 /// system for memory, and where it calls a function that needs some.
-fn needing(program: &Program, given: &[Vec<bool>], polls: &[bool]) -> Vec<Uses> {
+fn needing(program: &Program, given: &[Vec<bool>], polls: &[bool], regions: bool) -> Vec<Uses> {
     let mut uses = vec![Uses::default(); program.functions.len()];
     loop {
         let mut changed = false;
         for (k, f) in program.functions.iter().enumerate() {
-            let now = needing_of(f, &given[k], &uses, polls);
+            let now = needing_of(f, &given[k], &uses, polls, regions);
             if now != uses[k] {
                 uses[k] = now;
                 changed = true;
@@ -319,6 +331,18 @@ fn needing(program: &Program, given: &[Vec<bool>], polls: &[bool]) -> Vec<Uses> 
             return uses;
         }
     }
+}
+
+/// A constant of the function, made where the instructions are being kept.
+fn fresh_int(f: &mut Function, kept: &mut Vec<Instruction>, n: u64) -> Value {
+    f.types.push(LEFT);
+    let value = Value(f.types.len() - 1);
+    kept.push(Instruction {
+        results: vec![value],
+        op: Op::Constant(Constant::Int(n)),
+        at: Place::NONE,
+    });
+    value
 }
 
 /// A new pair of values of a stack in the function.
@@ -345,6 +369,8 @@ struct About<'a> {
     root: Option<u64>,
     /// The place of the function in the program.
     me_index: usize,
+    /// Whether the program starts tasks, so that a region is a frame of the pool.
+    tasks: bool,
 }
 
 /// The function with the stacks it takes before its parameters, and the one
@@ -360,8 +386,9 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
         first,
         root,
         me_index,
+        tasks,
     } = *about;
-    let me = needing_of(&f, given, uses, polls);
+    let me = needing_of(&f, given, uses, polls, tasks);
     let pool: Option<Value> = pooled[me_index].then(|| {
         f.types.push(NEXT);
         Value(f.types.len() - 1)
@@ -380,6 +407,8 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
     // opened, which its closing puts back. The blocks are taken so that the
     // block that opens an arena comes before the block that closes it.
     let mut opened: Vec<(Value, Option<[Value; 2]>)> = Vec::new();
+    // What the stack for results was where each window of a region opened.
+    let mut windows: Vec<(Value, Option<[Value; 2]>)> = Vec::new();
     let order = if opens_arena(&f) {
         reverse_postorder(&f)
     } else {
@@ -505,6 +534,94 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
                         if joins[me_index] {
                             kept.push(release_call(take, pool, pair));
                         }
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionNew,
+                    ..
+                } => {
+                    if tasks {
+                        // The frame of a region is the size of a task's: its
+                        // header, and the words that say where its stack is.
+                        let bytes = fresh_int(&mut f, &mut kept, REGION_BYTES);
+                        kept.push(Instruction {
+                            results: i.results.clone(),
+                            op: Op::Call {
+                                function: take + 2,
+                                args: with_pool(vec![bytes], pool),
+                            },
+                            at: Place::of("<stack_claim>"),
+                        });
+                    } else {
+                        // A program that starts no task has no pool, and no
+                        // region that the operations could build in.
+                        i.op = Op::Constant(Constant::Null);
+                        kept.push(i);
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionFree,
+                    args,
+                } => {
+                    if tasks {
+                        kept.push(Instruction {
+                            results: Vec::new(),
+                            op: Op::Call {
+                                function: take + 4,
+                                args: with_pool(vec![args[0]], pool),
+                            },
+                            at: Place::of("<stack_free>"),
+                        });
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionMove,
+                    args,
+                } => {
+                    if tasks {
+                        let [at, left] = now.results.expect("the function takes the stack it asks");
+                        let made = fresh(&mut f);
+                        kept.push(Instruction {
+                            results: made.to_vec(),
+                            op: Op::Call {
+                                function: take + 5,
+                                args: with_pool(vec![at, left, args[0]], pool),
+                            },
+                            at: Place::of("<stack_move>"),
+                        });
+                        now.results = Some(made);
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionOpen,
+                    args,
+                } => {
+                    if tasks {
+                        // What is built for results in the window is built in
+                        // the stack of the region, which its frame keeps.
+                        windows.push((i.results[0], now.results));
+                        let pair = load_pair(&mut f, &mut kept, args[0], REGION_STACK);
+                        now.results = Some(pair);
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionClose,
+                    args,
+                } => {
+                    if tasks {
+                        let at = windows
+                            .iter()
+                            .position(|(token, _)| *token == args[0])
+                            .expect("a window that was opened");
+                        let (_, saved) = windows.remove(at);
+                        let pair = now.results.expect("the window has the stack of the region");
+                        store_pair(&mut f, &mut kept, args[1], REGION_STACK, pair);
+                        now.results = saved;
                     }
                     continue;
                 }
@@ -713,7 +830,7 @@ fn opens_arena(f: &Function) -> bool {
         matches!(
             i.op,
             Op::System {
-                call: System::ArenaOpen,
+                call: System::ArenaOpen | System::RegionOpen,
                 ..
             }
         )
@@ -723,6 +840,16 @@ fn opens_arena(f: &Function) -> bool {
 /// The function without the openings and closings of arenas, for one that
 /// takes no stack, so that there is nothing to put back.
 fn without_arenas(mut f: Function) -> Function {
+    for i in f.blocks.iter_mut().flat_map(|b| &mut b.instructions) {
+        // With no task there is no region, so what asks for one gets none.
+        if let Op::System {
+            call: System::RegionNew,
+            ..
+        } = i.op
+        {
+            i.op = Op::Constant(Constant::Null);
+        }
+    }
     for block in &mut f.blocks {
         block.instructions.retain(|i| {
             !matches!(
@@ -730,6 +857,10 @@ fn without_arenas(mut f: Function) -> Function {
                 Op::System {
                     call: System::ArenaOpen
                         | System::ArenaClose
+                        | System::RegionFree
+                        | System::RegionMove
+                        | System::RegionOpen
+                        | System::RegionClose
                         | System::TaskMark
                         | System::TaskRelease
                         | System::TaskFrame
@@ -774,7 +905,7 @@ fn jump_of(end: &End, j: usize) -> &Jump {
 }
 
 /// Which stacks the function takes.
-fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool]) -> Uses {
+fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool], regions: bool) -> Uses {
     let mut now = Uses::default();
     for i in f.blocks.iter().flat_map(|b| &b.instructions) {
         match &i.op {
@@ -792,6 +923,18 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool]) -> Us
                 call: System::TaskFrame | System::TaskFree | System::TaskMove,
                 ..
             } => now.results = true,
+            // A region is made, windowed, given back, and moved only where tasks
+            // are, and gives the function its stack for results to move it into
+            // and to put back.
+            Op::System {
+                call:
+                    System::RegionNew
+                    | System::RegionFree
+                    | System::RegionMove
+                    | System::RegionOpen
+                    | System::RegionClose,
+                ..
+            } if regions => now.results = true,
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
                 if polls[*function] || gives_back(f, given, &i.results) {
@@ -1521,7 +1664,7 @@ fn joining_functions(program: &Program) -> Vec<bool> {
                 matches!(
                     i.op,
                     Op::System {
-                        call: System::TaskMove,
+                        call: System::TaskMove | System::RegionMove,
                         ..
                     }
                 )

@@ -251,6 +251,9 @@ struct Out<'a> {
     /// last, which are not in force while it is: what they are made of, and
     /// where each of their frames is.
     operating: Vec<Operating<'a>>,
+    /// The regions of handlers' state made in the blocks being lowered, which the
+    /// block that made each gives back where it ends, the innermost last.
+    regions: Vec<MadeRegion>,
     /// The names of each function lowered in place whose array is read or
     /// assigned at an index, by the number of the function's name.
     homed: HashMap<u32, HashSet<String>>,
@@ -299,6 +302,22 @@ struct Handler<'a> {
     frames: Vec<usize>,
     below: usize,
 }
+
+/// The region of the state of a handler, made where the handler was installed.
+struct MadeRegion {
+    /// The handler it is the region of.
+    handler: HandlerId,
+    /// The frame of the function the handler's operations are written in, where
+    /// the name of the region is bound.
+    frame: usize,
+    /// Whether an operation of the handler gave out memory that its state holds,
+    /// which the region is then moved with and not given back.
+    escapes: bool,
+}
+
+/// The name of the hidden state that stands for the region of a handler's state,
+/// the frame that the memory its operations store in the state is built in.
+const REGION: &str = "<region>";
 
 /// A handler whose operation is being lowered in place.
 struct Operating<'a> {
@@ -517,6 +536,7 @@ impl<'a> Out<'a> {
             written: 0,
             handlers: Vec::new(),
             operating: Vec::new(),
+            regions: Vec::new(),
             give_back: Vec::new(),
             roots: Vec::new(),
             homed: HashMap::new(),
@@ -1627,9 +1647,46 @@ impl<'a> Lowering<'a> {
         );
     }
 
+    /// Opens the window in which what is built for the state of the handler whose
+    /// operation is being lowered is built in the region of that state, where
+    /// `name` is a name of that state that holds memory.
+    fn open_region(&mut self, out: &mut Out<'a>, name: &str) -> Option<(form::Value, form::Value)> {
+        let region = self.region_for(out, name)?;
+        let token = out.emit(
+            form::Op::System {
+                call: form::System::RegionOpen,
+                args: vec![region],
+            },
+            vec![form::Type::Int(form::Bits::B8)],
+        )[0];
+        Some((region, token))
+    }
+
+    /// Ends a window that `open_region` opened, which keeps the values that were
+    /// built in it.
+    fn close_region(
+        &mut self,
+        out: &mut Out<'a>,
+        window: Option<(form::Value, form::Value)>,
+        kept: &[form::Value],
+    ) {
+        if let Some((region, token)) = window {
+            let mut args = vec![token, region];
+            args.extend(kept.iter().copied());
+            out.emit(
+                form::Op::System {
+                    call: form::System::RegionClose,
+                    args,
+                },
+                Vec::new(),
+            );
+        }
+    }
+
     /// Lowers the statements of a block, and gives the values of the last
     /// if it is an expression.
     fn block(&mut self, out: &mut Out<'a>, stmts: &'a [Stmt], env: &[Ty]) -> Vec<form::Value> {
+        let regions = out.regions.len();
         let mut result = Vec::new();
         for stmt in stmts {
             let outer = out.place;
@@ -1650,8 +1707,10 @@ impl<'a> Lowering<'a> {
                     // on, and a name bound to the old ones keeps them.
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
+                    let window = self.open_region(out, name);
                     let (ty, value) = self.expr(out, value, env);
                     self.defining_frame = false;
+                    self.close_region(out, window, &value);
                     // A `var` that is bound again drops the value it held.
                     self.drop_at(out, Site::Replace(addr(stmt)));
                     let made = self.made_frame.take();
@@ -1671,7 +1730,11 @@ impl<'a> Lowering<'a> {
                     value,
                     ..
                 } => {
+                    // What is built to be kept in the state of a handler is built
+                    // in the region of that state.
+                    let window = self.open_region(out, name);
                     let (_, value) = self.expr(out, value, env);
+                    self.close_region(out, window, &value);
                     // The value the name held is dropped where another takes
                     // its place.
                     self.drop_at(out, Site::Replace(addr(stmt)));
@@ -1774,7 +1837,38 @@ impl<'a> Lowering<'a> {
         if let Some(last) = stmts.last() {
             self.drop_at(out, Site::After(addr(last)));
         }
+        self.end_regions(out, regions, &result);
         result
+    }
+
+    /// Ends the regions of the handlers' state that the block made, in the
+    /// reverse of the order they were made: the region goes with what the block
+    /// gives when that holds memory, or when an operation of its handler gave out
+    /// memory that the state holds, and is given back otherwise.
+    fn end_regions(&mut self, out: &mut Out<'a>, from: usize, result: &[form::Value]) {
+        while out.regions.len() > from {
+            let made = out.regions.pop().expect("a region");
+            let at = out.frames[made.frame]
+                .iter()
+                .rposition(|b| b.name == REGION)
+                .expect("the region the handler made");
+            let address = out.frames[made.frame][at].values[0];
+            out.frames[made.frame].remove(at);
+            let holds =
+                made.escapes || result.iter().any(|v| out.types[v.0] == form::Type::Address);
+            let call = if holds {
+                form::System::RegionMove
+            } else {
+                form::System::RegionFree
+            };
+            out.emit(
+                form::Op::System {
+                    call,
+                    args: vec![address],
+                },
+                Vec::new(),
+            );
+        }
     }
 
     /// The values an expression gives, and their type, where `env` stands
