@@ -1,0 +1,20 @@
+use std.console (console, print)
+
+struct P {
+  n: Nat
+  s: str
+}
+
+fn main() ! console, alloc {
+  xs: [3]Nat = [1, 2, 3]
+  print("{xs}")
+  print("{repr(xs)}")
+  print("{["a", "b"]}")
+  print("{[P(n: 1, s: "x"), P(n: 2, s: "y")]}")
+  print("{[(1, "a"), (2, "b")]}")
+  m: [2][2]Nat = [[1, 2], [3, 4]]
+  print("{m}")
+  print("{repr(m)}")
+  e: [0]Nat = []
+  print("{e}")
+}

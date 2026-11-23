@@ -1,0 +1,13 @@
+use std.console (console, print)
+
+struct Key {
+  secret: str
+}
+
+without Fmt for Key
+
+fn main() ! console, alloc {
+  keys = [Key(secret: "a"), Key(secret: "b")]
+  print("{repr(keys)}")
+  print("{keys}")
+}

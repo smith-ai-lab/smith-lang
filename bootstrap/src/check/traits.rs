@@ -952,6 +952,7 @@ impl<'a> Defs<'a> {
                 .map(|t| Some(t.subst(args)))
                 .collect(),
             Ty::Tuple(items) => Some(items.clone()),
+            Ty::Array(of, _) if k == self.fmt || k == self.repr => Some(vec![of[0].clone()]),
             _ => None,
         }
     }

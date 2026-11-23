@@ -5,6 +5,7 @@ description: A string that holds expressions in braces, which the Fmt trait turn
 status: partial
 built:
   - "strings that hold expressions of any type that implements `Fmt`, an `impl` of `Fmt`, and every escape"
+  - "an array in the braces, written as a list is"
   - "a `List` or a `Slice` in the braces, written as [Repr](repr.md) says"
 ---
 
@@ -39,7 +40,7 @@ trait Fmt[T] {
 }
 ```
 
-A `str`, an integer, and a `bool` have it, and the text they give is the value as it reads: `{"inner"}` gives `inner`, `{1 == 2}` gives `false`. A struct, an enum, and a tuple have it too, as [Repr](repr.md) says.
+A `str`, an integer, and a `bool` have it, and the text they give is the value as it reads: `{"inner"}` gives `inner`, `{1 == 2}` gives `false`. A struct, an enum, a tuple, and an array have it too, as [Repr](repr.md) says.
 
 A type that should read differently implements `Fmt` itself.
 

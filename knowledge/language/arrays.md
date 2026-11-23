@@ -101,6 +101,10 @@ fn main() ! console, alloc {
 
 This prints `3`.
 
+## What an array is given
+
+An array has [`Fmt` and `Repr`](repr.md) when its element has them, and is written as a list is: `[1, 2, 3]`, and `[[1, 2], [3, 4]]` for an array of arrays. It has `Eq`, `Ord`, and `Copy` when its element has them, as [Traits a type is given](automatic-traits.md) says.
+
 ## The forms
 
 | Written | Is |

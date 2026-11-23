@@ -12,7 +12,7 @@ built:
 
 # Traits a type is given
 
-`Eq` and `Ord` are given automatically, as [`Copy`](ownership.md) is. A type that has them needs no `impl` to be compared.
+`Eq` and `Ord` are given automatically, as [`Copy`](ownership.md) is. A type that has them needs no `impl` to be compared. [`Fmt` and `Repr`](repr.md) are given to a struct, an enum, a tuple, an array, and a `List` from their parts in the same way.
 
 ## Given from its parts
 

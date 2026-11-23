@@ -1,11 +1,12 @@
 ---
 type: specification
 title: Repr
-description: The Repr trait, which writes a value as Smith source, and the Fmt and Repr that structs, enums, and tuples are given.
+description: The Repr trait, which writes a value as Smith source, and the Fmt and Repr that structs, enums, tuples, and arrays are given.
 status: partial
 built:
   - "`repr` and the `Repr` of a `str`, and the `Fmt` and `Repr` every struct, enum, tuple, `bool`, `()`, and integer type is given, which `without` takes away"
   - "the `Fmt` and `Repr` of `f32` and `f64`, which are one text, in a text and in `repr`; not `f16` or `bf16`"
+  - "the `Fmt` and `Repr` of an array of a size written as a number, written `[1, 2, 3]` as a list is, which `[]` is for none, and which an array has when its element has it; not a matrix"
   - "the `Fmt` and `Repr` of a `List` or a `Slice`, written `[1, 2, 3]` with the `Repr` of each element, which is `[]` for none, and which a list has when its element has it"
 ---
 
@@ -44,7 +45,7 @@ fn describe(tom: Cat) ! console, alloc {
 - The `Repr` of a struct is its construction, as in `Cat(name: "tom")`, with the `Repr` of each field.
 - A tuple is `("a", "b")` and the empty tuple is `()`.
 - A case of an enum is `.cat("a")` for a case that holds a value and `.none` for one that does not, with a leading dot as in a pattern.
-- An array or list is `[1, 2, 3]`.
+- An array or list is `[1, 2, 3]`, and an array of arrays is `[[1, 2], [3, 4]]`.
 
 ```
 use std.console (console, print)
@@ -63,7 +64,7 @@ fn pets() ! console, alloc {
 
 ## What is given
 
-Both traits are given automatically, as [`Copy`](ownership.md) is: a struct, an enum, or a tuple has each unless one of its fields lacks it. Its `Fmt` is its `Repr`, so `"{tom}"` above is `Cat(name: "tom")` and `"{Pet.cat("a")}"` is `.cat("a")`.
+Both traits are given automatically, as [`Copy`](ownership.md) is: a struct, an enum, a tuple, or an array has each unless one of its fields or its element lacks it. Its `Fmt` is its `Repr`, so `"{tom}"` above is `Cat(name: "tom")` and `"{Pet.cat("a")}"` is `.cat("a")`.
 
 `without` takes one away. After `without Fmt for Secret`, a `Secret` cannot be put in braces.
 
