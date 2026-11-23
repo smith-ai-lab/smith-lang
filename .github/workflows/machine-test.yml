@@ -31,6 +31,7 @@ jobs:
           SMITH_HASHES: ${{ runner.temp }}/case-hashes/case-hashes
         # A server of a thousand connections, and the test that connects to it, each
         # hold a thousand descriptors, and macOS gives a process 256 until it is asked.
+        shell: bash
         run: |
-          ulimit -n 10240 || true
+          if [ "$RUNNER_OS" = macOS ]; then ulimit -n 10240; fi
           cargo test --locked -- --group=machine
