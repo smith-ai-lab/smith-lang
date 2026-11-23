@@ -312,9 +312,10 @@ struct Slot {
 /// besides its results.
 struct Prepared {
     function: usize,
-    /// The values of the names the functions of its handlers use, which it
-    /// takes after its own arguments.
-    extra: Vec<form::Value>,
+    /// The names the functions of its handlers use, by frame and place in it,
+    /// whose values it takes after its own arguments. They are read when the
+    /// call is made, since an argument may change them.
+    reads: Vec<(usize, usize)>,
     /// The names it gives back after its own results.
     slots: Vec<Slot>,
 }
