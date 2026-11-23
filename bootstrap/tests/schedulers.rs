@@ -48,8 +48,8 @@ pub const ONCE: &[Test] = &[
         tasks_that_wait_for_handles_run_in_the_order_the_test_makes_the_handles_ready_for_every_seed,
     ),
     (
-        "a_child_under_the_scheduler_and_another_handler_that_holds_state_is_refused_as_not_built_yet",
-        a_child_under_the_scheduler_and_another_handler_that_holds_state_is_refused_as_not_built_yet,
+        "a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet",
+        a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet,
     ),
 ];
 
@@ -141,12 +141,12 @@ fn a_task_that_waits_for_another_runs_again_after_that_one_has_ended() {
     }
 }
 
-fn a_child_under_the_scheduler_and_another_handler_that_holds_state_is_refused_as_not_built_yet() {
+fn a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet() {
     let source = format!(
         "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T ! clock) -> T {{\n  var ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler(1)\n  with fake_clock()\n  a = spawn {{ now() }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
     );
     let errors = refused(&source);
-    assert!(errors.contains("under a handler that holds state"), "{errors}");
+    assert!(errors.contains("installed under its scheduler"), "{errors}");
 }
 
 fn every_executable_runs_the_tasks_of_a_seed_in_the_order_the_evaluator_does() {

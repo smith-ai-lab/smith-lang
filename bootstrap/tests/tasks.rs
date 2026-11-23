@@ -61,8 +61,8 @@ pub const ONCE: &[Test] = &[
         a_child_runs_under_the_handlers_in_force_where_it_was_spawned,
     ),
     (
-        "a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet",
-        a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet,
+        "a_child_under_a_handler_that_holds_state_reads_and_changes_it",
+        a_child_under_a_handler_that_holds_state_reads_and_changes_it,
     ),
     (
         "a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents",
@@ -298,15 +298,13 @@ fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
     });
 }
 
-/// A child under a handler that holds state is refused until the exclusion is
-/// built, and is never accepted with the state copied.
-fn a_child_under_a_handler_that_holds_state_is_refused_as_not_built_yet() {
+/// A child under a handler that holds state asks it, and changes what the next
+/// asks: the state goes through the poll, and is never copied into the child.
+fn a_child_under_a_handler_that_holds_state_reads_and_changes_it() {
     let source = program(&format!(
-        "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  join(t)\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{readings()}}\")\n}}\n"
+        "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  u = spawn {{ now() }}\n  wrapping_add(wrapping_mul(join(t), 10), join(u))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{readings()}}\")\n}}\n"
     ));
-    let errors = refused(&source);
-    assert!(errors.contains("under a handler that holds state"), "{errors}");
-    assert!(errors.contains("unbuilt: true"), "{errors}");
+    assert_eq!(run(&source), "12\n");
 }
 
 /// The system is asked for the same memory however many children a program

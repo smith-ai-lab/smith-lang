@@ -2,6 +2,7 @@
 //! and what leaves a function or a lambda early, and a call, which is lowered
 //! in place, with its arguments.
 
+use super::frames::holds_state;
 use super::*;
 
 /// The names a block writes where it uses a name: as a name, as the function
@@ -122,6 +123,14 @@ fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
     })
 }
 
+/// Makes the parameters of the names that were put in their frames without any,
+/// in the order they were put.
+pub(super) fn finish_params<'a>(out: &mut Out<'a>, later: Vec<(usize, usize, Vec<form::Type>)>) {
+    for (frame, at, types) in later {
+        out.frames[frame][at].values = out.params(&types);
+    }
+}
+
 impl<'a> Lowering<'a> {
     pub(super) fn function(&mut self, instance: &Instance) -> form::Function {
         self.function_with(instance, &[])
@@ -156,14 +165,24 @@ impl<'a> Lowering<'a> {
             out.define(name, ty, values);
         }
         let mut slots: Vec<Slot> = Vec::new();
-        let order = self.state_last(context.iter().map(|(_, def)| def.effect));
+        let order = self.state_last(
+            context
+                .iter()
+                .map(|(_, def)| (def.effect, holds_state(def))),
+        );
         let mut maps: Vec<Vec<(usize, usize)>> = vec![Vec::new(); context.len()];
         let mut made: Vec<Vec<Slot>> = (0..context.len()).map(|_| Vec::new()).collect();
+        let mut later = Vec::new();
         for i in order {
-            maps[i] = self.push_frames(&mut out, &context[i].1, &mut made[i]);
+            maps[i] = self.push_frames(&mut out, &context[i].1, &mut made[i], Some(&mut later));
         }
+        finish_params(&mut out, later);
         // What it gives back is in the order it takes what it is given.
-        let order = self.state_last(context.iter().map(|(_, def)| def.effect));
+        let order = self.state_last(
+            context
+                .iter()
+                .map(|(_, def)| (def.effect, holds_state(def))),
+        );
         for i in order {
             slots.append(&mut made[i]);
         }
@@ -222,6 +241,7 @@ impl<'a> Lowering<'a> {
         out: &mut Out<'a>,
         def: &HandlerDef<'a>,
         slots: &mut Vec<Slot>,
+        mut later: Option<&mut Vec<(usize, usize, Vec<form::Type>)>>,
     ) -> Vec<(usize, usize)> {
         let mut map: Vec<(usize, usize)> = Vec::new();
         for (orig, _) in &def.frames {
@@ -230,8 +250,18 @@ impl<'a> Lowering<'a> {
         }
         for ((_, names), (_, frame)) in def.frames.iter().zip(&map) {
             for c in names {
+                // What a handler's functions assign is state, which goes after
+                // what they only read, so its parameters are made once every
+                // handler's names are in their frames.
+                let defer = c.assigned && c.func.is_none() && later.is_some();
                 let (values, func) = match &c.func {
                     Some(func) => (Vec::new(), Some(moved(func, &map))),
+                    None if defer => {
+                        if let Some(later) = later.as_deref_mut() {
+                            later.push((*frame, out.frames[*frame].len(), c.scalars.clone()));
+                        }
+                        (Vec::new(), None)
+                    }
                     None => (out.params(&c.scalars), None),
                 };
                 if c.assigned {
@@ -999,12 +1029,30 @@ impl<'a> Lowering<'a> {
                 (defs.handled(e) || out.handlers.iter().any(|h| h.effect == at)).then_some(at)
             })
             .collect();
-        if suspends
-            && let Some(scheduler) = (out.handlers.iter().rev())
-                .find(|h| defs.is_scheduler(h.effect))
-                .map(|h| h.effect)
-        {
+        let polls = matches!(instance.template, Template::Free(f)
+            if !defs.is_operation(f) && self.polls(f, &mut Vec::new()));
+        let scheduler = (out.handlers.iter().rev())
+            .find(|h| defs.is_scheduler(h.effect))
+            .map(|h| h.effect);
+        if let (true, Some(scheduler)) = (suspends, scheduler) {
             handled.push(scheduler);
+        }
+        if polls || (suspends && scheduler.is_some()) {
+            // A function that waits or polls is given the state of every handler
+            // that holds any, as it is given that of the scheduler it waits under.
+            for i in 0..out.handlers.len() {
+                if out.handlers[i].def.is_none() {
+                    let (effect, operations) =
+                        (out.handlers[i].effect, out.handlers[i].operations.clone());
+                    let def = self.capture(out, effect, &operations);
+                    out.handlers[i].def = Some(Rc::new(def));
+                }
+            }
+            for h in &out.handlers {
+                if h.def.as_deref().is_some_and(holds_state) {
+                    handled.push(h.effect);
+                }
+            }
         }
         handled.sort_unstable();
         handled.dedup();
@@ -1038,8 +1086,13 @@ impl<'a> Lowering<'a> {
                 .collect()
         });
         let mut reads = Vec::new();
+        let mut state_reads = Vec::new();
         let mut slots = Vec::new();
-        let order = self.state_last(out.handlers[..upto].iter().map(|h| h.effect));
+        let order = self.state_last(
+            out.handlers[..upto]
+                .iter()
+                .map(|h| (h.effect, h.def.as_deref().is_some_and(holds_state))),
+        );
         for at in order {
             let h = &out.handlers[at];
             let def = h.def.as_ref().expect("made");
@@ -1050,17 +1103,21 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .rposition(|b| b.name == c.name)
                         .expect("a name the functions of the handler use");
-                    reads.push((frame, at));
                     if c.assigned {
+                        state_reads.push((frame, at));
                         slots.push(Slot {
                             frame,
                             name: c.name.clone(),
                             types: c.scalars.clone(),
                         });
+                    } else {
+                        reads.push((frame, at));
                     }
                 }
             }
         }
+        // What the functions assign is given after what they only read.
+        reads.extend(state_reads);
         let function = self.place(Body::Under(instance.clone(), ids));
         Prepared {
             function,
