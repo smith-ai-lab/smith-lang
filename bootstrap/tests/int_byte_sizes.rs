@@ -1,6 +1,6 @@
 //! `Int` and `Byte` are in every file with no import, and `std.bits` holds the
-//! names of sizes. Each is another name for the type the compiler has under
-//! the old name, so a value of one is a value of the other.
+//! names of sizes. `Int` is `i64` and `Byte` is `u8`, so a value of one is a
+//! value of the other.
 
 use smith::compile;
 use smith::target::Target;
