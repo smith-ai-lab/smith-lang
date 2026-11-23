@@ -202,6 +202,20 @@ fn pending(first: u64, except: u64) -> u64 {
   found
 }
 
+// Ends every task of the chain that begins at `first` but the one the block is
+// of, at the end of its block: the frame and the stack of each, whether it has
+// ended or waits, go back to the pool. The chain goes from the task started last
+// to the one started first, so a child is ended before the task that started it.
+fn cancel_rest(first: u64, root: u64) {
+  var at = first
+  loop round in 0..9223372036854775807 {
+    if at == 0 { break }
+    next = after(at)
+    if at != root { __drop(__frame_at(at)) }
+    at = next
+  }
+}
+
 // Puts a task first in the chain of those started, and gives its number.
 fn enter(n: u64, first: u64) -> u64 {
   __set_word(n, 0, first)
@@ -371,6 +385,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
           }
         }
       }
+      cancel_rest(first, top)
       result: T = __result(root)
       result
     },
@@ -570,6 +585,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
           }
         }
       }
+      cancel_rest(first, top)
       result: T = __result(root)
       result
     },

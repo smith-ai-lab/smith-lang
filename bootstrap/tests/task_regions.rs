@@ -141,6 +141,10 @@ pub const ONCE: &[Test] = &[
         "a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more",
         a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more,
     ),
+    (
+        "children_that_wait_when_the_block_that_started_them_ends_give_their_memory_back_for_20_rounds_as_for_1000",
+        children_that_wait_when_the_block_that_started_them_ends_give_their_memory_back_for_20_rounds_as_for_1000,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -953,4 +957,23 @@ fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_ask
 
 fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8() {
     generated_children(7);
+}
+
+/// Rounds of a block that starts children that wait for a handle that is never
+/// ready, one of them with a child of its own, and ends without joining any.
+fn left_waiting(rounds: u64) -> String {
+    format!(
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 ! task {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 ! task {{\n  spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 ! diverge {{\n  with test_scheduler_with_io(r, [])\n  spawn {{ waits(r) }}\n  spawn {{ parent(r) }}\n  spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 ! diverge {{\n  var sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() ! console, diverge, alloc {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
+    )
+}
+
+/// The block of a scheduler ends when its first task does, and what is still
+/// waiting then is ended, and its memory given back to the pool: the system is
+/// asked for the same memory after 20 rounds as after 1,000.
+fn children_that_wait_when_the_block_that_started_them_ends_give_their_memory_back_for_20_rounds_as_for_1000() {
+    let (few, few_bytes) = asked(&left_waiting(20));
+    let (many, many_bytes) = asked(&left_waiting(1000));
+    assert_eq!(few, format!("{}\n", (0..20u64).sum::<u64>()));
+    assert_eq!(many, format!("{}\n", (0..1000u64).sum::<u64>()));
+    assert_eq!(few_bytes, many_bytes);
 }

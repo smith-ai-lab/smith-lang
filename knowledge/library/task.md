@@ -10,7 +10,8 @@ built:
   - "`test_scheduler_with_io(seed, ready, body)` is the same with the I/O of a test: the handles of `ready` become ready one at a time, in that order, each when no task can run, and wake the tasks that wait for it with `test_ready(handle)`, so a test fixes the order in which tasks that wait for the system go on, for every seed"
   - "a child under a handler that holds state, whose state goes through each poll, and whose memory, as a list that an operation pushes onto, is built in a region of its own that the block that installs the handler gives back, as [the compiler](../compiler.md#effects) says"
   - "`task` has a third operation, `quiet`, for the library alone, which a program that calls it is refused: it waits until every task other than the one that asks has ended, and the schedulers answer it, so that `listen` of `std.http` serves the connections it took before it returns; a program waits for a task by its handle, as before"
-  - "not built: `outcome` and `Failure`, a task that ends by a failure, and the cancelling of a task, as [Cancellation](../language/cancellation.md), [How a task ends](../language/task-ending.md), and [A failed task](../language/task-failures.md) say"
+  - "when the block of a scheduler ends, each task of its group that has not ended is ended and its memory given back, as [Cancellation](../language/cancellation.md) says"
+  - "not built: `outcome` and `Failure`, a task that ends by a failure, and the ending of the values a cancelled task held, as [Cancellation](../language/cancellation.md), [How a task ends](../language/task-ending.md), and [A failed task](../language/task-failures.md) say"
   - "not built: `first`, a child that runs at the same time as its parent, and a handler that holds state installed under the scheduler of a child, which is refused as not built yet"
 ---
 
