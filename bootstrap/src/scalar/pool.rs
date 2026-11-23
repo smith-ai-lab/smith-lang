@@ -2,9 +2,9 @@
 //! a program that starts a task has: the pool is a block of memory that its
 //! address stands for, passed as a value and never kept anywhere else, so a
 //! program has the pool of the code that runs it and no other. It holds a piece
-//! at a time for each size, in classes that start at 4 KB and double up to 2 MB,
+//! at a time for each size, in classes that start at 64 bytes and double up to 2 MB,
 //! carved from chunks of 256 KB that the system gives, so that a task that holds
-//! little holds a few KB, and a task that holds more holds at most twice what it
+//! little holds a few bytes, and a task that holds more holds at most twice what it
 //! uses and a header of 16 bytes. A piece that is given back is the next that
 //! is taken of its class. A request that no class holds is asked of the system
 //! as it is, and is not kept when it is given back.
@@ -20,9 +20,9 @@ const NEXT: Type = Type::Address;
 const LEFT: Type = Type::Int(Bits::B64);
 
 /// How many classes of pieces there are.
-pub const CLASSES: u64 = 10;
+pub const CLASSES: u64 = 16;
 /// How many bytes a piece of the first class has, header included.
-pub const FIRST: u64 = 4096;
+pub const FIRST: u64 = 64;
 /// The bytes a piece spends on its header.
 pub const HEADER: u64 = 16;
 /// How many bytes the system is asked for at a time, at least.

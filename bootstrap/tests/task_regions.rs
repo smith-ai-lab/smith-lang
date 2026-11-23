@@ -1,6 +1,6 @@
 //! The memory of a task is regions of its own, taken from the pool: a task that
 //! waits with nothing built holds a few KB, a task that waits inside an arena in
-//! a loop asks the system for the same memory after 20 rounds as after 2,000,
+//! a loop asks the system for the same memory after 20 rounds as after 1,000,
 //! two tasks that each wait inside their own arena never see each other's bytes
 //! change, and a task whose result holds no address gives its memory back to the
 //! pool when it is joined.
@@ -17,8 +17,8 @@ pub const ONCE: &[Test] = &[
         a_thousand_tasks_that_wait_with_nothing_built_hold_under_eight_megabytes,
     ),
     (
-        "a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_2000",
-        a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_2000,
+        "a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000",
+        a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000,
     ),
     (
         "two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_change",
@@ -55,6 +55,10 @@ pub const ONCE: &[Test] = &[
     (
         "ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_of_one",
         ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_of_one,
+    ),
+    (
+        "a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more",
+        a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more,
     ),
 ];
 
@@ -104,13 +108,13 @@ fn arena_rounds(rounds: u64) -> String {
     )
 }
 
-fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_2000() {
+fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000() {
     let (few, few_bytes) = asked(&arena_rounds(20));
-    let (many, many_bytes) = asked(&arena_rounds(2000));
+    let (many, many_bytes) = asked(&arena_rounds(1000));
     let each = (0..200u64).sum::<u64>();
     let wanted = |n: u64| (0..n).map(|r| each + r + 1).sum::<u64>();
     assert_eq!(few, format!("{}\n", wanted(20)));
-    assert_eq!(many, format!("{}\n", wanted(2000)));
+    assert_eq!(many, format!("{}\n", wanted(1000)));
     assert_eq!(few_bytes, many_bytes);
 }
 
@@ -175,6 +179,7 @@ fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_j
         (many(1000), "500500\n".to_string()),
         (one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
         (lists_one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
+        (texts(10_000), format!("{}\n", (0..10_000u64).map(|n| n.to_string().len() as u64 + 17).sum::<u64>())),
     ];
     for (source, wanted) in big {
         let said = scalar::Outcome {
@@ -331,4 +336,27 @@ fn a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_b
     let (said, _) = asked(&list_up_to_main());
     let sum = |n: u64| (0..n).sum::<u64>();
     assert_eq!(said, format!("{} {} {}\n", sum(30), sum(40), sum(50)));
+}
+
+/// A recursion that starts a child at each level, each giving a text of twenty
+/// bytes, and joins them on the way back, so that all of them exist at once.
+fn texts(count: u64) -> String {
+    format!(
+        "{USES}fn build(n: u64) -> List[u64] ! alloc {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 ! task, alloc\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ \"{{first}}-abcdefghijklmnop\" }}\n    v = down(xs, at + 1)\n    t = join(g)\n    wrapping_add(t.size, v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 ! alloc, diverge {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(a)\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n"
+    )
+}
+
+/// The text a child gives is built in the first piece of its stack, which is 64
+/// bytes with its header and trailer, so a task that gives a text of twenty bytes
+/// costs its frame and 64 bytes, and no more.
+fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more() {
+    let (few_said, few) = asked(&texts(100));
+    let (many_said, more) = asked(&texts(200));
+    let length = |count: u64| (0..count).map(|n| n.to_string().len() as u64 + 17).sum::<u64>();
+    assert_eq!(few_said, format!("{}\n", length(100)));
+    assert_eq!(many_said, format!("{}\n", length(200)));
+    // The system gives memory in chunks of 256 KB, so a hundred children that
+    // each held a piece of 4 KB would ask for two chunks more, and a hundred that
+    // hold a frame and 64 bytes ask for no more than one.
+    assert!(more.saturating_sub(few) <= scalar::pool::CHUNK as usize, "{few} bytes for 100 children, {more} for 200");
 }

@@ -117,7 +117,7 @@ fn a_request_is_given_the_smallest_class_that_holds_it_and_its_header() {
         });
         scalar::run(&program).status
     };
-    // 4096 bytes hold 4080 and a header, 8192 hold 8176, and so on.
+    // 64 bytes hold 48 and a header, 128 hold 112, and so on.
     assert_eq!(apart(1), 1);
     assert_eq!(apart(pool::FIRST - pool::HEADER), 1);
     assert_eq!(apart(pool::FIRST - pool::HEADER + 1), 2);
