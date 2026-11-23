@@ -8,9 +8,11 @@ built:
   - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
   - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is `failed` with the one message that looking up a name is not built"
   - "`failed` holds the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
-  - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing; a handler that gives a `Listener`, a `Connection`, or a `Socket` is not built, as its handle is private to `std.net`"
+  - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing, and a handler that gives a `Listener`, a `Connection`, or a `Socket` makes it with `listener`, `connection`, or `socket` and reads its number with `handle`, as [Making a value in a handler](#making-a-value-in-a-handler) says"
+  - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux and macOS"
   - "on Linux a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` for the connection while other tasks run, and a call with no group blocks, as it did; macOS blocks until #967"
   - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held"
+  - "not built: a handler that keeps state and is under `listen` of `std.http`, which is refused as not built yet, as [Handlers and tasks](../language/task-handlers.md) says, and a handler that assigns a name under `stdio` of `std.mcp`, which stops the compiler"
   - "not Windows, or a name looked up"
 ---
 
@@ -132,6 +134,36 @@ fn ended[T](body: fn() -> T ! net) -> T {
 ```
 
 The system's handler never calls them. A value that the system's handler opened and that is released leaks its handle and does not close it, so only a handler that a test writes calls them.
+
+## Making a value in a handler
+
+A handler that plays the other side of a connection gives the program a `Connection`, a `Listener`, or a `Socket`. It makes each from a number of its own choosing with `connection`, `listener`, and `socket`, and `handle` gives the number back from the value it is lent, so it knows which one a call is about.
+
+```
+use std.net (connection, handle, listener, net, release)
+
+fn one_client[T](body: fn() -> T ! net) -> T {
+  net(
+    listen_on: fn(host, port) { .ok(listener(1)) },
+    accept: fn(l) { .ok(connection(handle(l) + 1)) },
+    stop: fn(l) { n = release(l) },
+    connect_to: fn(host, port) { .err(.refused) },
+    read: fn(c, most) { .ok([]) },
+    write: fn(c, bytes) { .ok(()) },
+    close: fn(c) { n = release(c) },
+    bind_to: fn(host, port) { .err(.refused) },
+    send: fn(s, to, bytes) { .err(.closed) },
+    receive: fn(s, most) { .err(.closed) },
+    unbind: fn(s) { n = release(s) },
+    body: body,
+  )
+}
+```
+
+Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gives no bytes, which is a connection the other side has finished with. A handler may keep what `write` is given in a `var`, as [Handlers](../language/handlers.md#a-handler-that-keeps-state) says.
+
+- **A number the system did not open reaches nothing.** The system's handler answers `listen`, `accept`, `read`, `write`, `send`, and `receive` with `failed`, whose message says the handle is not one the system opened, when it is given a value that `listener`, `connection`, or `socket` made, and makes no system call with it. `stop`, `close`, and `unbind` end such a value and close nothing. A program that makes `connection(1)` and writes to it writes nothing to standard output, under any handler.
+- **A value the system opened is not made again.** `handle` gives its number, and `connection` of that number is a value the system did not open.
 
 ## What answers it
 

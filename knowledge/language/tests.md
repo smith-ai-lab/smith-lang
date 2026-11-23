@@ -53,6 +53,25 @@ fn test_tokens() -> Result[(), Failed] {
 }
 ```
 
+## What a test carries
+
+A test is an ordinary function. It lists its effects as any function does, and the system's handlers answer them, as they answer `main`. A test that fakes one effect installs a handler of it with [`with`](with.md), and every other effect stays real.
+
+```
+use std.http (get, listen, routes)
+use std.test (Failed, expect)
+
+fn test_a_request_is_answered() -> Result[(), Failed] ! alloc {
+  with other_side()
+  with listen(port: 80)
+  with routes()
+  get("/hello", hello)
+  expect { true }
+}
+```
+
+`other_side` is a handler of [`net`](../library/net.md#making-a-value-in-a-handler) that makes a `Connection` with `connection` and answers `read` with the bytes of a request, so the server is tested with no socket and no port. The test carries `alloc` and nothing else, and `alloc` is answered by the system as it is for `main`.
+
 ## A test file is an ordinary module
 
 A test file is an ordinary module: it imports with `use`, as [Importing with use](use.md) describes, and it sees only public names. A test checks behaviour through the interface, while [contracts](contracts.md) and proofs check the internals.
@@ -73,6 +92,7 @@ Test files are left out of normal builds, so `smith build` never compiles `x_tes
 | `fn test_name() -> Result[(), Failed]` | A test: a single example that runs once |
 | `expect { e }` | The check, which reports both sides of a comparison when it fails |
 | `try expect { e }` | A check that ends the test when it fails |
+| `fn test_name() -> Result[(), Failed] ! e` | A test that carries the effect `e`, which the system answers unless the test installs a handler of it |
 | `fn test_name(key: take Key)` or `fn test_name(x: T)` | A property, as [Properties](properties.md) describes |
 
 Next: [Random values for tests](random.md)
