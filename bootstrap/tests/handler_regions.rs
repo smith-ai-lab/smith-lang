@@ -34,6 +34,10 @@ pub const ONCE: &[Test] = &[
         a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_the_region_as_a_list_is,
     ),
     (
+        "a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region",
+        a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region,
+    ),
+    (
         "a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends",
         a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends,
     ),
@@ -261,6 +265,20 @@ fn a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_th
     });
 }
 
+/// What is kept in the state may be built before the operation is called, or
+/// before the assignment in it: the caller builds a list and gives it to an
+/// operation that pushes it onto a list of lists, so the memory of the list that
+/// the caller built is the memory of the region, whichever stack it was asked of.
+fn a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region() {
+    generate::check(1047, 3, |g| (g.below(8) as u64, 1 + g.below(40) as u64), |&(seed, k)| {
+        let source = program(&format!(
+            "{BUILD}effect shelf {{\n  fn put(xs: take List[u64])\n  fn shelved() -> List[List[u64]] ! alloc\n}}\n\nfn shelving[T](body: fn() -> T ! shelf) -> T ! alloc {{\n  var shelves: List[List[u64]] = []\n  shelf(\n    put: fn(xs) {{\n      shelves = push(shelves, xs)\n    }},\n    shelved: {{\n      shelves\n    }},\n    body: body,\n  )\n}}\n\nfn stocker(n: u64, k: u64) -> u64 ! shelf, alloc {{\n  xs = build(n, k)\n  put(xs)\n  1\n}}\n\nfn run() -> List[List[u64]] ! alloc, diverge {{\n  with shelving()\n  with test_scheduler({seed})\n  a = spawn {{ stocker(40, {k}) }}\n  b = spawn {{ stocker(50, {k}) }}\n  join(a)\n  join(b)\n  n = spawn {{ noise(1) }}\n  join(n)\n  m = spawn {{ noise(2) }}\n  join(m)\n  shelved()\n}}\n\nfn main() ! console, alloc, diverge {{\n  all = run()\n  zs = build(400, 3)\n  var sum: u64 = 0\n  loop i in 0..all.size {{\n    inner = all[i]\n    sum = wrapping_add(sum, total(inner))\n  }}\n  print(\"{{all.size}} {{sum}} {{total(zs)}}\")\n}}\n"
+        ));
+        let expected = format!("2 {} {}\n", built(40, k) + built(50, k), built(400, 3));
+        assert_eq!(run(&source), expected, "for {source}");
+    });
+}
+
 /// A block that installs the handler, with children that push to it, is run for
 /// many rounds, and asks the system for no more than it does for a few: what the
 /// block's region held is given back to the pool where the block ends, as a
@@ -341,13 +359,13 @@ fn serve(l: Listener) -> Result[u64, NetError] ! net, alloc, task {
 
 fn net_program(seed: u64) -> String {
     program(&format!(
-        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) ! alloc, diverge {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", 80, serve)\n}}\n\nfn main() ! console, alloc, diverge {{\n  (served, writes) = run()\n  var bytes: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n  }}\n  print(\"{{writes.size}} {{bytes}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
+        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) ! alloc, diverge {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", 80, serve)\n}}\n\nfn main() ! console, alloc, diverge {{\n  (served, writes) = run()\n  var bytes: u64 = 0\n  var sum: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n    loop j in 0..inner.size {{\n      b: u64 = inner[j]\n      sum = wrapping_add(sum, b)\n    }}\n  }}\n  zs = build(300, 5)\n  print(\"{{writes.size}} {{bytes}} {{sum}} {{total(zs)}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
     ))
 }
 
 fn a_handler_of_net_keeps_what_write_was_given_while_listen_serves_two_connections() {
     for seed in 0..8 {
-        assert_eq!(run(&net_program(seed)), "2 4\nserved 2\n", "for seed {seed}");
+        assert_eq!(run(&net_program(seed)), format!("2 4 197 {}\nserved 2\n", built(300, 5)), "for seed {seed}");
     }
 }
 

@@ -649,31 +649,15 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
-                    call: System::RegionOpen,
+                    call: System::RegionKeep,
                     args,
                 } => {
-                    let [frame] = &args[..] else {
-                        return Err(Why::WrongCount);
-                    };
-                    let [token] = &instruction.results[..] else {
-                        return Err(Why::WrongCount);
-                    };
-                    if f.types[token.0] != Type::Int(Bits::B8) {
-                        return Err(Why::WrongType(*token));
-                    }
-                    used(frame, i, Type::Address)?;
-                }
-                Op::System {
-                    call: System::RegionClose,
-                    args,
-                } => {
-                    let [token, frame, kept @ ..] = &args[..] else {
+                    let [frame, kept @ ..] = &args[..] else {
                         return Err(Why::WrongCount);
                     };
                     if !instruction.results.is_empty() {
                         return Err(Why::WrongCount);
                     }
-                    used(token, i, Type::Int(Bits::B8))?;
                     used(frame, i, Type::Address)?;
                     for v in kept {
                         used(v, i, f.types[v.0])?;

@@ -2309,8 +2309,7 @@ impl<S: System> Writer<'_, S> {
                     | Call::RegionNew
                     | Call::RegionFree
                     | Call::RegionMove
-                    | Call::RegionOpen
-                    | Call::RegionClose,
+                    | Call::RegionKeep,
                 ..
             } => unreachable!("an arena is gone once the stacks of `alloc` are passed"),
             Op::System {

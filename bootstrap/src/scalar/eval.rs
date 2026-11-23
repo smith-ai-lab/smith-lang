@@ -1252,8 +1252,7 @@ impl Machine<'_> {
                             | System::RegionNew
                             | System::RegionFree
                             | System::RegionMove
-                            | System::RegionOpen
-                            | System::RegionClose,
+                            | System::RegionKeep,
                         ..
                     } => unreachable!(
                         "an arena or a region is gone once the stacks of `alloc` are passed"

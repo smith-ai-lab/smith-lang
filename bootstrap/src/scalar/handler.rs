@@ -73,11 +73,14 @@ pub fn takes_room(program: &Program, f: &Function) -> bool {
 struct Uses {
     results: bool,
     temporaries: bool,
+    /// Whether it builds, or calls a function that builds, in the region of a
+    /// handler's state, which takes the pool and no stack.
+    regioned: bool,
 }
 
 impl Uses {
     fn any(self) -> bool {
-        self.results || self.temporaries
+        self.results || self.temporaries || self.regioned
     }
 }
 
@@ -153,18 +156,32 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
             }
         })
         .collect();
-    let uses = needing(&program, &given, &polls, tasks_program);
+    // What is kept in the region of a handler's state is built there, in a program
+    // that starts tasks, and in no other has a region.
+    let regioned: Vec<Vec<Option<Value>>> = program
+        .functions
+        .iter()
+        .map(|f| {
+            if tasks_program {
+                escape::regioned(f)
+            } else {
+                vec![None; f.types.len()]
+            }
+        })
+        .collect();
+    let uses = needing(&program, &given, &regioned, &polls, tasks_program);
     let rounds: Vec<escape::Rounds> = (program.functions.iter().enumerate())
         .map(|(k, f)| {
             escape::rounds(f, &|i| match &i.op {
                 Op::System {
                     call: System::Allocate,
                     ..
-                } => !given[k][i.results[0].0],
+                } => !given[k][i.results[0].0] && regioned[k][i.results[0].0].is_none(),
                 Op::Call { function, .. } => {
                     uses[*function].results
                         && !polls[*function]
                         && !gives_back(f, &given[k], &i.results)
+                        && !in_a_region(&regioned[k], &i.results)
                 }
                 _ => false,
             })
@@ -184,6 +201,7 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
                 with_state(
                     f,
                     &given[k],
+                    &regioned[k],
                     &rounds[k],
                     &About {
                         uses: &uses,
@@ -306,6 +324,12 @@ fn is_poll(f: &Function) -> bool {
     f.name.ends_with("<poll>") || f.name == "<poll any>"
 }
 
+/// Whether what a call gives is memory that a region keeps, so that the callee
+/// builds it in the region.
+fn in_a_region(regioned: &[Option<Value>], results: &[Value]) -> bool {
+    results.iter().any(|v| regioned[v.0].is_some())
+}
+
 /// Whether what a call gives is memory that the function returns, so that the
 /// callee builds it in the stack for results.
 fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
@@ -316,12 +340,18 @@ fn gives_back(f: &Function, given: &[bool], results: &[Value]) -> bool {
 
 /// Which stacks each function takes, which is what it needs where it asks the
 /// system for memory, and where it calls a function that needs some.
-fn needing(program: &Program, given: &[Vec<bool>], polls: &[bool], regions: bool) -> Vec<Uses> {
+fn needing(
+    program: &Program,
+    given: &[Vec<bool>],
+    regioned: &[Vec<Option<Value>>],
+    polls: &[bool],
+    regions: bool,
+) -> Vec<Uses> {
     let mut uses = vec![Uses::default(); program.functions.len()];
     loop {
         let mut changed = false;
         for (k, f) in program.functions.iter().enumerate() {
-            let now = needing_of(f, &given[k], &uses, polls, regions);
+            let now = needing_of(f, &given[k], &regioned[k], &uses, polls, regions);
             if now != uses[k] {
                 uses[k] = now;
                 changed = true;
@@ -376,7 +406,13 @@ struct About<'a> {
 /// The function with the stacks it takes before its parameters, and the one
 /// for results before its results, taking room where it asked the system, and
 /// giving the stacks to each call that needs them, and to each block.
-fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &About) -> Function {
+fn with_state(
+    mut f: Function,
+    given: &[bool],
+    regioned: &[Option<Value>],
+    rounds: &escape::Rounds,
+    about: &About,
+) -> Function {
     let About {
         uses,
         polls,
@@ -388,7 +424,7 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
         me_index,
         tasks,
     } = *about;
-    let me = needing_of(&f, given, uses, polls, tasks);
+    let me = needing_of(&f, given, regioned, uses, polls, tasks);
     let pool: Option<Value> = pooled[me_index].then(|| {
         f.types.push(NEXT);
         Value(f.types.len() - 1)
@@ -407,8 +443,6 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
     // opened, which its closing puts back. The blocks are taken so that the
     // block that opens an arena comes before the block that closes it.
     let mut opened: Vec<(Value, Option<[Value; 2]>)> = Vec::new();
-    // What the stack for results was where each window of a region opened.
-    let mut windows: Vec<(Value, Option<[Value; 2]>)> = Vec::new();
     let order = if opens_arena(&f) {
         reverse_postorder(&f)
     } else {
@@ -597,32 +631,25 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
                     continue;
                 }
                 Op::System {
-                    call: System::RegionOpen,
-                    args,
-                } => {
-                    if tasks {
-                        // What is built for results in the window is built in
-                        // the stack of the region, which its frame keeps.
-                        windows.push((i.results[0], now.results));
-                        let pair = load_pair(&mut f, &mut kept, args[0], REGION_STACK);
-                        now.results = Some(pair);
-                    }
-                    continue;
-                }
+                    call: System::RegionKeep,
+                    ..
+                } => continue,
                 Op::System {
-                    call: System::RegionClose,
+                    call: System::Allocate,
                     args,
-                } => {
-                    if tasks {
-                        let at = windows
-                            .iter()
-                            .position(|(token, _)| *token == args[0])
-                            .expect("a window that was opened");
-                        let (_, saved) = windows.remove(at);
-                        let pair = now.results.expect("the window has the stack of the region");
-                        store_pair(&mut f, &mut kept, args[1], REGION_STACK, pair);
-                        now.results = saved;
-                    }
+                } if regioned[i.results[0].0].is_some() => {
+                    // Memory that a region keeps is built in the stack of the
+                    // region, which its frame keeps from one request to the next.
+                    let frame = regioned[i.results[0].0].expect("a region");
+                    let [at, left] = load_pair(&mut f, &mut kept, frame, REGION_STACK);
+                    let next = fresh(&mut f);
+                    i.op = Op::Call {
+                        function: take,
+                        args: with_pool(vec![at, left, args[0]], pool),
+                    };
+                    i.results.splice(0..0, next);
+                    kept.push(i);
+                    store_pair(&mut f, &mut kept, frame, REGION_STACK, next);
                     continue;
                 }
                 Op::System {
@@ -642,6 +669,50 @@ fn with_state(mut f: Function, given: &[bool], rounds: &escape::Rounds, about: &
                     };
                     i.results.splice(0..0, next);
                     *stack = Some(next);
+                }
+                Op::Call { function, args }
+                    if uses[*function].any() && tasks && in_a_region(regioned, &i.results) =>
+                {
+                    // What the callee builds for its results is built in the stack
+                    // of the region, and what it builds for its temporaries is built
+                    // where the function's are.
+                    let callee = uses[*function];
+                    let frame = (i.results.iter())
+                        .find_map(|v| regioned[v.0])
+                        .expect("a region");
+                    if first && callee.temporaries {
+                        let [at, left] = now.temporaries.expect("the function takes what it gives");
+                        let made = fresh(&mut f);
+                        kept.push(Instruction {
+                            results: made.to_vec(),
+                            op: Op::Call {
+                                function: take + 1,
+                                args: with_pool(vec![at, left], pool),
+                            },
+                            at: Place::of("<stack_take>"),
+                        });
+                        now.temporaries = Some(made);
+                    }
+                    let mut passed = Vec::new();
+                    if callee.results {
+                        passed.extend(load_pair(&mut f, &mut kept, frame, REGION_STACK));
+                    }
+                    if callee.temporaries {
+                        passed.extend(now.temporaries.expect("the function takes what it gives"));
+                    }
+                    args.splice(0..0, passed);
+                    if pooled[*function] {
+                        args.insert(0, pool.expect("a function that takes the pool gives it"));
+                    }
+                    let next = callee.results.then(|| fresh(&mut f));
+                    if let Some(next) = next {
+                        i.results.splice(0..0, next);
+                    }
+                    kept.push(i);
+                    if let Some(next) = next {
+                        store_pair(&mut f, &mut kept, frame, REGION_STACK, next);
+                    }
+                    continue;
                 }
                 Op::Call { function, args } if uses[*function].any() => {
                     let callee = uses[*function];
@@ -830,7 +901,7 @@ fn opens_arena(f: &Function) -> bool {
         matches!(
             i.op,
             Op::System {
-                call: System::ArenaOpen | System::RegionOpen,
+                call: System::ArenaOpen,
                 ..
             }
         )
@@ -859,8 +930,7 @@ fn without_arenas(mut f: Function) -> Function {
                         | System::ArenaClose
                         | System::RegionFree
                         | System::RegionMove
-                        | System::RegionOpen
-                        | System::RegionClose
+                        | System::RegionKeep
                         | System::TaskMark
                         | System::TaskRelease
                         | System::TaskFrame
@@ -905,7 +975,14 @@ fn jump_of(end: &End, j: usize) -> &Jump {
 }
 
 /// Which stacks the function takes.
-fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool], regions: bool) -> Uses {
+fn needing_of(
+    f: &Function,
+    given: &[bool],
+    regioned: &[Option<Value>],
+    uses: &[Uses],
+    polls: &[bool],
+    regions: bool,
+) -> Uses {
     let mut now = Uses::default();
     for i in f.blocks.iter().flat_map(|b| &b.instructions) {
         match &i.op {
@@ -913,7 +990,9 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool], regio
                 call: System::Allocate,
                 ..
             } => {
-                if given[i.results[0].0] {
+                if regioned[i.results[0].0].is_some() {
+                    now.regioned = true;
+                } else if given[i.results[0].0] {
                     now.results = true;
                 } else {
                     now.temporaries = true;
@@ -927,17 +1006,17 @@ fn needing_of(f: &Function, given: &[bool], uses: &[Uses], polls: &[bool], regio
             // are, and gives the function its stack for results to move it into
             // and to put back.
             Op::System {
-                call:
-                    System::RegionNew
-                    | System::RegionFree
-                    | System::RegionMove
-                    | System::RegionOpen
-                    | System::RegionClose,
+                call: System::RegionMove,
                 ..
             } if regions => now.results = true,
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
-                if polls[*function] || gives_back(f, given, &i.results) {
+                now.regioned |= callee.regioned;
+                if in_a_region(regioned, &i.results) {
+                    now.regioned = true;
+                    // What it builds for its results is built in the region.
+                    now.temporaries |= callee.temporaries;
+                } else if polls[*function] || gives_back(f, given, &i.results) {
                     now.results |= callee.results;
                     now.temporaries |= callee.temporaries;
                 } else {

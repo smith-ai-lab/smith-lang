@@ -1561,8 +1561,7 @@ impl Lowering<'_> {
             | System::RegionNew
             | System::RegionFree
             | System::RegionMove
-            | System::RegionOpen
-            | System::RegionClose => {
+            | System::RegionKeep => {
                 unreachable!("an arena is gone once the stacks of `alloc` are passed")
             }
             System::Suspend => {

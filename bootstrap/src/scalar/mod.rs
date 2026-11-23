@@ -318,18 +318,12 @@ pub enum System {
     /// task, where what the handler's block gave holds an address into them. It
     /// gives nothing.
     RegionMove,
-    /// Opens a window in which the memory that is built for results is built in
-    /// the region whose frame is at the address it takes, and not in the stack
-    /// for results of the function. It gives the token that the `RegionClose`
-    /// that ends the window takes, a byte, and is gone once the stacks of `alloc`
-    /// are passed.
-    RegionOpen,
-    /// Ends the window that the token it takes opened, which is its first
-    /// argument, and the address of the region's frame its second. The values
-    /// after them are those that were built in the window and are kept in the
-    /// region: they are the memory that the window gives back, as the values a
-    /// function returns are. It gives nothing.
-    RegionClose,
+    /// Says that the values after the first argument, the address of the frame of a
+    /// region, are kept in that region: the state of a handler is assigned them. The
+    /// memory that is, or is held with, an address among them is built in the
+    /// region, wherever in the function it is asked for, as the memory of a value
+    /// the function returns is built where its caller keeps it. It gives nothing.
+    RegionKeep,
     /// Ends the program with the status, a byte, that it takes. It gives
     /// nothing.
     Exit,
