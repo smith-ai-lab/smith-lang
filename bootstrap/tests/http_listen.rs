@@ -502,10 +502,12 @@ fn a_connection_that_ends_before_a_request_does_not_stop_the_server() {
         // Nothing is sent, and a head that is cut off is sent.
         drop(TcpStream::connect(("127.0.0.1", server.port)).unwrap());
         let mut cut = TcpStream::connect(("127.0.0.1", server.port)).unwrap();
+        // The timeout is set before the server can close its end, since macOS
+        // refuses an option of a socket whose peer has closed.
+        cut.set_read_timeout(Some(Duration::from_secs(8))).unwrap();
         cut.write_all(b"GET /users/1 HTTP/1.1\r\nho").unwrap();
         cut.shutdown(Shutdown::Write).unwrap();
         let mut rest = Vec::new();
-        cut.set_read_timeout(Some(Duration::from_secs(8))).unwrap();
         let _ = cut.read_to_end(&mut rest);
         let mut client = server.connect();
         client.send(get("/users/2").as_bytes());
