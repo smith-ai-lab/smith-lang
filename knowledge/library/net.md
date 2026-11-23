@@ -166,6 +166,37 @@ Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gi
 - **A number the system did not open reaches nothing.** The system's handler answers `listen`, `accept`, `read`, `write`, `send`, and `receive` with `failed`, whose message says the handle is not one the system opened, when it is given a value that `listener`, `connection`, or `socket` made, and makes no system call with it. `stop`, `close`, and `unbind` end such a value and close nothing. A program that makes `connection(1)` and writes to it writes nothing to standard output, under any handler.
 - **A value the system opened is not made again.** `handle` gives its number, and `connection` of that number is a value the system did not open.
 
+## Looking up a name
+
+On Linux a native executable links no C library, so it has no `getaddrinfo`, and `std.net` looks a host name up itself, in Smith, in the system's handler of `net`. `connect_to` with a name that is neither `localhost` nor a number written with dots or colons asks `/etc/hosts` and then the nameservers of `/etc/resolv.conf` over UDP, and tries each address it finds, in the order below, until one connects. It gives `unknown_host` when the name has no address, and `failed` when no nameserver answered in time. A handler written in Smith that answers `connect_to` reads no file and asks no one. On macOS and Windows the system's own lookup is called, which those systems already link.
+
+What follows is taken from how glibc (`resolv/`, `nss/nss_files`) and musl (`src/network/lookup_name.c`, `res_msend.c`, `resolvconf.c`) do it. Their documentation and source were read for what they do, and no code is copied. Each behaviour says which one Smith follows.
+
+| Behaviour | Smith | Follows | Why |
+| --- | --- | --- | --- |
+| Order | `/etc/hosts`, and DNS only when the file has no address for the name | both | `/etc/nsswitch.conf` is not read, as in musl: it names plugins, and plugins are out of scope |
+| `/etc/hosts` | A line is an address, then names, up to a `#`; a name matches a whole word, ignoring case; every matching line gives its address, in file order | glibc for case, musl for the rest | A host name has no case |
+| A file that is missing or cannot be read | Treated as empty | both | |
+| `resolv.conf` lines | `nameserver`, `search`, `domain`, and `options` with `ndots:`, `timeout:`, and `attempts:`; any other line or option is ignored | both | |
+| Nameservers | The first three that are addresses; with none, `127.0.0.1` | both | |
+| `search` and `domain` | The last of either line gives the list of domains; with none, no domain is added, and the machine's own name is not used | musl | |
+| Defaults and limits | `ndots` 1, at most 15; `timeout` 5 seconds, at most 30; `attempts` 2, at most 5 | glibc for the limits | The smaller limits stop a file from making a program wait for minutes |
+| Which names are tried | A name with `ndots` dots or more, or ending in a dot, is tried as it is first and then with each domain; any other is tried with each domain first and then as it is. A name or a domain longer than 253 characters, or with a label longer than 63 or empty, is not asked | both | |
+| Which records | `A` and `AAAA` of each name, in two queries with ids that differ, sent from one socket | musl | |
+| Which nameservers | All at once, and the first accepted answer of each query is the one used | musl | A first nameserver that does not answer costs the whole timeout in glibc, which asks one after another |
+| Time and tries | The timeout is the whole wait for a name; the queries are sent again every timeout divided by the attempts, to every nameserver, until each is answered or the time is gone; a `SERVFAIL` is sent again at once, twice at most | musl | glibc waits for the timeout of each nameserver in each of its tries, which is minutes with a dead nameserver |
+| A truncated answer | When the `TC` bit is set, the query is asked again of that nameserver over TCP, a length of two bytes before each message, and the answer over TCP is the one used; with no answer over TCP, there is none | both | |
+| Which answers are believed | An answer is believed when it came from the address and port a query was sent to, repeats the id of the query and its question, has the answer bit set, and has the code 0 or 3 (`NOERROR` or `NXDOMAIN`); any other is ignored, as is a message of fewer than twelve bytes | musl for the address and the id, glibc for the question, neither for the answer bit | A message that someone sends without seeing the query has to match all of them |
+| The ids | Each id is two bytes of `entropy`, and the two queries of a name never share one | musl asks for random ids; the entropy source is Smith's | |
+| Which records of an answer are used | An address in an `A` or `AAAA` record whose owner is the name asked or a name reached from it by `CNAME` records of the same answer, in any order of the answer; every other record is ignored | neither | Both take every address of the right type whatever its owner |
+| An answer that is not well formed | A message is read only as far as it was given: a count, a length, or a name that runs past the end ends the reading and the answer is not believed; a pointer inside a name goes only to an earlier place of the message, so no name loops | musl for the bounds | |
+| An answer with no address | `NXDOMAIN` or no address of either type goes on to the next name; no answer in time, or `SERVFAIL`, ends the lookup with `failed` | glibc | musl tries the next name after any failure, and a name that exists would be missed |
+| The order of the addresses | Those of `/etc/hosts` as they are, otherwise the `A` records and then the `AAAA` records, each as the nameserver gave them | neither | Both sort by RFC 6724, which needs the machine's own addresses |
+
+`unknown_host` holds the name that was asked. `failed` holds `lookup of the name: no nameserver answered in time` when the time was gone, and `lookup of the name: the nameserver failed` after a `SERVFAIL`.
+
+Not done: a cache of answers, DNS over TLS or HTTPS, mDNS (`.local` names), and the plugins of `nsswitch.conf`.
+
 ## What answers it
 
 - A native executable answers `net` with the system's own calls, for every system Smith builds for, and a call that waits suspends its task.
