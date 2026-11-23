@@ -6,14 +6,17 @@ use std.text (Text, append_ascii, finish, text)
 
 pub struct Listener {
   handle: i64
+  opened: bool
 }
 
 pub struct Connection {
   handle: i64
+  opened: bool
 }
 
 pub struct Socket {
   handle: i64
+  opened: bool
 }
 
 without Copy for Listener
@@ -73,6 +76,43 @@ pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError
   result
 }
 
+// A handler that a test writes makes each of these from a number it chooses, and
+// reads the number back with `handle`. A value made so is not one the system
+// opened, and the system's handler refuses it.
+pub fn listener(handle: Nat) -> Listener {
+  Listener(handle: wrapping_narrow(handle), opened: false)
+}
+
+pub fn connection(handle: Nat) -> Connection {
+  Connection(handle: wrapping_narrow(handle), opened: false)
+}
+
+pub fn socket(handle: Nat) -> Socket {
+  Socket(handle: wrapping_narrow(handle), opened: false)
+}
+
+pub trait Held[T] {
+  fn handle(x: T) -> Nat
+}
+
+impl Held[Listener] {
+  fn handle(x: Listener) -> Nat {
+    count(x.handle)
+  }
+}
+
+impl Held[Connection] {
+  fn handle(x: Connection) -> Nat {
+    count(x.handle)
+  }
+}
+
+impl Held[Socket] {
+  fn handle(x: Socket) -> Nat {
+    count(x.handle)
+  }
+}
+
 // Ends a value without a system call and gives the handle it held, so a handler
 // that a test writes knows which one it was given. What the system opened is not
 // closed.
@@ -111,6 +151,12 @@ impl Release[Socket] {
 // an error, and the layout of an address differ.
 fn on_macos() -> bool {
   __system(12) == 1
+}
+
+// What a value the system did not open is answered with: its handle is not one
+// the program owns, so no call is made with it.
+fn not_opened(call: str, h: i64) -> NetError ! alloc {
+  .failed("{call}: handle {h} is not one the system opened")
 }
 
 // What the kernel gave, when it refused: minus its error number.
@@ -406,7 +452,7 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
     __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure("listen", listening))
   }
-  .ok(Listener(handle: fd))
+  .ok(Listener(handle: fd, opened: true))
 }
 
 // Waits until the descriptor can be read, as a task that a scheduler runs does,
@@ -422,6 +468,7 @@ fn wait_to_write(fd: i64) ! task {
 }
 
 fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
+  if not l.opened { return .err(not_opened("accept", l.handle)) }
   if __scheduled() {
     var fd: i64 = -1
     var failed: i64 = 0
@@ -439,11 +486,11 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
     }
     if failed != 0 { return .err(failure("accept", failed)) }
     if fd < 0 { return .err(.failed("accept: interrupted")) }
-    return .ok(Connection(handle: fd))
+    return .ok(Connection(handle: fd, opened: true))
   }
   loop attempt in 0..64 {
     fd = __system(3, l.handle, 0, 0, 0, 0, 0)
-    if fd >= 0 { return .ok(Connection(handle: fd)) }
+    if fd >= 0 { return .ok(Connection(handle: fd, opened: true)) }
     if fd != -4 { return .err(failure("accept", fd)) }
   }
   .err(.failed("accept: interrupted"))
@@ -451,8 +498,9 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
 
 fn system_stop(l: take Listener) {
   h = l.handle
+  opened = l.opened
   __consume(l)
-  __system(9, h, 0, 0, 0, 0, 0)
+  if opened { __system(9, h, 0, 0, 0, 0, 0) }
 }
 
 fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] ! alloc {
@@ -465,10 +513,11 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
     __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure("connect", connected))
   }
-  .ok(Connection(handle: fd))
+  .ok(Connection(handle: fd, opened: true))
 }
 
 fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc, task {
+  if not c.opened { return .err(not_opened("read", c.handle)) }
   if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
   if __scheduled() {
@@ -504,6 +553,7 @@ fn count(given: i64) -> Nat {
 }
 
 fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc, task {
+  if not c.opened { return .err(not_opened("write", c.handle)) }
   var sent: Nat = 0
   var flags: i64 = no_signal()
   // A task that a scheduler runs does not block: the call that does not wait is
@@ -530,8 +580,9 @@ fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! all
 
 fn system_close(c: take Connection) {
   h = c.handle
+  opened = c.opened
   __consume(c)
-  __system(9, h, 0, 0, 0, 0, 0)
+  if opened { __system(9, h, 0, 0, 0, 0, 0) }
 }
 
 fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc {
@@ -544,10 +595,11 @@ fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc
     __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure("bind", bound))
   }
-  .ok(Socket(handle: fd))
+  .ok(Socket(handle: fd, opened: true))
 }
 
 fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
+  if not s.opened { return .err(not_opened("send", s.handle)) }
   where = try place(to.host, to.port)
   loop attempt in 0..64 {
     given = __system(7, s.handle, bytes, bytes.size, no_signal(), where.bytes, where.bytes.size)
@@ -558,6 +610,7 @@ fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetErro
 }
 
 fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc {
+  if not s.opened { return .err(not_opened("receive", s.handle)) }
   var buffer: List[Byte] = []
   if most > 0 { buffer = __reserve(most) }
   from = zeros(28)
@@ -576,6 +629,7 @@ fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetErro
 
 fn system_unbind(s: take Socket) {
   h = s.handle
+  opened = s.opened
   __consume(s)
-  __system(9, h, 0, 0, 0, 0, 0)
+  if opened { __system(9, h, 0, 0, 0, 0, 0) }
 }
