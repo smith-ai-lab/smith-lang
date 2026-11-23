@@ -416,6 +416,11 @@ pub enum Raw {
     /// machine, so it asks nothing of a machine that has no clock, where it
     /// gives minus 38 and is never run, as `EpollWait` does.
     Now,
+    /// `openat(directory, path, flags, mode)`, with the path written as bytes
+    /// and ended by a zero byte, which the library reads files of Linux with.
+    OpenAt,
+    /// `read(descriptor, bytes, count)`.
+    Read,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1221,6 +1226,8 @@ impl Program {
                             | Raw::SendTo
                             | Raw::RecvFrom
                             | Raw::Close
+                            | Raw::OpenAt
+                            | Raw::Read
                     ),
                     ..
                 }

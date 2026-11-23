@@ -157,7 +157,7 @@ fn main() ! console, alloc {
 "
         .to_string(),
     );
-    let library: Vec<(&str, &str)> = ["bits", "console", "int", "list", "net", "task", "text", "time"]
+    let library: Vec<(&str, &str)> = ["bits", "console", "dns", "entropy", "int", "list", "net", "task", "text", "time"]
         .into_iter()
         .map(|module| (module, smith::library_text(module)))
         .collect();

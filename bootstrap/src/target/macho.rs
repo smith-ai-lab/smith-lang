@@ -77,7 +77,12 @@ pub fn slot(call: Raw) -> usize {
         Raw::NanoSleep => 17,
         Raw::Kqueue => 18,
         Raw::Kevent => 19,
-        Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait => {
+        Raw::Kind
+        | Raw::EpollCreate1
+        | Raw::EpollCtl
+        | Raw::EpollWait
+        | Raw::OpenAt
+        | Raw::Read => {
             unreachable!("which kernel it is, and what only Linux has, call nothing")
         }
     }
