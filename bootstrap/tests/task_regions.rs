@@ -173,9 +173,22 @@ pub const MACHINE: &[Test] = &[
         every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped,
     ),
     (
-    "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back",
-    every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back,
-)];
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_1_of_4",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(0),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_2_of_4",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(1),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_3_of_4",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(2),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_4_of_4",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(3),
+    ),
+];
 
 const USES_WITH_TASK: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\nuse std.task (Task, join, spawn, task, test_scheduler)\n";
 
@@ -268,36 +281,48 @@ fn ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_
     assert_eq!(few_bytes, many_bytes);
 }
 
-fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back() {
+/// A program, and what it prints when the evaluator has not the time to say.
+type Case = (String, Option<String>);
+
+/// Each program of the test, which the evaluator runs when it can, as a part of
+/// four: part `k` takes every fourth, so that no part is more than a quarter of the
+/// work, which the executables of every target are most of.
+fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(k: usize) {
     let targets = runnable();
-    for source in [
-        many(200),
-        arena_rounds(300),
-        two_in_arenas(4),
-        one_after_another(500),
-        lists_one_after_another(200),
-        list_up_to_main(),
-    ] {
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-        let said = scalar::run(&scalar::passes(&program));
-        assert_eq!(said.status, 0);
-        for &target in &targets {
-            runs_as(source.as_bytes(), target, &said);
-        }
-    }
-    // The executables run what the evaluator has not the time for: 1,000 tasks
-    // that all exist at once, 2,000 rounds of an arena in a task, and 10,000 children one after another.
-    let big = [
-        (arena_rounds(2000), format!("{}\n", (0..2000u64).map(|r| (0..200u64).sum::<u64>() + r + 1).sum::<u64>())),
-        (many(1000), "500500\n".to_string()),
-        (one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
-        (lists_one_after_another(10_000), format!("{}\n", 4950u64 * 10_000)),
-        (texts(10_000), format!("{}\n", (0..10_000u64).map(|n| n.to_string().len() as u64 + 17).sum::<u64>())),
+    let cases: Vec<Case> = vec![
+        (many(200), None),
+        (arena_rounds(300), None),
+        (two_in_arenas(4), None),
+        (one_after_another(500), None),
+        (lists_one_after_another(200), None),
+        (list_up_to_main(), None),
+        // The executables run what the evaluator has not the time for: 1,000 tasks
+        // that all exist at once, 2,000 rounds of an arena in a task, and 10,000
+        // children one after another.
+        (
+            arena_rounds(2000),
+            Some(format!("{}\n", (0..2000u64).map(|r| (0..200u64).sum::<u64>() + r + 1).sum::<u64>())),
+        ),
+        (many(1000), Some("500500\n".to_string())),
+        (one_after_another(10_000), Some(format!("{}\n", 4950u64 * 10_000))),
+        (lists_one_after_another(10_000), Some(format!("{}\n", 4950u64 * 10_000))),
+        (
+            texts(10_000),
+            Some(format!("{}\n", (0..10_000u64).map(|n| n.to_string().len() as u64 + 17).sum::<u64>())),
+        ),
     ];
-    for (source, wanted) in big {
-        let said = scalar::Outcome {
-            status: 0,
-            stdout: wanted.into_bytes(),
+    for (source, wanted) in cases.into_iter().skip(k).step_by(4) {
+        let said = match wanted {
+            Some(wanted) => scalar::Outcome {
+                status: 0,
+                stdout: wanted.into_bytes(),
+            },
+            None => {
+                let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+                let said = scalar::run(&scalar::passes(&program));
+                assert_eq!(said.status, 0);
+                said
+            }
         };
         for &target in &targets {
             runs_as(source.as_bytes(), target, &said);
