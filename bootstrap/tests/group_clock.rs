@@ -99,7 +99,7 @@ fn kernel() -> Vec<Target> {
 /// The seconds that the shell's `times` says its children used, user and system
 /// together, of the last two lines it prints: the shell's own and its children's.
 fn children_seconds(said: &str) -> f64 {
-    let line = said.lines().filter(|l| !l.trim().is_empty()).last().expect("times printed a line");
+    let line = said.lines().rfind(|l| !l.trim().is_empty()).expect("times printed a line");
     line.split_whitespace()
         .map(|t| {
             let (m, s) = t.split_once('m').expect("minutes");
