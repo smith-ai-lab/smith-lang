@@ -5,8 +5,8 @@ description: Three things end a task before its work is done, and what is droppe
 status: partial
 built:
   - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, an enum, or a list, and a task that is asked to end before it ran ends what its lambda was given, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
-  - "a task that runs out of memory, or makes a console write the system refuses, ends and the program goes on, on x86-64 and arm64, and a `join` of it ends the program with the status 1"
-  - "not built: a failed task does not yet close the handles it opened since its last wait, nor the children it started since then, and `join` of it does not yet fail the joiner; nor are the handles of `fs`, nor WebAssembly, where a failure traps"
+  - "a task that runs out of memory, or makes a console write the system refuses, ends and the program goes on, on x86-64 and arm64, and a `join` of it ends the task that joins it by the same failure"
+  - "not built: a failed task does not yet close the handles it opened since its last wait, nor the children it started since then; nor are the handles of `fs`, nor WebAssembly, where a failure traps"
 ---
 
 # How a task ends
