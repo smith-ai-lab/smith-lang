@@ -138,7 +138,34 @@ pub fn spawn[T](work: take fn() -> T) -> Task[T] ! task {
 }
 
 pub fn join[T](child: take Task[T]) -> T ! task {
-  __result(finish(child.number))
+  f = finish(child.number)
+  if has_failed(child.number) {
+    // The child that failed made no value, so the task that joins it ends by the
+    // same failure, once the frame of the child has gone back.
+    kind = __word(child.number, 2)
+    __drop(f)
+    __fail(kind)
+  } else {
+    __result(f)
+  }
+}
+
+// What can end a task, which a program matches as any enum.
+pub enum Failure {
+  out_of_memory
+  refused_write
+}
+
+// The failure of a child, or what it gave, so that the task that asks goes on.
+pub fn outcome[T](child: take Task[T]) -> Result[T, Failure] ! task {
+  f = finish(child.number)
+  if has_failed(child.number) {
+    kind = __word(child.number, 2)
+    __drop(f)
+    if kind == 0 { .err(.out_of_memory) } else { .err(.refused_write) }
+  } else {
+    .ok(__result(f))
+  }
 }
 
 // The next number of a sequence that `seed` picks, which mixes the bits of the
@@ -412,9 +439,11 @@ fn ended(n: u64) {
   __set_word(n, 1, wrapping_add(state(n), 1))
 }
 
-// It ended by a failure, which a join of it may not hide.
-fn ended_by_failure(n: u64) {
+// It ended by a failure, which the word a task waits on says, since it waits on
+// nothing now.
+fn ended_by_failure(n: u64, kind: u64) {
   __set_word(n, 1, wrapping_add(state(n), 129))
+  __set_word(n, 2, kind)
 }
 
 fn waits_on_task(n: u64, t: u64) {
@@ -482,8 +511,6 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
     },
     finish: fn(child) {
       if not has_ended(child) { __wait(.task(child)) }
-      // The value of a task that failed was never made.
-      if has_failed(child) { __end(1) }
       first = leave(first, child)
       __set_word(anchor, 0, first)
       f = __frame_at(child)
@@ -544,7 +571,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
                 current = n
                 by = 0
                 if n == top { __end(1) }
-                ended_by_failure(n)
+                ended_by_failure(n, kind)
               }
               .waiting(w) {
                 match w {
@@ -583,7 +610,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             anchor = note
             current = other
             by = 0
-            ended_by_failure(other)
+            ended_by_failure(other, kind)
           }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
@@ -808,8 +835,6 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
     },
     finish: fn(child) {
       if not has_ended(child) { __wait(.task(child)) }
-      // The value of a task that failed was never made.
-      if has_failed(child) { __end(1) }
       first = leave(first, child)
       __set_word(anchor, 0, first)
       f = __frame_at(child)
@@ -895,7 +920,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
                 current = n
                 by = 0
                 if n == top { __end(1) }
-                ended_by_failure(n)
+                ended_by_failure(n, kind)
               }
               .waiting(w) {
                 match w {
@@ -950,7 +975,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             anchor = note
             current = other
             by = 0
-            ended_by_failure(other)
+            ended_by_failure(other, kind)
           }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")

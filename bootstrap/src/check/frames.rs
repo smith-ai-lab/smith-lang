@@ -20,6 +20,7 @@ pub(super) enum Kind {
     Word,
     SetWord,
     Drop,
+    Fail,
 }
 
 /// Which call a call is, when it is one that only the library may make.
@@ -38,6 +39,7 @@ pub(super) fn kind(call: &Call) -> Option<Kind> {
         "__word" => Some(Kind::Word),
         "__set_word" => Some(Kind::SetWord),
         "__drop" => Some(Kind::Drop),
+        "__fail" => Some(Kind::Fail),
         _ => None,
     }
 }
@@ -155,6 +157,17 @@ impl<'a> Checker<'a> {
                 self.arguments(body, call, &signature, false, None, None);
                 Ty::Nothing
             }
+            Kind::Fail => {
+                // Ends the task that runs it by a failure, as running out of
+                // memory does, which the number says.
+                let signature = one("failure", Ty::Int(Int::U64), Ty::Nothing);
+                self.arguments(body, call, &signature, false, None, None);
+                // It gives whatever its place asks for, since nothing follows it.
+                match want {
+                    Want::Ty(t) if !t.unknown() => t.clone(),
+                    _ => Ty::Nothing,
+                }
+            }
             Kind::Wait => {
                 let signature = one("wait", Ty::Enum(wait, Vec::new()), Ty::Nothing);
                 self.arguments(body, call, &signature, false, None, None);
@@ -196,7 +209,17 @@ impl<'a> Checker<'a> {
         let text = |t: &Ty| self.defs.text(t, body.scope);
         let gives = made
             .and_then(|c| self.frame_gives.get(&addr(c)))
-            .or_else(|| self.of_a_task(arg));
+            .or_else(|| self.of_a_task(arg))
+            .or_else(|| {
+                // A name that the one call of `finish` for the number of a
+                // task defined, so that the frame may be looked at before it is
+                // read.
+                let Expr::Name { name, .. } = &arg.value else {
+                    return None;
+                };
+                let call = body.f.and_then(|f| defined_by_finish(&f.body, name))?;
+                self.of_a_task_call(call)
+            });
         let error = match gives {
             Some(gives) if gives == read || gives.unknown() || read.unknown() => return,
             Some(gives) => format!(
@@ -218,6 +241,11 @@ impl<'a> Checker<'a> {
         let Expr::Call(finish) = &arg.value else {
             return None;
         };
+        self.of_a_task_call(finish)
+    }
+
+    /// The same, for the call of `finish` itself.
+    fn of_a_task_call(&self, finish: &Call) -> Option<&Ty> {
         if finish.callee != "finish" || finish.qualifier.is_some() || !of_std(finish.pos) {
             return None;
         }
@@ -235,6 +263,29 @@ impl<'a> Checker<'a> {
             _ => None,
         }
     }
+}
+
+/// The call of `finish` that the one definition of `name` in a function is the
+/// value of, when `name` is defined once and never assigned again.
+fn defined_by_finish<'b>(body: &'b [Stmt], name: &str) -> Option<&'b Call> {
+    let mut found: Option<&Call> = None;
+    let mut times = 0;
+    for stmt in statements(body) {
+        match stmt {
+            Stmt::Define {
+                name: n,
+                var: false,
+                value: Expr::Call(c),
+                ..
+            } if n == name => {
+                times += 1;
+                found = (c.callee == "finish").then_some(c);
+            }
+            Stmt::Define { name: n, .. } | Stmt::Assign { name: n, .. } if n == name => times += 1,
+            _ => {}
+        }
+    }
+    found.filter(|_| times == 1)
 }
 
 /// The call of `__frame` that the one definition of `name` in a function is the

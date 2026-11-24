@@ -330,6 +330,19 @@ impl<'a> Lowering<'a> {
                 debug_assert_eq!(self.scalars(&ty), vec![status, status, WORD]);
                 (ty, values)
             }
+            Kind::Fail => {
+                let (_, failure) = self.expr(out, &call.args[0].value, env);
+                out.emit(
+                    form::Op::System {
+                        call: form::System::Fail,
+                        args: failure,
+                    },
+                    Vec::new(),
+                );
+                // What it gives is never read, and is zeros of the type it was asked for.
+                let values = self.zeros(out, &ty);
+                (ty, values)
+            }
             Kind::Drop => {
                 // The frame of a child that has ended and is not joined: its
                 // stack and its frame go back to the pool, and what it gave is
