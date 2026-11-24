@@ -151,6 +151,9 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
     // block of `f` does, with jumps to blocks of `f`.
     let mut first = Vec::with_capacity(old.len());
     let mut original_ends = Vec::with_capacity(old.len());
+    // The jumps, as a block and the place of the jump in its end, that go to a
+    // block of `f`, which is not placed until all of `f` is.
+    let mut later: Vec<(usize, usize, usize)> = Vec::new();
     for block in old {
         let Block {
             params,
@@ -164,22 +167,10 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
             instructions: Vec::new(),
             end: End::Return(Vec::new()),
         });
-        // The call that a landing follows is not replaced: the failure that goes up
-        // through it finds its landing by where the call is, and a failure inside
-        // the callee would not find it if the callee's code were in this function.
-        let kept_call = instructions
-            .iter()
-            .position(|i| {
-                matches!(
-                    i.op,
-                    Op::System {
-                        call: System::Unwinding,
-                        ..
-                    }
-                )
-            })
-            .and_then(|u| u.checked_sub(1))
-            .filter(|c| matches!(instructions[*c].op, Op::Call { .. }));
+        // The block of `f` that is the landing of the call that ends this block's
+        // instructions, when the call has one: the first jump of the choice on
+        // `Unwinding` that follows the call.
+        let outer = outer_landing(&instructions, &end);
         for (index, instruction) in instructions.into_iter().enumerate() {
             let Instruction {
                 results: call_results,
@@ -187,8 +178,14 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
                 at: place,
             } = instruction;
             let (function, args) = match op {
+                // A call that a landing follows is not replaced when its function fails
+                // itself: the failure of an `Allocate`, a `Write` or a `Fail` goes up from
+                // the frame that holds it, to the landings of the calls it went up
+                // through, and would go past this one if the code were in this function.
                 Op::Call { function, args }
-                    if replaced(done, function) && Some(index) != kept_call =>
+                    if replaced(done, function)
+                        && !(outer.as_ref().is_some_and(|(_, call, _)| *call == index)
+                            && fails_itself(done[function].as_ref().unwrap())) =>
                 {
                     (function, args)
                 }
@@ -250,9 +247,26 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
                 instructions: Vec::new(),
                 end: End::Return(Vec::new()),
             });
+            if let Some((landing, _, args)) = outer.as_ref().filter(|(_, call, _)| *call == index) {
+                chained(
+                    &mut blocks,
+                    &mut types,
+                    entry..after,
+                    (*landing, args),
+                    place,
+                    &mut later,
+                );
+            }
         }
         blocks[at].end = end;
         original_ends.push(at);
+    }
+    for (block, jump, to) in later {
+        match &mut blocks[block].end {
+            End::Jump(j) => j.block = first[to],
+            End::Switch { jumps, .. } => jumps[jump].block = first[to],
+            End::Return(_) => {}
+        }
     }
     for at in original_ends {
         let to = |j: &mut Jump| j.block = first[j.block];
@@ -276,4 +290,167 @@ pub(super) fn renamed(op: &Op, rename: &impl Fn(Value) -> Value) -> Op {
     let mut op = op.clone();
     op.rename(rename);
     op
+}
+
+/// The block that is the landing of the call that is the last of the
+/// instructions, which the choice on `Unwinding` in `end` goes to first.
+fn outer_landing(instructions: &[Instruction], end: &End) -> Option<(usize, usize, Vec<Value>)> {
+    let unwinding = instructions.iter().position(|i| {
+        matches!(
+            i.op,
+            Op::System {
+                call: System::Unwinding,
+                ..
+            }
+        )
+    })?;
+    let call = unwinding.checked_sub(1)?;
+    if !matches!(instructions[call].op, Op::Call { .. }) {
+        return None;
+    }
+    match end {
+        End::Switch { jumps, .. } => jumps.first().map(|j| (j.block, call, j.args.clone())),
+        _ => None,
+    }
+}
+
+/// Makes the blocks that a call was replaced by end what the call's own
+/// function owned, and then what the function that holds them owns across the
+/// call, as a failure that went up through the call did: each landing among
+/// them goes on to `landing` where it went on up from the function, and each
+/// call among them that has no landing is given a choice on `Unwinding` whose
+/// first jump is `landing`. The landing is a block of the function, which is
+/// placed later, and `later` is told of the jumps to it.
+fn chained(
+    blocks: &mut Vec<Block>,
+    types: &mut Vec<super::Type>,
+    copy: std::ops::Range<usize>,
+    (landing, landing_args): (usize, &[Value]),
+    place: super::Place,
+    later: &mut Vec<(usize, usize, usize)>,
+) {
+    // The blocks that the landings of the copy are made of: a call in one of them
+    // is a failure inside a landing, which ends the program, and is left as it is.
+    let mut in_landing = vec![false; blocks.len()];
+    let mut stack: Vec<usize> = Vec::new();
+    for b in copy.clone() {
+        let has_unwinding = blocks[b].instructions.iter().any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Unwinding,
+                    ..
+                }
+            )
+        });
+        if let (true, End::Switch { jumps, .. }) = (has_unwinding, &blocks[b].end) {
+            stack.push(jumps[0].block);
+        }
+    }
+    while let Some(b) = stack.pop() {
+        if !in_landing[b] {
+            in_landing[b] = true;
+            stack.extend(super::graph::jumps(&blocks[b].end).iter().map(|j| j.block));
+        }
+    }
+    for b in copy {
+        if in_landing[b] {
+            if let Some(r) = blocks[b].instructions.iter().position(|i| {
+                matches!(
+                    i.op,
+                    Op::System {
+                        call: System::Resume,
+                        ..
+                    }
+                )
+            }) {
+                blocks[b].instructions.truncate(r);
+                blocks[b].end = End::Jump(Jump {
+                    block: 0,
+                    args: landing_args.to_vec(),
+                });
+                later.push((b, 0, landing));
+            }
+            continue;
+        }
+        let mut b = b;
+        // A call whose next instruction is not `Unwinding` has no landing.
+        while let Some(c) = (0..blocks[b].instructions.len()).find(|&c| {
+            matches!(blocks[b].instructions[c].op, Op::Call { .. })
+                && !matches!(
+                    blocks[b].instructions.get(c + 1).map(|i| &i.op),
+                    Some(Op::System {
+                        call: System::Unwinding,
+                        ..
+                    })
+                )
+        }) {
+            let rest = blocks[b].instructions.split_off(c + 1);
+            let end = std::mem::replace(&mut blocks[b].end, End::Return(Vec::new()));
+            let int = super::Type::Int(super::Bits::B64);
+            let mut fresh = |ty: super::Type| {
+                types.push(ty);
+                Value(types.len() - 1)
+            };
+            let (asked, none, equal) = (
+                fresh(int),
+                fresh(int),
+                fresh(super::Type::Int(super::Bits::B8)),
+            );
+            let (call, constant, compare) = (
+                Op::System {
+                    call: System::Unwinding,
+                    args: Vec::new(),
+                },
+                Op::Constant(super::Constant::Int(0)),
+                Op::Compare {
+                    op: super::Compare::Equal,
+                    a: asked,
+                    b: none,
+                },
+            );
+            for (results, op) in [(asked, call), (none, constant), (equal, compare)] {
+                blocks[b].instructions.push(Instruction {
+                    results: vec![results],
+                    op,
+                    at: place,
+                });
+            }
+            let next = blocks.len();
+            blocks.push(Block {
+                params: Vec::new(),
+                instructions: rest,
+                end,
+            });
+            blocks[b].end = End::Switch {
+                on: equal,
+                jumps: vec![
+                    Jump {
+                        block: 0,
+                        args: landing_args.to_vec(),
+                    },
+                    Jump {
+                        block: next,
+                        args: Vec::new(),
+                    },
+                ],
+            };
+            later.push((b, 0, landing));
+            b = next;
+        }
+    }
+}
+
+/// Whether the function holds an instruction that the system may refuse, which
+/// ends the task by a failure that starts in the frame of the function.
+fn fails_itself(f: &Function) -> bool {
+    (f.blocks.iter().flat_map(|b| &b.instructions)).any(|i| {
+        matches!(
+            i.op,
+            Op::System {
+                call: System::Allocate | System::Write(_) | System::Fail,
+                ..
+            }
+        )
+    })
 }
