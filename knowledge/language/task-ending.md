@@ -5,7 +5,7 @@ description: Three things end a task before its work is done, and what is droppe
 status: partial
 built:
   - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, or an enum, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
-  - "not built: a failure of a task, the handles of a list, and the handles of `fs`"
+  - "not built: a failure of a task, the handles in a list, the handles of `fs`, and the handles that the lambda of a task that has not run yet captured, which stay open until the program ends, as when `spawn { serve(c) }` is in a group that ends before the child runs"
 ---
 
 # How a task ends
