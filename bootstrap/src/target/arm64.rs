@@ -1119,6 +1119,9 @@ struct Writer<'a, S> {
     /// failure goes on up from the function once it has.
     fail_at: Option<u32>,
     resume: Option<ResumeAt>,
+    /// The label at the return address of the call that was last made, which the
+    /// landing of the call is found from.
+    after_call: std::cell::Cell<Option<usize>>,
     /// Where a request for memory that the system refuses goes: the failure 0
     /// when the program has a routine for it, and the end of the program when it
     /// has none.
@@ -1203,7 +1206,7 @@ fn function<S: System>(
         at
     });
     // The calls that a landing follows, by where they are, and where the landing is.
-    let mut landing_of_call: std::collections::HashMap<(usize, usize), usize> =
+    let mut landing_of_call: std::collections::HashMap<(usize, usize), Jump> =
         std::collections::HashMap::new();
     for (b, block) in f.blocks.iter().enumerate() {
         let unwinding_op = block.instructions.iter().position(|i| {
@@ -1219,7 +1222,7 @@ fn function<S: System>(
             && u > 0
             && matches!(block.instructions[u - 1].op, Op::Call { .. })
         {
-            landing_of_call.insert((b, u - 1), jumps[0].block);
+            landing_of_call.insert((b, u - 1), jumps[0].clone());
         }
     }
     // The failure waits in the frame while a landing runs.
@@ -1276,6 +1279,7 @@ fn function<S: System>(
             unwind: unwinding.map(|u| u.routine),
             through_at,
             fail_at,
+            after_call: std::cell::Cell::new(None),
             resume: unwinding.map(|u| ResumeAt {
                 next: u.next,
                 stub: u.stub,
@@ -1336,7 +1340,7 @@ fn function<S: System>(
             })
             .collect();
         w.run(asm, &moves);
-        let mut entries: Vec<(usize, usize, usize)> = Vec::new();
+        let mut entries: Vec<(usize, usize, Jump)> = Vec::new();
         for (b, block) in f.blocks.iter().enumerate() {
             asm.bind(w.labels[b]);
             let made = block.instructions.len() - usize::from(w.branches_on_compare[b]);
@@ -1360,10 +1364,13 @@ fn function<S: System>(
                 // The return address of a call that a landing follows is where the
                 // unwinder finds the landing from.
                 if fail_at.is_some()
-                    && let Some(&landing) = landing_of_call.get(&(b, i))
+                    && let Some(landing) = landing_of_call.get(&(b, i)).cloned()
                 {
-                    let (after, entry) = (asm.label(), asm.label());
-                    asm.bind(after);
+                    let after = w
+                        .after_call
+                        .take()
+                        .expect("a call leaves its return address");
+                    let entry = asm.label();
                     entries.push((after, entry, landing));
                 }
             }
@@ -1378,7 +1385,8 @@ fn function<S: System>(
                 X29,
                 8,
             );
-            asm.branch(w.labels[landing]);
+            // The landing is given what the jump of the choice gives it.
+            w.jump(asm, &landing, usize::MAX);
             final_entries.push((after, entry));
         }
         if let Some(u) = unwinding {
@@ -2098,6 +2106,11 @@ impl<S: System> Writer<'_, S> {
                     .collect();
                 self.run(asm, &moves);
                 asm.call_label(self.functions[*function]);
+                if self.fail_at.is_some() {
+                    let after = asm.label();
+                    asm.bind(after);
+                    self.after_call.set(Some(after));
+                }
                 let moves: Vec<Move<Loc>> = (results
                     .iter()
                     .zip(at_bottom(&area.results, &callee.results)))
