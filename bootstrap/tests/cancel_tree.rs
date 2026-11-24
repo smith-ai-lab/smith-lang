@@ -56,6 +56,10 @@ struct Case {
     ready: Vec<u64>,
     seed: u64,
     waits: bool,
+    /// The task, by its number in the order the functions are written, and the
+    /// step of it that asks for more memory than the system gives, so that it
+    /// ends by a failure there, when the tree has a task that is not the first.
+    fails: Option<(usize, usize)>,
 }
 
 struct Ids {
@@ -90,6 +94,24 @@ fn node(g: &mut Gen, ids: &mut Ids, given: Option<u64>, depth: usize) -> Node {
     }
 }
 
+/// How many tasks the tree has.
+fn count(n: &Node) -> usize {
+    1 + n.steps.iter().filter_map(|s| s.child.as_ref()).map(count).sum::<usize>()
+}
+
+/// How many steps the task that is `which` in the order the functions are written has.
+fn steps_of(n: &Node, which: usize) -> usize {
+    fn find<'a>(n: &'a Node, which: usize, at: &mut usize) -> Option<&'a Node> {
+        let me = *at;
+        *at += 1;
+        if me == which {
+            return Some(n);
+        }
+        n.steps.iter().filter_map(|s| s.child.as_ref()).find_map(|c| find(c, which, at))
+    }
+    find(n, which, &mut 0).map_or(1, |n| n.steps.len())
+}
+
 fn waits(n: &Node, into: &mut Vec<u64>) {
     for s in &n.steps {
         into.push(s.wait);
@@ -112,11 +134,17 @@ fn case(g: &mut Gen) -> Case {
             ready.insert(g.below(ready.len() + 1), w);
         }
     }
-    Case { tree, ready, seed: g.below(1000) as u64, waits: g.below(3) != 0 }
+    // One of the tasks that are not the first, at one of its steps, fails.
+    let tasks = count(&tree);
+    let fails = (tasks > 1 && g.below(2) == 0).then(|| {
+        let at = 1 + g.below(tasks - 1);
+        (at, g.below(steps_of(&tree, at)))
+    });
+    Case { tree, ready, seed: g.below(1000) as u64, waits: g.below(3) != 0, fails }
 }
 
 /// The function of each node, by the number it is given in the order it is met.
-fn functions(n: &Node, k: &mut usize, out: &mut String) -> usize {
+fn functions(n: &Node, k: &mut usize, out: &mut String, fails: Option<(usize, usize)>) -> usize {
     let me = *k;
     *k += 1;
     let mut body = String::new();
@@ -124,7 +152,7 @@ fn functions(n: &Node, k: &mut usize, out: &mut String) -> usize {
     for (i, s) in n.steps.iter().enumerate() {
         body += &format!("  a{i} = opened({})\n", s.opens);
         if let Some(c) = &s.child {
-            let at = functions(c, k, out);
+            let at = functions(c, k, out, fails);
             match c.given {
                 Some(id) => {
                     body += &format!("  g{i} = opened({id})\n  t{i} = spawn {{ n{at}(g{i}) }}\n");
@@ -133,11 +161,17 @@ fn functions(n: &Node, k: &mut usize, out: &mut String) -> usize {
             }
             joins.push(i);
         }
+        if fails == Some((me, i)) {
+            body += "  more = eat()\n";
+        }
         body += &format!("  test_ready({})\n", s.wait);
     }
     body += "  var total: u64 = 0\n";
     for i in joins {
-        body += &format!("  total = wrapping_add(total, join(t{i}))\n");
+        // A child that failed gives no value, and its parent goes on.
+        body += &format!(
+            "  match outcome(t{i}) {{\n    .ok(v) {{ total = wrapping_add(total, v) }}\n    .err(failure) {{ }}\n  }}\n"
+        );
     }
     for i in (0..n.steps.len()).rev() {
         body += &format!("  close(a{i})\n");
@@ -154,7 +188,7 @@ fn functions(n: &Node, k: &mut usize, out: &mut String) -> usize {
 fn program(c: &Case) -> String {
     let mut functions_text = String::new();
     let mut k = 0;
-    let root = functions(&c.tree, &mut k, &mut functions_text);
+    let root = functions(&c.tree, &mut k, &mut functions_text, c.fails);
     let start = match c.tree.given {
         Some(id) => format!("  g = opened({id})\n  spawn {{ n{root}(g) }}"),
         None => format!("  spawn {{ n{root}() }}"),
@@ -166,7 +200,17 @@ fn program(c: &Case) -> String {
 use std.console (console, print)
 use std.int (wrapping_add)
 use std.net (Connection, close, connection, handle, net, release)
-use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+use std.list (push)
+use std.task (join, outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+
+// Asks for more memory than the system gives, so that the task that calls it ends.
+fn eat() -> u64 ! alloc {{
+  var xs: List[u64] = []
+  loop i in 0..9223372036854775807 {{
+    xs = push(xs, i)
+  }}
+  0
+}}
 
 fn opened(id: u64) -> Connection ! console, alloc {{
   print(\"opened {{id}}\")
@@ -232,7 +276,7 @@ fn every_connection_a_generated_tree_of_tasks_opened_is_closed_once(part: u64) {
         let source = program(c);
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         assert_eq!(scalar::check(&program), Ok(()), "for {source}");
-        let (outcome, _) = scalar::run_poisoning_freed_frames(&scalar::passes(&program));
+        let (outcome, _) = scalar::run_poisoning_freed_frames(&scalar::passes(&program), 1 << 20);
         let text = String::from_utf8(outcome.stdout).expect("text");
         assert_eq!(outcome.status, 0, "{text} for {source}");
         let lines: Vec<&str> = text.lines().collect();

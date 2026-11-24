@@ -2,10 +2,9 @@
 type: specification
 title: A failed task
 description: What join gives the task that waits for a child that ended by a failure, outcome, which lets that task recover, and a child that is never joined.
-status: partial
+status: built
 built:
   - "`join` of a child that ended by a failure ends the task that joins it by the same failure, `outcome(t)` gives `.err` of a `Failure`, a child that is never joined ends alone, and a failure that reaches `main` ends the program with the status 1"
-  - "not built: what the failed task had open since its last wait, which is closed by the cleanups of [How a task ends](task-ending.md)"
 ---
 
 # A failed task

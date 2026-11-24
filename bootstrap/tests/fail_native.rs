@@ -24,6 +24,10 @@ pub const MACHINE: &[Test] = &[
         a_join_of_a_child_that_ran_out_of_memory_ends_the_program_with_the_status_1_and_gives_no_value,
     ),
     (
+        "a_task_that_holds_a_connection_and_runs_out_of_memory_closes_it_and_the_peer_sees_the_end_of_the_file",
+        a_task_that_holds_a_connection_and_runs_out_of_memory_closes_it_and_the_peer_sees_the_end_of_the_file,
+    ),
+    (
         "a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file",
         a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file,
     ),
@@ -40,6 +44,7 @@ pub const MACHINE: &[Test] = &[
 const PROGRAM: &str = include_str!("fail_native.smith");
 const ROUNDS: &str = include_str!("fail_rounds.smith");
 const PEER: &str = include_str!("fail_peer.smith");
+const CLOSED: &str = include_str!("fail_closed.smith");
 
 /// Runs the program, for each target that has the native unwinder, under a limit
 /// of address space, and says what it wrote and how it ended.
@@ -100,16 +105,31 @@ fn a_join_of_a_child_that_ran_out_of_memory_ends_the_program_with_the_status_1_a
 /// program, which goes on for 2.5 seconds, is still running.
 fn a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file()
  {
+    the_peer_sees_the_end_of_the_file(PEER, "fail_peer");
+}
+
+/// A task that holds the connection of a peer and runs out of memory at a call
+/// closes it as it goes up, so the peer sees the end of the file while the group
+/// and the program go on, and not when the group ends.
+fn a_task_that_holds_a_connection_and_runs_out_of_memory_closes_it_and_the_peer_sees_the_end_of_the_file()
+ {
+    the_peer_sees_the_end_of_the_file(CLOSED, "fail_closed");
+}
+
+/// Runs the program, which takes a connection of a peer and goes on for 2.5
+/// seconds after its group has ended, and asks that the peer reads the end of the
+/// file within 1.8 seconds, while the program is still running.
+fn the_peer_sees_the_end_of_the_file(source: &str, what: &str) {
     for target in targets::runnable()
         .into_iter()
         .filter(|t| t.name().starts_with("linux"))
     {
-        let bytes = targets::build(PEER.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
+        let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
         targets::record(target, &[&bytes]);
         if targets::fingerprinting() {
             continue;
         }
-        let dir = crate::scratch::path("fail_peer");
+        let dir = crate::scratch::path(what);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("program");
         crate::executable::write(&path, &bytes);

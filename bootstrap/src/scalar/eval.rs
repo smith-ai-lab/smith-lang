@@ -101,11 +101,12 @@ thread_local! {
 
 /// Runs the program as `run_counting` does, and fails with a panic that says so
 /// when it reads or writes the memory of a frame of a task after the frame was
-/// freed.
-pub fn run_poisoning_freed_frames(program: &Program) -> (Outcome, Vec<usize>) {
+/// freed. The system gives `limit` bytes in all, and a request for more fails
+/// the task that makes it.
+pub fn run_poisoning_freed_frames(program: &Program, limit: usize) -> (Outcome, Vec<usize>) {
     POISON.with(|p| p.set(true));
     let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_counting(program, usize::MAX)
+        run_counting(program, limit)
     }));
     POISON.with(|p| p.set(false));
     match run {

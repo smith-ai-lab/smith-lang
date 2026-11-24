@@ -1,0 +1,59 @@
+use std.bits (u64)
+use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.list (push)
+use std.net (Connection, Listener, NetError, accept, close, listen, net, read)
+use std.task (spawn, task, tasks)
+use std.time (sleep, time)
+
+// Waits for the peer to say something, which it never does.
+fn hold(c: take Connection) ! net, task, alloc {
+  r = read(c, 1)
+  close(c)
+}
+
+// Asks for more memory, a list of numbers that grows without end, until the
+// system refuses, which ends the task and no more.
+fn eat() ! alloc {
+  var xs: List[u64] = []
+  loop i in 0..9223372036854775807 {
+    xs = push(xs, i)
+  }
+}
+
+// Holds the connection and runs out of memory at a call, before it has closed it,
+// so that the only way the peer sees the end of the file is the task's ending it
+// as it goes up.
+fn spoil(c: take Connection) ! net, task, alloc {
+  eat()
+  close(c)
+}
+
+// Takes one connection and gives it to a task that fails in the same poll that
+// started the child, in a group of its own, which ends after a while.
+fn one(l: Listener) -> Result[(), NetError] ! net, time, alloc {
+  with tasks()
+  c = try accept(l)
+  spawn { spoil(c) }
+  sleep(200)
+  .ok(())
+}
+
+fn session(port: 0..65536) -> Result[(), NetError] ! net, time, alloc {
+  listen("127.0.0.1", port, fn(l) { one(l) })
+}
+
+// The program goes on for a while after the group ends, so that a connection
+// that is closed then is closed by the group's end and not by the program's.
+fn main(args: List[str]) -> Result[(), NetError] ! net, time, alloc, diverge {
+  if args.size < 1 { return .ok(()) }
+  port: Result[0..65536, ReadError] = from_text("port", args[0])
+  match port {
+    .ok(p) {
+      done = session(p)
+      sleep(2500)
+      done
+    }
+    _ { .ok(()) }
+  }
+}
