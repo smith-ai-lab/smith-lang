@@ -367,6 +367,17 @@ impl Builder {
         );
     }
 
+    /// Ends the task that runs it by the failure, a 64-bit number, that it takes.
+    pub fn fail(&mut self, kind: Value) {
+        self.emit(
+            Op::System {
+                call: System::Fail,
+                args: vec![kind],
+            },
+            &[],
+        );
+    }
+
     /// Ends the block being filled by a jump.
     pub fn jump(&mut self, block: usize, args: Vec<Value>) {
         self.blocks[self.current].end = End::Jump(Jump { block, args });

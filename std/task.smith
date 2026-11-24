@@ -36,10 +36,12 @@ pub enum Wait {
   write_by: Handle
 }
 
-// What polling a frame says: that the task is done, or what it waits for.
+// What polling a frame says: that the task is done, what it waits for, or the
+// failure, as a number, that it ended by.
 pub enum Poll {
   done
   waiting: Wait
+  failed: u64
 }
 
 // A child, by the number the scheduler gave it. Only `spawn` makes one, from a
@@ -80,6 +82,7 @@ fn run(frame: Frame) {
       __eprint("a task waits, and the system's scheduler does not wait yet")
       __end(1)
     }
+    .failed(kind) { __end(1) }
   }
 }
 
@@ -517,6 +520,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }
+              .failed(kind) { __end(1) }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -548,6 +552,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         f = __frame_at(other)
         match __poll(f) {
           .done { ended(other) }
+          .failed(kind) { __end(1) }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)
@@ -841,6 +846,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }
+              .failed(kind) { __end(1) }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -888,6 +894,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         f = __frame_at(other)
         match __poll(f) {
           .done { ended(other) }
+          .failed(kind) { __end(1) }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)

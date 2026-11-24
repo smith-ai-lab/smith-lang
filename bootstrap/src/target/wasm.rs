@@ -1579,6 +1579,12 @@ impl Lowering<'_> {
                 self.get_wrapped(args[0]);
                 self.code.call(self.context.exit);
             }
+            // A failure traps there, as every end of the program does: the
+            // program is the one task, with the status 1.
+            System::Fail => {
+                self.code.i32_const(1);
+                self.code.call(self.context.exit);
+            }
         }
     }
 
