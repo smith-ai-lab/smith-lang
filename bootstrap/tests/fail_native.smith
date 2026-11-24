@@ -1,0 +1,23 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.list (push)
+use std.task (join, spawn, tasks)
+use std.time (sleep, time)
+
+// Asks for more memory, a list of numbers that grows without end, until the
+// system refuses, which ends the task and no more.
+fn eat() ! alloc {
+  var xs: List[u64] = []
+  loop i in 0..9223372036854775807 {
+    xs = push(xs, i)
+  }
+}
+
+// The group goes on when a child it started has run out of memory, if the parent
+// does not ask for what the child never made.
+fn main() ! console, alloc, time {
+  with tasks()
+  child = spawn { eat() }
+  sleep(100)
+  print("the parent went on")
+}

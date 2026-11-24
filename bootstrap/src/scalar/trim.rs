@@ -72,6 +72,12 @@ fn trim_function(f: &mut Function) -> Trimmed {
     let copy = graph::copies(f);
     graph::rename(f, &|v| copy[v.0]);
     let mut trimmed = Trimmed::same(f.blocks[0].params.len(), f.results.len());
+    // What a poll is passed to pass through is kept, whatever it does with it, so
+    // that a failure of the task it polls, which gives the poll's caller what the
+    // poll was given, finds each result where its parameter was.
+    if f.name == "<poll any>" {
+        return trimmed;
+    }
     let own = f.blocks[0].params.clone();
     // A first block that is jumped to is a loop's, and its parameters are
     // not the function's own after the first round.
