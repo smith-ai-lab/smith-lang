@@ -27,14 +27,28 @@ pub const MACHINE: &[Test] = &[
         "a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file",
         a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file,
     ),
+    (
+        "every_round_of_a_child_that_runs_out_of_memory_reaches_as_far_as_the_first_because_its_memory_goes_back",
+        every_round_of_a_child_that_runs_out_of_memory_reaches_as_far_as_the_first_because_its_memory_goes_back,
+    ),
+    (
+        "every_round_of_a_child_that_a_parent_joins_and_that_runs_out_of_memory_reaches_as_far_as_the_first",
+        every_round_of_a_child_that_a_parent_joins_and_that_runs_out_of_memory_reaches_as_far_as_the_first,
+    ),
 ];
 
 const PROGRAM: &str = include_str!("fail_native.smith");
+const ROUNDS: &str = include_str!("fail_rounds.smith");
 const PEER: &str = include_str!("fail_peer.smith");
 
 /// Runs the program, for each target that has the native unwinder, under a limit
 /// of address space, and says what it wrote and how it ended.
 fn limited(source: &str, what: &str, check: impl Fn(&str, Option<i32>)) {
+    limited_to(60000, source, what, check);
+}
+
+/// The same, with `kilobytes` of address space.
+fn limited_to(kilobytes: u64, source: &str, what: &str, check: impl Fn(&str, Option<i32>)) {
     // The native unwinder is that of Linux on x86-64 and arm64, which limit address space
     // by `ulimit -v`.
     for target in targets::runnable()
@@ -53,7 +67,7 @@ fn limited(source: &str, what: &str, check: impl Fn(&str, Option<i32>)) {
         let output = crate::clock::output_within(
             Command::new("sh")
                 .arg("-c")
-                .arg("ulimit -v 60000; exec \"$0\"")
+                .arg(format!("ulimit -v {kilobytes}; exec \"$0\""))
                 .arg(&path),
             true,
         )
@@ -154,4 +168,58 @@ fn a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_ch
         assert_eq!(read, Ok(()), "{}", target.name());
         assert!(alive, "the program ended first, {}", target.name());
     }
+}
+
+/// How far each round of `fail_rounds.smith` got, which it says every thousand
+/// pushes, and whether each ended by running out of memory.
+fn reaches(said: &str) -> Vec<(u64, bool)> {
+    said.split("round ")
+        .skip(1)
+        .map(|round| {
+            let last = round
+                .lines()
+                .skip(1)
+                .filter_map(|line| line.trim().parse::<u64>().ok())
+                .max()
+                .unwrap_or(0);
+            (last, round.contains("out of memory"))
+        })
+        .collect()
+}
+
+/// Rounds of a child that pushes onto a list until the system refuses, each in its
+/// own group, under a limit that the first round passes at 4 million pushes: the
+/// memory of a task that failed goes back, so each round gets as far as the first.
+/// Without it each round got half as far as the one before, since the pieces larger
+/// than 2 MB that the first round asked the system for were kept by nothing.
+fn every_round_of_a_child_that_runs_out_of_memory_reaches_as_far_as_the_first_because_its_memory_goes_back()
+ {
+    let source = ROUNDS.replace("outcome(spawn { eaten() })", "outcome(spawn { eat() })");
+    assert_ne!(source, ROUNDS);
+    limited_to(200000, &source, "fail_rounds", |said, status| {
+        let rounds = reaches(said);
+        assert_eq!(rounds.len(), 6, "{said}");
+        assert!(rounds.iter().all(|(_, failed)| *failed), "{said}");
+        assert!(rounds[0].0 >= 1_000_000, "{said}");
+        assert!(rounds.iter().all(|(last, _)| *last == rounds[0].0), "{rounds:?}");
+        assert_eq!(status, Some(0));
+    });
+}
+
+/// The same when the child is joined by a task that ends by the child's failure.
+fn every_round_of_a_child_that_a_parent_joins_and_that_runs_out_of_memory_reaches_as_far_as_the_first()
+ {
+    let source = ROUNDS.replace(
+        "fn eaten() -> u64 ! alloc, console {\n  eat()\n}",
+        "fn eaten() -> u64 ! alloc, console, task {\n  join(spawn { eat() })\n}",
+    );
+    assert_ne!(source, ROUNDS);
+    limited_to(200000, &source, "fail_rounds_joined", |said, status| {
+        let rounds = reaches(said);
+        assert_eq!(rounds.len(), 6, "{said}");
+        assert!(rounds.iter().all(|(_, failed)| *failed), "{said}");
+        assert!(rounds[0].0 >= 1_000_000, "{said}");
+        assert!(rounds.iter().all(|(last, _)| *last == rounds[0].0), "{rounds:?}");
+        assert_eq!(status, Some(0));
+    });
 }
