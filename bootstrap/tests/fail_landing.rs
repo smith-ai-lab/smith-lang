@@ -18,6 +18,14 @@ pub const ONCE: &[Test] = &[
         a_task_that_runs_out_of_memory_two_calls_deep_closes_the_connection_of_each_function_once,
     ),
     (
+        "a_failure_in_a_function_that_owns_nothing_and_is_inlined_ends_what_its_caller_owns",
+        a_failure_in_a_function_that_owns_nothing_and_is_inlined_ends_what_its_caller_owns,
+    ),
+    (
+        "a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_its_caller_owns",
+        a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_its_caller_owns,
+    ),
+    (
         "a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else",
         a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else,
     ),
@@ -124,6 +132,43 @@ fn a_task_that_runs_out_of_memory_two_calls_deep_closes_the_connection_of_each_f
     let source = program(TWO_DEEP, REPORT).replace("owner(5)", "outer(5)");
     let lines = said(&source);
     // The function that failed ends what it owns first, and then its caller.
+    assert_eq!(lines, ["closed 6", "closed 5", "out of memory", "1"]);
+}
+
+const THROUGH_A_CALL_INLINED: &str = "fn middle() -> u64 ! alloc {
+  eat()
+}
+
+fn owner(n: u64) -> u64 ! net, alloc {
+  c = connection(n)
+  x = middle()
+  close(c)
+  x
+}
+";
+
+fn a_failure_in_a_function_that_owns_nothing_and_is_inlined_ends_what_its_caller_owns() {
+    let lines = said(&program(THROUGH_A_CALL_INLINED, REPORT));
+    assert_eq!(lines, ["closed 5", "out of memory", "1"]);
+}
+
+const OWNS_AND_INLINED: &str = "fn middle(n: u64) -> u64 ! net, alloc {
+  c = connection(n)
+  x = eat()
+  close(c)
+  x
+}
+
+fn owner(n: u64) -> u64 ! net, alloc {
+  c = connection(n)
+  x = middle(6)
+  close(c)
+  x
+}
+";
+
+fn a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_its_caller_owns() {
+    let lines = said(&program(OWNS_AND_INLINED, REPORT));
     assert_eq!(lines, ["closed 6", "closed 5", "out of memory", "1"]);
 }
 
