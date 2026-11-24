@@ -45,8 +45,8 @@ mod words;
 pub use build::Builder;
 pub use common::common;
 pub use eval::{
-    Outcome, Waited, call, call_waiting, poll_cancelling, poll_through, poll_to_end, run,
-    run_copying, run_counting, run_measured, run_poisoning_freed_frames, run_taking,
+    Outcome, Waited, call, call_waiting, poll_cancelling, poll_failing, poll_through, poll_to_end,
+    run, run_copying, run_counting, run_measured, run_poisoning_freed_frames, run_taking,
     run_with_command_line, run_with_command_line_and_errors, run_with_input, run_with_limit,
     run_with_words, run_with_words_and_errors,
 };
@@ -331,6 +331,13 @@ pub enum System {
     /// Ends the program with the status, a byte, that it takes. It gives
     /// nothing.
     Exit,
+    /// Ends the task that runs it by a failure, which the 64-bit integer it
+    /// takes says: 0 for a request for memory that the system refused, and 1 for
+    /// a write to the console that it refused. In a task that a scheduler polls
+    /// the poll that runs it gives the status of a task that ended by a failure,
+    /// and which; anywhere else it ends the program with the status 1. It gives
+    /// nothing, and nothing after it runs.
+    Fail,
     /// Fills the bytes from an address, as many as a 64-bit integer says,
     /// with bytes nobody can predict, which the system gives. It takes the
     /// address and then the count, and gives a byte: 0 when every byte is
