@@ -1,7 +1,8 @@
 //! Runs a program in the scalar form, in-process. What it gives is what the
 //! program does.
 
-use std::collections::HashMap;
+use std::cell::Cell;
+use std::collections::{BTreeMap, HashMap};
 
 use super::vector::{
     lane_of, lane_type, vector_binary, vector_choose, vector_compare, vector_first_set,
@@ -76,6 +77,34 @@ struct Machine<'a> {
     /// What says whether a wait is over at once, and each wait so far.
     ready: Option<&'a mut (dyn FnMut(u64, u64) -> bool + 'a)>,
     waited: Vec<Waited>,
+    /// Whether a read or a write inside a frame that was freed is a failure. The
+    /// evaluator never gives a frame's memory to another, so what a freed frame
+    /// holds is what it held, and a program that reads it after it was freed
+    /// would pass by luck without this.
+    poison: bool,
+    /// How many bytes each frame that was made has, by its address, and the frames
+    /// that were freed, by their address and where they end.
+    frames: HashMap<usize, usize>,
+    freed: BTreeMap<usize, usize>,
+}
+
+thread_local! {
+    static POISON: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs the program as `run_counting` does, and fails with a panic that says so
+/// when it reads or writes the memory of a frame of a task after the frame was
+/// freed.
+pub fn run_poisoning_freed_frames(program: &Program) -> (Outcome, Vec<usize>) {
+    POISON.with(|p| p.set(true));
+    let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_counting(program, usize::MAX)
+    }));
+    POISON.with(|p| p.set(false));
+    match run {
+        Ok(done) => done,
+        Err(e) => std::panic::resume_unwind(e),
+    }
 }
 
 /// A wait a program made: its kind and handle, and whether what it waited for
@@ -218,6 +247,9 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         depth: 0,
         ready: None,
         waited: Vec::new(),
+        poison: POISON.with(Cell::get),
+        frames: HashMap::new(),
+        freed: BTreeMap::new(),
     };
     let status = match machine.call(program.main, args) {
         Ok(_) => 0,
@@ -295,6 +327,9 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         depth: 0,
         ready: None,
         waited: Vec::new(),
+        poison: POISON.with(Cell::get),
+        frames: HashMap::new(),
+        freed: BTreeMap::new(),
     };
     let words = args.iter().map(|n| Word::Int(*n)).collect();
     integers(machine.call(function, words).ok().expect("memory"))
@@ -335,6 +370,9 @@ fn alone<'a>(
         depth: 0,
         ready: Some(ready),
         waited: Vec::new(),
+        poison: false,
+        frames: HashMap::new(),
+        freed: BTreeMap::new(),
     }
 }
 
@@ -784,6 +822,17 @@ enum Stop {
 }
 
 impl Machine<'_> {
+    /// Fails when `size` bytes from `from` are inside a frame that was freed.
+    fn check_not_freed(&self, from: usize, size: usize) {
+        if let Some((start, end)) = self.freed.range(..from + size).next_back()
+            && from < *end
+        {
+            panic!(
+                "a frame was read or written after it was freed: {size} bytes at {from}, in the frame from {start} to {end}"
+            );
+        }
+    }
+
     /// Runs a call of the function to its end. The calls it makes, and the calls
     /// they make, are open frames in a list and not calls of this function, so
     /// that the depth of the calls is bounded by memory and not by the stack of
@@ -1153,6 +1202,7 @@ impl Machine<'_> {
                         };
                         let size = width(*ty);
                         let from = at - BASE;
+                        self.check_not_freed(from, size);
                         let mut n = 0u128;
                         for (k, byte) in self.memory[from..from + size].iter().enumerate() {
                             n |= (*byte as u128) << (8 * k);
@@ -1174,6 +1224,7 @@ impl Machine<'_> {
                         };
                         let size = width(*ty);
                         let from = at - BASE;
+                        self.check_not_freed(from, size);
                         for k in 0..size {
                             self.memory[from + k] = (n >> (8 * k)) as u8;
                         }
@@ -1193,6 +1244,7 @@ impl Machine<'_> {
                         self.left -= count as usize;
                         let at = BASE + self.memory.len();
                         self.memory.resize(self.memory.len() + count as usize, 0);
+                        self.frames.insert(at, count as usize);
                         vec![Word::Address(at)]
                     }
                     // Bytes nobody can predict are not what an evaluator that
@@ -1256,8 +1308,19 @@ impl Machine<'_> {
                         ..
                     } => vec![Word::Int(0)],
                     Op::System {
-                        call:
-                            System::TaskMark | System::TaskRelease | System::TaskFree | System::TaskMove,
+                        call: System::TaskFree,
+                        args,
+                    } => {
+                        if let Word::Address(frame) = get(&args[0])
+                            && let Some(&bytes) = self.frames.get(&frame)
+                            && self.poison
+                        {
+                            self.freed.insert(frame - BASE, frame - BASE + bytes);
+                        }
+                        Vec::new()
+                    }
+                    Op::System {
+                        call: System::TaskMark | System::TaskRelease | System::TaskMove,
                         ..
                     } => Vec::new(),
                     // The evaluator keeps a frame where it is, as it keeps every
