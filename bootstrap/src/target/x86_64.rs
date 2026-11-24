@@ -2404,6 +2404,11 @@ impl<S: System> Writer<'_, S> {
                 self.read_into(asm, RDI, args[0]);
                 S::end(asm);
             }
+            // Nothing yet puts a task back to the scheduler that polled it, so a
+            // failure ends the program, as a refused request for memory does.
+            Op::System {
+                call: Call::Fail, ..
+            } => asm.jmp(self.fail),
             Op::System {
                 call: Call::Allocate,
                 args,

@@ -36,10 +36,12 @@ pub enum Wait {
   write_by: Handle
 }
 
-// What polling a frame says: that the task is done, or what it waits for.
+// What polling a frame says: that the task is done, what it waits for, or the
+// failure, as a number, that it ended by.
 pub enum Poll {
   done
   waiting: Wait
+  failed: u64
 }
 
 // A child, by the number the scheduler gave it. Only `spawn` makes one, from a
@@ -80,6 +82,7 @@ fn run(frame: Frame) {
       __eprint("a task waits, and the system's scheduler does not wait yet")
       __end(1)
     }
+    .failed(kind) { __end(1) }
   }
 }
 
@@ -358,16 +361,6 @@ fn has_waiter(first: u64, fd: u64) -> bool {
   found
 }
 
-// For the library and its tests: the milliseconds from `now` to `deadline`, and
-// none, which is 0, when the time has come. A group asks it of every task that
-// waits for a time, with the one `now` it read for the turn: `expire` wakes the
-// task that has 0 left and `nearest` waits for the least of those that have more,
-// so each task is woken or waited for, and none is neither, which two reads of
-// the clock in a turn can make of a time that comes between them.
-pub fn time_left(deadline: u64, now: u64) -> u64 {
-  if deadline > now { wrapping_sub(deadline, now) } else { 0 }
-}
-
 // Wakes the tasks whose time has come, as `moment` says, and gives how many of
 // them were waiting for a descriptor too.
 fn expire(first: u64, moment: u64) -> u64 {
@@ -375,7 +368,7 @@ fn expire(first: u64, moment: u64) -> u64 {
   var at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
-    if waits_for_time(at) and time_left(deadline(at), moment) == 0 {
+    if waits_for_time(at) and deadline(at) <= moment {
       if waits_for_descriptor(at) { woken = wrapping_add(woken, 1) }
       woken_by(at, true)
     }
@@ -392,9 +385,9 @@ fn nearest(first: u64, moment: u64) -> u64 {
   var at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
-    if waits_for_time(at) {
-      left = time_left(deadline(at), moment)
-      if left > 0 and (found == 0 or left < found) { found = left }
+    if waits_for_time(at) and deadline(at) > moment {
+      left = wrapping_sub(deadline(at), moment)
+      if found == 0 or left < found { found = left }
     }
     at = after(at)
   }
@@ -517,6 +510,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }
+              .failed(kind) { __end(1) }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -548,6 +542,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         f = __frame_at(other)
         match __poll(f) {
           .done { ended(other) }
+          .failed(kind) { __end(1) }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)
@@ -788,19 +783,12 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       loop round in 0..9223372036854775807 {
         if has_ended(top) { break }
         first = reap(first)
-        // The clock is read only when a task waits for a time, and once for the turn
-        // to decide which tasks' times have come and how long to wait for the next,
-        // so that a time that comes between two reads is neither missed by the one
-        // nor counted as left by the other.
+        // The clock is read only when a task waits for a time.
         timers = has_timers(first)
-        var moment: u64 = 0
-        if timers {
-          moment = read_clock()
-          parked = wrapping_sub(parked, expire(first, moment))
-        }
+        if timers { parked = wrapping_sub(parked, expire(first, read_clock())) }
         var many = count_runnable(first)
         var soon: u64 = 0
-        if timers and many == 0 { soon = nearest(first, moment) }
+        if timers and many == 0 { soon = nearest(first, read_clock()) }
         if parked > 0 or soon > 0 {
           // The system's queue is asked what is ready, and when nothing can run it
           // is waited in until the nearest time that a task waits for, or for ever
@@ -823,13 +811,8 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         turn = wrapping_add(turn, 1)
         match checked_rem(turn, many) {
           .none {
-            // No task can run now. When one waits for a time or for the system the
-            // turn is made again, as when the wait for them ended early, and only
-            // when none does is it so for ever.
-            if not timers and parked == 0 {
-              __eprint("every task waits, and none can run")
-              __end(1)
-            }
+            __eprint("every task waits, and none can run")
+            __end(1)
           }
           .some(k) {
             n = nth_runnable(first, k)
@@ -841,6 +824,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             f = __frame_at(n)
             match __poll(f) {
               .done { ended(n) }
+              .failed(kind) { __end(1) }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -888,6 +872,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         f = __frame_at(other)
         match __poll(f) {
           .done { ended(other) }
+          .failed(kind) { __end(1) }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)

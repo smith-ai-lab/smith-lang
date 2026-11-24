@@ -82,6 +82,9 @@ struct Machine<'a> {
     /// holds is what it held, and a program that reads it after it was freed
     /// would pass by luck without this.
     poison: bool,
+    /// The failure a task ended by, when it did: the program ends when nothing
+    /// polling the task catches it.
+    failed: Option<u64>,
     /// How many bytes each frame that was made has, by its address, and the frames
     /// that were freed, by their address and where they end.
     frames: HashMap<usize, usize>,
@@ -248,6 +251,7 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         ready: None,
         waited: Vec::new(),
         poison: POISON.with(Cell::get),
+        failed: None,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     };
@@ -328,6 +332,7 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         ready: None,
         waited: Vec::new(),
         poison: POISON.with(Cell::get),
+        failed: None,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     };
@@ -371,6 +376,7 @@ fn alone<'a>(
         ready: Some(ready),
         waited: Vec::new(),
         poison: false,
+        failed: None,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     }
@@ -496,6 +502,45 @@ pub fn poll_cancelling(
         if cancel_after == Some(waiting) {
             ask(&mut machine);
         }
+    }
+}
+
+/// Polls the frame of a task that `suspend` made a state machine, each wait
+/// answered by `ready`, until it is done or ends by a failure, and gives the
+/// failure it ended by, if it did, and each wait.
+pub fn poll_failing(
+    program: &Program,
+    poll_any: usize,
+    task: &super::Task,
+    args: &[u64],
+    state: &mut Vec<u64>,
+    ready: &mut dyn FnMut(u64, u64) -> bool,
+) -> (Option<u64>, Vec<Waited>) {
+    let mut machine = alone(program, ready);
+    machine.memory.resize(16, 0);
+    let frame = BASE + machine.memory.len();
+    machine
+        .memory
+        .resize(machine.memory.len() + task.bytes as usize, 0);
+    machine.memory[16..].fill(0xA5);
+    let mut words = vec![Word::Address(frame)];
+    words.extend(args.iter().map(|n| Word::Int(*n)));
+    machine.call(task.start, words).ok().expect("memory");
+    loop {
+        let mut words = vec![Word::Address(frame)];
+        words.extend(state.iter().map(|n| Word::Int(*n)));
+        let given = machine.call(poll_any, words).ok().expect("memory");
+        let mut given = integers(given);
+        let rest = given.split_off(state.len());
+        let mut rest = rest.into_iter();
+        let status = rest.next().expect("a status");
+        let (kind, handle) = (rest.next().expect("a kind"), rest.next().expect("a handle"));
+        match status {
+            0 => return (None, machine.waited),
+            2 => return (Some(handle), machine.waited),
+            _ => machine.wait(kind, handle),
+        }
+        *state = given;
     }
 }
 
@@ -841,7 +886,60 @@ impl Machine<'_> {
         let mut open: Vec<Frame> = Vec::new();
         let mut frame = self.enter(function, args);
         loop {
-            match self.run(&mut frame)? {
+            let stop = match self.run(&mut frame) {
+                Ok(stop) => stop,
+                // A task that ended by a failure goes back to the poll that
+                // was running it: the innermost `<poll any>` that has a caller
+                // gives it the status 2 and the failure, with nothing else of
+                // what it would have given.
+                Err(Ended(status)) => {
+                    let Some(kind) = self.failed else {
+                        return Err(Ended(status));
+                    };
+                    let program = self.program;
+                    let is_poll = |f: &Frame| program.functions[f.function].name == "<poll any>";
+                    // The poll is the frame that is running, one that waits below
+                    // it, or the function the run began with.
+                    let at = if is_poll(&frame) {
+                        Some(open.len())
+                    } else {
+                        open.iter().rposition(is_poll)
+                    };
+                    let Some(at) = at else {
+                        return Err(Ended(status));
+                    };
+                    self.failed = None;
+                    let poll = if at == open.len() {
+                        frame
+                    } else {
+                        open.swap_remove(at)
+                    };
+                    open.truncate(at);
+                    let results = &program.functions[poll.function].results;
+                    let mut words: Vec<Word> = results
+                        .iter()
+                        .map(|ty| match ty {
+                            Type::Address => Word::Address(0),
+                            Type::Vector(_) => Word::Vector(0),
+                            Type::Int(_) | Type::Float(_) => Word::Int(0),
+                        })
+                        .collect();
+                    let n = words.len();
+                    words[n - 3] = Word::Int(2);
+                    words[n - 1] = Word::Int(kind);
+                    let Some(mut caller) = open.pop() else {
+                        return Ok(words);
+                    };
+                    let call = &program.functions[caller.function].blocks[caller.block]
+                        .instructions[caller.at - 1];
+                    for (result, word) in call.results.iter().zip(words) {
+                        caller.values[result.0] = Some(word);
+                    }
+                    frame = caller;
+                    continue;
+                }
+            };
+            match stop {
                 Stop::Call { function, args } => {
                     let next = self.enter(function, args);
                     open.push(std::mem::replace(&mut frame, next));
@@ -1361,6 +1459,18 @@ impl Machine<'_> {
                             panic!("a status that is not a number")
                         };
                         return Err(Ended(status as u8));
+                    }
+                    // A failure ends the program unless the poll that is running
+                    // the task catches it, which `failed` tells.
+                    Op::System {
+                        call: System::Fail,
+                        args,
+                    } => {
+                        let Word::Int(kind) = get(&args[0]) else {
+                            panic!("a failure that is not a number")
+                        };
+                        self.failed = Some(kind);
+                        return Err(Ended(1));
                     }
                     Op::System {
                         call: System::Write(stream),
