@@ -192,6 +192,9 @@ fn deadline(n: u64) -> u64 { __word(n, 3) }
 // polled too, and leaves at once, by the exit that its first function begins with.
 fn is_cancelled(n: u64) -> bool { bits(n, 64) != 0 }
 
+// Whether the task ended by a failure.
+fn has_failed(n: u64) -> bool { bits(n, 128) != 0 }
+
 // Whether a task of the chain that begins at `first` waits for the task, which
 // then keeps its frame, since the one that waits reads it ended from there.
 fn is_waited_for(first: u64, n: u64) -> bool {
@@ -409,6 +412,11 @@ fn ended(n: u64) {
   __set_word(n, 1, wrapping_add(state(n), 1))
 }
 
+// It ended by a failure, which a join of it may not hide.
+fn ended_by_failure(n: u64) {
+  __set_word(n, 1, wrapping_add(state(n), 129))
+}
+
 fn waits_on_task(n: u64, t: u64) {
   __set_word(n, 1, wrapping_add(wrapping_sub(state(n), bits(n, 2)), 2))
   __set_word(n, 2, t)
@@ -459,6 +467,7 @@ pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! diverge 
 // waits for ever, which ends the program as every task waiting does.
 pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T ! task) -> T ! diverge {
   var first: u64 = 0
+  var anchor: u64 = 0
   var next: u64 = 0
   var rng: u64 = seed
   var current: u64 = 0
@@ -468,11 +477,15 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
     start: fn(work) {
       n = enter(__address(work), first)
       first = n
+      __set_word(anchor, 0, first)
       n
     },
     finish: fn(child) {
       if not has_ended(child) { __wait(.task(child)) }
+      // The value of a task that failed was never made.
+      if has_failed(child) { __end(1) }
       first = leave(first, child)
+      __set_word(anchor, 0, first)
       f = __frame_at(child)
       f
     },
@@ -486,9 +499,13 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
     timed_out: { is_timed_out(current) },
     limit: fn(ms) { by = ms },
     body: {
+      // A frame that holds the head of the chain where no failure takes it.
+      spare = __frame({ 0 })
+      note = __address(spare)
       root = __frame(body)
       top = enter(__address(root), first)
       first = top
+      anchor = note
       loop {
         if has_ended(top) { break }
         first = reap(first)
@@ -518,9 +535,17 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             runs_again(n)
             current = n
             f = __frame_at(n)
+            __set_word(note, 0, first)
             match __poll(f) {
               .done { ended(n) }
-              .failed(kind) { __end(1) }
+              .failed(kind) {
+                first = __word(note, 0)
+                anchor = note
+                current = n
+                by = 0
+                if n == top { __end(1) }
+                ended_by_failure(n)
+              }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -550,9 +575,16 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         other = pending(first, top)
         if other == 0 { break }
         f = __frame_at(other)
+        __set_word(note, 0, first)
         match __poll(f) {
           .done { ended(other) }
-          .failed(kind) { __end(1) }
+          .failed(kind) {
+            first = __word(note, 0)
+            anchor = note
+            current = other
+            by = 0
+            ended_by_failure(other)
+          }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)
@@ -561,6 +593,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
         __consume(f)
       }
       cancel_rest(first, top)
+      __drop(spare)
       result: T = __result(root)
       result
     },
@@ -760,6 +793,7 @@ fn ready_descriptor(ep: i64, time: i64) -> Option[u64] ! alloc {
 // numbers and nothing else, as every scheduler does.
 fn group[T](body: take fn() -> T ! task) -> T ! alloc {
   var first: u64 = 0
+  var anchor: u64 = 0
   var parked: u64 = 0
   var ep: i64 = -1
   var turn: u64 = 0
@@ -769,11 +803,15 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
     start: fn(work) {
       n = enter(__address(work), first)
       first = n
+      __set_word(anchor, 0, first)
       n
     },
     finish: fn(child) {
       if not has_ended(child) { __wait(.task(child)) }
+      // The value of a task that failed was never made.
+      if has_failed(child) { __end(1) }
       first = leave(first, child)
+      __set_word(anchor, 0, first)
       f = __frame_at(child)
       f
     },
@@ -787,9 +825,13 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
     timed_out: { is_timed_out(current) },
     limit: fn(ms) { by = ms },
     body: {
+      // A frame that holds the head of the chain where no failure takes it.
+      spare = __frame({ 0 })
+      note = __address(spare)
       root = __frame(body)
       top = enter(__address(root), first)
       first = top
+      anchor = note
       loop round in 0..9223372036854775807 {
         if has_ended(top) { break }
         first = reap(first)
@@ -844,9 +886,17 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
             runs_again(n)
             current = n
             f = __frame_at(n)
+            __set_word(note, 0, first)
             match __poll(f) {
               .done { ended(n) }
-              .failed(kind) { __end(1) }
+              .failed(kind) {
+                first = __word(note, 0)
+                anchor = note
+                current = n
+                by = 0
+                if n == top { __end(1) }
+                ended_by_failure(n)
+              }
               .waiting(w) {
                 match w {
                   .task(t) { waits_on_task(n, t) }
@@ -892,9 +942,16 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         other = pending(first, top)
         if other == 0 { break }
         f = __frame_at(other)
+        __set_word(note, 0, first)
         match __poll(f) {
           .done { ended(other) }
-          .failed(kind) { __end(1) }
+          .failed(kind) {
+            first = __word(note, 0)
+            anchor = note
+            current = other
+            by = 0
+            ended_by_failure(other)
+          }
           .waiting(w) {
             __eprint("a task that was asked to end waits again")
             __end(1)
@@ -904,6 +961,7 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       }
       cancel_rest(first, top)
       if ep >= 0 { __system(22, ep, 0, 0, 0, 0, 0) }
+      __drop(spare)
       result: T = __result(root)
       result
     },
