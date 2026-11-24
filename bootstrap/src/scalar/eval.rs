@@ -1336,7 +1336,10 @@ impl Machine<'_> {
                             panic!("a request for memory that is not a number")
                         };
                         self.requests.push(count as usize);
+                        // A request that the system refuses is the failure 0, which the
+                        // poll of a task catches.
                         if count > self.left as u64 {
+                            self.failed = Some(0);
                             return Err(Ended(1));
                         }
                         self.left -= count as usize;
