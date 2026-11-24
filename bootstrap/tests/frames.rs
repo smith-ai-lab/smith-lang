@@ -272,7 +272,7 @@ fn module_of(case: &[Lambda]) -> String {
         }
         let poll = |k: usize, indent: &str| {
             format!(
-                "{indent}if done{k} == 0 {{\n{indent}  match __poll(f{k}) {{\n{indent}    .done {{ done{k} = 1 }}\n{indent}    .waiting(w) {{ hash{k} = fold_wait(hash{k}, w) }}\n{indent}  }}\n{indent}}}\n"
+                "{indent}if done{k} == 0 {{\n{indent}  match __poll(f{k}) {{\n{indent}    .done {{ done{k} = 1 }}\n{indent}    .waiting(w) {{ hash{k} = fold_wait(hash{k}, w) }}\n{indent}    .failed(kind) {{ done{k} = 1 }}\n{indent}  }}\n{indent}}}\n"
             )
         };
         let n = case.len();
@@ -423,7 +423,7 @@ fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
 }
 
 /// A handler of `count` that keeps state, and one that does not.
-const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T ! sense) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T ! sense) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 ! sense {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
+const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T ! sense) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T ! sense) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 ! sense {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
 
 fn a_frame_under_a_handler_that_holds_state_reads_and_changes_it() {
     let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() ! console, alloc {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";
