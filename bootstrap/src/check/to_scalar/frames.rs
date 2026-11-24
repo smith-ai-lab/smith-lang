@@ -690,6 +690,31 @@ impl<'a> Lowering<'a> {
         // then the scheduler's state.
         out.give_back = own_slots.iter().chain(&state).cloned().collect();
         let lambda: &'a Lambda = def.lambda;
+        // A task that is asked to end before it runs leaves at once, ending what
+        // its lambda was given, as a task that is asked to end while it waits
+        // does, and gives zeros, which nothing reads.
+        let asked = out.emit(
+            form::Op::System {
+                call: form::System::Cancelled,
+                args: Vec::new(),
+            },
+            vec![WORD],
+        )[0];
+        let none = out.zero(WORD);
+        let not_asked = out.compare(form::Compare::Equal, asked, none);
+        let blocks = out.switch(not_asked, 2);
+        out.current = blocks[0];
+        let before = std::mem::replace(&mut self.asking, true);
+        self.drop_at(&mut out, crate::check::ownership::Site::Start(addr(lambda)));
+        self.asking = before;
+        let mut zeros = self.zeros(&mut out, &def.gives);
+        if def.gives == Ty::Nothing {
+            zeros.clear();
+        }
+        zeros.extend(self.state_values(&out, &own_slots));
+        zeros.extend(self.state_values(&out, &state));
+        out.blocks[out.current].end = form::End::Return(zeros);
+        out.current = blocks[1];
         let code = Code::Stmts(&lambda.body);
         let limits: Vec<usize> = match out.give_back.is_empty() {
             true => Vec::new(),

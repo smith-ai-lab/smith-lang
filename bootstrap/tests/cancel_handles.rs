@@ -21,6 +21,14 @@ pub const ONCE: &[Test] = &[
         a_connection_given_to_a_parent_by_join_is_closed_once_by_the_parent_and_not_by_the_child_that_ended,
     ),
     (
+        "a_cancelled_task_closes_each_connection_of_a_list_it_holds",
+        a_cancelled_task_closes_each_connection_of_a_list_it_holds,
+    ),
+    (
+        "a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given",
+        a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given,
+    ),
+    (
         "a_function_that_holds_a_connection_while_it_may_wait_and_does_not_carry_net_is_refused",
         a_function_that_holds_a_connection_while_it_may_wait_and_does_not_carry_net_is_refused,
     ),
@@ -39,7 +47,7 @@ fn program(functions: &str, tasks: &str, seed: u64) -> String {
 use std.console (console, print)
 use std.int (wrapping_add)
 use std.net (close, connection, handle, net, release, write, Connection)
-use std.list (freeze)
+use std.list (freeze, push)
 use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 {functions}
@@ -201,4 +209,42 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
     let source = program(FINISH, "  spawn { finish(4) }", 0)
         .replace("test_scheduler_with_io(0, [])", "test_scheduler_with_io(0, [4])");
     assert_eq!(sorted(said(&source)), ["1", "closed 4"]);
+}
+
+const LIST: &str = "fn hold_list(n: u64) -> List[Connection] ! net, task, alloc {
+  var cs: List[Connection] = []
+  cs = push(cs, connection(n))
+  cs = push(cs, connection(wrapping_add(n, 1)))
+  test_ready(n)
+  cs
+}
+";
+
+fn a_cancelled_task_closes_each_connection_of_a_list_it_holds() {
+    for seed in 0..8 {
+        let source = program(LIST, "  t = spawn { hold_list(20) }", seed);
+        assert_eq!(
+            sorted(said(&source)),
+            ["1", "closed 20", "closed 21"],
+            "seed {seed}"
+        );
+    }
+}
+
+const SERVE: &str = "fn serve(c: take Connection) -> u64 ! net, task {
+  test_ready(1)
+  close(c)
+  3
+}
+";
+
+/// The group ends before the child it started has run, so the connection that
+/// its lambda was given is closed by the child's first check, once, and the
+/// child does nothing else.
+fn a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given() {
+    for seed in 0..8 {
+        let source = program(SERVE, "  c = connection(9)\n  spawn { serve(c) }", seed)
+            .replace("  late = test_ready_by(99, 10)\n", "");
+        assert_eq!(sorted(said(&source)), ["1", "closed 9"], "seed {seed}");
+    }
 }
