@@ -1172,7 +1172,7 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
                 matches!(
                     i.op,
                     Op::System {
-                        call: Call::Fail | Call::Allocate,
+                        call: Call::Fail | Call::Allocate | Call::Write(_),
                         ..
                     }
                 )
@@ -1288,6 +1288,8 @@ struct Writer<'a, S> {
     /// when the program has a routine for it, and the end of the program when it
     /// has none.
     refused: usize,
+    /// Where a write to the console that the system refuses goes: the failure 1.
+    refused_write: usize,
     /// How far below its caller's frame the function's frame reaches, with
     /// the return address.
     frame: u32,
@@ -1393,6 +1395,11 @@ fn function<S: System>(
             fail
         },
         through_at,
+        refused_write: if unwinding.is_some() {
+            asm.label()
+        } else {
+            fail
+        },
         frame: total,
         frames,
         at,
@@ -1491,6 +1498,9 @@ fn function<S: System>(
         // here puts back from the frame of this function.
         asm.bind(w.refused);
         asm.mov_imm(R11, 0);
+        asm.call(u.routine);
+        asm.bind(w.refused_write);
+        asm.mov_imm(R11, 1);
         asm.call(u.routine);
         asm.bind(u.end);
         if u.landing != u.stub {
@@ -2617,7 +2627,7 @@ impl<S: System> Writer<'_, S> {
                     })
                     .collect();
                 self.run(asm, &moves);
-                S::write(asm, *stream, self.fail);
+                S::write(asm, *stream, self.refused_write);
             }
             Op::System {
                 call: Call::Read,
