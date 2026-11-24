@@ -35,11 +35,11 @@ const PEER: &str = include_str!("fail_peer.smith");
 /// Runs the program, for each target that has the native unwinder, under a limit
 /// of address space, and says what it wrote and how it ended.
 fn limited(source: &str, what: &str, check: impl Fn(&str, Option<i32>)) {
-    // The native unwinder is that of x86-64 on Linux, which limits address space
+    // The native unwinder is that of Linux on x86-64 and arm64, which limit address space
     // by `ulimit -v`.
     for target in targets::runnable()
         .into_iter()
-        .filter(|t| t.name().starts_with("linux") && !t.name().ends_with("arm64"))
+        .filter(|t| t.name().starts_with("linux"))
     {
         let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
         targets::record(target, &[&bytes]);
@@ -88,7 +88,7 @@ fn a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_ch
  {
     for target in targets::runnable()
         .into_iter()
-        .filter(|t| t.name().starts_with("linux") && !t.name().ends_with("arm64"))
+        .filter(|t| t.name().starts_with("linux"))
     {
         let bytes = targets::build(PEER.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
         targets::record(target, &[&bytes]);

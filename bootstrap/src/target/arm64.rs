@@ -28,6 +28,9 @@ pub const X21: u32 = 21;
 /// Kept for the chip, as x16 and x17 are: the register an instruction
 /// reaches a place in the frame too far from the stack pointer through.
 const X15: u32 = 15;
+/// Holds the failure while a failure goes up the frames, where nothing else
+/// keeps a value, and no instruction works in it.
+const X29: u32 = 29;
 /// Kept for the chip: the two registers an instruction works in, and where a
 /// value that breaks a circle of copies waits.
 const X16: u32 = 16;
@@ -304,6 +307,16 @@ impl Asm {
             label,
         });
         self.word(0x9400_0000);
+    }
+
+    /// `blr xn`.
+    fn call_register(&mut self, rn: u32) {
+        self.word(0xd63f_0000 | rn << 5);
+    }
+
+    /// `br xn`.
+    fn jump_register(&mut self, rn: u32) {
+        self.word(0xd61f_0000 | rn << 5);
     }
 
     /// `ret`.
@@ -858,6 +871,22 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     let texts: Vec<usize> = program.data.iter().map(|_| asm.label()).collect();
     let functions: Vec<usize> = program.functions.iter().map(|_| asm.label()).collect();
     let fail = asm.label();
+    // A failure goes back to the poll of the task only when a function polls and
+    // a function fails or asks for memory; a program that does not has none of
+    // what follows.
+    let unwinds = (program.functions.iter().any(|f| f.name == "<poll any>"))
+        && program.functions.iter().any(|f| {
+            (f.blocks.iter().flat_map(|b| &b.instructions)).any(|i| {
+                matches!(
+                    i.op,
+                    Op::System {
+                        call: Call::Fail | Call::Allocate,
+                        ..
+                    }
+                )
+            })
+        });
+    let routine = asm.label();
     let takes = program.takes_arguments();
     if takes {
         S::arguments_on_entry(&mut asm);
@@ -874,11 +903,28 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     asm.bind(fail);
     S::exit(&mut asm, 1);
     let mut frames = Vec::new();
+    let mut known = Vec::new();
     for (f, &label) in program.functions.iter().zip(&functions) {
         asm.bind(label);
+        let (end, stub) = (asm.label(), asm.label());
+        let landing = if f.name == "<poll any>" {
+            asm.label()
+        } else {
+            stub
+        };
+        let unwinding = unwinds.then_some(Unwinding {
+            routine,
+            end,
+            stub,
+            landing,
+        });
         frames.push(function::<S>(
-            &mut asm, program, f, &texts, &functions, fail,
+            &mut asm, program, f, &texts, &functions, fail, unwinding,
         ));
+        known.push((label, end, stub, landing));
+    }
+    if unwinds {
+        unwinder(&mut asm, routine, fail, &known);
     }
     let offsets: Vec<usize> = functions.iter().map(|&l| asm.label_offset(l)).collect();
     let pieces: Vec<Written> = (program.functions.iter())
@@ -890,6 +936,68 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
         .zip(program.data.iter().map(Vec::as_slice))
         .collect();
     (asm, data, parts)
+}
+
+/// The routine a failure calls, with the failure in x29. It goes up the frames
+/// from the one that failed, by the return address of each, putting back the
+/// registers each frame saved, until the frame is a poll's, which it leaves by
+/// the poll's landing with the stack as the poll had it, so the poll goes back to
+/// its caller with the failure. A return address that no function holds is the
+/// start of the program, which ends with the status 1. `known` is each function's
+/// start, end, the code that puts back its registers, and its landing, which is
+/// that code when the function is not a poll.
+fn unwinder(asm: &mut Asm, routine: usize, fail: usize, known: &[(usize, usize, usize, usize)]) {
+    let functions = asm.label();
+    asm.table_entries(
+        functions,
+        known
+            .iter()
+            .flat_map(|(a, b, c, d)| [*a, *b, *c, *d])
+            .collect(),
+    );
+    let (next, scan, other, ordinary) = (asm.label(), asm.label(), asm.label(), asm.label());
+    asm.bind(routine);
+    // x3 is the return address of the frame whose base is in x0.
+    asm.mov(X3, X30);
+    asm.add_immediate(0x9100_0000, X0, SP, 0);
+    asm.bind(next);
+    asm.address(X4, functions);
+    asm.mov_imm(X5, 0);
+    asm.bind(scan);
+    asm.mov_imm(6, known.len() as u64);
+    asm.cmp(X5, 6);
+    asm.cond(HS, fail);
+    // x6 is the entry: add x6, x4, x5, lsl #4
+    asm.word(0x8b00_0000 | X5 << 16 | 4 << 10 | X4 << 5 | 6);
+    // The entry's fields, each how far from the table, by x7.
+    let field = |asm: &mut Asm, rd: u32, at: u32| {
+        asm.add_immediate(0x9100_0000, rd, 6, at);
+        asm.load(rd, 4, true, Place::At(rd));
+        asm.add(rd, rd, X4);
+    };
+    field(asm, 7, 0);
+    asm.cmp(X3, 7);
+    asm.cond(LS, other);
+    field(asm, 7, 4);
+    asm.cmp(X3, 7);
+    asm.cond(HI, other);
+    field(asm, 7, 8);
+    field(asm, 8, 12);
+    asm.cmp(8, 7);
+    asm.cond(EQ, ordinary);
+    asm.add_immediate(0x9100_0000, SP, X0, 0);
+    asm.jump_register(8);
+    asm.bind(ordinary);
+    asm.call_register(7);
+    // The return address is at the top of the frame, and the caller's frame is
+    // above the frame.
+    asm.add(X0, X0, X2);
+    asm.add_immediate(0xd100_0000, X1, X0, 16);
+    asm.load(X3, 8, false, Place::At(X1));
+    asm.branch(next);
+    asm.bind(other);
+    asm.add_immediate(0x9100_0000, X5, X5, 1);
+    asm.branch(scan);
 }
 
 /// Where a value is held, in the code.
@@ -925,6 +1033,18 @@ enum Saved {
     Float,
 }
 
+/// What a function adds to be put back by a failure: the labels of the end of
+/// its code and of the code that puts back the registers it saved, and the one
+/// where a failure that reaches the frame of a poll goes on, which is the stub's
+/// own when the function is not a poll.
+#[derive(Clone, Copy)]
+struct Unwinding {
+    routine: usize,
+    end: usize,
+    stub: usize,
+    landing: usize,
+}
+
 /// A function being written, and where each value is.
 struct Writer<'a, S> {
     program: &'a Program,
@@ -935,6 +1055,16 @@ struct Writer<'a, S> {
     texts: &'a [usize],
     functions: &'a [usize],
     fail: usize,
+    /// The routine that a failure calls, when there is one.
+    unwind: Option<usize>,
+    /// Where a poll keeps what it was given to pass through, in its frame: a task
+    /// that fails gives the poll's caller what the poll was given, which is what
+    /// the handlers of the program passed, and a failure does not lose them.
+    through_at: Option<u32>,
+    /// Where a request for memory that the system refuses goes: the failure 0
+    /// when the program has a routine for it, and the end of the program when it
+    /// has none.
+    refused: usize,
     /// How far below its caller's frame the function's frame reaches.
     frame: u32,
     /// Where in the frame the bytes of each `Frame` are, by its value.
@@ -972,6 +1102,7 @@ fn function<S: System>(
     texts: &[usize],
     functions: &[usize],
     fail: usize,
+    unwinding: Option<Unwinding>,
 ) -> u32 {
     let f = &crate::scalar::rematerialized(f);
     let constants = super::branch::constants(f);
@@ -1005,6 +1136,12 @@ fn function<S: System>(
             }
         }
     }
+    // A poll keeps what it is given to pass through where a failure finds it.
+    let through_at = (unwinding.is_some() && f.name == "<poll any>").then(|| {
+        let at = round_up(spilled_to, 8);
+        spilled_to = at + 8 * (f.blocks[0].params.len() as u32 - 1);
+        at
+    });
     let saved_from = round_up(spilled_to, 8);
     // The address the function returns to is kept above its values.
     let total = round_up(saved_from + 8 * allocation.saved.len() as u32, 16) + 16;
@@ -1037,6 +1174,7 @@ fn function<S: System>(
     // A choice branches straight to the block it goes to when that block is
     // in reach of a conditional branch, which is 1 MB, and otherwise the
     // function is written again with the branch over an unconditional one.
+    let refused = unwinding.map_or(fail, |_| asm.label());
     let mark = asm.mark();
     for far in [false, true] {
         let labels = f.blocks.iter().map(|_| asm.label()).collect();
@@ -1047,6 +1185,9 @@ fn function<S: System>(
             texts,
             functions,
             fail,
+            unwind: unwinding.map(|u| u.routine),
+            through_at,
+            refused,
             frame: total,
             frames: frames.clone(),
             at: at.clone(),
@@ -1071,6 +1212,23 @@ fn function<S: System>(
             match kind {
                 Saved::Int => asm.store(Place::Frame(*at), *r, 8),
                 Saved::Float => asm.float_store(Place::Frame(*at), *r, 8),
+            }
+        }
+        if let Some(at) = through_at {
+            let given = f.blocks[0].params.iter().zip(&w.arrive).skip(1);
+            for (i, (p, from)) in given.enumerate() {
+                if matches!(f.types[p.0], Type::Float(_) | Type::Vector(_)) {
+                    continue;
+                }
+                let to = Place::Frame(at + 8 * i as u32);
+                match *from {
+                    Loc::Register(r) => asm.store(to, r, 8),
+                    Loc::Frame(from) => {
+                        asm.load(X16, 8, false, Place::Frame(from));
+                        asm.store(to, X16, 8);
+                    }
+                    Loc::Float(_) | Loc::Imm(_) => {}
+                }
             }
         }
         // The function's own parameters are in registers, and in the caller's
@@ -1105,6 +1263,47 @@ fn function<S: System>(
                 }
             }
             w.end(asm, b);
+        }
+        if let Some(u) = unwinding {
+            // The failure that a refused request for memory is, which a call from
+            // here puts back from the frame of this function.
+            asm.bind(refused);
+            asm.mov_imm(X29, 0);
+            asm.call_label(u.routine);
+            asm.bind(u.end);
+            if u.landing != u.stub {
+                // A failure that reaches the poll goes back to its caller as the
+                // poll ends: with the status 2 and the failure, which is in x29,
+                // what the poll was given to pass through as it was given, and
+                // zeros for the rest.
+                asm.bind(u.landing);
+                let results: Vec<(Loc, Type)> = (w.leave.iter().copied())
+                    .zip(f.results.iter().copied())
+                    .collect();
+                w.give_the_failure(asm, &results);
+                for (kind, r, at) in &w.saved {
+                    match kind {
+                        Saved::Int => asm.load(*r, 8, false, Place::Frame(*at)),
+                        Saved::Float => asm.float_load(*r, 8, Place::Frame(*at)),
+                    }
+                }
+                asm.load(X30, 8, false, Place::Frame(w.frame - 16));
+                asm.release_stack(w.frame);
+                asm.ret();
+            }
+            // What puts back the registers of the frame whose base is in x0, and
+            // leaves in x2 how many bytes the frame takes.
+            asm.bind(u.stub);
+            for (kind, r, at) in &w.saved {
+                asm.mov_imm(X1, u64::from(*at));
+                asm.add(X1, X0, X1);
+                match kind {
+                    Saved::Int => asm.load(*r, 8, false, Place::At(X1)),
+                    Saved::Float => asm.float_load(*r, 8, Place::At(X1)),
+                }
+            }
+            asm.mov_imm(X2, u64::from(total));
+            asm.ret();
         }
         if far || asm.reaches(mark) {
             break;
@@ -1171,6 +1370,37 @@ fn held(f: &Function, constants: &[Option<u64>], folded: Option<&[Vec<Folded>]>)
 }
 
 impl<S: System> Writer<'_, S> {
+    /// Puts where a poll gives its results what it gives when the task failed:
+    /// the status 2, the failure, which is in x29, what the poll was given to pass
+    /// through as it was given, and zeros for the rest, except what is a float or
+    /// a vector, which nothing reads.
+    fn give_the_failure(&self, asm: &mut Asm, results: &[(Loc, Type)]) {
+        let n = results.len();
+        for (i, (to, ty)) in results.iter().enumerate() {
+            let width = size(*ty);
+            let kept = (self.through_at)
+                .filter(|_| i + 3 < n)
+                .map(|at| at + 8 * i as u32);
+            match (*to, ty) {
+                (_, Type::Float(_) | Type::Vector(_)) => {}
+                (Loc::Register(r), _) if i == n - 1 => asm.mov(r, X29),
+                (Loc::Register(r), _) => match kept {
+                    Some(at) => asm.load(r, 8, false, Place::Frame(at)),
+                    None => asm.mov_imm(r, if i == n - 3 { 2 } else { 0 }),
+                },
+                (Loc::Frame(at), _) if i == n - 1 => asm.store(Place::Frame(at), X29, width),
+                (Loc::Frame(at), _) => {
+                    match kept {
+                        Some(from) => asm.load(X16, 8, false, Place::Frame(from)),
+                        None => asm.mov_imm(X16, if i == n - 3 { 2 } else { 0 }),
+                    }
+                    asm.store(Place::Frame(at), X16, width);
+                }
+                (Loc::Float(_) | Loc::Imm(_), _) => {}
+            }
+        }
+    }
+
     fn width(&self, v: Value) -> u32 {
         size(self.f.types[v.0])
     }
@@ -1845,17 +2075,25 @@ impl<S: System> Writer<'_, S> {
                 self.read_into(asm, X0, args[0]);
                 S::end(asm);
             }
-            // Nothing yet puts a task back to the scheduler that polled it, so a
-            // failure ends the program, as a refused request for memory does.
+            // A failure goes back to the poll that runs the task when the program
+            // has one, and otherwise ends the program, as a refused request for
+            // memory does.
             Op::System {
-                call: Call::Fail, ..
-            } => asm.branch(self.fail),
+                call: Call::Fail,
+                args,
+            } => match self.unwind {
+                Some(routine) => {
+                    self.read_into(asm, X29, args[0]);
+                    asm.call_label(routine);
+                }
+                None => asm.branch(self.fail),
+            },
             Op::System {
                 call: Call::Allocate,
                 args,
             } => {
                 self.read_into(asm, X1, args[0]);
-                S::alloc(asm, self.fail);
+                S::alloc(asm, self.refused);
                 self.finish(asm, results[0], X0, true);
             }
         }
