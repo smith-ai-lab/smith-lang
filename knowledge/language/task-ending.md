@@ -4,8 +4,8 @@ title: How a task ends
 description: Three things end a task before its work is done, and what is dropped and closed when one does.
 status: partial
 built:
-  - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, or an enum, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
-  - "not built: a failure of a task, the handles in a list, the handles of `fs`, and the handles that the lambda of a task that has not run yet captured, which stay open until the program ends, as when `spawn { serve(c) }` is in a group that ends before the child runs"
+  - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, an enum, or a list, and a task that is asked to end before it ran ends what its lambda was given, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
+  - "not built: a failure of a task, and the handles of `fs`"
 ---
 
 # How a task ends

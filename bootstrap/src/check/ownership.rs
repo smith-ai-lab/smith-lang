@@ -228,6 +228,10 @@ pub(super) enum Site {
     /// After a call, where the task may be asked to end and the function leaves
     /// at once: what the function owns and has not handed on.
     Cancel(usize),
+    /// At the start of the work of a child, by the address of its lambda, where
+    /// the task is asked to end before it ran: what the lambda was given and
+    /// would have given away.
+    Start(usize),
 }
 
 /// Where the values that may hold a child task are dropped, which the
@@ -1102,7 +1106,7 @@ impl<'a> Walk<'a> {
                 None
             }
             Expr::Lambda(l) => {
-                self.lambda(st, l, &[], Kept::Lent);
+                self.lambda(st, l, &[], (Kept::Lent, false));
                 None
             }
             Expr::Loop(l) => {
@@ -1614,7 +1618,13 @@ impl<'a> Walk<'a> {
     /// away of what it did not define or take is spent from here, and the
     /// lambda is called once, so it is passed to a parameter that takes its
     /// function. Its parameter owns what it is given when `takes` says so.
-    fn lambda(&mut self, st: &mut State, l: &Lambda, takes: &[bool], kept: Kept) {
+    fn lambda(
+        &mut self,
+        st: &mut State,
+        l: &Lambda,
+        takes: &[bool],
+        (kept, spawned): (Kept, bool),
+    ) {
         let outer = st
             .as_ref()
             .map(|m| m.held.iter().map(|h| (h.name.clone(), h.pos)).collect())
@@ -1666,6 +1676,22 @@ impl<'a> Walk<'a> {
                 && leaves.iter().all(|gone| !gone.contains(name));
             !paid
         });
+        if spawned {
+            let mut names: Vec<&String> = Vec::new();
+            for (name, ..) in &frame.gives {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+            let dropped = (names.into_iter())
+                .map(|name| Dropped {
+                    name: name.clone(),
+                    part: Vec::new(),
+                    except: Vec::new(),
+                })
+                .collect();
+            self.record(Site::Start(addr(l)), dropped);
+        }
         if frame.gives.is_empty() {
             return;
         }
@@ -1861,7 +1887,12 @@ impl<'a> Walk<'a> {
                     } else {
                         Kept::Lent
                     };
-                    self.lambda(st, l, takes, kept);
+                    let spawned = call.qualifier.is_none()
+                        && call.callee == "spawn"
+                        && defs
+                            .function(call.name_pos, &call.callee)
+                            .is_some_and(|f| super::of_std(defs.file.functions[f].pos));
+                    self.lambda(st, l, takes, (kept, spawned));
                 }
                 value => {
                     self.eval(st, value, flow);

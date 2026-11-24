@@ -1437,8 +1437,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// Ends each handle of `net` that a value holds, through the handler in
-    /// force, where a task that was asked to end leaves. The handles in a list
-    /// are not ended yet.
+    /// force, where a task that was asked to end leaves.
     fn close_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
         let defs = self.typed.defs;
         if !self.holds_handle(ty, &mut Vec::new()) {
@@ -1452,6 +1451,10 @@ impl<'a> Lowering<'a> {
             Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
             Ty::Tuple(items) => items.clone(),
             Ty::Array(items, n) => vec![items[0].clone(); *n as usize],
+            Ty::List(of) | Ty::Slice(of) => {
+                self.close_elements(out, &of[0], values);
+                return;
+            }
             Ty::Enum(e, args) => {
                 let layout = self.layout(*e, args);
                 let holds: Vec<Option<Ty>> = (defs.cases[*e].iter())
@@ -1702,6 +1705,43 @@ impl<'a> Lowering<'a> {
         let at = out.binary(form::Binary::Add, values[0], offset);
         let held = self.load(out, at, &places);
         self.call_detach(out, element, &held);
+        let one = out.int(form::Bits::B64, 1);
+        let next = out.binary(form::Binary::Add, i, one);
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![next],
+        });
+        out.current = done;
+    }
+
+    /// Ends the handles of each element of a list or a slice, whose address and
+    /// size are the first two of `values`, one element after another.
+    fn close_elements(&mut self, out: &mut Out<'a>, element: &Ty, values: &[form::Value]) {
+        if !self.holds_handle(element, &mut Vec::new()) {
+            return;
+        }
+        let word = form::Type::Int(form::Bits::B64);
+        let scalars = self.scalars(element);
+        let (places, stride) = form::element(&scalars);
+        let places: Vec<(form::Type, u64)> = scalars.into_iter().zip(places).collect();
+        let stride = out.int(form::Bits::B64, i128::from(stride));
+        let zero = out.int(form::Bits::B64, 0);
+        let header = out.new_block();
+        let i = out.fresh(word);
+        out.blocks[header].params = vec![i];
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![zero],
+        });
+        out.current = header;
+        let more = out.compare(form::Compare::LessU, i, values[1]);
+        let arms = out.switch(more, 2);
+        let done = arms[0];
+        out.current = arms[1];
+        let offset = out.binary(form::Binary::Mul, i, stride);
+        let at = out.binary(form::Binary::Add, values[0], offset);
+        let held = self.load(out, at, &places);
+        self.close_value(out, element, &held);
         let one = out.int(form::Bits::B64, 1);
         let next = out.binary(form::Binary::Add, i, one);
         out.blocks[out.current].end = form::End::Jump(form::Jump {
