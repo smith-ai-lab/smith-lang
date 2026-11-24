@@ -778,12 +778,19 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
       loop round in 0..9223372036854775807 {
         if has_ended(top) { break }
         first = reap(first)
-        // The clock is read only when a task waits for a time.
+        // The clock is read only when a task waits for a time, and once for the turn
+        // to decide which tasks' times have come and how long to wait for the next,
+        // so that a time that comes between two reads is neither missed by the one
+        // nor counted as left by the other.
         timers = has_timers(first)
-        if timers { parked = wrapping_sub(parked, expire(first, read_clock())) }
+        var moment: u64 = 0
+        if timers {
+          moment = read_clock()
+          parked = wrapping_sub(parked, expire(first, moment))
+        }
         var many = count_runnable(first)
         var soon: u64 = 0
-        if timers and many == 0 { soon = nearest(first, read_clock()) }
+        if timers and many == 0 { soon = nearest(first, moment) }
         if parked > 0 or soon > 0 {
           // The system's queue is asked what is ready, and when nothing can run it
           // is waited in until the nearest time that a task waits for, or for ever
@@ -806,8 +813,13 @@ fn group[T](body: take fn() -> T ! task) -> T ! alloc {
         turn = wrapping_add(turn, 1)
         match checked_rem(turn, many) {
           .none {
-            __eprint("every task waits, and none can run")
-            __end(1)
+            // No task can run now. When one waits for a time or for the system the
+            // turn is made again, as when the wait for them ended early, and only
+            // when none does is it so for ever.
+            if not timers and parked == 0 {
+              __eprint("every task waits, and none can run")
+              __end(1)
+            }
           }
           .some(k) {
             n = nth_runnable(first, k)
