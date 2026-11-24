@@ -117,9 +117,11 @@ pub struct Suspended {
 }
 
 /// The bytes at the start of a frame: the number of the state, the number of
-/// the poll, and the stack for results of the task, as it is now and as it was
-/// when the task began, each a pair of the address and the bytes left.
-pub const HEADER: u64 = 80;
+/// the poll, the stack for results of the task, as it is now and as it was
+/// when the task began, each a pair of the address and the bytes left, the four
+/// words of a scheduler, and one word more, which it keeps in memory that no
+/// failure puts back, so the bytes are a multiple of 16.
+pub const HEADER: u64 = 96;
 
 /// Where in the header the four words are that a scheduler keeps its queues in.
 pub const SCHEDULER_AT: u64 = 48;
