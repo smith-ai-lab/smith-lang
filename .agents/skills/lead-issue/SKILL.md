@@ -40,7 +40,7 @@ Then find the work the last lead left in flight, since a worker reports to the s
 
    The issue is the brief. If the worker would need more than this, the issue is missing something: fix the issue.
 
-3. Wait for the worker's message, and for nothing else. Do not message it or check on it while it works, do not subscribe to its pull request, and do not schedule a check. Each of those wakes the lead, and a wake costs the whole conversation again. If the owner writes and no message has come, look at GitHub once then.
+3. Wait for the worker's message. Do not message it or check on it while it works, and do not subscribe to its pull request: each of those wakes the lead, and a wake costs the whole conversation again. But a worker can stop without a message, and then both of you wait. So before you end a turn while any worker works, schedule one check-in three hours out (`send_later`), and replace it rather than add a second. When it comes, look once at each worker's session status and its open pull requests. A worker that is idle with no message has stopped without saying so: read its last turn and act on it. If the owner writes and no message has come, look at GitHub once then.
 
 4. If it stopped with a question, answer in a comment on the issue. Answer from `knowledge/`. If it does not answer the question, it is a design question: ask the owner, agree on the answer, write it into `knowledge/` with the `update-knowledge` skill, and then answer. Then tell the worker the answer is on the issue.
 

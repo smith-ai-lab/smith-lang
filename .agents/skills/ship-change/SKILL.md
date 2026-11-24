@@ -34,6 +34,8 @@ Every change reaches `main` through a pull request. Nothing is pushed to `main` 
 ## Finishing
 
 - If a lead gave you the issue, stop once the pull request exists and every check passes. End your turn with the pull request's number. The lead reviews it and merges it.
+- A job that the runner cancelled or lost, and not a test that failed, is run again once with `gh api -X POST repos/{owner}/{repo}/actions/runs/<run>/rerun-failed-jobs`. If it does not pass the second time, stop and say so; don't wait for it.
+- Never end a turn waiting for something that will not wake you. While checks run, wait for them inside the turn, in a loop with a time limit, or subscribe to the pull request so that the result wakes you. A lead that gave you the issue is told every time you stop, whatever the reason: the checks passed, a check failed and you could not fix it, a check was cancelled twice, or you are blocked. Silence reads as "still working", so a worker that stops without a message stops the work.
 - Otherwise, add the pull request to the merge queue with a rebase merge once every check is green.
 
 ## What you could not guess
