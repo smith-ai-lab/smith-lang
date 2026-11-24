@@ -110,7 +110,8 @@ fn run_with(target: Target, source: &str, words: &[&str], limit: Option<u32>, du
     }
     let status = child.wait().unwrap();
     std::fs::remove_dir_all(&dir).ok();
-    assert!(status.success(), "{} ended with {status}", target.name());
+    let said = crate::ports::said(&mut child);
+    assert!(status.success(), "{} ended with {status}, and said {said:?}, after {all:?}", target.name());
     (all, started.elapsed())
 }
 
