@@ -1196,6 +1196,8 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     S::exit(&mut asm, 1);
     let mut frames = Vec::new();
     let mut known = Vec::new();
+    let mut sites = Vec::new();
+    let next = asm.label();
     for (f, &label) in program.functions.iter().zip(&functions) {
         asm.bind(label);
         let (end, stub) = (asm.label(), asm.label());
@@ -1206,17 +1208,19 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
         };
         let unwinding = unwinds.then_some(Unwinding {
             routine,
+            next,
             end,
             stub,
             landing,
         });
-        frames.push(function::<S>(
-            &mut asm, program, f, &texts, &functions, fail, unwinding,
-        ));
+        let (total, here) =
+            function::<S>(&mut asm, program, f, &texts, &functions, fail, unwinding);
+        frames.push(total);
+        sites.extend(here);
         known.push((label, end, stub, landing));
     }
     if unwinds {
-        unwinder(&mut asm, routine, fail, &known);
+        unwinder(&mut asm, routine, next, fail, &known, &sites);
     }
     let offsets: Vec<usize> = functions.iter().map(|&l| asm.label_offset(l)).collect();
     let pieces: Vec<Written> = (program.functions.iter())
@@ -1261,11 +1265,24 @@ fn passing(places: &[Passed], types: &[Type], base: u32) -> Vec<Loc> {
 /// its code and of the code that puts back the registers it saved, and the one
 /// where a failure that reaches the frame of a poll goes on, which is the
 /// stub's own when the function is not a poll.
+#[derive(Clone, Copy)]
 struct Unwinding {
     routine: usize,
+    /// Where the unwinder goes on from the frame whose base is in rax, which has
+    /// the return address of the frame above it in rdx.
+    next: usize,
     end: usize,
     stub: usize,
     landing: usize,
+}
+
+/// What a landing ends with: the unwinder, the code that puts back the registers
+/// of the function, and where a poll goes on instead.
+#[derive(Clone, Copy)]
+struct ResumeAt {
+    next: usize,
+    stub: usize,
+    poll: Option<usize>,
 }
 
 /// A function being written, and where each value is.
@@ -1284,6 +1301,10 @@ struct Writer<'a, S> {
     /// that fails gives the poll's caller what the poll was given, which is what
     /// the handlers of the program passed, and a failure does not lose them.
     through_at: Option<u32>,
+    /// Where a failure waits while a landing of this function runs, and how the
+    /// failure goes on up from the function once it has.
+    fail_at: Option<u32>,
+    resume: Option<ResumeAt>,
     /// Where a request for memory that the system refuses goes: the failure 0
     /// when the program has a routine for it, and the end of the program when it
     /// has none.
@@ -1329,7 +1350,7 @@ fn function<S: System>(
     functions: &[usize],
     fail: usize,
     unwinding: Option<Unwinding>,
-) -> u32 {
+) -> (u32, Vec<(usize, usize)>) {
     let f = &crate::scalar::rematerialized(f);
     let constants = super::branch::constants(f);
     let held = held(f, &constants);
@@ -1353,6 +1374,32 @@ fn function<S: System>(
     let through_at = (unwinding.as_ref().is_some() && f.name == "<poll any>").then(|| {
         let at = round_up(spilled_to, 8);
         spilled_to = at + 8 * (f.blocks[0].params.len() as u32 - 1);
+        at
+    });
+    // The calls that a landing follows, by where they are, and where the landing is.
+    let mut landing_of_call: std::collections::HashMap<(usize, usize), usize> =
+        std::collections::HashMap::new();
+    for (b, block) in f.blocks.iter().enumerate() {
+        let unwinding_op = block.instructions.iter().position(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: Call::Unwinding,
+                    ..
+                }
+            )
+        });
+        if let (Some(u), End::Switch { jumps, .. }) = (unwinding_op, &block.end)
+            && u > 0
+            && matches!(block.instructions[u - 1].op, Op::Call { .. })
+        {
+            landing_of_call.insert((b, u - 1), jumps[0].block);
+        }
+    }
+    // The failure waits in the frame while a landing runs.
+    let fail_at = (unwinding.is_some() && !landing_of_call.is_empty()).then(|| {
+        let at = round_up(spilled_to, 8);
+        spilled_to = at + 8;
         at
     });
     let saved_from = round_up(spilled_to, 8);
@@ -1395,6 +1442,12 @@ fn function<S: System>(
             fail
         },
         through_at,
+        fail_at,
+        resume: unwinding.map(|u| ResumeAt {
+            next: u.next,
+            stub: u.stub,
+            poll: (u.landing != u.stub).then_some(u.landing),
+        }),
         refused_write: if unwinding.is_some() {
             asm.label()
         } else {
@@ -1449,6 +1502,8 @@ fn function<S: System>(
         })
         .collect();
     w.run(asm, &moves);
+    let mut entries: Vec<(usize, usize, usize)> = Vec::new();
+    let mut sites: Vec<(usize, usize)> = Vec::new();
     for (b, block) in f.blocks.iter().enumerate() {
         asm.bind(w.labels[b]);
         let made = block.instructions.len() - usize::from(w.branches_on_compare[b]);
@@ -1490,8 +1545,28 @@ fn function<S: System>(
                 Some(j) => w.choice(asm, &block.instructions[j], instruction),
                 None => w.instruction(asm, &instruction.results, &instruction.op),
             }
+            // The return address of a call that a landing follows is where the
+            // unwinder finds the landing from.
+            if fail_at.is_some()
+                && let Some(&landing) = landing_of_call.get(&(b, i))
+            {
+                let (after, entry) = (asm.label(), asm.label());
+                asm.bind(after);
+                entries.push((after, entry, landing));
+            }
         }
         w.end(asm, b);
+    }
+    // The way in to each landing keeps the failure, and goes to the landing.
+    for (after, entry, landing) in entries {
+        asm.bind(entry);
+        asm.store(
+            Place::Frame(fail_at.expect("a frame has room for it")),
+            R11,
+            8,
+        );
+        asm.jmp(w.labels[landing]);
+        sites.push((after, entry));
     }
     if let Some(u) = unwinding {
         // The failure that a refused request for memory is, which a call from
@@ -1528,7 +1603,7 @@ fn function<S: System>(
         asm.mov32(RCX, total);
         asm.ret();
     }
-    total
+    (total, sites)
 }
 
 /// The routine a failure calls, with the failure in r11. It goes up the frames
@@ -1539,7 +1614,14 @@ fn function<S: System>(
 /// start of the program, which ends with the status 1. `known` is each
 /// function's start, end, the code that puts back its registers, and its landing,
 /// which is that code when the function is not a poll.
-fn unwinder(asm: &mut Asm, routine: usize, fail: usize, known: &[(usize, usize, usize, usize)]) {
+fn unwinder(
+    asm: &mut Asm,
+    routine: usize,
+    next: usize,
+    fail: usize,
+    known: &[(usize, usize, usize, usize)],
+    sites: &[(usize, usize)],
+) {
     let functions = asm.label();
     asm.table_entries(
         functions,
@@ -1549,14 +1631,59 @@ fn unwinder(asm: &mut Asm, routine: usize, fail: usize, known: &[(usize, usize, 
             .collect(),
     );
     let rsp = Reg(4);
-    let (next, scan_functions, other_function, ordinary) =
-        (asm.label(), asm.label(), asm.label(), asm.label());
+    let table = asm.label();
+    asm.table_entries(table, sites.iter().flat_map(|(a, b)| [*a, *b]).collect());
+    let (scan_functions, other_function, ordinary, scan_sites, not_a_site, in_a_site) = (
+        asm.label(),
+        asm.label(),
+        asm.label(),
+        asm.label(),
+        asm.label(),
+        asm.label(),
+    );
     asm.bind(routine);
     // rdx is the return address of the frame in rax, which is the base of the
     // frame that holds it.
     asm.load(RDX, 8, false, Place::Frame(0));
     asm.lea_displaced(RAX, rsp, 8);
     asm.bind(next);
+    // A frame at a call that has a landing enters it first, a poll too.
+    asm.address(RDI, table);
+    asm.mov_imm(R9, 0);
+    asm.bind(scan_sites);
+    asm.cmp_imm32(R9, sites.len() as u32);
+    asm.jcc(AE, not_a_site);
+    asm.load(
+        R8,
+        4,
+        true,
+        Place::Indexed {
+            base: RDI,
+            index: R9,
+            scale: 8,
+        },
+    );
+    asm.add(R8, RDI);
+    asm.cmp(R8, RDX);
+    asm.jcc(Z, in_a_site);
+    asm.lea_displaced(R9, R9, 1);
+    asm.jmp(scan_sites);
+    asm.bind(in_a_site);
+    asm.lea_displaced(RSI, RDI, 4);
+    asm.load(
+        R8,
+        4,
+        true,
+        Place::Indexed {
+            base: RSI,
+            index: R9,
+            scale: 8,
+        },
+    );
+    asm.add(R8, RDI);
+    asm.mov(rsp, RAX);
+    asm.jump_register(R8);
+    asm.bind(not_a_site);
     asm.address(RDI, functions);
     asm.mov_imm(R9, 0);
     asm.bind(scan_functions);
@@ -2622,9 +2749,29 @@ impl<S: System> Writer<'_, S> {
                 asm.mov_imm(RAX, 0);
                 self.finish(asm, results[0], RAX, true);
             }
+            // A landing is over: the failure goes on up, from where the landing is.
             Op::System {
                 call: Call::Resume, ..
-            } => asm.jmp(self.fail),
+            } => match (self.resume, self.fail_at) {
+                (Some(r), Some(at)) => {
+                    asm.load(R11, 8, false, Place::Frame(at));
+                    match r.poll {
+                        // A poll that owned something goes back to its caller.
+                        Some(landing) => asm.jmp(landing),
+                        None => {
+                            // The frame is left as a frame whose return address
+                            // is the next the unwinder looks at.
+                            asm.mov(RAX, Reg(4));
+                            asm.call(r.stub);
+                            asm.add(RAX, RCX);
+                            asm.load(RDX, 8, false, Place::At(RAX));
+                            asm.lea_displaced(RAX, RAX, 8);
+                            asm.jmp(r.next);
+                        }
+                    }
+                }
+                _ => asm.jmp(self.fail),
+            },
             Op::System {
                 call: Call::Write(stream),
                 args,
