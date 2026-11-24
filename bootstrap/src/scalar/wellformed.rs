@@ -594,7 +594,15 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                 }
                 Op::System {
-                    call: System::Cancelled,
+                    call: System::Resume,
+                    args,
+                } => {
+                    if !args.is_empty() || !instruction.results.is_empty() {
+                        return Err(Why::WrongCount);
+                    }
+                }
+                Op::System {
+                    call: System::Cancelled | System::Unwinding,
                     args,
                 } => {
                     let [result] = &instruction.results[..] else {

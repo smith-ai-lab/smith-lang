@@ -2015,6 +2015,17 @@ impl<S: System> Writer<'_, S> {
                 call: Call::Suspend | Call::Cancelled,
                 ..
             } => unreachable!("a suspension is gone once the state machines are made"),
+            // Nothing but the unwinder takes the jump the choice on it makes.
+            Op::System {
+                call: Call::Unwinding,
+                ..
+            } => {
+                asm.mov_imm(X0, 0);
+                self.finish(asm, results[0], X0, true);
+            }
+            Op::System {
+                call: Call::Resume, ..
+            } => asm.branch(self.fail),
             Op::System {
                 call: Call::Write(stream),
                 args,

@@ -1416,10 +1416,47 @@ impl<'a> Lowering<'a> {
                 .expect("a name the functions of the handler use");
             out.frames[slot.frame][at].values = given.by_ref().take(slot.types.len()).collect();
         }
+        // Where a failure goes up through the call, the function ends what it
+        // owns there, as it ends it where the task is asked to end.
+        if self.owns_across(out) {
+            self.exit_on(out, form::System::Unwinding, true);
+        }
         if prepared.suspends {
             self.cancel_exit(out);
         }
         results
+    }
+
+    /// Whether the function owns something at the call it is lowering that a
+    /// task that is asked to end ends: a child, or a handle.
+    fn owns_across(&mut self, out: &mut Out<'a>) -> bool {
+        // The calls that end what the function owns, in a landing or in the exit
+        // of a task that is asked to end, have no landing of their own, since a
+        // failure in one is a second failure.
+        if out.returns.last().is_none() || self.asking || self.closing {
+            return false;
+        }
+        let Some(&site) = out.sites.last() else {
+            return false;
+        };
+        let Some(items) = self
+            .typed
+            .drops
+            .at
+            .get(&crate::check::ownership::Site::Cancel(site))
+        else {
+            return false;
+        };
+        let items = items.clone();
+        items.iter().any(|item| {
+            let Some(at) = out.find(&item.name) else {
+                return false;
+            };
+            let bound = &out.names()[at];
+            let handles = self.holds_handle(&bound.ty, &mut Vec::new());
+            !(bound.home.is_some() || (self.holds_none(&bound.ty) && !handles))
+                && self.part_of(&bound.ty, &item.part).is_some()
+        })
     }
 
     /// Where the task may be asked to end, after a call it may be suspended in:
@@ -1429,13 +1466,21 @@ impl<'a> Lowering<'a> {
     /// themselves are ended by their handlers. Inside the block of a loop over
     /// a value no exit is written, as the block does not leave the function.
     pub(super) fn cancel_exit(&mut self, out: &mut Out<'a>) {
+        self.exit_on(out, form::System::Cancelled, false);
+    }
+
+    /// The exit of `cancel_exit`, taken when what `asked` gives is not 0: where
+    /// the task is asked to end, which a call that waits is followed by, and where
+    /// a failure goes up through a call, which `landing` says: the landing ends
+    /// what the function owns, and goes on up.
+    pub(super) fn exit_on(&mut self, out: &mut Out<'a>, asked: form::System, landing: bool) {
         let Some(returns) = out.returns.last() else {
             return;
         };
         let (kept, in_block, gives) = (returns.kept, returns.of.is_some(), returns.gives.clone());
         let asked = out.emit(
             form::Op::System {
-                call: form::System::Cancelled,
+                call: asked,
                 args: Vec::new(),
             },
             vec![form::Type::Int(form::Bits::B64)],
@@ -1450,6 +1495,15 @@ impl<'a> Lowering<'a> {
             let before = std::mem::replace(&mut self.asking, true);
             self.drop_at(out, crate::check::ownership::Site::Cancel(site));
             self.asking = before;
+        }
+        if landing {
+            out.emit(
+                form::Op::System {
+                    call: form::System::Resume,
+                    args: Vec::new(),
+                },
+                Vec::new(),
+            );
         }
         if let Some(kept) = kept {
             // In the block of a loop over a value that has a `return`: as that
@@ -1481,7 +1535,9 @@ impl<'a> Lowering<'a> {
             args: Vec::new(),
         });
         out.current = blocks[1];
-        out.exits += 1;
+        if !landing {
+            out.exits += 1;
+        }
     }
 
     /// Whether a block calls a function that carries an effect that may suspend

@@ -85,6 +85,10 @@ struct Machine<'a> {
     /// The failure a task ended by, when it did: the program ends when nothing
     /// polling the task catches it.
     failed: Option<u64>,
+    /// Whether a landing is running, which a failure inside it ends the program.
+    in_landing: bool,
+    /// Whether the frame that goes on is entering the landing of its call.
+    entering_landing: bool,
     /// How many bytes each frame that was made has, by its address, and the frames
     /// that were freed, by their address and where they end.
     frames: HashMap<usize, usize>,
@@ -252,6 +256,8 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         waited: Vec::new(),
         poison: POISON.with(Cell::get),
         failed: None,
+        in_landing: false,
+        entering_landing: false,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     };
@@ -333,6 +339,8 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         waited: Vec::new(),
         poison: POISON.with(Cell::get),
         failed: None,
+        in_landing: false,
+        entering_landing: false,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     };
@@ -377,6 +385,8 @@ fn alone<'a>(
         waited: Vec::new(),
         poison: false,
         failed: None,
+        in_landing: false,
+        entering_landing: false,
         frames: HashMap::new(),
         freed: BTreeMap::new(),
     }
@@ -844,6 +854,39 @@ fn width(ty: Type) -> usize {
     }
 }
 
+fn program_name<'p>(program: &'p Program, frame: &Frame) -> &'p str {
+    &program.functions[frame.function].name
+}
+
+/// Where a failure that is going up goes on: to a frame, or out of the call.
+enum Up {
+    On(Frame),
+    Over(Vec<Word>),
+}
+
+/// The landing of the call a frame is at, which is the first jump of the choice
+/// on `Unwinding` that follows the call in its block, when there is one.
+fn landing_of(program: &Program, frame: &Frame) -> Option<usize> {
+    let block = &program.functions[frame.function].blocks[frame.block];
+    let call = frame.at.checked_sub(1)?;
+    if !matches!(block.instructions.get(call)?.op, Op::Call { .. }) {
+        return None;
+    }
+    block.instructions[call..].iter().find(|i| {
+        matches!(
+            i.op,
+            Op::System {
+                call: System::Unwinding,
+                ..
+            }
+        )
+    })?;
+    match &block.end {
+        End::Switch { jumps, .. } => jumps.first().map(|j| j.block),
+        _ => None,
+    }
+}
+
 /// A call that is open: where it is in its function, and what its values are.
 struct Frame {
     function: usize,
@@ -853,6 +896,8 @@ struct Frame {
     /// a call inside it.
     block: usize,
     args: Vec<Word>,
+    /// What the call began with, which a poll that a failure ends gives back.
+    entry: Vec<Word>,
     entered: bool,
     /// The place of the instruction to run next in the block.
     at: usize,
@@ -862,8 +907,13 @@ struct Frame {
 
 /// Why a frame stopped: it calls a function, or it returns.
 enum Stop {
-    Call { function: usize, args: Vec<Word> },
+    Call {
+        function: usize,
+        args: Vec<Word>,
+    },
     Return(Vec<Word>),
+    /// A landing is over, and the failure goes on up.
+    Resume,
 }
 
 impl Machine<'_> {
@@ -889,60 +939,57 @@ impl Machine<'_> {
             let stop = match self.run(&mut frame) {
                 Ok(stop) => stop,
                 // A task that ended by a failure goes back to the poll that
-                // was running it: the innermost `<poll any>` that has a caller
-                // gives it the status 2 and the failure, with nothing else of
-                // what it would have given.
+                // was running it: each frame above the poll that is at a call
+                // with a landing runs the landing, and the innermost
+                // `<poll any>` that has a caller is given the status 2 and the
+                // failure, with nothing else of what it would have given.
                 Err(Ended(status)) => {
                     let Some(kind) = self.failed else {
                         return Err(Ended(status));
                     };
                     let program = self.program;
                     let is_poll = |f: &Frame| program.functions[f.function].name == "<poll any>";
-                    // The poll is the frame that is running, one that waits below
-                    // it, or the function the run began with.
-                    let at = if is_poll(&frame) {
-                        Some(open.len())
-                    } else {
-                        open.iter().rposition(is_poll)
-                    };
-                    let Some(at) = at else {
+                    // A failure inside a landing is a second failure, which ends
+                    // the program, as one no poll catches does.
+                    if self.in_landing || !(is_poll(&frame) || open.iter().any(is_poll)) {
                         return Err(Ended(status));
-                    };
-                    self.failed = None;
-                    let poll = if at == open.len() {
+                    }
+                    // The frame that failed has no landing, since what failed in it
+                    // was not a call that it owns something across.
+                    let start = if is_poll(&frame) {
                         frame
                     } else {
-                        open.swap_remove(at)
+                        open.pop().expect("a poll is below the frame")
                     };
-                    open.truncate(at);
-                    let results = &program.functions[poll.function].results;
-                    let mut words: Vec<Word> = results
-                        .iter()
-                        .map(|ty| match ty {
-                            Type::Address => Word::Address(0),
-                            Type::Vector(_) => Word::Vector(0),
-                            Type::Int(_) | Type::Float(_) => Word::Int(0),
-                        })
-                        .collect();
-                    let n = words.len();
-                    words[n - 3] = Word::Int(2);
-                    words[n - 1] = Word::Int(kind);
-                    let Some(mut caller) = open.pop() else {
-                        return Ok(words);
-                    };
-                    let call = &program.functions[caller.function].blocks[caller.block]
-                        .instructions[caller.at - 1];
-                    for (result, word) in call.results.iter().zip(words) {
-                        caller.values[result.0] = Some(word);
+                    match self.goes_up(start, &mut open, kind, false) {
+                        Up::On(next) => {
+                            frame = next;
+                            continue;
+                        }
+                        Up::Over(words) => return Ok(words),
                     }
-                    frame = caller;
-                    continue;
                 }
             };
             match stop {
                 Stop::Call { function, args } => {
                     let next = self.enter(function, args);
                     open.push(std::mem::replace(&mut frame, next));
+                }
+                // A landing is over: the frame goes, and the failure goes on up.
+                Stop::Resume => {
+                    let kind = self.failed.expect("a landing is entered by a failure");
+                    self.in_landing = false;
+                    // A poll that ran a landing goes on as a poll, and a frame
+                    // that ran one is left.
+                    let (next, landed) = if program_name(self.program, &frame) == "<poll any>" {
+                        (frame, true)
+                    } else {
+                        (open.pop().expect("a poll is below a landing"), false)
+                    };
+                    match self.goes_up(next, &mut open, kind, landed) {
+                        Up::On(next) => frame = next,
+                        Up::Over(words) => return Ok(words),
+                    }
                 }
                 Stop::Return(words) => match open.pop() {
                     None => return Ok(words),
@@ -957,6 +1004,61 @@ impl Machine<'_> {
                     }
                 },
             }
+        }
+    }
+
+    /// Goes up from `frame`, which a failure is at, to the first frame that has a
+    /// landing for the call it is at, which it is given to run, or to the poll,
+    /// which it is given the status 2 for. The frame that failed has no landing,
+    /// and the frames that are at a call have the landing that follows it.
+    fn goes_up(&mut self, mut frame: Frame, open: &mut Vec<Frame>, kind: u64, landed: bool) -> Up {
+        let program = self.program;
+        let mut landed = landed;
+        loop {
+            // A frame that is at a call it owns something across ends it first, a
+            // poll too, since what a poll has been made of may own.
+            if !landed
+                && frame.entered
+                && let Some(landing) = landing_of(program, &frame)
+            {
+                // The frame goes on from the call, and the choice on `Unwinding`
+                // that follows it takes the jump to the landing, once.
+                let _ = landing;
+                self.entering_landing = true;
+                self.in_landing = true;
+                return Up::On(frame);
+            }
+            landed = false;
+            if program.functions[frame.function].name == "<poll any>" {
+                self.failed = None;
+                self.in_landing = false;
+                let results = &program.functions[frame.function].results;
+                let mut words: Vec<Word> = results
+                    .iter()
+                    .map(|ty| match ty {
+                        Type::Address => Word::Address(0),
+                        Type::Vector(_) => Word::Vector(0),
+                        Type::Int(_) | Type::Float(_) => Word::Int(0),
+                    })
+                    .collect();
+                let n = words.len();
+                // What the poll was given to pass through, as it was given.
+                for (word, given) in words[..n - 3].iter_mut().zip(frame.entry.iter().skip(1)) {
+                    *word = *given;
+                }
+                words[n - 3] = Word::Int(2);
+                words[n - 1] = Word::Int(kind);
+                let Some(mut caller) = open.pop() else {
+                    return Up::Over(words);
+                };
+                let call = &program.functions[caller.function].blocks[caller.block].instructions
+                    [caller.at - 1];
+                for (result, word) in call.results.iter().zip(words) {
+                    caller.values[result.0] = Some(word);
+                }
+                return Up::On(caller);
+            }
+            frame = open.pop().expect("a poll is below the frame");
         }
     }
 
@@ -985,6 +1087,7 @@ impl Machine<'_> {
             function,
             values: vec![None; self.program.functions[function].types.len()],
             block: 0,
+            entry: args.clone(),
             args,
             entered: false,
             at: 0,
@@ -1408,6 +1511,21 @@ impl Machine<'_> {
                         call: System::Cancelled,
                         ..
                     } => vec![Word::Int(0)],
+                    // Only a failure that is going up takes the jump to a landing,
+                    // which it does by what this gives once.
+                    Op::System {
+                        call: System::Unwinding,
+                        ..
+                    } => vec![Word::Int(u64::from(std::mem::take(
+                        &mut self.entering_landing,
+                    )))],
+                    Op::System {
+                        call: System::Resume,
+                        ..
+                    } => {
+                        *at += 1;
+                        return Ok(Stop::Resume);
+                    }
                     Op::System {
                         call: System::TaskFree,
                         args,
