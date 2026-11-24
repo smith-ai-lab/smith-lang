@@ -7,7 +7,11 @@
 //! little holds a few bytes, and a task that holds more holds at most twice what it
 //! uses and a header of 16 bytes. A piece that is given back is the next that
 //! is taken of its class. A request that no class holds is asked of the system
-//! as it is, and is not kept when it is given back.
+//! as it is, with its size in its header, and when it is given back it goes on a
+//! list of its own, from which the next request that no class holds takes the
+//! first piece of at least its size and at most twice it, so that a task that
+//! ends gives its large memory to the next and a program that starts tasks one
+//! after another does not ask the system for more each time.
 //!
 //! The pool is a block of words: where the chunk being carved is, how many bytes
 //! of it are left, and the first free piece of each class. A piece has a header
@@ -28,7 +32,7 @@ pub const HEADER: u64 = 16;
 /// How many bytes the system is asked for at a time, at least.
 pub const CHUNK: u64 = 256 * 1024;
 /// The bytes of the block that is the pool.
-pub const BLOCK: u64 = 16 + 8 * CLASSES;
+pub const BLOCK: u64 = 16 + 8 * (CLASSES + 1);
 
 /// The function that makes a pool: it takes nothing and gives the address of the
 /// pool, which has no piece.
@@ -63,6 +67,12 @@ pub fn take_sized() -> Function {
     let (refill, i) = f.block(&[LEFT, LEFT]);
     let (have, h) = f.block(&[LEFT, LEFT]);
     let (large, _) = f.block(&[]);
+    let (scan, sc) = f.block(&[NEXT]);
+    let (inspect, ins) = f.block(&[NEXT]);
+    let (check_wide, cw) = f.block(&[NEXT, NEXT, LEFT]);
+    let (onward, on) = f.block(&[NEXT]);
+    let (reuse_large, rl) = f.block(&[NEXT, NEXT, LEFT]);
+    let (fresh, _) = f.block(&[]);
     let zero = runtime::int(&mut f, 0);
     let one = runtime::int(&mut f, 1);
     let eight = runtime::int(&mut f, 8);
@@ -146,11 +156,62 @@ pub fn take_sized() -> Function {
     let given = f.binary(Binary::Add, piece, header);
     let capacity = f.binary(Binary::Sub, size, header);
     f.ret(vec![given, capacity]);
-    // A request no class holds is asked of the system as it is.
+    // A request no class holds is given a piece that was given back and is not too
+    // large for it, when there is one, and is asked of the system as it is when
+    // there is not.
     f.at(large);
+    let slot_at = runtime::int(&mut f, 16 + 8 * CLASSES);
+    let large_slot = f.binary(Binary::Add, pool, slot_at);
+    f.jump(scan, vec![large_slot]);
+    f.at(scan);
+    let link_slot = sc[0];
+    let head_word = f.load(LEFT, link_slot);
+    let no_piece = f.compare(Compare::Equal, head_word, zero);
+    f.switch(no_piece, vec![(inspect, vec![link_slot]), (fresh, vec![])]);
+    f.at(inspect);
+    let link_slot = ins[0];
+    let held = f.load(NEXT, link_slot);
+    let size_at = f.binary(Binary::Add, held, eight);
+    let size = f.load(LEFT, size_at);
+    let too_small = f.compare(Compare::LessU, size, total);
+    f.switch(
+        too_small,
+        vec![
+            (check_wide, vec![link_slot, held, size]),
+            (onward, vec![held]),
+        ],
+    );
+    f.at(check_wide);
+    let (link_slot, held, size) = (cw[0], cw[1], cw[2]);
+    let twice = f.binary(Binary::Add, total, total);
+    let too_wide = f.compare(Compare::LessU, twice, size);
+    f.switch(
+        too_wide,
+        vec![
+            (reuse_large, vec![link_slot, held, size]),
+            (onward, vec![held]),
+        ],
+    );
+    // The piece's own link is after its header, in the memory it holds while it is
+    // free.
+    f.at(onward);
+    let held = on[0];
+    let next_slot = f.binary(Binary::Add, held, header);
+    f.jump(scan, vec![next_slot]);
+    f.at(reuse_large);
+    let (link_slot, held, size) = (rl[0], rl[1], rl[2]);
+    let link_at = f.binary(Binary::Add, held, header);
+    let after = f.load(NEXT, link_at);
+    f.store(link_slot, after);
+    let given = f.binary(Binary::Add, held, header);
+    let capacity = f.binary(Binary::Sub, size, header);
+    f.ret(vec![given, capacity]);
+    f.at(fresh);
     let piece = f.allocate(total);
     let marker = runtime::int(&mut f, CLASSES);
     f.store(piece, marker);
+    let size_at = f.binary(Binary::Add, piece, eight);
+    f.store(size_at, total);
     let given = f.binary(Binary::Add, piece, header);
     f.ret(vec![given, bytes]);
     f.finish(&[NEXT, LEFT])
@@ -164,16 +225,16 @@ pub fn give() -> Function {
     let p = f.params(&[NEXT, NEXT]);
     let (pool, given) = (p[0], p[1]);
     let (keep, _) = f.block(&[]);
-    let (drop, _) = f.block(&[]);
+    let (large, _) = f.block(&[]);
     let zero = runtime::int(&mut f, 0);
     let eight = runtime::int(&mut f, 8);
     let header = runtime::int(&mut f, HEADER);
     let back = f.binary(Binary::Sub, zero, header);
     let piece = f.binary(Binary::Add, given, back);
     let class = f.load(LEFT, piece);
-    let large = runtime::int(&mut f, CLASSES);
-    let is_large = f.compare(Compare::Equal, class, large);
-    f.switch(is_large, vec![(keep, vec![]), (drop, vec![])]);
+    let marker = runtime::int(&mut f, CLASSES);
+    let is_large = f.compare(Compare::Equal, class, marker);
+    f.switch(is_large, vec![(keep, vec![]), (large, vec![])]);
     f.at(keep);
     let sixteen = runtime::int(&mut f, 16);
     let by = f.binary(Binary::Mul, class, eight);
@@ -184,7 +245,14 @@ pub fn give() -> Function {
     f.store(next_at, head);
     f.store(slot, piece);
     f.ret(Vec::new());
-    f.at(drop);
+    // A large piece keeps its size in its header, and its link in the memory it
+    // held.
+    f.at(large);
+    let slot_at = runtime::int(&mut f, 16 + 8 * CLASSES);
+    let slot = f.binary(Binary::Add, pool, slot_at);
+    let head = f.load(NEXT, slot);
+    f.store(given, head);
+    f.store(slot, piece);
     f.ret(Vec::new());
     f.finish(&[])
 }

@@ -1,0 +1,43 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.int (checked_rem)
+use std.list (push)
+use std.task (join, outcome, spawn, task, tasks)
+
+// Pushes until the system refuses, saying how far it got every thousand.
+fn eat() -> u64 ! alloc, console {
+  var xs: List[u64] = []
+  loop i in 0..9223372036854775807 {
+    r: u64 = i
+    match checked_rem(r, 1000) {
+      .some(m) { if m == 0 { print("{r}") } }
+      .none { }
+    }
+    xs = push(xs, i)
+  }
+  0
+}
+
+// What the child that is joined does: it ends by the failure of its own child.
+fn eaten() -> u64 ! alloc, console {
+  eat()
+}
+
+fn round(k: u64) ! alloc, console, task {
+  print("round {k}")
+  match outcome(spawn { eaten() }) {
+    .ok(n) { print("value") }
+    .err(.out_of_memory) { print("out of memory") }
+    .err(.refused_write) { print("refused write") }
+  }
+}
+
+fn main() ! console, alloc {
+  with tasks()
+  round(1)
+  round(2)
+  round(3)
+  round(4)
+  round(5)
+  round(6)
+}
