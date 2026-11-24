@@ -880,7 +880,7 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
                 matches!(
                     i.op,
                     Op::System {
-                        call: Call::Fail | Call::Allocate,
+                        call: Call::Fail | Call::Allocate | Call::Write(_),
                         ..
                     }
                 )
@@ -1065,6 +1065,8 @@ struct Writer<'a, S> {
     /// when the program has a routine for it, and the end of the program when it
     /// has none.
     refused: usize,
+    /// Where a write to the console that the system refuses goes: the failure 1.
+    refused_write: usize,
     /// How far below its caller's frame the function's frame reaches.
     frame: u32,
     /// Where in the frame the bytes of each `Frame` are, by its value.
@@ -1175,6 +1177,7 @@ fn function<S: System>(
     // in reach of a conditional branch, which is 1 MB, and otherwise the
     // function is written again with the branch over an unconditional one.
     let refused = unwinding.map_or(fail, |_| asm.label());
+    let refused_write = unwinding.map_or(fail, |_| asm.label());
     let mark = asm.mark();
     for far in [false, true] {
         let labels = f.blocks.iter().map(|_| asm.label()).collect();
@@ -1188,6 +1191,7 @@ fn function<S: System>(
             unwind: unwinding.map(|u| u.routine),
             through_at,
             refused,
+            refused_write,
             frame: total,
             frames: frames.clone(),
             at: at.clone(),
@@ -1269,6 +1273,9 @@ fn function<S: System>(
             // here puts back from the frame of this function.
             asm.bind(refused);
             asm.mov_imm(X29, 0);
+            asm.call_label(u.routine);
+            asm.bind(refused_write);
+            asm.mov_imm(X29, 1);
             asm.call_label(u.routine);
             asm.bind(u.end);
             if u.landing != u.stub {
@@ -2020,7 +2027,7 @@ impl<S: System> Writer<'_, S> {
                     })
                     .collect();
                 self.run(asm, &moves);
-                S::write(asm, *stream, self.fail);
+                S::write(asm, *stream, self.refused_write);
             }
             Op::System {
                 call: Call::Read,

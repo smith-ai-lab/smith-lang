@@ -1,0 +1,20 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.task (spawn, tasks)
+use std.time (sleep, time)
+
+// Writes until the system refuses, which it does once the reader of standard
+// output has gone, and ends the task and no more.
+fn chatter() ! console {
+  loop i in 0..1000 {
+    print("a line the reader has gone from")
+  }
+}
+
+// The reader has gone by the time the child writes.
+fn main() ! console, alloc, time {
+  sleep(300)
+  with tasks()
+  spawn { chatter() }
+  sleep(100)
+}
