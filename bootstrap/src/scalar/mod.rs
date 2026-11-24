@@ -375,6 +375,17 @@ pub enum System {
     /// once `suspend` has run: in a function that is not a state machine it is
     /// the constant 0, so no target builds it.
     Cancelled,
+    /// Takes nothing and gives a 64-bit integer that is always 0. A call that
+    /// the function owns something across is followed by a choice on it, whose
+    /// first jump goes to the landing of the call: the blocks that end what the
+    /// function owns there when a failure goes up through the call, and end with
+    /// `Resume`. Nothing takes the jump but the unwinder, so no pass can know it
+    /// is not taken, and what the landing reads is live across the call.
+    Unwinding,
+    /// Ends a landing: the failure goes on up from the function, whose frame is
+    /// left as the landing found it. Nothing follows it, and the block it is in
+    /// returns, for the form's sake.
+    Resume,
 }
 
 /// The calls of the kernel that a program asks for with `System::Raw`, each

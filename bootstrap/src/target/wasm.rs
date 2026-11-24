@@ -1572,6 +1572,15 @@ impl Lowering<'_> {
             | System::RegionKeep => {
                 unreachable!("an arena is gone once the stacks of `alloc` are passed")
             }
+            // Nothing goes up the frames of a module, so no landing is entered.
+            System::Unwinding => {
+                self.code.i64_const(0);
+                self.set(results[0]);
+            }
+            System::Resume => {
+                self.code.i32_const(1);
+                self.code.call(self.context.exit);
+            }
             System::Suspend | System::Cancelled => {
                 unreachable!("a suspension is gone once the state machines are made")
             }

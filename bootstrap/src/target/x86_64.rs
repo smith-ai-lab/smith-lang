@@ -2614,6 +2614,17 @@ impl<S: System> Writer<'_, S> {
                 call: Call::Suspend | Call::Cancelled,
                 ..
             } => unreachable!("a suspension is gone once the state machines are made"),
+            // Nothing but the unwinder takes the jump the choice on it makes.
+            Op::System {
+                call: Call::Unwinding,
+                ..
+            } => {
+                asm.mov_imm(RAX, 0);
+                self.finish(asm, results[0], RAX, true);
+            }
+            Op::System {
+                call: Call::Resume, ..
+            } => asm.jmp(self.fail),
             Op::System {
                 call: Call::Write(stream),
                 args,

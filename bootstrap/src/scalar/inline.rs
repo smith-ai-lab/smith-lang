@@ -9,7 +9,7 @@
 //! looked at again. The pass is one walk over the program it gives, and
 //! gives the same program every time.
 
-use super::{Block, End, Function, Instruction, Jump, Op, Program, Value};
+use super::{Block, End, Function, Instruction, Jump, Op, Program, System, Value};
 
 /// The most a function may hold, as `size` counts, for a call of it to be
 /// replaced when it is called from more than one place.
@@ -164,14 +164,34 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
             instructions: Vec::new(),
             end: End::Return(Vec::new()),
         });
-        for instruction in instructions {
+        // The call that a landing follows is not replaced: the failure that goes up
+        // through it finds its landing by where the call is, and a failure inside
+        // the callee would not find it if the callee's code were in this function.
+        let kept_call = instructions
+            .iter()
+            .position(|i| {
+                matches!(
+                    i.op,
+                    Op::System {
+                        call: System::Unwinding,
+                        ..
+                    }
+                )
+            })
+            .and_then(|u| u.checked_sub(1))
+            .filter(|c| matches!(instructions[*c].op, Op::Call { .. }));
+        for (index, instruction) in instructions.into_iter().enumerate() {
             let Instruction {
                 results: call_results,
                 op,
                 at: place,
             } = instruction;
             let (function, args) = match op {
-                Op::Call { function, args } if replaced(done, function) => (function, args),
+                Op::Call { function, args }
+                    if replaced(done, function) && Some(index) != kept_call =>
+                {
+                    (function, args)
+                }
                 op => {
                     blocks[at].instructions.push(Instruction {
                         results: call_results,
