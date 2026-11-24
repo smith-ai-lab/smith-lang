@@ -28,6 +28,7 @@ Every change reaches `main` through a pull request. Nothing is pushed to `main` 
 
 - The checks in `.github/workflows/ci.yml` pass on your machine before you push, and every check passes on the pull request before you stop.
 - The change keeps nothing of the form it replaces, as [Keeping nothing of an older Smith](../../../knowledge/compiler.md#keeping-nothing-of-an-older-smith) says. Before you push, search `bootstrap/src`, `std/`, `compiler/`, `bootstrap/tests`, `measure/`, `.agents/skills/`, and `knowledge/` for the old form, and remove each place it is found.
+- Before you open or update the pull request, read `git diff origin/main...HEAD --stat` after fetching `main`. Every file in it is one your change meant to touch. A file you didn't mean to change, and above all a test that was deleted, means the branch was made from an old tree: make it again from `main`.
 - The title follows the commit format.
 - The body says what changed and why, names anything you could not verify, and ends with `Closes #<issue>` so the roadmap updates when it merges.
 
