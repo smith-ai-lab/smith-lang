@@ -1,7 +1,7 @@
 //! A block with a `try` that is passed to a call whose result nothing settles
 //! gets the same look as one whose result is partly known, so the `try` is
-//! refused with the error of the checker, at the `try`, wherever the block is
-//! written, and the checker never panics on it.
+//! refused at the `try`, wherever the block is written, with the type the block
+//! gives, and the checker never panics on it.
 
 use smith::diag::Error;
 use smith::lower;
@@ -106,7 +106,9 @@ fn errors(source: &str) -> Vec<Error> {
 fn refused_at_the_try(source: &str, try_line: usize) {
     let found = errors(source);
     assert!(
-        found.iter().any(|e| e.pos.line == try_line && e.message.contains("`Try`")),
+        found.iter().any(|e| e.pos.line == try_line
+                && e.message.contains("this block gives `u64`")
+                && e.message.contains("`try` cannot return a failure")),
         "{found:?} for\n{source}"
     );
 }

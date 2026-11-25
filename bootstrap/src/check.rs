@@ -8492,7 +8492,19 @@ impl<'a> Checker<'a> {
             Form::Try => Want::Ty(Ty::Enum(defs.flow, vec![Ty::Unknown, body.returns.clone()])),
             _ => Want::Any,
         };
-        let of = self.expr(body, &m.of, &split);
+        let errors = self.errors.len();
+        let mut of = self.expr(body, &m.of, &split);
+        // A `try` that is refused still gives what the step holds when it
+        // succeeds, so that what a block of it gives is known.
+        if matches!(m.form, Form::Try)
+            && self.errors.len() > errors
+            && of.unknown()
+            && let Expr::Call(split) = &m.of
+            && let Some(Ty::Enum(_, held)) = self.types.get(&addr(&split.args[0].value))
+            && let Some(kept) = held.first()
+        {
+            of = Ty::Enum(defs.flow, vec![kept.clone(), Ty::Unknown]);
+        }
         let outer = body.names.len();
         let vars = body.vars.len();
         let known = body.facts.mark();
