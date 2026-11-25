@@ -1839,18 +1839,14 @@ impl<'a> Lowering<'a> {
                     // its statements once each, in order, so an assignment
                     // makes the name stand for the new values from then
                     // on, and a name bound to the old ones keeps them.
-                    if let Expr::Lambda(l) = value {
-                        self.bind_env(out, name, l, env);
-                        continue;
-                    }
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
                     let written = value;
                     let (ty, value) = self.expr(out, value, env);
                     // What gives a function with a name is that function, whatever
                     // the call that gives it is lowered to.
-                    let ty = match self.typed.type_of(written, env) {
-                        named @ Ty::Named(_) => named,
+                    let ty = match self.typed.types.get(&addr(written)).map(|t| t.subst(env)) {
+                        Some(named @ Ty::Named(_)) => named,
                         _ => ty,
                     };
                     self.defining_frame = false;
@@ -1865,15 +1861,6 @@ impl<'a> Lowering<'a> {
                             template: Template::Free(*g),
                             args: Vec::new(),
                         })),
-                        // A name bound to a lambda that holds names holds it too.
-                        Ty::Struct(s, _) if self.typed.defs.env_lambda(*s).is_some() => {
-                            match written {
-                                Expr::Name { name: from, .. } => {
-                                    out.find(from).and_then(|at| out.names()[at].func.clone())
-                                }
-                                _ => None,
-                            }
-                        }
                         _ => None,
                     };
                     match out.find(name) {

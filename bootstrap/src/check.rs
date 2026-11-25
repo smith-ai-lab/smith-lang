@@ -949,9 +949,15 @@ struct Defs<'a> {
     /// For each struct the parser made to hold what a lambda reads, the lambda,
     /// and the types of its parameters and of its result, the result last,
     /// among the type parameters of the function it is written in.
-    env_lambdas: Vec<Option<(&'a Lambda, Vec<Ty>)>>,
+    env_lambdas: Vec<EnvLambda<'a>>,
     /// The struct of each lambda it is made for, by where the lambda is written.
     env_at: Map<Pos, usize>,
+    /// The function each such struct's lambda is written in.
+    env_owner: Vec<Option<usize>>,
+    /// The types of the names that a lambda reads that its function defines, which
+    /// the signature of a function that gives the lambda is made with, found by
+    /// checking the body of the function.
+    env_types: Map<usize, Vec<Ty>>,
     enum_scopes: Vec<Scope>,
     /// The type each case of each enum holds, if it holds one, among the
     /// enum's type parameters.
@@ -1107,6 +1113,14 @@ impl<'a> Defs<'a> {
                 || (naming.imports.iter())
                     .any(|(w, to, home)| (w == name || to == name) && *home == at)
         })
+    }
+
+    /// The signature of a function, with the types of the names its lambdas read
+    /// that it defines, once they are found.
+    fn signature_of(&self, f: &Function) -> Signature {
+        let mut scope = self.scope(&f.generics, &f.needs);
+        self.add_implicit(&mut scope, f.params.iter().map(|p| &p.ty));
+        self.signature(f, scope)
     }
 
     /// The struct that holds what a lambda bound to a name, stored in a field,
@@ -1804,11 +1818,21 @@ impl<'a> Defs<'a> {
                 let mut args: Vec<Ty> = (0..def.generics.len() - def.fields.len())
                     .map(Ty::Param)
                     .collect();
-                for field in &def.fields {
-                    let p = f.params.iter().find(|p| p.name == field.name)?;
-                    // What is lent is not given, as a value that is lent is not returned.
-                    let ty = self.quietly(&p.ty, scope);
-                    if ty.holds_fn() || !ownership::copies(self, scope, &ty) {
+                for (i, field) in def.fields.iter().enumerate() {
+                    let ty = match f.params.iter().find(|p| p.name == field.name) {
+                        // What is lent is not given, as a value that is lent is not
+                        // returned, unless the function takes it.
+                        Some(p)
+                            if p.take
+                                || ownership::copies(self, scope, &self.quietly(&p.ty, scope)) =>
+                        {
+                            self.quietly(&p.ty, scope)
+                        }
+                        Some(_) => return None,
+                        // The type the body gives a name it defines, once found.
+                        None => self.env_types.get(&s)?.get(i)?.clone(),
+                    };
+                    if ty.holds_fn() || ty.unknown() {
                         return None;
                     }
                     args.push(ty);
@@ -2889,6 +2913,8 @@ fn check_file(
         field_items: Vec::new(),
         env_lambdas: Vec::new(),
         env_at: Map::default(),
+        env_owner: Vec::new(),
+        env_types: Map::default(),
         struct_scopes: Vec::new(),
         fields: Vec::new(),
         enum_scopes: Vec::new(),
@@ -2986,7 +3012,7 @@ fn check_file(
                 .collect()
         })
         .collect();
-    defs.env_lambdas = env_lambdas(&defs);
+    (defs.env_lambdas, defs.env_owner) = env_lambdas(&defs);
     defs.env_at = (defs.env_lambdas.iter().enumerate())
         .filter_map(|(s, l)| Some((l.as_ref()?.0.pos, s)))
         .collect();
@@ -3003,11 +3029,7 @@ fn check_file(
         })
         .collect();
     defs.signatures = (file.functions.iter())
-        .map(|f| {
-            let mut scope = defs.scope(&f.generics, &f.needs);
-            defs.add_implicit(&mut scope, f.params.iter().map(|p| &p.ty));
-            defs.signature(f, scope)
-        })
+        .map(|f| defs.signature_of(f))
         .collect();
     defs.trait_sigs = (file.traits.iter())
         .map(|t| {
@@ -3064,45 +3086,8 @@ fn check_file(
 
     defs.withouts = withouts(&defs, &mut errors);
 
-    let mut checker = Checker {
-        defs: &defs,
-        errors,
-        types: HashMap::new(),
-        drops: ownership::Drops::default(),
-        widened: HashMap::new(),
-        infer_on: false,
-        solve: None,
-        solved: infer::Solved::default(),
-        rounds: Vec::new(),
-        inferred: HashMap::new(),
-        patterned: HashSet::new(),
-        assigning: None,
-        comparing: false,
-        discovering: false,
-        found: HashMap::new(),
-        settled: false,
-        value_calls: Set::default(),
-        fn_values: Map::default(),
-        named: Set::default(),
-        named_calls: Map::default(),
-        field_receivers: Map::default(),
-        type_args: Map::default(),
-        frame_gives: Map::default(),
-        seeded: None,
-        extended: Map::default(),
-        handler_slots: Map::default(),
-        lambda_base: Map::default(),
-        no_impl: false,
-        refusals: 0,
-        zero_divisors: Vec::new(),
-        deciding: None,
-        cross: Vec::new(),
-        walking: Vec::new(),
-        walked_calls: Vec::new(),
-        kernel_calls: Vec::new(),
-        unused_effects: Vec::new(),
-        circles: Vec::new(),
-    };
+    settle_env_types(&mut defs);
+    let mut checker = Checker::new(&defs, errors);
     checker.main(main);
     for &item in &reached {
         match item {
@@ -7181,9 +7166,58 @@ enum Owner {
     Impl,
 }
 
+impl<'a> Checker<'a> {
+    /// A checker that has looked at nothing, over the definitions `defs`.
+    fn new(defs: &'a Defs<'a>, errors: Vec<Error>) -> Self {
+        Checker {
+            defs,
+            errors,
+            probed: Map::default(),
+            types: HashMap::new(),
+            drops: ownership::Drops::default(),
+            widened: HashMap::new(),
+            infer_on: false,
+            solve: None,
+            solved: infer::Solved::default(),
+            rounds: Vec::new(),
+            inferred: HashMap::new(),
+            patterned: HashSet::new(),
+            assigning: None,
+            comparing: false,
+            discovering: false,
+            found: HashMap::new(),
+            settled: false,
+            value_calls: Set::default(),
+            fn_values: Map::default(),
+            named: Set::default(),
+            named_calls: Map::default(),
+            field_receivers: Map::default(),
+            type_args: Map::default(),
+            frame_gives: Map::default(),
+            seeded: None,
+            extended: Map::default(),
+            handler_slots: Map::default(),
+            lambda_base: Map::default(),
+            no_impl: false,
+            refusals: 0,
+            zero_divisors: Vec::new(),
+            deciding: None,
+            cross: Vec::new(),
+            walking: Vec::new(),
+            walked_calls: Vec::new(),
+            kernel_calls: Vec::new(),
+            unused_effects: Vec::new(),
+            circles: Vec::new(),
+        }
+    }
+}
+
 struct Checker<'a> {
     defs: &'a Defs<'a>,
     errors: Vec<Error>,
+    /// The types of the names each lambda that reads names read, as the body
+    /// that was checked last gave them, by the struct that holds them.
+    probed: Map<usize, Vec<Ty>>,
     /// The type of each expression checked, by its address.
     types: HashMap<usize, Ty>,
     /// Where the values that may hold a child task are dropped.
@@ -7890,6 +7924,10 @@ impl<'a> Checker<'a> {
             // A name that holds a function with a name is a function of that
             // function's type.
             (Ty::Named(g), Ty::Fn(items)) if defs.function_items(*g) == *items => {}
+            // A lambda that holds the values of the names it read is a function of
+            // its own types.
+            (Ty::Struct(e, held), Ty::Fn(items))
+                if defs.env_items(*e, held).as_ref() == Some(items) => {}
             (Ty::Fn(_), Ty::Named(n)) if self.fn_values.contains_key(&addr(value)) => {
                 self.named.insert(addr(value));
                 if self.fn_values[&addr(value)] != *n {
@@ -8057,6 +8095,15 @@ impl<'a> Checker<'a> {
                     let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
                     let message =
                         self.mismatch(body, value, defs.describe(&items, body.scope), needed);
+                    self.errors.push(Error::new(value.pos(), message));
+                }
+            }
+            (Ty::Struct(e, held), Ty::Fn(_)) if defs.env_lambda(*e).is_some() => {
+                let items = Ty::func(defs.env_items(*e, held).expect("checked"));
+                if !unify(pattern, &items, sol) {
+                    let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
+                    let message =
+                        self.mismatch(body, value, defs.describe(given, body.scope), needed);
                     self.errors.push(Error::new(value.pos(), message));
                 }
             }
@@ -8547,6 +8594,7 @@ impl<'a> Checker<'a> {
                 }
                 Stmt::Expr(value @ Expr::Lambda(l)) if self.defs.env_of(l).is_some() => {
                     let held = self.held_lambda(body, l, "returned", true);
+                    self.types.insert(addr(value), held.clone());
                     End::Value(held, value)
                 }
                 Stmt::Expr(value @ Expr::Lambda(l)) => {
@@ -10231,19 +10279,59 @@ fn is_proof(f: &Function) -> bool {
     f.result.as_ref().is_some_and(|t| t.statement.is_some())
 }
 
+/// Finds the types of the names that a lambda reads and its function defines,
+/// as the body of the function gives them, for the signature of a function that
+/// gives the lambda, which is made before any body is checked. A function whose
+/// signature needs the types of another's is checked after it, as often as there
+/// are functions.
+fn settle_env_types(defs: &mut Defs) {
+    let mut owners: Vec<usize> = Vec::new();
+    for (s, owner) in defs.env_owner.iter().enumerate() {
+        let Some(f) = *owner else { continue };
+        let params = &defs.file.functions[f].params;
+        let defined = (defs.file.structs[s].fields.iter())
+            .any(|field| !params.iter().any(|p| p.name == field.name));
+        if defined && !owners.contains(&f) {
+            owners.push(f);
+        }
+    }
+    for _ in 0..owners.len() {
+        let mut found: Map<usize, Vec<Ty>> = Map::default();
+        for &f in &owners {
+            let mut probe = Checker::new(defs, Vec::new());
+            probe.body(Template::Free(f));
+            found.extend(probe.probed);
+        }
+        if (found.iter()).all(|(s, types)| defs.env_types.get(s) == Some(types)) {
+            break;
+        }
+        defs.env_types.extend(found);
+        for &f in &owners {
+            defs.signatures[f] = defs.signature_of(&defs.file.functions[f]);
+        }
+    }
+}
+
+/// The lambda that a struct the parser made for it holds the values of what it
+/// reads, and the types its parameters and its result are written with.
+type EnvLambda<'a> = Option<(&'a Lambda, Vec<Ty>)>;
+
 /// The lambda that each struct the parser made for one holds the values of what
 /// it reads, with the types its parameters and its result are written with.
-fn env_lambdas<'a>(defs: &Defs<'a>) -> Vec<Option<(&'a Lambda, Vec<Ty>)>> {
+fn env_lambdas<'a>(defs: &Defs<'a>) -> (Vec<EnvLambda<'a>>, Vec<Option<usize>>) {
     let file = defs.file;
     if !file
         .structs
         .iter()
         .any(|s| s.name.starts_with("env@lambda@"))
     {
-        return vec![None; file.structs.len()];
+        return (
+            vec![None; file.structs.len()],
+            vec![None; file.structs.len()],
+        );
     }
-    let mut found: Map<String, &'a Lambda> = Map::default();
-    for f in &file.functions {
+    let mut found: Map<String, (&'a Lambda, usize)> = Map::default();
+    for (at, f) in file.functions.iter().enumerate() {
         for stmt in statements(&f.body) {
             let (Stmt::Define { value, .. }
             | Stmt::Destructure { value, .. }
@@ -10253,14 +10341,14 @@ fn env_lambdas<'a>(defs: &Defs<'a>) -> Vec<Option<(&'a Lambda, Vec<Ty>)>> {
             walk(value, &mut all);
             for e in all {
                 if let Expr::Lambda(l) = e {
-                    found.insert(crate::parser::env_name(l.pos), l);
+                    found.insert(crate::parser::env_name(l.pos), (l, at));
                 }
             }
         }
     }
-    (file.structs.iter().enumerate())
+    let lambdas = (file.structs.iter().enumerate())
         .map(|(i, s)| {
-            let l = *found.get(&s.name)?;
+            let (l, _) = *found.get(&s.name)?;
             let scope = &defs.struct_scopes[i];
             let mut items: Vec<Ty> = l
                 .types
@@ -10274,7 +10362,13 @@ fn env_lambdas<'a>(defs: &Defs<'a>) -> Vec<Option<(&'a Lambda, Vec<Ty>)>> {
             );
             Some((l, items))
         })
-        .collect()
+        .collect();
+    let owners = file
+        .structs
+        .iter()
+        .map(|s| found.get(&s.name).map(|(_, f)| *f))
+        .collect();
+    (lambdas, owners)
 }
 
 /// Reports each alias that names itself, directly or through

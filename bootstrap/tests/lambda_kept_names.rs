@@ -51,8 +51,12 @@ pub const ONCE: &[Test] = &[
         which_lambda_that_reads_names_a_value_is_is_known_when_the_program_is_built,
     ),
     (
-        "a_lambda_that_is_returned_reads_the_parameters_of_its_function_only",
-        a_lambda_that_is_returned_reads_the_parameters_of_its_function_only,
+        "a_lambda_that_is_returned_reads_any_name_of_its_function",
+        a_lambda_that_is_returned_reads_any_name_of_its_function,
+    ),
+    (
+        "a_lambda_that_reads_a_value_without_copy_that_its_function_owns_takes_it",
+        a_lambda_that_reads_a_value_without_copy_that_its_function_owns_takes_it,
     ),
 ];
 
@@ -71,6 +75,14 @@ enum Hold {
     Made,
     /// In a struct that a struct holds.
     Nested,
+    /// Returned by a function that defines the names the lambda reads.
+    ReturnLocal,
+    /// In a struct that a function that defines the names the lambda reads builds.
+    MadeLocal,
+    /// Bound to a name, and given to a function that calls it.
+    Passed,
+    /// Returned, and given to a function that calls it.
+    PassedReturned,
 }
 
 /// What the generator chose: how the lambda is held, the values of the names it
@@ -95,7 +107,8 @@ impl Program {
     const HEAD: &'static str = "use std.console (console, print)\nuse std.int (wrapping_add)\n\n\
                                 struct Held {\n  run: fn(Int) -> Int\n}\n\n\
                                 struct Step[F] {\n  run: F\n}\n\n\
-                                struct Shop {\n  held: Held\n}\n\n";
+                                struct Shop {\n  held: Held\n}\n\n\
+                                fn apply(f: fn(Int) -> Int, x: Int) -> Int { f(x) }\n\n";
 
     /// The parameters of the function that makes the lambda, which are the names it reads.
     fn params(&self) -> String {
@@ -119,6 +132,16 @@ impl Program {
 
     fn lambda(&self) -> String {
         format!("fn(x: Int) -> Int {{ {} }}", self.body("x", &|i| format!("k{i}")))
+    }
+
+    /// The lambda that reads names its function defines, and the lines that
+    /// define them.
+    fn local_lambda(&self) -> (String, String) {
+        let defines: String = (0..self.reads.len())
+            .map(|i| format!("  m{i} = wrapping_add(k{i}, 0)\n"))
+            .collect();
+        let lambda = format!("fn(x: Int) -> Int {{ {} }}", self.body("x", &|i| format!("m{i}")));
+        (defines, lambda)
     }
 
     /// The names the lambda reads, defined where it is written.
@@ -157,6 +180,23 @@ impl Program {
                 text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n\n";
                 text += &Self::main(&format!("  h = made({values})\n  r = priced(h, {x})\n"));
             }
+            Hold::ReturnLocal => {
+                let (defines, lambda) = self.local_lambda();
+                text += &format!("fn make({params}) -> fn(Int) -> Int {{\n{defines}  {lambda}\n}}\n\n");
+                text += &Self::main(&format!("  r = make({values})({x})\n"));
+            }
+            Hold::MadeLocal => {
+                let (defines, lambda) = self.local_lambda();
+                text += &format!("fn made({params}) -> Held {{\n{defines}  Held(run: {lambda})\n}}\n\n");
+                text += &Self::main(&format!("  h = made({values})\n  r = h.run({x})\n"));
+            }
+            Hold::Passed => {
+                text += &Self::main(&format!("{}  f = {lambda}\n  r = apply(f, {x})\n", self.locals()));
+            }
+            Hold::PassedReturned => {
+                text += &format!("fn make({params}) -> fn(Int) -> Int {{ {lambda} }}\n\n");
+                text += &Self::main(&format!("  r = apply(make({values}), {x})\n"));
+            }
             Hold::Nested => {
                 text += &format!("fn made({params}) -> Held {{ Held(run: {lambda}) }}\n\n");
                 text += "fn sold(s: Shop, x: Int) -> Int {\n  h = s.held\n  h.run(x)\n}\n\n";
@@ -188,6 +228,10 @@ const ALL: &[Hold] = &[
     Hold::BindTheReturn,
     Hold::Made,
     Hold::Nested,
+    Hold::ReturnLocal,
+    Hold::MadeLocal,
+    Hold::Passed,
+    Hold::PassedReturned,
 ];
 
 fn a_lambda_that_reads_names_and_is_kept_gives_what_its_body_gives_for_the_values_it_read() {
@@ -201,7 +245,7 @@ fn a_lambda_that_reads_names_and_is_kept_gives_what_its_body_gives_for_the_value
 /// A lambda stored where the names it reads are is lowered where it is called,
 /// and the struct that holds it has no bytes of its own.
 fn a_lambda_that_reads_names_and_is_stored_builds_to_the_bytes_of_its_body_written_where_it_is_called() {
-    generate::check(4422, 3, |g: &mut Gen| program_of(g, &[Hold::Field, Hold::Step]), |p| {
+    generate::check(4422, 3, |g: &mut Gen| program_of(g, &[Hold::Field, Hold::Step, Hold::Passed]), |p| {
         let (kept, written) = (p.kept(), p.written_where_called());
         if let Err(found) = check(kept.as_bytes()) {
             panic!("{found:?} for\n{kept}");
@@ -255,7 +299,7 @@ fn a_lambda_that_holds_something_lent_or_assigns_a_name_is_refused_where_it_is_k
         let result = if stored { "Pricing" } else { "fn(f32) -> f32" };
         // Lent: a list the function is lent.
         let lent = format!(
-            "fn kept(xs: List[f32]) -> {result} {{\n  {open}fn(v: f32) -> f32 {{ xs.size }}{close}\n}}\n"
+            "fn kept(xs: List[f32]) -> {result} {{\n  {open}fn(v: f32) -> f32 {{ float(xs.size) }}{close}\n}}\n"
         );
         // Assigned: a `var` of the function.
         let assigned = format!(
@@ -265,7 +309,9 @@ fn a_lambda_that_holds_something_lent_or_assigns_a_name_is_refused_where_it_is_k
             let source = refused_source(&item, call);
             let found = check(source.as_bytes()).expect_err("refused");
             assert!(
-                found.iter().any(|e| e.message.starts_with("a lambda cannot be")),
+                found
+                    .iter()
+                    .any(|e| e.message.starts_with("a lambda cannot be") || e.message.contains("lent")),
                 "{found:?} for\n{source}"
             );
         }
@@ -341,12 +387,53 @@ fn which_lambda_that_reads_names_a_value_is_is_known_when_the_program_is_built()
     );
 }
 
-/// What a function gives is known before its body is checked, so a lambda that
-/// it returns reads the parameters of the function, and one that reads a name the
-/// function defines is refused saying which.
-fn a_lambda_that_is_returned_reads_the_parameters_of_its_function_only() {
-    let source = "fn kept(rate: f32) -> fn(f32) -> f32 {\n  doubled = rate * 2.0\n  \
-                  fn(v: f32) -> f32 { v - doubled }\n}\n\nfn main() {\n  r = kept(1.0)(2.0)\n}\n";
-    let found = check(source.as_bytes()).expect_err("refused");
-    assert!(found.iter().any(|e| e.message.contains("`doubled`")), "{found:?}");
+/// A lambda that is returned reads any name of its function, at the type the
+/// body gives it, though what a function gives is known before its body is
+/// checked, and a function that gives what another gives is refused.
+fn a_lambda_that_is_returned_reads_any_name_of_its_function() {
+    let source = "use std.console (console, print)\n\n\
+                  fn scaler(k: f32) -> fn(f32) -> f32 {\n  k2 = k * 2.0\n  fn(x: f32) -> f32 { x * k2 }\n}\n\n\
+                  fn main() <console, alloc> {\n  print(\"{scaler(3.0)(2.0)}\")\n}\n";
+    let ran = scalar::run(&lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
+    assert_eq!(ran.stdout, b"12.0\n");
+    let chained = source.replace(
+        "fn main() <console, alloc> {\n",
+        "fn twice() -> fn(f32) -> f32 { scaler(2.0) }\n\nfn main() <console, alloc> {\n  r = twice()(1.0)\n",
+    );
+    let found = check(chained.as_bytes()).expect_err("refused");
+    assert!(found.iter().any(|e| e.message.contains("must be known when the program is built")), "{found:?}");
+}
+
+/// A lambda that is stored or returned takes a value without `Copy` that its
+/// function owns, so a later use of the name is a use after it was given away,
+/// and a value that is lent is refused.
+fn a_lambda_that_reads_a_value_without_copy_that_its_function_owns_takes_it() {
+    let head = "use std.console (console, print)\n\nstruct P {\n  d: fn(f32) -> f32\n}\n\n";
+    let main = "fn main() <console, alloc> {\n  ys: List[f32] = [1.0, 2.0, 3.0]\n  \
+                print(\"{made(1.0).d(2.0)} {ret(ys)(2.0)}\")\n}\n";
+    let owned = "fn made(k: f32) -> P <alloc> {\n  xs: List[f32] = [k, 2.0]\n  \
+                 P(d: fn(x: f32) -> f32 { x + float(xs.size) })\n}\n\n\
+                 fn ret(xs: take List[f32]) -> fn(f32) -> f32 {\n  fn(x: f32) -> f32 { x + float(xs.size) }\n}\n\n";
+    let ran = scalar::run(&lower(format!("{head}{owned}{main}").as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
+    assert_eq!(ran.stdout, b"4.0 5.0\n");
+    // Used after the lambda took it, stored and returned.
+    let after = [
+        "fn made(k: f32) -> P <alloc> {\n  xs: List[f32] = [k, 2.0]\n  \
+         p = P(d: fn(x: f32) -> f32 { x + float(xs.size) })\n  n = xs.size\n  if n > 0 { p } else { p }\n}\n\n\
+         fn ret(xs: take List[f32]) -> fn(f32) -> f32 {\n  fn(x: f32) -> f32 { x + float(xs.size) }\n}\n\n",
+        // The name the lambda is bound to is stored, which gives away what it holds.
+        "fn made(k: f32) -> P <alloc> {\n  xs: List[f32] = [k, 2.0]\n  f = fn(x: f32) -> f32 { x + float(xs.size) }\n  \
+         p = P(d: f)\n  n = xs.size\n  if n > 0 { p } else { p }\n}\n\n\
+         fn ret(xs: take List[f32]) -> fn(f32) -> f32 {\n  fn(x: f32) -> f32 { x + float(xs.size) }\n}\n\n",
+    ];
+    for item in after {
+        let source = format!("{head}{item}{main}");
+        let found = check(source.as_bytes()).expect_err("refused");
+        assert!(found.iter().any(|e| e.message.contains("after it was given away")), "{found:?} for\n{source}");
+    }
+    // A value that is lent is not taken.
+    let lent = "fn made(k: f32) -> P { P(d: fn(x: f32) -> f32 { x }) }\n\n\
+                fn ret(xs: List[f32]) -> fn(f32) -> f32 {\n  fn(x: f32) -> f32 { x + float(xs.size) }\n}\n\n";
+    let found = check(format!("{head}{lent}{main}").as_bytes()).expect_err("refused");
+    assert!(found.iter().any(|e| e.message.contains("lent")), "{found:?}");
 }

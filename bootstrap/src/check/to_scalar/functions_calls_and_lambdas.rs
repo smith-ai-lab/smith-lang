@@ -503,6 +503,28 @@ impl<'a> Lowering<'a> {
         (name, ty): &(String, Ty),
         env: &[Ty],
     ) -> Bound<'a> {
+        // A lambda that holds the values of the names it read is given as the
+        // struct that holds them, and called as the lambda it is.
+        if let Ty::Fn(_) = ty {
+            let defs = self.typed.defs;
+            let held = match value {
+                Expr::Name { name, .. } => out.find(name).map(|at| out.names()[at].ty.clone()),
+                Expr::Lambda(_) => None,
+                _ => Some(self.typed.type_of(value, env)),
+            };
+            if let Some(held @ Ty::Struct(e, _)) = held
+                && defs.env_lambda(e).is_some()
+            {
+                let (_, values) = self.expr(out, value, env);
+                return Bound {
+                    name: name.clone(),
+                    func: Some(self.held_func(&held, out.at)),
+                    ty: held,
+                    values,
+                    home: None,
+                };
+            }
+        }
         let (values, func) = if let Ty::Fn(_) = ty {
             let func = match value {
                 Expr::Lambda(l) => Func::Lambda(l, out.at, env.to_vec()),
@@ -639,16 +661,6 @@ impl<'a> Lowering<'a> {
         (Ty::Struct(s, args), values)
     }
 
-    /// Binds a name to a lambda that reads names of its function: the name
-    /// holds the values of the names it read, as of now, and the lambda, whose
-    /// body is lowered where it is called.
-    pub(super) fn bind_env(&mut self, out: &mut Out<'a>, name: &str, l: &'a Lambda, env: &[Ty]) {
-        let (ty, values) = self.env_value(out, l, env);
-        out.define(name, ty, values);
-        let at = out.find(name).expect("defined");
-        out.names_mut()[at].func = Some(Func::Lambda(l, out.at, env.to_vec()));
-    }
-
     /// The names a lambda of struct `s` read, each standing for the value that
     /// the lambda holds, from the values of the lambda.
     fn held_names(&self, s: usize, args: &[Ty], values: &[form::Value]) -> Vec<Bound<'a>> {
@@ -704,10 +716,11 @@ impl<'a> Lowering<'a> {
             }
             _ => unreachable!("checked"),
         };
-        let func = match local.func.clone() {
-            Some(func) => func,
-            // A lambda a function gave is where it is written, for its body.
-            None => self.held_func(&local.ty, frame),
+        let func = match (&local.ty, local.func.clone()) {
+            // The body of a lambda that holds names is lowered where it is called.
+            (Ty::Struct(..), _) => self.held_func(&local.ty, frame),
+            (_, Some(func)) => func,
+            (_, None) => unreachable!("a function"),
         };
         self.run_held(out, call, (func, held, items), env, quiet)
     }
