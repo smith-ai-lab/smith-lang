@@ -7656,6 +7656,7 @@ impl<'a> Checker<'a> {
                     .totals
                     .iter()
                     .all(|(p, t)| solve.first.get(p) == Some(t));
+            let grown = if unchanged { Vec::new() } else { grown };
             if (grown.is_empty() && settled)
                 || unchanged
                 || looks > solve.totals.len() + solve.empties.len() + 1
