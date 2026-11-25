@@ -1252,6 +1252,15 @@ impl<'a> Checker<'a> {
             }
             return;
         }
+        if let Some((name, Ty::Struct(s, _))) = body.names.last()
+            && *s == self.defs.range
+            && !body.vars.contains(name)
+        {
+            if Self::decided(body) {
+                self.give_range(body, value);
+            }
+            return;
+        }
         let Some((name, Ty::Int(t))) = body.names.last().cloned() else {
             return;
         };
@@ -1272,6 +1281,35 @@ impl<'a> Checker<'a> {
                 if let Some(same) = self.equal(body, &mut facts, id, &given) {
                     facts.known.push(same);
                 }
+            }
+        }
+        body.facts = facts;
+    }
+
+    /// Notes the ends of the `Range` the name defined last was given, when it
+    /// was built from two ends: `r.start` and `r.end` are what they were.
+    fn give_range(&mut self, body: &mut Body<'a>, value: &Expr) {
+        let Expr::Call(call) = value else {
+            return;
+        };
+        if call.callee != "Range" || call.args.len() != 2 {
+            return;
+        }
+        let at = body.names.len() - 1;
+        let mut facts = std::mem::take(&mut body.facts);
+        for (end, arg) in ["start", "end"].into_iter().zip(&call.args) {
+            let mut builder = self.builder(body, &mut facts, false);
+            let given = builder.lin(&arg.value);
+            let overflow = builder.overflow;
+            let id = facts.id(Key::Field(
+                format!("{}.{end}", root(body, &facts, at)),
+                0,
+                u64::MAX as i128,
+            ));
+            if let (Some(given), false) = (given, overflow)
+                && let Some(same) = self.equal(body, &mut facts, id, &given)
+            {
+                facts.known.push(same);
             }
         }
         body.facts = facts;

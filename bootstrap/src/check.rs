@@ -1036,6 +1036,8 @@ struct Defs<'a> {
     option: usize,
     flow: usize,
     result: usize,
+    /// The prelude's `Range`, which `a..b` written as a value builds.
+    range: usize,
     /// Each trait taken away from a struct or an enum by `without`.
     withouts: Vec<(usize, Def)>,
     /// How many defaults of type parameters are being resolved inside one
@@ -2986,6 +2988,7 @@ fn check_file(
         option: prelude_item(&file, Kind::Enum, "Option"),
         flow: prelude_item(&file, Kind::Enum, "Flow"),
         result: prelude_item(&file, Kind::Enum, "Result"),
+        range: prelude_item(&file, Kind::Struct, "Range"),
         withouts: Vec::new(),
         default_depth: Cell::new(0),
         has_alias: file.structs.iter().any(|s| s.alias.is_some()),

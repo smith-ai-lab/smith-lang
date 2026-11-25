@@ -805,6 +805,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
         no_names: None,
         name_bound_ok: false,
         no_lambda: false,
+        in_index: false,
         binds: Vec::new(),
         holes: Vec::new(),
         modules: Vec::new(),
@@ -1252,6 +1253,9 @@ struct Parser<'a> {
     /// after the value of a `match`, rather than a lambda. Inside
     /// parentheses and braces it opens a lambda again.
     no_lambda: bool,
+    /// Whether the expression read next is the first part of an index, where
+    /// `..` begins a piece and is not a range written as a value.
+    in_index: bool,
     /// The bindings that take apart the parameters of the function whose
     /// signature was read last that are written as patterns, in order. They
     /// open its body.
@@ -2313,6 +2317,13 @@ impl Parser<'_> {
     /// Parses an expression, with its operators grouped as the precedence
     /// table in `knowledge/grammar.md` says.
     fn expr(&mut self) -> Result<Expr, Error> {
+        let in_index = std::mem::replace(&mut self.in_index, false);
+        let expr = self.expr_inside();
+        self.in_index = in_index;
+        expr
+    }
+
+    fn expr_inside(&mut self) -> Result<Expr, Error> {
         let mut expr = self.either()?;
         while self.tok() == &Tok::Punct("|>") {
             expr = self.step(expr)?;
