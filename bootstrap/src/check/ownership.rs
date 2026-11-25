@@ -1480,6 +1480,9 @@ impl<'a> Walk<'a> {
         if let Some(measure) = &l.decreases {
             self.eval(st, measure, Flow::Lend);
         }
+        for invariant in &l.invariants {
+            self.eval(st, invariant, Flow::Lend);
+        }
         // The elements stay in the list, so the block is lent each one.
         let element = "this `loop`";
         // A loop over a value that is made where it is written holds it in a

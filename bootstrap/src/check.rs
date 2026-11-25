@@ -5806,6 +5806,9 @@ fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
             if let Some(e) = &l.decreases {
                 walk(e, out);
             }
+            for e in &l.invariants {
+                walk(e, out);
+            }
             for value in values(&l.body) {
                 walk(value, out);
             }
@@ -5895,6 +5898,9 @@ pub(super) fn blocks<'a>(e: &'a Expr, out: &mut Vec<&'a [Stmt]>) {
                 blocks(&o.value, out);
             }
             if let Some(e) = &l.decreases {
+                blocks(e, out);
+            }
+            for e in &l.invariants {
                 blocks(e, out);
             }
             out.push(&l.body);
@@ -8843,15 +8849,27 @@ impl<'a> Checker<'a> {
                 self.errors.push(self.defined_twice(body, &r.name, r.pos));
             }
             body.names.push((r.name.clone(), ty));
+            // An invariant is about the counter and the names outside.
+            for invariant in &l.invariants {
+                self.condition(body, invariant);
+            }
+            self.invariants_before(body, l, Some(r));
             self.assume_range(body, r);
         }
         if let Some((o, ty)) = element {
+            // An invariant of a loop over a value is about the names outside
+            // it, as the element is not one before the first pass.
+            for invariant in &l.invariants {
+                self.condition(body, invariant);
+            }
+            self.invariants_before(body, l, None);
             if body.names.iter().any(|(n, _)| n == &o.name) {
                 self.errors.push(self.defined_twice(body, &o.name, o.pos));
             }
             body.names.push((o.name.clone(), ty));
         }
         self.begin_round(body, &assigned);
+        self.assume_invariants(body, l);
         let start = measure.and_then(|e| self.measure_of(body, std::slice::from_ref(e), &[]));
         body.loops += 1;
         self.rounds.push(passes.1);
@@ -8865,10 +8883,12 @@ impl<'a> Checker<'a> {
         if let (Some(e), Some(start)) = (measure, &start) {
             self.decreased(body, l, e, start);
         }
+        self.invariants_after_pass(body, l, l.range.as_ref());
         body.names.truncate(outer);
         body.vars.truncate(vars);
         body.facts.reset(&known);
         self.forget(body, &assigned);
+        self.invariants_after_loop(body, l, l.range.as_ref(), &assigned);
         Ty::Nothing
     }
 
