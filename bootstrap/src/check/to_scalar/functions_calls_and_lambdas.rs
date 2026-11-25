@@ -1067,12 +1067,14 @@ impl<'a> Lowering<'a> {
         (gives, result)
     }
 
-    /// Ends a handle of `net`, as the program that owns it would by calling
-    /// `end`, which is `close`, `stop`, or `unbind`: through the handler in force,
-    /// or the function the library answers it with where none is.
+    /// Ends a handle of `net` or a `File` of `fs`, as the program that owns it
+    /// would by calling `end`, which is `close`, `stop`, `unbind`, or
+    /// `close_file`: through the handler in force, or the function the library
+    /// answers it with where none is.
     pub(super) fn end_handle(
         &mut self,
         out: &mut Out<'a>,
+        effect_name: &str,
         end: &str,
         ty: &Ty,
         values: &[form::Value],
@@ -1084,9 +1086,9 @@ impl<'a> Lowering<'a> {
                 g.name == end
                     && defs.is_operation(f)
                     && crate::check::of_std(g.pos)
-                    && crate::check::written_name(&g.effects[0].0) == "net"
+                    && crate::check::written_name(&g.effects[0].0) == effect_name
             })
-            .expect("an operation of `net` that ends the handle");
+            .expect("an operation that ends the handle");
         let instance = Instance {
             template: Template::Free(f),
             args: Vec::new(),
