@@ -617,6 +617,26 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// Binds a name to a lambda that reads names of its function: the name
+    /// holds the values of the names it read, as of now, and the lambda, whose
+    /// body is lowered where it is called.
+    pub(super) fn bind_env(&mut self, out: &mut Out<'a>, name: &str, l: &'a Lambda, env: &[Ty]) {
+        let defs = self.typed.defs;
+        let s = defs.env_of(l).expect("a struct for the lambda");
+        let fields = &defs.file.structs[s].fields;
+        let own = defs.file.structs[s].generics.len() - fields.len();
+        let mut args: Vec<Ty> = env[..own].to_vec();
+        let mut values = Vec::new();
+        for field in fields {
+            let at = out.find(&field.name).expect("checked");
+            args.push(out.names()[at].ty.clone());
+            values.extend(out.read(at));
+        }
+        out.define(name, Ty::Struct(s, args), values);
+        let at = out.find(name).expect("defined");
+        out.names_mut()[at].func = Some(Func::Lambda(l, out.at, env.to_vec()));
+    }
+
     /// Lowers a call of a name that holds a function. A lambda's body is
     /// lowered in place, in the frame it is written in, with its parameters
     /// standing for the arguments.
@@ -641,8 +661,32 @@ impl<'a> Lowering<'a> {
         let at = out.find(&call.callee).expect("checked");
         let local = &out.names()[at];
         let func = local.func.clone().expect("a function");
-        let Ty::Fn(items) = local.ty.clone() else {
-            unreachable!("checked")
+        let mut held = Vec::new();
+        let items = match local.ty.clone() {
+            Ty::Fn(items) => items,
+            Ty::Struct(s, args) => {
+                // The names the lambda read stand for the values it holds.
+                let defs = self.typed.defs;
+                let own = defs.file.structs[s].generics.len() - defs.file.structs[s].fields.len();
+                let mut from = 0;
+                for (field, ty) in defs.file.structs[s].fields.iter().zip(&defs.fields[s]) {
+                    let ty = ty.subst(&args);
+                    let size = self.size(&ty);
+                    held.push(Bound {
+                        name: field.name.clone(),
+                        ty,
+                        values: local.values[from..from + size].to_vec(),
+                        func: None,
+                        home: None,
+                    });
+                    from += size;
+                }
+                self.typed.env_items[&s]
+                    .iter()
+                    .map(|t| t.subst(&args[..own]))
+                    .collect()
+            }
+            _ => unreachable!("checked"),
         };
         let (gives, params) = items.split_last().expect("a result");
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
@@ -658,7 +702,10 @@ impl<'a> Lowering<'a> {
             args[at] = Some(self.argument(out, &arg.value, &param, env));
         }
         let args = args.into_iter().map(|a| a.expect("given")).collect();
+        let before = out.names().len();
+        out.names_mut().extend(held);
         let mut result = self.run_func(out, func, args, gives, quiet);
+        out.names_mut().truncate(before);
         if *gives == Ty::Nothing {
             result.clear();
         }

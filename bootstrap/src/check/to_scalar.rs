@@ -1835,6 +1835,10 @@ impl<'a> Lowering<'a> {
                     // its statements once each, in order, so an assignment
                     // makes the name stand for the new values from then
                     // on, and a name bound to the old ones keeps them.
+                    if let Expr::Lambda(l) = value {
+                        self.bind_env(out, name, l, env);
+                        continue;
+                    }
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
                     let written = value;

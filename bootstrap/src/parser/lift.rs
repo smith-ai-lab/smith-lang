@@ -4,6 +4,7 @@
 //! is replaced by that name, so that it is a function value known when the
 //! program is built, as a function with a name is.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use super::{Call, Expr, Function, Generic, Lambda, Param, Stmt, Struct, Type};
@@ -15,8 +16,9 @@ fn lifted_name(l: &Lambda) -> String {
 
 /// Replaces each lambda that is bound, stored in a struct, or returned, and
 /// that holds nothing lent, by the name of a new function, which it adds.
-pub(super) fn lift(functions: &mut Vec<Function>, structs: &[Struct]) {
-    let structs: HashMap<&str, &Struct> = structs
+pub(super) fn lift(functions: &mut Vec<Function>, structs: &mut Vec<Struct>) {
+    let envs = RefCell::new(Vec::new());
+    let named: HashMap<&str, &Struct> = structs
         .iter()
         .filter(|s| s.alias.is_none())
         .map(|s| (s.name.as_str(), s))
@@ -34,15 +36,18 @@ pub(super) fn lift(functions: &mut Vec<Function>, structs: &[Struct]) {
         }
         let generics: HashSet<String> = f.generics.iter().map(|g| g.name.clone()).collect();
         let cx = Cx {
-            structs: &structs,
+            structs: &named,
             around: &around,
             generics: &generics,
+            generic_list: &f.generics,
+            envs: &envs,
         };
         let last = f.body.len().checked_sub(1);
         let result = f.result.as_ref().filter(|t| t.function);
         block(&cx, &mut f.body, last.map(|i| (i, result)), &mut lifted);
     }
     functions.extend(lifted);
+    structs.extend(envs.into_inner());
 }
 
 struct Cx<'a> {
@@ -51,6 +56,10 @@ struct Cx<'a> {
     around: &'a HashSet<String>,
     /// The type parameters of the function.
     generics: &'a HashSet<String>,
+    /// The type parameters of the function, in order.
+    generic_list: &'a [Generic],
+    /// The structs that hold what the lambdas bound to a name read.
+    envs: &'a RefCell<Vec<Struct>>,
 }
 
 /// What a lambda is kept as, where it is written: not kept, kept with nothing to
@@ -73,6 +82,11 @@ fn block(
         match stmt {
             Stmt::Define { value, .. } => {
                 value_of(cx, value, Kept::Anywhere, out);
+                if let Expr::Lambda(l) = value
+                    && let Some(env) = env_struct(cx, l)
+                {
+                    cx.envs.borrow_mut().push(env);
+                }
             }
             Stmt::Expr(value) => {
                 let kept = match returned {
@@ -205,6 +219,10 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
     let mut mine: HashSet<&str> = l.params.iter().map(|(n, _)| n.as_str()).collect();
     for stmt in crate::check::statements(&l.body) {
         if let Stmt::Define { name, .. } = stmt {
+            // A name of the function that is defined again is assigned.
+            if cx.around.contains(name) && !mine.contains(name.as_str()) {
+                return None;
+            }
             mine.insert(name);
         }
     }
@@ -255,4 +273,102 @@ fn type_names<'a>(t: &'a Type, out: &mut HashSet<&'a str>) {
     for a in &t.args {
         type_names(a, out);
     }
+}
+
+/// The name of the struct that holds what a lambda reads: where it is written.
+pub(crate) fn env_name(pos: super::Pos) -> String {
+    format!("env@lambda@{}:{}", pos.line, pos.col)
+}
+
+/// The generic struct that holds what a lambda bound to a name reads of the
+/// function it is written in: the type parameters of the function, then one for
+/// each name it reads, and a field for each name. No source writes it, and
+/// the checker gives it the types the names have. None when the lambda leaves a
+/// type out, assigns a name of its function, or reads none.
+fn env_struct(cx: &Cx, l: &Lambda) -> Option<Struct> {
+    if !l.generics.is_empty() || l.result.is_none() || l.types.iter().any(Option::is_none) {
+        return None;
+    }
+    let mut mine: HashSet<&str> = l.params.iter().map(|(n, _)| n.as_str()).collect();
+    for stmt in crate::check::statements(&l.body) {
+        if let Stmt::Define { name, .. } = stmt {
+            // A name of the function that is defined again is assigned.
+            if cx.around.contains(name) && !mine.contains(name.as_str()) {
+                return None;
+            }
+            mine.insert(name);
+        }
+    }
+    let outside = |name: &String| cx.around.contains(name) && !mine.contains(name.as_str());
+    let mut reads: Vec<(&String, super::Pos)> = Vec::new();
+    let mut used = Vec::new();
+    for stmt in crate::check::statements(&l.body) {
+        match stmt {
+            Stmt::Define { value, .. } | Stmt::Destructure { value, .. } | Stmt::Expr(value) => {
+                crate::check::walk(value, &mut used)
+            }
+            Stmt::Assign { name, value, .. } => {
+                if outside(name) {
+                    return None;
+                }
+                crate::check::walk(value, &mut used)
+            }
+        }
+    }
+    for e in used {
+        match e {
+            Expr::Name { name, pos } if outside(name) => {
+                if !reads.iter().any(|(n, _)| *n == name) {
+                    reads.push((name, *pos));
+                }
+            }
+            Expr::Call(c) => {
+                if outside(&c.callee) && c.qualifier.is_none() && c.through.is_none() {
+                    return None;
+                }
+                if c.qualifier.as_ref().is_some_and(|(q, _)| outside(q)) {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    if reads.is_empty() {
+        return None;
+    }
+    let mut generics = cx.generic_list.to_vec();
+    let mut fields = Vec::new();
+    for (name, pos) in reads {
+        let implicit = format!("read@{name}");
+        generics.push(Generic {
+            name: implicit.clone(),
+            pos,
+            out: None,
+            bound: None,
+            default: None,
+        });
+        fields.push(super::Field {
+            name: name.clone(),
+            pos,
+            ty: Type {
+                name: implicit,
+                pos,
+                args: Vec::new(),
+                function: false,
+                range: None,
+                statement: None,
+                length: None,
+            },
+            function: None,
+            default: None,
+            public: None,
+        });
+    }
+    Some(Struct {
+        name: env_name(l.pos),
+        pos: l.pos,
+        generics,
+        fields,
+        alias: None,
+    })
 }
