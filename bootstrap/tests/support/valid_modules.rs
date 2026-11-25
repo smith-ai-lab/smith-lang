@@ -78,7 +78,19 @@ pub fn check(module: &[u8]) -> Result<(), String> {
     }
 }
 
-/// Makes every module a test builds pass `node` before it is given back.
+/// Makes every module a test builds pass `node` before it is given back, with
+/// `node` already started and answering. The tests that start first all build a
+/// module, and one waits for the start of `node` with the lock held while the
+/// others wait for the lock, so a start that is slow on a loaded machine would
+/// be taken for a test that does not end. Here it is before any test begins.
+/// The time it takes is printed, so that a run says what the start cost.
 pub fn install() {
+    let begin = std::time::Instant::now();
+    let empty = [0, 0x61, 0x73, 0x6d, 1, 0, 0, 0];
+    check(&empty).expect("node takes the empty module");
+    println!(
+        "node started and checked a module in {:.0} ms",
+        begin.elapsed().as_secs_f64() * 1000.0
+    );
     smith::target::check_modules_with(check);
 }
