@@ -6,15 +6,27 @@ use std.task (Handle, task)
 pub struct File {
   handle: i64
   opened: bool
+  pub path: str
 }
 
 without Copy for File
 without Discard for File
 
 pub enum FsError {
-  missing
-  denied
-  failed: str
+  missing: str
+  denied: str
+  failed: (str, str)
+}
+
+// What a person reads: the path, and then what went wrong.
+impl Fmt[FsError] {
+  fn fmt(value: FsError) -> str <alloc> {
+    match value {
+      .missing(path) { "{path}: no such file" }
+      .denied(path) { "{path}: permission denied" }
+      .failed((path, said)) { "{path}: {said}" }
+    }
+  }
 }
 
 pub effect fs {
@@ -55,7 +67,12 @@ pub fn write_all(path: str, bytes: List[Byte], executable: bool = false) -> Resu
 // the number back with `handle`. A file made so is not one the system opened, and
 // the system's handler refuses it.
 pub fn file(handle: Nat) -> File {
-  File(handle: wrapping_narrow(handle), opened: false)
+  named(handle, "")
+}
+
+// A file that no system opened, with the path its errors name.
+fn named(handle: Nat, path: str) -> File {
+  File(handle: wrapping_narrow(handle), opened: false, path: path)
 }
 
 pub trait Held[T] {
@@ -111,26 +128,26 @@ fn count(given: i64) -> Nat {
 // What the kernel gave, when it refused: minus its error number. A file that is
 // not there is a name or a directory of the path that does not exist, and one the
 // program may not read is a permission it lacks.
-fn failure(call: str, given: i64) -> FsError <alloc> {
+fn failure(path: str, call: str, given: i64) -> FsError <alloc> {
   code = 0 - given
   // Windows says a file or a folder of the path is not there with 2 and 3, and
   // that the program may not use it with 5.
   if on_windows() {
-    if code == 2 or code == 3 { return .missing }
-    if code == 5 { return .denied }
-    return .failed("{call}: error {code}")
+    if code == 2 or code == 3 { return .missing(path) }
+    if code == 5 { return .denied(path) }
+    return .failed((path, "{call}: error {code}"))
   }
   if code == 2 or code == 20 {
-    .missing
+    .missing(path)
   } else if code == 13 or code == 1 {
-    .denied
+    .denied(path)
   } else {
-    .failed("{call}: error {code}")
+    .failed((path, "{call}: error {code}"))
   }
 }
 
-fn not_opened(call: str, h: i64) -> FsError <alloc> {
-  .failed("{call}: handle {h} is not one the system opened")
+fn not_opened(f: File, call: str) -> FsError <alloc> {
+  .failed((f.path, "{call}: handle {f.handle} is not one the system opened"))
 }
 
 // The path as the kernel reads it, ended by a zero byte, when no byte of it is
@@ -138,7 +155,7 @@ fn not_opened(call: str, h: i64) -> FsError <alloc> {
 fn name(path: str) -> Result[List[Byte], FsError] <alloc> {
   var made: List[Byte] = []
   loop i in 0..path.size {
-    if path[i] == 0 { return .err(.failed("a path holds a zero byte")) }
+    if path[i] == 0 { return .err(.failed((path, "a path holds a zero byte"))) }
     made = push(made, path[i])
   }
   .ok(push(made, 0))
@@ -169,7 +186,7 @@ fn wide_name(path: str) -> Result[List[Byte], FsError] <alloc> {
   var point: 0..2097152 = 0
   loop i in 0..path.size {
     b = path[i]
-    if b == 0 { return .err(.failed("a path holds a zero byte")) }
+    if b == 0 { return .err(.failed((path, "a path holds a zero byte"))) }
     if need > 0 {
       point = bit_and(bit_or(shift_left(point, 6), bit_and(b, 63)), 2097151)
       need = need - 1
@@ -212,39 +229,39 @@ fn wait_to_write(fd: i64) <task> {
 // What Windows opens: the path, the access (read, or write), and the disposition
 // (an existing file, or a new one that empties one that exists), and whether the
 // handle came.
-fn opened_on_windows(call: str, where: List[Byte], access: i64, how: i64) -> Result[File, FsError] <alloc> {
+fn opened_on_windows(path: str, call: str, where: List[Byte], access: i64, how: i64) -> Result[File, FsError] <alloc> {
   fd = __system(19, 0, where, access, how, 0, 0)
-  if fd < 0 { return .err(failure(call, fd)) }
-  .ok(File(handle: fd, opened: true))
+  if fd < 0 { return .err(failure(path, call, fd)) }
+  .ok(File(handle: fd, opened: true, path: path))
 }
 
 fn system_open_file(path: str) -> Result[File, FsError] <alloc, task> {
   where = try system_name(path)
-  if on_windows() { return opened_on_windows("open", where, 2147483648, 3) }
+  if on_windows() { return opened_on_windows(path, "open", where, 2147483648, 3) }
   var flags: i64 = 524288
   if on_macos() { flags = 16777216 }
   if __scheduled() { flags = if on_macos() { 16777220 } else { 526336 } }
   fd = __system(19, -100, where, flags, 0, 0, 0)
-  if fd < 0 { return .err(failure("open", fd)) }
-  .ok(File(handle: fd, opened: true))
+  if fd < 0 { return .err(failure(path, "open", fd)) }
+  .ok(File(handle: fd, opened: true, path: path))
 }
 
 fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <alloc, task> {
   where = try system_name(path)
-  if on_windows() { return opened_on_windows("create", where, 1073741824, 2) }
+  if on_windows() { return opened_on_windows(path, "create", where, 1073741824, 2) }
   var flags: i64 = 524865
   if on_macos() { flags = 16778753 }
   if __scheduled() { flags = if on_macos() { 16778757 } else { 526913 } }
   fd = __system(19, -100, where, flags, 438, 0, 0)
-  if fd < 0 { return .err(failure("create", fd)) }
+  if fd < 0 { return .err(failure(path, "create", fd)) }
   if executable {
     made = __system(27, fd, 493, 0, 0, 0, 0)
     if made < 0 {
       __system(28, fd, 0, 0, 0, 0, 0)
-      return .err(failure("create", made))
+      return .err(failure(path, "create", made))
     }
   }
-  .ok(File(handle: fd, opened: true))
+  .ok(File(handle: fd, opened: true, path: path))
 }
 
 fn system_close_file(f: take File) {
@@ -281,11 +298,11 @@ fn probe(fd: i64) -> i64 <alloc> {
 }
 
 fn system_size(f: File) -> Result[Nat, FsError] <alloc> {
-  if not f.opened { return .err(not_opened("size", f.handle)) }
+  if not f.opened { return .err(not_opened(f, "size")) }
   asked = probe(f.handle)
-  if asked == 0 - 21 { return .err(failure("size", asked)) }
+  if asked == 0 - 21 { return .err(failure(f.path, "size", asked)) }
   end = end_of(f.handle)
-  if end < 0 { return .err(failure("size", end)) }
+  if end < 0 { return .err(failure(f.path, "size", end)) }
   .ok(count(end))
 }
 
@@ -300,10 +317,10 @@ fn would_block() -> i64 {
 }
 
 fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, task> {
-  if not f.opened { return .err(not_opened("read", f.handle)) }
+  if not f.opened { return .err(not_opened(f, "read")) }
   var last: Nat = range.end
   asked = probe(f.handle)
-  if asked == 0 - 21 { return .err(failure("read", asked)) }
+  if asked == 0 - 21 { return .err(failure(f.path, "read", asked)) }
   end = end_of(f.handle)
   var stream = false
   if end >= 0 {
@@ -311,7 +328,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
   } else if end == no_places() {
     stream = true
   } else {
-    return .err(failure("read", end))
+    return .err(failure(f.path, "read", end))
   }
   first = range.start
   if first >= last { return .ok([]) }
@@ -328,14 +345,14 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
     } else {
       match checked_add(first, have) {
         .some(at) { got = __system(23, f.handle, chunk, left, at, 0, 0) }
-        .none { return .err(.failed("read: too far into the file")) }
+        .none { return .err(.failed((f.path, "read: too far into the file"))) }
       }
     }
     if got == would_block() {
       if __scheduled() { wait_to_read(f.handle) }
     } else if got == -4 {
     } else if got < 0 {
-      return .err(failure("read", got))
+      return .err(failure(f.path, "read", got))
     } else if got == 0 {
       break
     } else {
@@ -343,7 +360,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
       if have == 0 { made = piece } else { made = append(made, piece) }
       match checked_add(have, count(got)) {
         .some(n) { have = n }
-        .none { return .err(.failed("read: too many bytes")) }
+        .none { return .err(.failed((f.path, "read: too many bytes"))) }
       }
       if stream { break }
     }
@@ -359,7 +376,7 @@ fn tail(xs: List[Byte], from: Nat) -> List[Byte] <alloc> {
 }
 
 fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <alloc, task> {
-  if not f.opened { return .err(not_opened("write", f.handle)) }
+  if not f.opened { return .err(not_opened(f, "write")) }
   var done: Nat = 0
   var stream = false
   // What is left to send once a write has sent only a part: the bytes are sent
@@ -378,7 +395,7 @@ fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <all
           given = if whole { __system(24, f.handle, bytes, handed, place, 0, 0) } else { __system(24, f.handle, rest, handed, place, 0, 0) }
         }
       }
-      .none { return .err(.failed("write: too far into the file")) }
+      .none { return .err(.failed((f.path, "write: too far into the file"))) }
     }
     if given == no_places() {
       stream = true
@@ -386,7 +403,7 @@ fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <all
       if __scheduled() { wait_to_write(f.handle) }
     } else if given == -4 {
     } else if given < 0 {
-      return .err(failure("write", given))
+      return .err(failure(f.path, "write", given))
     } else {
       n = count(given)
       if n < handed {
@@ -395,7 +412,7 @@ fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <all
       }
       match checked_add(done, n) {
         .some(total) { done = total }
-        .none { return .err(.failed("write: too many bytes")) }
+        .none { return .err(.failed((f.path, "write: too many bytes"))) }
       }
     }
   }
@@ -465,31 +482,31 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
   fs(
     open_file: fn(path) {
       match found(held, path) {
-        .some(i) { .ok(file(i)) }
-        .none { .err(.missing) }
+        .some(i) { .ok(named(i, path)) }
+        .none { .err(.missing(path)) }
       }
     },
     create_file: fn(path, executable) {
       match found(held, path) {
         .some(i) {
           held = holding(held, i, [])
-          .ok(file(i))
+          .ok(named(i, path))
         }
         .none {
           at = held.size
           held = push(held, MemoryFile(path: path, bytes: []))
-          .ok(file(at))
+          .ok(named(at, path))
         }
       }
     },
     close_file: fn(f) { n = release(f) },
     size: fn(f) {
       at = handle(f)
-      if at < held.size { .ok(held[at].bytes.size) } else { .err(.failed("size: no such file")) }
+      if at < held.size { .ok(held[at].bytes.size) } else { .err(.failed((f.path, "size: no such file"))) }
     },
     read: fn(f, range) {
       at = handle(f)
-      if at < held.size { .ok(piece(held[at].bytes, range)) } else { .err(.failed("read: no such file")) }
+      if at < held.size { .ok(piece(held[at].bytes, range)) } else { .err(.failed((f.path, "read: no such file"))) }
     },
     write: fn(f, at, bytes) {
       place = handle(f)
@@ -500,10 +517,10 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
             held = holding(held, place, put(held[place].bytes, at, bytes, total))
             .ok(())
           } else {
-            .err(.failed("write: no such file"))
+            .err(.failed((f.path, "write: no such file")))
           }
         }
-        .none { .err(.failed("write: too far into the file")) }
+        .none { .err(.failed((f.path, "write: too far into the file"))) }
       }
     },
     body: body,

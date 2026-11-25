@@ -45,6 +45,10 @@ pub const ONCE: &[Test] = &[
         a_handler_that_refuses_gives_denied_and_failed_as_values_and_no_operation_ends_the_program,
     ),
     (
+        "each_case_of_an_fs_error_is_written_as_its_path_and_what_went_wrong",
+        each_case_of_an_fs_error_is_written_as_its_path_and_what_went_wrong,
+    ),
+    (
         "a_file_that_is_not_closed_or_is_closed_twice_or_is_used_after_it_is_closed_does_not_compile",
         a_file_that_is_not_closed_or_is_closed_twice_or_is_used_after_it_is_closed_does_not_compile,
     ),
@@ -74,6 +78,14 @@ pub const MACHINE: &[Test] = &[
     (
         "a_file_that_is_not_there_a_directory_and_a_file_that_may_not_be_read_come_back_as_values_natively",
         a_file_that_is_not_there_a_directory_and_a_file_that_may_not_be_read_come_back_as_values_natively,
+    ),
+    (
+        "a_main_that_returns_an_fs_error_with_try_says_what_failed_and_ends_with_status_1",
+        a_main_that_returns_an_fs_error_with_try_says_what_failed_and_ends_with_status_1,
+    ),
+    (
+        "an_error_of_an_operation_on_a_file_names_the_path_the_file_was_opened_with",
+        an_error_of_an_operation_on_a_file_names_the_path_the_file_was_opened_with,
     ),
     (
         "a_file_written_as_executable_is_one_the_system_runs",
@@ -135,8 +147,8 @@ fn copy(from: str, to: str) -> Result[(), FsError] <fs, alloc> {{
 
 fn kind(e: FsError) -> str {{
   match e {{
-    .missing {{ \"missing\" }}
-    .denied {{ \"denied\" }}
+    .missing(path) {{ \"missing\" }}
+    .denied(path) {{ \"denied\" }}
     .failed(why) {{ \"failed\" }}
   }}
 }}
@@ -325,9 +337,9 @@ use std.fs (FsError, fs, read_all, release, write_all)
 
 fn kind(e: FsError) -> str {
   match e {
-    .missing { \"missing\" }
-    .denied { \"denied\" }
-    .failed(why) { why }
+    .missing(path) { \"missing\" }
+    .denied(path) { \"denied\" }
+    .failed((path, why)) { why }
   }
 }
 
@@ -340,12 +352,12 @@ fn tell(r: Result[List[Byte], FsError]) <console, alloc> {
 
 fn refusing[T](body: fn() -> T <fs>) -> T {
   fs(
-    open_file: fn(path) { .err(.denied) },
-    create_file: fn(path, executable) { .err(.failed(\"disk\")) },
+    open_file: fn(path) { .err(.denied(path)) },
+    create_file: fn(path, executable) { .err(.failed((path, \"disk\"))) },
     close_file: fn(f) { n = release(f) },
-    size: fn(f) { .err(.missing) },
-    read: fn(f, range) { .err(.missing) },
-    write: fn(f, at, bytes) { .err(.denied) },
+    size: fn(f) { .err(.missing(f.path)) },
+    read: fn(f, range) { .err(.missing(f.path)) },
+    write: fn(f, at, bytes) { .err(.denied(f.path)) },
     body: body,
   )
 }
@@ -361,6 +373,97 @@ fn main() <console, alloc> {
 }
 ";
     assert_eq!(evaluated(source), "denied\ndisk\nafter\n");
+}
+
+/// Each case written by its `Fmt`: the path, and then what went wrong.
+fn each_case_of_an_fs_error_is_written_as_its_path_and_what_went_wrong() {
+    let source = "use std.console (console, print)
+use std.fs (FsError)
+
+fn main() <console, alloc> {
+  errors: List[FsError] = [
+    .missing(\"missing.txt\"),
+    .denied(\"secret.key\"),
+    .failed((\"data.bin\", \"read: error 5\")),
+  ]
+  loop i in 0..errors.size { print(\"{errors[i]}\") }
+}
+";
+    assert_eq!(
+        evaluated(source),
+        "missing.txt: no such file\nsecret.key: permission denied\ndata.bin: read: error 5\n"
+    );
+}
+
+/// A `main` that returns the error of `read_all` with `try` writes what failed
+/// to standard error, and ends with status 1.
+fn a_main_that_returns_an_fs_error_with_try_says_what_failed_and_ends_with_status_1() {
+    let dir = folder();
+    let d = dir.to_str().unwrap().replace('\\', "/");
+    let source = format!(
+        "use std.console (console, print)
+use std.fs (FsError, fs, read_all, write_all)
+
+fn main() -> Result[(), FsError] <console, fs, alloc> {{
+  bytes = try read_all(\"{d}/photo.jpg\")
+  try write_all(\"{d}/photo-copy.jpg\", bytes)
+  print(\"copied {{bytes.size}} bytes\")
+  .ok(())
+}}
+"
+    );
+    for target in native_targets() {
+        let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+        targets::record(target, &[&bytes]);
+        if targets::fingerprinting() {
+            continue;
+        }
+        let out = output_of(&bytes, &[]);
+        assert_eq!(out.status.code(), Some(1), "{}", target.name());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "", "{}", target.name());
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr).trim_end(),
+            format!("{d}/photo.jpg: no such file"),
+            "{}",
+            target.name()
+        );
+    }
+    std::fs::remove_dir_all(dir).ok();
+}
+
+/// A call on a `File` is not given the path, so the path that its error names is
+/// the one the `File` keeps from `open`.
+fn an_error_of_an_operation_on_a_file_names_the_path_the_file_was_opened_with() {
+    let dir = folder();
+    let d = dir.to_str().unwrap().replace('\\', "/");
+    std::fs::write(dir.join("data.bin"), b"abc").unwrap();
+    // A file that was opened to be read is refused a write.
+    let source = format!(
+        "use std.console (console, print)
+use std.fs (FsError, fs, open, write)
+
+fn main() -> Result[(), FsError] <console, fs, alloc> {{
+  with f = open(\"{d}/data.bin\")
+  match write(f, 0, [1]) {{
+    .ok(_) {{ print(\"written\") }}
+    .err(e) {{ print(\"{{e}}\") }}
+  }}
+  .ok(())
+}}
+"
+    );
+    for target in native_targets() {
+        let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+        targets::record(target, &[&bytes]);
+        if targets::fingerprinting() {
+            continue;
+        }
+        let out = output_of(&bytes, &[]);
+        let said = String::from_utf8_lossy(&out.stdout).trim_end().to_string();
+        assert!(said.starts_with(&format!("{d}/data.bin: ")), "{}: {said}", target.name());
+        assert_ne!(said, format!("{d}/data.bin: "), "{}", target.name());
+    }
+    std::fs::remove_dir_all(dir).ok();
 }
 
 /// What a program that opens a path and says what happened prints natively.
