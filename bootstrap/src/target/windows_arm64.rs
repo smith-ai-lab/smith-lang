@@ -4,13 +4,13 @@
 //! file is written by the PE writer `windows_x64` uses.
 
 use super::Part;
-use super::arm64::{self, Asm, LS, NE, Place, System, X0, X1, X2, X3, X4, X19, X20, X21};
+use super::arm64::{self, Asm, EQ, LS, NE, Place, System, X0, X1, X2, X3, X4, X5, X19, X20, X21};
 use super::pe::{
-    self, ACCEPT, BIND, CLOSE_SOCKET, CONNECT, EXIT_PROCESS, GET_COMMAND_LINE, GET_SOCK_NAME,
-    GET_STD_HANDLE, LISTEN, MEM_COMMIT_RESERVE, MOST_PER_WRITE, Machine, PAGE_READWRITE, READ_FILE,
-    RECV_FROM, SEND_TO, SET_SOCK_OPT, SOCKET, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
-    STD_OUTPUT_HANDLE, VIRTUAL_ALLOC, WRITE_FILE, WSA_GET_LAST_ERROR, WSA_STARTUP, process_prng,
-    socket_slot,
+    self, ACCEPT, BIND, CLOSE_HANDLE, CLOSE_SOCKET, CONNECT, CREATE_FILE, EXIT_PROCESS,
+    GET_COMMAND_LINE, GET_FILE_SIZE, GET_LAST_ERROR, GET_SOCK_NAME, GET_STD_HANDLE, LISTEN,
+    MEM_COMMIT_RESERVE, MOST_PER_WRITE, Machine, PAGE_READWRITE, READ_FILE, RECV_FROM, SEND_TO,
+    SET_SOCK_OPT, SOCKET, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, VIRTUAL_ALLOC,
+    WRITE_FILE, WSA_GET_LAST_ERROR, WSA_STARTUP, process_prng, socket_slot,
 };
 use crate::scalar::{Program, Raw, Stream};
 
@@ -37,12 +37,14 @@ const SAVED: u32 = 8;
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let net = program.asks_the_network();
-    let (asm, data, parts) = if net {
-        arm64::code::<Windows<true, true>>(program)
-    } else if program.reads() {
-        arm64::code::<Windows<true, false>>(program)
-    } else {
-        arm64::code::<Windows<false, false>>(program)
+    let files = program.asks_the_files();
+    let (asm, data, parts) = match (net, program.reads(), files) {
+        (true, _, true) => arm64::code::<Windows<true, true, true>>(program),
+        (true, _, false) => arm64::code::<Windows<true, true, false>>(program),
+        (false, true, true) => arm64::code::<Windows<true, false, true>>(program),
+        (false, true, false) => arm64::code::<Windows<true, false, false>>(program),
+        (false, false, true) => arm64::code::<Windows<false, false, true>>(program),
+        (false, false, false) => arm64::code::<Windows<false, false, false>>(program),
     };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = pe::imports(
@@ -51,6 +53,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.asks_for_entropy(),
         program.reads(),
         net,
+        files,
     );
     let mut at = 0;
     let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
@@ -61,11 +64,12 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
 }
 
 /// Whether the program reads standard input, which moves the slot of
-/// `ProcessPrng`, and whether it carries `net`, which asks for the sockets
-/// of `WS2_32.dll` and moves it again.
-struct Windows<const READS: bool, const NET: bool>;
+/// `ProcessPrng`, whether it carries `net`, which asks for the sockets
+/// of `WS2_32.dll` and moves it again, and whether it asks for the files, which
+/// imports more of `KERNEL32.dll` and moves them both.
+struct Windows<const READS: bool, const NET: bool, const FILES: bool>;
 
-impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
+impl<const READS: bool, const NET: bool, const FILES: bool> System for Windows<READS, NET, FILES> {
     const RESERVED: u32 = RESERVED;
     const STACK_BY_PAGE: bool = true;
 
@@ -160,7 +164,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         let end = asm.label();
         asm.mov(X0, X1);
         asm.mov(X1, X2);
-        asm.call(process_prng(READS, NET));
+        asm.call(process_prng(READS, NET, FILES));
         asm.cbz_w(X0, refused);
         asm.mov_w(X0, 0);
         asm.branch(end);
@@ -181,7 +185,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
             asm.reserve_stack(512);
             asm.mov_w(X0, 0x0202);
             asm.stack_address(X1, 0);
-            asm.call(socket_slot(WSA_STARTUP));
+            asm.call(socket_slot(WSA_STARTUP, FILES));
             asm.release_stack(512);
         }
     }
@@ -194,7 +198,10 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
     /// 64-bit number first. Those that give a socket give 64 bits.
     fn raw(asm: &mut Asm, call: Raw) {
         if call == Raw::Kind {
-            asm.mov_w(X0, if NET { 2 } else { 0 });
+            asm.mov_w(X0, if NET || FILES { 2 } else { 0 });
+            return;
+        }
+        if FILES && files_call(asm, call) {
             return;
         }
         let (function, int) = match call {
@@ -219,7 +226,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
                 return;
             }
         };
-        asm.call(socket_slot(function));
+        asm.call(socket_slot(function, FILES));
         if int {
             // sxtw x0, w0
             asm.word(0x9340_7c00 | X0 << 5 | X0);
@@ -228,7 +235,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         // cmn x0, #1; b.ne given
         asm.word(0xb100_041f);
         asm.cond(NE, given);
-        asm.call(socket_slot(WSA_GET_LAST_ERROR));
+        asm.call(socket_slot(WSA_GET_LAST_ERROR, FILES));
         // sxtw x0, w0; neg x0, x0
         asm.word(0x9340_7c00 | X0 << 5 | X0);
         asm.word(0xcb00_03e0 | X0 << 16);
@@ -261,4 +268,131 @@ fn handle(stream: Stream) -> u32 {
         Stream::Stdout => STD_OUTPUT_HANDLE,
         Stream::Stderr => STD_ERROR_HANDLE,
     }
+}
+
+const X6: u32 = 6;
+
+/// `FILE_ATTRIBUTE_NORMAL` and `FILE_FLAG_BACKUP_SEMANTICS`, which opens a
+/// directory too, so that what is read of it is refused as the other systems do.
+const OPEN_FLAGS: u64 = 0x80 | 0x0200_0000;
+/// The errors that say a read has nothing more: the end of the file, and a pipe
+/// whose other end is closed.
+const ERROR_HANDLE_EOF: u32 = 38;
+const ERROR_BROKEN_PIPE: u32 = 109;
+
+/// What a call of `KERNEL32.dll` that refused gives: minus the system's last
+/// error, or 0 where the error is one of `ended`, which a read gives at the end
+/// of what there is.
+fn refused(asm: &mut Asm, ended: &[u32]) {
+    let zero = asm.label();
+    let done = asm.label();
+    asm.call(GET_LAST_ERROR);
+    // mov w0, w0, which gives the error as the 32-bit number it is
+    asm.word(0x2a00_03e0);
+    for &code in ended {
+        // cmp x0, #code
+        asm.word(0xf100_001f | code << 10);
+        asm.cond(EQ, zero);
+    }
+    // neg x0, x0
+    asm.word(0xcb00_03e0 | X0 << 16);
+    asm.branch(done);
+    asm.bind(zero);
+    asm.mov_w(X0, 0);
+    asm.bind(done);
+}
+
+/// Makes the call of a file that the words ask for, which are those of the
+/// kernel of Linux, with `KERNEL32.dll`: `CreateFileW` with a path in UTF-16, an
+/// access, and a disposition, `ReadFile` and `WriteFile`, which take a place by an
+/// `OVERLAPPED`, `GetFileSizeEx` for the end of a file, and `CloseHandle`. It
+/// gives what the call gave, or minus the system's last error, and says whether
+/// the call was one of a file.
+fn files_call(asm: &mut Asm, call: Raw) -> bool {
+    let done = asm.label();
+    let room = match call {
+        Raw::OpenAt | Raw::CloseFile | Raw::LSeek => 16,
+        Raw::PRead | Raw::PWrite | Raw::Read | Raw::Write => 64,
+        Raw::FChmod => {
+            // A file of this system has no mode to make it one that runs.
+            asm.mov_w(X0, 0);
+            return true;
+        }
+        _ => return false,
+    };
+    asm.reserve_stack(room);
+    let failed = asm.label();
+    match call {
+        Raw::OpenAt => {
+            // The words are the directory, the path, the access, and the disposition.
+            asm.mov(X4, X3);
+            asm.mov(X0, X1);
+            asm.mov(X1, X2);
+            asm.mov_w(X2, 7);
+            asm.mov_w(X3, 0);
+            asm.mov64(X5, OPEN_FLAGS);
+            asm.mov_w(X6, 0);
+            asm.call(CREATE_FILE);
+            // cmn x0, #1; b.eq failed
+            asm.word(0xb100_041f);
+            asm.cond(EQ, failed);
+            asm.branch(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        Raw::PRead | Raw::PWrite | Raw::Read | Raw::Write => {
+            // The words are the handle, the bytes, the count, and the place.
+            let places = matches!(call, Raw::PRead | Raw::PWrite);
+            let reads = matches!(call, Raw::PRead | Raw::Read);
+            if places {
+                asm.mov_w(X5, 0);
+                asm.store(Place::Frame(0), X5, 8);
+                asm.store(Place::Frame(8), X5, 8);
+                asm.store(Place::Frame(16), X3, 8);
+                asm.store(Place::Frame(24), X5, 8);
+            }
+            asm.mov64(X5, u64::from(MOST_PER_WRITE));
+            asm.cmp(X2, X5);
+            asm.csel(X2, X2, X5, LS);
+            asm.stack_address(X3, 32);
+            if places {
+                asm.stack_address(X4, 0);
+            } else {
+                asm.mov_w(X4, 0);
+            }
+            asm.call(if reads { READ_FILE } else { WRITE_FILE });
+            asm.cbz_w(X0, failed);
+            asm.load(X0, 4, false, Place::Frame(32));
+            asm.branch(done);
+            asm.bind(failed);
+            if reads {
+                refused(asm, &[ERROR_HANDLE_EOF, ERROR_BROKEN_PIPE]);
+            } else {
+                refused(asm, &[]);
+            }
+        }
+        Raw::LSeek => {
+            // The end of the file, which is what the kernel of Linux gives for a
+            // place of nothing from the end.
+            asm.stack_address(X1, 0);
+            asm.call(GET_FILE_SIZE);
+            asm.cbz_w(X0, failed);
+            asm.load(X0, 8, false, Place::Frame(0));
+            asm.branch(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        Raw::CloseFile => {
+            asm.call(CLOSE_HANDLE);
+            asm.cbz_w(X0, failed);
+            asm.mov_w(X0, 0);
+            asm.branch(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        _ => unreachable!("a call of a file"),
+    }
+    asm.bind(done);
+    asm.release_stack(room);
+    true
 }

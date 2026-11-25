@@ -119,7 +119,7 @@ impl System for Linux {
             Raw::Listen => 50,
             Raw::GetSockName => 51,
             Raw::SetSockOpt => 54,
-            Raw::Close | Raw::CloseQueue => 3,
+            Raw::Close | Raw::CloseQueue | Raw::CloseFile => 3,
             Raw::Read => 0,
             Raw::Write => 1,
             Raw::PRead => 17,

@@ -45,6 +45,34 @@ const IMPORTS: [&str; 6] = [
     "GetCommandLineW",
     "ReadFile",
 ];
+/// The symbols of `KERNEL32.dll` of a program that reads or writes files, which
+/// are those of `IMPORTS` and then the four that the files ask for, in the order
+/// of their slots.
+const ALL_IMPORTS: [&str; 10] = [
+    "GetStdHandle",
+    "WriteFile",
+    "ExitProcess",
+    "VirtualAlloc",
+    "GetCommandLineW",
+    "ReadFile",
+    "CreateFileW",
+    "CloseHandle",
+    "GetFileSizeEx",
+    "GetLastError",
+];
+pub const CREATE_FILE: usize = 6;
+pub const CLOSE_HANDLE: usize = 7;
+pub const GET_FILE_SIZE: usize = 8;
+pub const GET_LAST_ERROR: usize = 9;
+/// How many symbols of `KERNEL32.dll` a program imports when it takes every one
+/// of them, which one that carries `net` or asks for the files does.
+pub const fn kernel_len(files: bool) -> usize {
+    if files {
+        ALL_IMPORTS.len()
+    } else {
+        IMPORTS.len()
+    }
+}
 pub const GET_STD_HANDLE: usize = 0;
 pub const WRITE_FILE: usize = 1;
 pub const EXIT_PROCESS: usize = 2;
@@ -91,8 +119,8 @@ pub const CLOSE_SOCKET: usize = 11;
 /// The slot of a function of `WS2_32.dll`. A program that carries `net` imports
 /// every symbol of `KERNEL32.dll`, so the library of sockets is the second, after
 /// the slot that ends the first.
-pub const fn socket_slot(function: usize) -> usize {
-    IMPORTS.len() + 1 + function
+pub const fn socket_slot(function: usize, files: bool) -> usize {
+    kernel_len(files) + 1 + function
 }
 /// `ProcessPrng`'s slot in the import address table, which follows the slots
 /// of `KERNEL32.dll` and the one that ends them, and, in a program that
@@ -100,9 +128,11 @@ pub const fn socket_slot(function: usize) -> usize {
 /// asks for it imports the first five symbols of `KERNEL32.dll`, and
 /// `ReadFile` too when it reads standard input, and all of them when it
 /// carries `net`.
-pub const fn process_prng(reads: bool, net: bool) -> usize {
+pub const fn process_prng(reads: bool, net: bool, files: bool) -> usize {
     if net {
-        IMPORTS.len() + 1 + SOCKETS.len() + 1
+        kernel_len(files) + 1 + SOCKETS.len() + 1
+    } else if files {
+        ALL_IMPORTS.len() + 1
     } else if reads {
         IMPORTS.len() + 1
     } else {
@@ -134,8 +164,11 @@ pub fn imports(
     entropy: bool,
     reads: bool,
     net: bool,
+    files: bool,
 ) -> Needs {
-    let kernel: &'static [&'static str] = if reads || net {
+    let kernel: &'static [&'static str] = if files {
+        &ALL_IMPORTS
+    } else if reads || net {
         &IMPORTS
     } else if takes_arguments || entropy {
         &IMPORTS[..5]

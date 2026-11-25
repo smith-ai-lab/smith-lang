@@ -8,13 +8,15 @@
 //! under `memory_fs` natively for the large ones, and compares what it printed
 //! with what the test works out in Rust from the numbers it chose.
 //!
-//! The tests make pipes and read modes, which only the systems of Unix have, and
-//! only Linux builds files so far, so the file is read on Unix alone.
+//! The tests that make pipes and read modes run where the system has them, which
+//! is Unix. Windows has no mode that makes a file one to run, and builds no wait
+//! for a descriptor, so a file of the kind that waits is made on Unix alone.
 
-#![cfg(unix)]
-
+#[cfg(unix)]
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 
 use smith::diag::Error;
 use smith::target::Target;
@@ -51,8 +53,8 @@ pub const ONCE: &[Test] = &[
         a_function_that_holds_a_file_while_it_may_wait_and_does_not_carry_fs_is_refused,
     ),
     (
-        "a_target_that_builds_no_files_refuses_a_program_that_carries_fs_naming_itself",
-        a_target_that_builds_no_files_refuses_a_program_that_carries_fs_naming_itself,
+        "every_target_but_one_builds_a_program_that_carries_fs_and_that_one_refuses_it_naming_itself",
+        every_target_but_one_builds_a_program_that_carries_fs_and_that_one_refuses_it_naming_itself,
     ),
     (
         "a_program_that_carries_no_fs_asks_the_kernel_for_no_call_of_files",
@@ -92,7 +94,8 @@ const LARGE: &[usize] = &[0, 1, 63, 64, 65, 4095, 4096, 4097, 100000, 1000000];
 /// The program, with the lines of `body` as what `run` does. Where the files
 /// are is `dir`, the first part of every path the body writes as `DIR`.
 fn program(body: &str, dir: &str, memory: bool) -> String {
-    let body = body.replace("DIR", dir);
+    // Windows reads a path written with `/` as it reads one written with `\\`.
+    let body = body.replace("DIR", &dir.replace('\\', "/"));
     let main = if memory {
         "fn main() <console, alloc> {\n  with memory_fs([])\n  run()\n}\n"
     } else {
@@ -155,16 +158,22 @@ fn evaluated(source: &str) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
-/// The targets that build files and that this machine can run, which are the
-/// Linux ones.
-fn linux() -> Vec<Target> {
-    targets::runnable().into_iter().filter(|t| t.name().starts_with("linux")).collect()
+/// Whether the target builds a program that carries `fs`.
+fn builds_files(target: Target) -> bool {
+    let source = program("  print(\"a\")\n  match read_all(\"a\") {\n    .ok(_) { }\n    .err(_) { }\n  }\n", "d", false);
+    let lowered = lowered(&source);
+    std::panic::catch_unwind(|| target.emit(&lowered)).is_ok()
+}
+
+/// The targets that build files and that this machine can run.
+fn native_targets() -> Vec<Target> {
+    targets::runnable().into_iter().filter(|t| builds_files(*t)).collect()
 }
 
 /// What the program prints as an executable, for each target that builds files.
 fn native(source: &str) -> Vec<String> {
     let mut all = Vec::new();
-    for target in linux() {
+    for target in native_targets() {
         let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         targets::record(target, &[&bytes]);
         if targets::fingerprinting() {
@@ -356,15 +365,13 @@ fn main() <console, alloc> {
 
 /// What a program that opens a path and says what happened prints natively.
 fn a_file_that_is_not_there_a_directory_and_a_file_that_may_not_be_read_come_back_as_values_natively() {
-    use std::os::unix::fs::PermissionsExt;
     let dir = folder();
     let d = dir.to_str().unwrap();
     std::fs::create_dir(dir.join("nodir")).unwrap();
-    std::fs::write(dir.join("locked"), b"secret").unwrap();
-    std::fs::set_permissions(dir.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
-    // A user that may read every file is refused nothing, so there is no denial to see.
-    let reads_everything = std::fs::File::open(dir.join("locked")).is_ok();
-    let body = "  match read_all(\"DIR/nothing\") {
+    // A file with no mode to read it is made where the system has modes, and a
+    // user that may read every file is refused nothing, so there is no denial to see.
+    let locked = make_locked(&dir);
+    let mut body = "  match read_all(\"DIR/nothing\") {
     .ok(_) { print(\"read\") }
     .err(e) { print(kind(e)) }
   }
@@ -376,36 +383,69 @@ fn a_file_that_is_not_there_a_directory_and_a_file_that_may_not_be_read_come_bac
     .ok(_) { print(\"read\") }
     .err(e) { print(kind(e)) }
   }
-  match read_all(\"DIR/locked\") {
+"
+    .to_string();
+    let mut expected = "missing\nmissing\nfailed\n".to_string();
+    if let Some(reads_everything) = locked {
+        body.push_str(
+            "  match read_all(\"DIR/locked\") {
     .ok(_) { print(\"read\") }
     .err(e) { print(kind(e)) }
   }
-  print(\"after\")
-";
-    let source = program(body, d, false);
-    let expected = if reads_everything {
-        "missing\nmissing\nfailed\nread\nafter\n"
-    } else {
-        "missing\nmissing\nfailed\ndenied\nafter\n"
-    };
+",
+        );
+        expected.push_str(if reads_everything { "read\n" } else { "denied\n" });
+    }
+    body.push_str("  print(\"after\")\n");
+    expected.push_str("after\n");
+    let source = program(&body, d, false);
     for said in native(&source) {
         assert_eq!(said, expected);
     }
-    std::fs::set_permissions(dir.join("locked"), std::fs::Permissions::from_mode(0o600)).unwrap();
+    unlock(&dir);
     std::fs::remove_dir_all(dir).ok();
 }
 
-fn a_file_written_as_executable_is_one_the_system_runs() {
+/// Makes a file nobody may read, and says whether this user reads it all the
+/// same, on a system that has modes, and gives nothing on one that has none.
+#[cfg(unix)]
+fn make_locked(dir: &std::path::Path) -> Option<bool> {
     use std::os::unix::fs::PermissionsExt;
+    std::fs::write(dir.join("locked"), b"secret").unwrap();
+    std::fs::set_permissions(dir.join("locked"), std::fs::Permissions::from_mode(0o000)).unwrap();
+    Some(std::fs::File::open(dir.join("locked")).is_ok())
+}
+
+#[cfg(not(unix))]
+fn make_locked(_: &std::path::Path) -> Option<bool> {
+    None
+}
+
+#[cfg(unix)]
+fn unlock(dir: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(dir.join("locked"), std::fs::Permissions::from_mode(0o600)).unwrap();
+}
+
+#[cfg(not(unix))]
+fn unlock(_: &std::path::Path) {}
+
+fn a_file_written_as_executable_is_one_the_system_runs() {
     let dir = folder();
     let d = dir.to_str().unwrap();
-    let script = "#!/bin/sh\\necho ran\\n";
+    // A script the system runs: a shell script on Unix, which needs its mode, and a
+    // batch file on Windows, which is run by its name.
+    let (script, name) = if cfg!(windows) {
+        ("@echo ran\\r\\n", "run.cmd")
+    } else {
+        ("#!/bin/sh\\necho ran\\n", "run")
+    };
     let body = format!(
         "  match write_all(\"DIR/plain\", \"{script}\".bytes) {{
     .ok(_) {{ print(\"plain\") }}
     .err(e) {{ print(kind(e)) }}
   }}
-  match write_all(\"DIR/run\", \"{script}\".bytes, executable: true) {{
+  match write_all(\"DIR/{name}\", \"{script}\".bytes, executable: true) {{
     .ok(_) {{ print(\"run\") }}
     .err(e) {{ print(kind(e)) }}
   }}
@@ -418,21 +458,40 @@ fn a_file_written_as_executable_is_one_the_system_runs() {
     let source = program(&body, d, false);
     for said in native(&source) {
         assert_eq!(said, "plain\nrun\nagain\n");
-        let ran = Command::new(dir.join("run")).output().unwrap();
-        assert_eq!(String::from_utf8_lossy(&ran.stdout), "ran\n");
+        let ran = Command::new(dir.join(name)).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim_end(), "ran");
         // A file that exists and is written again as one to run becomes one.
-        let mode = std::fs::metadata(dir.join("plain")).unwrap().permissions().mode();
-        assert_ne!(mode & 0o111, 0, "{mode:o}");
-        std::fs::remove_file(dir.join("run")).ok();
+        assert_runs_as_a_program(&dir.join("plain"));
+        std::fs::remove_file(dir.join(name)).ok();
         std::fs::remove_file(dir.join("plain")).ok();
     }
     std::fs::remove_dir_all(dir).ok();
+}
+
+#[cfg(unix)]
+fn assert_runs_as_a_program(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = std::fs::metadata(path).unwrap().permissions().mode();
+    assert_ne!(mode & 0o111, 0, "{mode:o}");
+}
+
+/// A file of Windows has no mode, and is run by its name.
+#[cfg(not(unix))]
+fn assert_runs_as_a_program(path: &std::path::Path) {
+    assert!(path.exists());
 }
 
 /// A file that has no places, as a pipe has none, is read from where it is, and
 /// a task that waits for it lets the others run: the other task sleeps and
 /// says so while the first waits, and the program ends only when the first has
 /// its bytes, so it would never end if the wait held the thread.
+#[cfg(not(unix))]
+fn a_task_that_waits_to_read_a_file_suspends_only_itself() {
+    // A task that waits for a descriptor is not built for Windows, and it has no
+    // pipe made by name that a file is opened from.
+}
+
+#[cfg(unix)]
 fn a_task_that_waits_to_read_a_file_suspends_only_itself() {
     use std::os::unix::fs::OpenOptionsExt;
     let source = "use std.console (console, print)
@@ -470,7 +529,7 @@ fn main() <console, alloc, fs, time> {
         return;
     }
     let source = source.replace("PIPE", pipe.to_str().unwrap());
-    for target in linux() {
+    for target in native_targets() {
         let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
         targets::record(target, &[&bytes]);
         if targets::fingerprinting() {
@@ -572,22 +631,20 @@ fn main() <fs, time> {{
     lowered(&waiting("fs, time"));
 }
 
-fn a_target_that_builds_no_files_refuses_a_program_that_carries_fs_naming_itself() {
+fn every_target_but_one_builds_a_program_that_carries_fs_and_that_one_refuses_it_naming_itself() {
     let source = program("  match read_all(\"a\") {\n    .ok(_) { print(\"ok\") }\n    .err(e) { print(kind(e)) }\n  }\n", "d", false);
     let lowered = lowered(&source);
     assert!(lowered.asks_the_files());
+    let mut refused = Vec::new();
     for &target in Target::ALL.iter() {
-        if target.name().starts_with("linux") {
-            continue;
+        if let Err(why) = std::panic::catch_unwind(|| target.emit(&lowered)) {
+            let message = why.downcast_ref::<String>().cloned().unwrap_or_default();
+            assert!(message.contains(target.name()), "{message}");
+            assert!(message.contains("fs"), "{message}");
+            refused.push(target);
         }
-        let refused = std::panic::catch_unwind(|| target.emit(&lowered));
-        let message = match refused {
-            Ok(_) => panic!("{} built a program that carries fs", target.name()),
-            Err(why) => why.downcast_ref::<String>().cloned().unwrap_or_default(),
-        };
-        assert!(message.contains(target.name()), "{message}");
-        assert!(message.contains("fs"), "{message}");
     }
+    assert_eq!(refused.len(), 1, "{refused:?}");
 }
 
 fn a_program_that_carries_no_fs_asks_the_kernel_for_no_call_of_files() {
