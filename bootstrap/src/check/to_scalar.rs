@@ -1417,11 +1417,12 @@ impl<'a> Lowering<'a> {
         any
     }
 
-    /// Whether a value of the type holds a handle of `net`.
+    /// Whether a value of the type holds a handle of `net`, or a `File`.
     fn holds_handle(&self, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
         let defs = self.typed.defs;
         let parts: Vec<Ty> = match ty {
             Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
+            Ty::Struct(s, _) if Some(*s) == defs.file_handle => return true,
             Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
             Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
                 .map(|t| t.subst(args))
@@ -1440,8 +1441,8 @@ impl<'a> Lowering<'a> {
         any
     }
 
-    /// Ends each handle of `net` that a value holds, through the handler in
-    /// force, where a task that was asked to end leaves.
+    /// Ends each handle of `net`, and each `File`, that a value holds, through
+    /// the handler in force, where a task that was asked to end leaves.
     fn close_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
         let defs = self.typed.defs;
         if !self.holds_handle(ty, &mut Vec::new()) {
@@ -1449,7 +1450,11 @@ impl<'a> Lowering<'a> {
         }
         let parts: Vec<Ty> = match ty {
             Ty::Struct(s, _) if let Some((_, end)) = defs.handles.iter().find(|(h, _)| h == s) => {
-                self.end_handle(out, end, ty, values);
+                self.end_handle(out, "net", end, ty, values);
+                return;
+            }
+            Ty::Struct(s, _) if Some(*s) == defs.file_handle => {
+                self.end_handle(out, "fs", "close_file", ty, values);
                 return;
             }
             Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
