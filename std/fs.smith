@@ -1,4 +1,4 @@
-use std.bits (i64, u64)
+use std.bits (bit_and, bit_or, i64, shift_left, shift_right, u64)
 use std.int (checked_add, narrow, wrapping_narrow)
 use std.list (append, copy, push)
 use std.task (Handle, task)
@@ -86,7 +86,18 @@ impl Release[File] {
 // The numbers of the kernel's calls, in the order the compiler gives them to
 // `__system`: the first twenty-three are those of `std.net`, of which 9 closes a
 // descriptor and 19 opens a file, and then pread, pwrite, write, lseek, and
-// fchmod.
+// fchmod, and 28, which closes a file, as `CloseHandle` does on Windows.
+
+// The number 12 is not a call: it is 1 when the kernel is macOS's, 2 when it is
+// Windows's, and 0 when it is Linux's, whose flags of a file and whose number for
+// a call that would wait differ.
+fn on_macos() -> bool {
+  __system(12) == 1
+}
+
+fn on_windows() -> bool {
+  __system(12) == 2
+}
 
 // A number of bytes the kernel gave, which is not negative.
 fn count(given: i64) -> Nat {
@@ -102,6 +113,13 @@ fn count(given: i64) -> Nat {
 // program may not read is a permission it lacks.
 fn failure(call: str, given: i64) -> FsError <alloc> {
   code = 0 - given
+  // Windows says a file or a folder of the path is not there with 2 and 3, and
+  // that the program may not use it with 5.
+  if on_windows() {
+    if code == 2 or code == 3 { return .missing }
+    if code == 5 { return .denied }
+    return .failed("{call}: error {code}")
+  }
   if code == 2 or code == 20 {
     .missing
   } else if code == 13 or code == 1 {
@@ -126,6 +144,57 @@ fn name(path: str) -> Result[List[Byte], FsError] <alloc> {
   .ok(push(made, 0))
 }
 
+// A unit of UTF-16, the low byte first.
+fn put16(made: take List[Byte], unit: 0..65536) -> List[Byte] <alloc> {
+  push(push(made, bit_and(unit, 255)), shift_right(unit, 8))
+}
+
+// What a code point is in UTF-16: one unit, or two where it is above 65535.
+fn put_point(made: take List[Byte], point: 0..2097152) -> List[Byte] <alloc> {
+  if point < 65536 {
+    put16(made, point)
+  } else {
+    // The units of a surrogate pair: 55296 and the ten high bits of the point
+    // less 65536, which is 55232 and the bits of the point above the tenth, and
+    // 56320 and the ten low bits.
+    put16(put16(made, 55232 + shift_right(point, 10)), 56320 + bit_and(point, 1023))
+  }
+}
+
+// The path as Windows reads it: UTF-16, the low byte of a unit first, and ended
+// by a unit of zero, when no unit of it is zero.
+fn wide_name(path: str) -> Result[List[Byte], FsError] <alloc> {
+  var made: List[Byte] = []
+  var need: 0..4 = 0
+  var point: 0..2097152 = 0
+  loop i in 0..path.size {
+    b = path[i]
+    if b == 0 { return .err(.failed("a path holds a zero byte")) }
+    if need > 0 {
+      point = bit_and(bit_or(shift_left(point, 6), bit_and(b, 63)), 2097151)
+      need = need - 1
+      if need == 0 { made = put_point(made, point) }
+    } else if b < 128 {
+      made = put_point(made, b)
+    } else if b < 224 {
+      point = bit_and(b, 31)
+      need = 1
+    } else if b < 240 {
+      point = bit_and(b, 15)
+      need = 2
+    } else {
+      point = bit_and(b, 7)
+      need = 3
+    }
+  }
+  .ok(push(push(made, 0), 0))
+}
+
+// The path as the system reads it.
+fn system_name(path: str) -> Result[List[Byte], FsError] <alloc> {
+  if on_windows() { wide_name(path) } else { name(path) }
+}
+
 fn wait_to_read(fd: i64) <task> {
   number: u64 = wrapping_narrow(fd)
   __wait(.read(Handle(number: number)))
@@ -136,29 +205,42 @@ fn wait_to_write(fd: i64) <task> {
   __wait(.write(Handle(number: number)))
 }
 
-// The flags of the kernel, which are Linux's: read only, write only, create,
-// empty a file that exists, do not wait, and close at an exec. A task that a
-// scheduler runs opens a file as one that does not wait, so that a read that has
-// to wait gives the task back to the scheduler.
+// The flags of the kernel: read only, write only, create, empty a file that
+// exists, do not wait, and close at an exec, as Linux writes them or macOS does.
+// A task that a scheduler runs opens a file as one that does not wait, so that a
+// read that has to wait gives the task back to the scheduler.
+// What Windows opens: the path, the access (read, or write), and the disposition
+// (an existing file, or a new one that empties one that exists), and whether the
+// handle came.
+fn opened_on_windows(call: str, where: List[Byte], access: i64, how: i64) -> Result[File, FsError] <alloc> {
+  fd = __system(19, 0, where, access, how, 0, 0)
+  if fd < 0 { return .err(failure(call, fd)) }
+  .ok(File(handle: fd, opened: true))
+}
+
 fn system_open_file(path: str) -> Result[File, FsError] <alloc, task> {
-  where = try name(path)
+  where = try system_name(path)
+  if on_windows() { return opened_on_windows("open", where, 2147483648, 3) }
   var flags: i64 = 524288
-  if __scheduled() { flags = 526336 }
+  if on_macos() { flags = 16777216 }
+  if __scheduled() { flags = if on_macos() { 16777220 } else { 526336 } }
   fd = __system(19, -100, where, flags, 0, 0, 0)
   if fd < 0 { return .err(failure("open", fd)) }
   .ok(File(handle: fd, opened: true))
 }
 
 fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <alloc, task> {
-  where = try name(path)
+  where = try system_name(path)
+  if on_windows() { return opened_on_windows("create", where, 1073741824, 2) }
   var flags: i64 = 524865
-  if __scheduled() { flags = 526913 }
+  if on_macos() { flags = 16778753 }
+  if __scheduled() { flags = if on_macos() { 16778757 } else { 526913 } }
   fd = __system(19, -100, where, flags, 438, 0, 0)
   if fd < 0 { return .err(failure("create", fd)) }
   if executable {
     made = __system(27, fd, 493, 0, 0, 0, 0)
     if made < 0 {
-      __system(9, fd, 0, 0, 0, 0, 0)
+      __system(28, fd, 0, 0, 0, 0, 0)
       return .err(failure("create", made))
     }
   }
@@ -169,12 +251,31 @@ fn system_close_file(f: take File) {
   h = f.handle
   opened = f.opened
   __consume(f)
-  if opened { __system(9, h, 0, 0, 0, 0, 0) }
+  if opened { __system(28, h, 0, 0, 0, 0, 0) }
+}
+
+// Where the file ends, which is its size. Windows says a file that has no places
+// cannot be asked, and a directory is told by what a read of it says, with 1.
+fn end_of(fd: i64) -> i64 {
+  end = __system(26, fd, 0, 2, 0, 0, 0)
+  if on_windows() and end < 0 { return 0 - 29 }
+  end
 }
 
 // What the kernel says of reading no byte at the start: a directory refuses with
 // 21, and a file that has no places with 29.
-fn probe(fd: i64) -> i64 {
+fn probe(fd: i64) -> i64 <alloc> {
+  if on_windows() {
+    one: List[Byte] = __reserve(1)
+    asked = __system(23, fd, one, 1, 0, 0, 0)
+    return if asked == 0 - 1 { 0 - 21 } else { asked }
+  }
+  if on_macos() {
+    // A read of no bytes of a directory gives nothing on macOS, so a byte is
+    // asked for, and what is read is not kept.
+    one: List[Byte] = __reserve(1)
+    return __system(23, fd, one, 1, 0, 0, 0)
+  }
   nothing: List[Byte] = []
   __system(23, fd, nothing, 0, 0, 0, 0)
 }
@@ -183,7 +284,7 @@ fn system_size(f: File) -> Result[Nat, FsError] <alloc> {
   if not f.opened { return .err(not_opened("size", f.handle)) }
   asked = probe(f.handle)
   if asked == 0 - 21 { return .err(failure("size", asked)) }
-  end = __system(26, f.handle, 0, 2, 0, 0, 0)
+  end = end_of(f.handle)
   if end < 0 { return .err(failure("size", end)) }
   .ok(count(end))
 }
@@ -195,7 +296,7 @@ fn no_places() -> i64 {
 }
 
 fn would_block() -> i64 {
-  0 - 11
+  if on_macos() { 0 - 35 } else { 0 - 11 }
 }
 
 fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, task> {
@@ -203,7 +304,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
   var last: Nat = range.end
   asked = probe(f.handle)
   if asked == 0 - 21 { return .err(failure("read", asked)) }
-  end = __system(26, f.handle, 0, 2, 0, 0, 0)
+  end = end_of(f.handle)
   var stream = false
   if end >= 0 {
     if last > count(end) { last = count(end) }
