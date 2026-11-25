@@ -7,7 +7,8 @@ built:
   - "lambdas passed to a call, after it or by name, and function types on parameters"
   - "a lambda that writes the types of its parameters and of its result"
   - "a lambda that gives away a value of the function it is written in, passed to a parameter that takes its function"
-  - "not the parameters of a lambda bound to a name, inferred from the calls of it, as [Inference](inference.md#a-lambdas-parameters) says, which comes with a lambda bound to a name (#1114)"
+  - "a lambda that holds nothing lent and writes the type of each parameter and of its result, bound to a name, stored in a field, and returned, each known when the program is built, and one that writes type parameters after `fn`"
+  - "not a lambda that leaves out the type of a parameter or of its result where it is bound, stored, or returned, and not the parameters of a lambda bound to a name inferred from the calls of it, as [Inference](inference.md#a-lambdas-parameters) says (#1114)"
 ---
 
 # Lambdas
@@ -213,7 +214,9 @@ struct Step[F] {
 
 A lambda that is bound, stored, or returned is written with `fn`, also when it takes nothing: `fn() { 1.0 }`. The block alone is a lambda only as the argument of a call, so `x = { 1.0 }` is still refused, as a block that stands alone is not an expression.
 
-Binding, storing, and returning a lambda, and a lambda's own type parameters, are not built, so every example of this section but the first is refused today, and no words are quoted.
+A lambda that is bound, stored, or returned writes the type of each parameter and of its result today. One that leaves a type out, as `fn() { 1.0 }` or `fn(v) { v * 2.0 }`, is not built there yet. A lambda that holds something lent is refused where it is bound, stored, or returned: "a lambda cannot be bound to a name, as it is only passed to a call", and its two likes for a field and a result. A lambda that needs an effect is refused where it is stored or returned, as a function with a name is, since the type of a field states none.
+
+Two lambdas where one type is needed are refused as two functions with names are, since each lambda is a type of its own: "which function this is depends on what the program does when it runs, and a function value must be known when the program is built".
 
 A lambda that is passed to a call is inlined: it costs what its block costs, written where the function calls it.
 

@@ -6,6 +6,7 @@ status: partial
 built:
   - "a function with a name passed to a call"
   - "a function with a name bound to a name, stored in a field, and returned, each known when the program is built, and refused where which function it is depends on what the program does"
+  - "a lambda that holds nothing lent, bound, stored, and returned in the same way, as [Lambdas](lambdas.md#where-a-lambda-may-go) says"
 ---
 
 # Function values
