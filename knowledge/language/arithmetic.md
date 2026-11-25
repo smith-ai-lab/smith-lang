@@ -54,7 +54,7 @@ fn average(a: 0..256, b: 0..256) -> 0..256 {
 }
 ```
 
-This compiles with no proof. `sum` is a `0..511`, which a binding with no stated type keeps, and `sum / 2` is a `0..256`, which the result holds.
+This compiles with no proof. `sum` is a `0..511`, which a name with no stated type has, as [Inference](inference.md) says, and `sum / 2` is a `0..256`, which the result holds.
 
 Each of these is refused, as the value is wider than the range it enters.
 

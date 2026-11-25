@@ -63,7 +63,7 @@ This prints `250`, `251`, and `252`. Here `j` is a `0..3`, so `x + j` is a `0..2
 
 ### A `var` the loop changes
 
-A `var` with no stated type has the range of what it is first given, as [`var`](var.md#the-range-of-a-var) says, so a `var` that a loop assigns states its range.
+A `var` with no stated type has the range that holds every value it is given, as [`var`](var.md#the-range-of-a-var) says, so a loop that gives it `i` makes it the range of `i`.
 
 ```
 fn last_index(n: 0..11) -> 0..10 {
@@ -73,17 +73,17 @@ fn last_index(n: 0..11) -> 0..10 {
 }
 ```
 
-This is refused, as `last` is a `0..1`, the range of the `0` it was first given, and `i` is outside it. The fix is to state the range.
+`last_index(4)` is `3`. `last` holds the `0` and each `i`, so it is a `0..10`. A `var` that the loop gives a value that depends on the `var` itself has no range inferred yet, as [Inference](inference.md#a-value-that-depends-on-itself-in-a-loop) says, so it states its range.
 
 ```
-fn last_index(n: 0..11) -> 0..10 {
-  var last: 0..10 = 0
-  loop i in 0..n { last = i }
-  last
+fn total(n: 0..11) -> 0..101 {
+  var sum: 0..101 = 0
+  loop i in 0..n { sum = sum + i }
+  sum
 }
 ```
 
-`last_index(4)` is `3`. Each assignment in the loop is proven to stay in the range of the `var`.
+`total(4)` is `6`. Each assignment in the loop is proven to stay in the range of the `var`.
 
 ## Ending early with `break`
 
