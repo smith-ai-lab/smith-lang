@@ -2635,6 +2635,7 @@ fn check_file(
         infer_on: false,
         solve: None,
         solved: infer::Solved::default(),
+        rounds: Vec::new(),
         inferred: HashMap::new(),
         patterned: HashSet::new(),
         assigning: None,
@@ -6703,6 +6704,9 @@ struct Checker<'a> {
     solve: Option<infer::Solve>,
     /// What the solving found, which the look that is kept reads.
     solved: infer::Solved,
+    /// How many rounds each `loop` around what is being checked has at most,
+    /// from the outermost, where that is known when the program is built.
+    rounds: Vec<Option<u128>>,
     /// The `var`s of the body whose range is solved, by their place among the
     /// names, with the place of the statement that defines each.
     inferred: HashMap<usize, Pos>,
@@ -7643,7 +7647,8 @@ impl<'a> Checker<'a> {
             self.errors.truncate(errors);
             self.refusals = refusals;
             self.no_impl = no_impl;
-            let solve = self.solve.take().expect("solving");
+            let mut solve = self.solve.take().expect("solving");
+            self.templates(&mut solve);
             looks += 1;
             let grown: Vec<Pos> = solve
                 .totals
@@ -7687,7 +7692,7 @@ impl<'a> Checker<'a> {
                 let mut solve = solve;
                 for def in stuck {
                     if solve.written.contains(&def) {
-                        let error = self.grows_by_itself(def, &solve);
+                        let error = self.not_finite(def, &solve);
                         self.errors.push(error);
                         refused.insert(def);
                     } else if let Some((_, _, first)) =
@@ -7706,6 +7711,12 @@ impl<'a> Checker<'a> {
         self.solved.elems = last.merged_elems();
         self.solved.ranges = last.totals;
         self.solved.given = last.given;
+        self.solved.templated = last
+            .adds
+            .keys()
+            .filter(|d| !last.unbounded.contains_key(*d))
+            .copied()
+            .collect();
         self.solved.refused = refused;
         self.solved.put = put;
     }
@@ -7979,6 +7990,17 @@ impl<'a> Checker<'a> {
                                 && self.inferred.contains_key(&at)
                             {
                                 self.infer_assign(body, at, (name, *pos), value);
+                            } else if body.vars.contains(name)
+                                && self
+                                    .inferred
+                                    .get(&at)
+                                    .is_some_and(|d| self.solved.templated.contains(d))
+                                && self.adds_to(name, value)
+                            {
+                                // The count of passes shows that it fits, as
+                                // [`Checker::templates`] says.
+                                self.expr(body, value, &Want::Any);
+                                self.assign(body, at, value);
                             } else if body.vars.contains(name) {
                                 let gives = self.expr(body, value, &Want::Ty(needed.clone()));
                                 // A number that its uses have not decided is decided by
@@ -8783,7 +8805,15 @@ impl<'a> Checker<'a> {
                 None
             }
         };
-        let element = l.over.as_ref().map(|o| (o, self.element_type(body, o)));
+        let mut rounds = None;
+        let element = l.over.as_ref().map(|o| {
+            let (element, most) = self.element_type(body, o);
+            rounds = most;
+            (o, element)
+        });
+        if let Some(r) = &l.range {
+            rounds = self.range_rounds(body, r);
+        }
         let measure = l.decreases.as_ref();
         if let Some(e) = measure {
             let gives = self.measure_type(body, e);
@@ -8817,11 +8847,13 @@ impl<'a> Checker<'a> {
         self.begin_round(body, &assigned);
         let start = measure.and_then(|e| self.measure_of(body, std::slice::from_ref(e), &[]));
         body.loops += 1;
+        self.rounds.push(rounds);
         if let End::Value(gives, value) = self.block(body, &l.body, &Want::Unused)
             && self.defs.is_result(&gives)
         {
             self.dropped(body, value, &gives);
         }
+        self.rounds.pop();
         body.loops -= 1;
         if let (Some(e), Some(start)) = (measure, &start) {
             self.decreased(body, l, e, start);
@@ -8838,12 +8870,18 @@ impl<'a> Checker<'a> {
     /// read as its bytes. The value is worked out once, when the loop starts,
     /// so assigning a `var` it was read from changes nothing about which
     /// elements the loop gives.
-    fn element_type(&mut self, body: &mut Body<'a>, o: &Over) -> Ty {
-        let defs = self.defs;
+    fn element_type(&mut self, body: &mut Body<'a>, o: &Over) -> (Ty, Option<u128>) {
         let given = self.expr(body, &o.value, &Want::Any);
         if given.unknown() {
-            return Ty::Unknown;
+            return (Ty::Unknown, None);
         }
+        let rounds = self.over_rounds(body, o, &given);
+        (self.element_of(body, o, given), rounds)
+    }
+
+    /// The type of the elements a `loop` runs over.
+    fn element_of(&mut self, body: &mut Body<'a>, o: &Over, given: Ty) -> Ty {
+        let defs = self.defs;
         let walked = as_read(&given, &Ty::List(vec![Ty::Unknown]));
         match defs.find(
             defs.iterate,
