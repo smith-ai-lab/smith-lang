@@ -5,7 +5,7 @@
 //! comes from there and shares nothing with the compiler.
 
 use smith::target::Target;
-use smith::{compile, lower};
+use smith::{check, compile, lower};
 
 use crate::Test;
 use crate::generate::{self, Gen};
@@ -287,7 +287,7 @@ fn cost(lines: usize) -> f64 {
     (0..3)
         .map(|_| {
             let start = crate::clock::thread_time();
-            let result = lower(source.as_bytes());
+            let result = check(source.as_bytes());
             let spent = crate::clock::thread_time() - start;
             assert!(result.is_ok(), "{result:?}");
             spent.as_secs_f64()
