@@ -2643,11 +2643,18 @@ impl Parser<'_> {
             tok => return Err(self.expected("an expression", tok)),
         };
         while matches!(self.tok(), Tok::Punct("." | "["))
-            || (self.tok() == &Tok::Punct("(") && matches!(expr, Expr::Call(_)))
+            || (self.tok() == &Tok::Punct("(")
+                && matches!(expr, Expr::Call(_) | Expr::Field { .. }))
         {
             if self.tok() == &Tok::Punct("(") {
                 let at = expr.pos();
-                let mut call = self.call_rest(None, String::new(), at)?;
+                // A field is called by its name, and a call by what it gives.
+                let (name, name_pos) = match &expr {
+                    Expr::Field { name, pos, .. } => (name.clone(), *pos),
+                    _ => (String::new(), at),
+                };
+                let mut call = self.call_rest(None, name, name_pos)?;
+                call.pos = at;
                 call.through = Some(Box::new(expr));
                 expr = Expr::Call(call);
                 continue;
