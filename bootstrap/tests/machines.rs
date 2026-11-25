@@ -58,6 +58,10 @@ pub const ONCE: &[Test] = &[
         a_compiler_that_differs_for_nothing_needs_no_machine,
     ),
     (
+        "a_change_to_what_a_machine_job_is_made_of_is_named_and_one_to_an_executable_is_not",
+        a_change_to_what_a_machine_job_is_made_of_is_named_and_one_to_an_executable_is_not,
+    ),
+    (
         "nothing_known_of_a_compiler_needs_every_machine",
         nothing_known_of_a_compiler_needs_every_machine,
     ),
@@ -278,6 +282,35 @@ fn a_compiler_that_differs_for_one_target_needs_exactly_the_machines_that_run_it
 fn a_compiler_that_differs_for_nothing_needs_no_machine() {
     let same = lines(0, &sha256::hex(b"a compiler"));
     assert_eq!(needs(&same, &same), Vec::<String>::new());
+}
+
+/// What `machine-job-files.sh` keeps of the names of files.
+fn job_files(names: &[&str]) -> Vec<String> {
+    let given = names.iter().map(|n| format!("{n}\n")).collect::<String>();
+    let output = crate::clock::output_within_given(
+        Command::new("sh").arg(github().join("machine-job-files.sh")),
+        given.as_bytes(),
+        true,
+    )
+    .unwrap();
+    assert!(output.status.success(), "{}", cli::stderr(&output));
+    String::from_utf8(output.stdout).unwrap().lines().map(str::to_string).collect()
+}
+
+fn a_change_to_what_a_machine_job_is_made_of_is_named_and_one_to_an_executable_is_not() {
+    let job = [
+        ".github/workflows/machine-test.yml",
+        ".github/workflows/ci.yml",
+        ".github/machines",
+        "bootstrap/tests/main.rs",
+        "bootstrap/tests/support/clock.rs",
+    ];
+    assert_eq!(job_files(&job), job);
+    let other = ["bootstrap/src/lib.rs", "bootstrap/tests/machines.rs", "std/io.smith", "knowledge/index.md"];
+    assert_eq!(job_files(&other), Vec::<String>::new());
+    // Only the names that are the job's are kept.
+    let both: Vec<&str> = job.iter().chain(&other).copied().collect();
+    assert_eq!(job_files(&both), job);
 }
 
 fn nothing_known_of_a_compiler_needs_every_machine() {

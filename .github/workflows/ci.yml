@@ -168,6 +168,15 @@ jobs:
           echo "== this change"; cat head.fingerprint
           machines=$(sh .github/needs-machines.sh base.fingerprint head.fingerprint |
             jq -Rsc 'split("\n") | map(select(. != ""))')
+          # A change to the job that runs the tests, or to the harness, alters
+          # no executable, and is what a machine would find a break in.
+          job=$(git diff --name-only "$BASE" HEAD | sh .github/machine-job-files.sh)
+          if [ -n "$job" ]; then
+            echo "every machine runs, as the change touches what a machine job is made of:"
+            echo "$job"
+            machines=$(awk '!/^#/ && NF == 2 { print $2 }' .github/machines |
+              jq -Rsc 'split("\n") | map(select(. != ""))')
+          fi
           echo "the machines that need a test: $machines"
           echo "machines=$machines" >> "$GITHUB_OUTPUT"
       # Every case for every target, built by the compiler of the base and by
