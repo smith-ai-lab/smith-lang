@@ -4,10 +4,10 @@ title: The network
 description: The net effect of std.net, for connections and datagrams, each a value used exactly once, with a write that sends everything and a read that gives what has come.
 status: partial
 built:
-  - "`std.net` declares `net`, with the operations, `Address`, and `NetError` as the page shows them, and `Listener`, `Connection`, and `Socket`, each a struct with one private field, the system's handle, and neither `Copy` nor `Discard`"
+  - "`std.net` declares `net`, with the operations, `Address`, and `NetError` as the page shows them, and `Listener`, `Connection`, and `Socket`, each a struct with the system's handle, the `host` and `port` it was opened with, and neither `Copy` nor `Discard`"
   - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
   - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is looked up by `connect_to` on Linux, as [Looking up a name](#looking-up-a-name) says, and is `failed` with the one message that looking up a name is not built on macOS and in `listen`, `bind`, and `send`"
-  - "`failed` holds the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed"
+  - "`failed` holds the address and the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed; each case holds the host and the port, as `example.com:80`, and `NetError` has a `Fmt` that writes them with what went wrong"
   - "a handler of `net` answers an operation that gives a `Result` with an error, with no system call, on every target, and `stop`, `close`, and `unbind` with nothing, and a handler that gives a `Listener`, a `Connection`, or a `Socket` makes it with `listener`, `connection`, or `socket` and reads its number with `handle`, as [Making a value in a handler](#making-a-value-in-a-handler) says"
   - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux, macOS, and Windows"
   - "on Linux and on macOS a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` on Linux and in `kqueue` on macOS for the connection while other tasks run, and a call with no group blocks, as it did"
@@ -15,7 +15,7 @@ built:
   - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held"
   - "not built: a handler that keeps state and is under `listen` of `std.http`, which is refused as not built yet, as [Handlers and tasks](../language/task-handlers.md) says, and a handler that assigns a name under `stdio` of `std.mcp`, which stops the compiler"
   - "on Windows, on x86-64 and arm64, the system answers every operation through `ws2_32.dll`, which only a program that carries `net` asks the loader for, and every call waits where it is, so a task that waits for a connection is not built there and waits for an issue of its own, completion ports; `failed` holds Winsock's number, as `connect: error 10061`, and `refused`, `in_use`, and `closed` are the same refusals by their numbers, `in_use` being 10048 or 10013, which Windows gives for a port that a socket holds for itself alone, as a listener does there; the clock is not built there"
-  - "`connect_to` of the system with a name that is not `localhost` or a number looks it up on Linux, on x86-64 and arm64, in Smith, in `std.dns` and `std.net`: `/etc/hosts`, and then the nameservers of `/etc/resolv.conf` over UDP, with each behaviour that [Looking up a name](#looking-up-a-name) tables, and tries each address it finds, in its order, until one connects; `resolve` of `std.net` does it for the text of the two files and the port of the nameservers that a caller gives, which is how a test puts a nameserver on a port of 127.0.0.1, and the system's handler calls it with the files and the port 53"
+  - "`connect_to` of the system with a name that is not `localhost` or a number looks it up on Linux, on x86-64 and arm64, in Smith, in `std.dns` and `std.net`: `/etc/hosts`, and then the nameservers of `/etc/resolv.conf` over UDP, with each behaviour that [Looking up a name](#looking-up-a-name) tables, and tries each address it finds, in its order, until one connects; `resolve` of `std.net` does it for the text of the two files, the port of the nameservers, and the address its errors name, that a caller gives, which is how a test puts a nameserver on a port of 127.0.0.1, and the system's handler calls it with the files, the port 53, and the host and port of the connection"
   - "a lookup in a task of a group suspends the task while it waits for a nameserver, with `wait_to_read_by` until the time to send the queries again, or the end of the time, and the other tasks run meanwhile, as a test of a task that ticks beside a lookup that no nameserver answers shows; the connection to a nameserver over TCP, for an answer cut short, waits for its bytes in the same way but is opened and written with the thread, and a lookup with no group blocks, as a call of `read` does"
   - "not built: a name looked up on macOS or Windows, which will call the system's own lookup, `GetAddrInfoW` of `ws2_32.dll` on Windows, where `connect_to` says what it said"
 ---
@@ -64,10 +64,10 @@ struct Address {
 
 enum NetError {
   unknown_host: str
-  refused
-  in_use
-  closed
-  failed: str
+  refused: str
+  in_use: str
+  closed: str
+  failed: (str, str)
 }
 ```
 
@@ -87,6 +87,17 @@ enum NetError {
 - **A `Listener`, a `Connection`, and a `Socket` are used exactly once,** as [Values used exactly once](../language/resources.md) says. One that is not ended, is ended twice, or is used after it is ended does not compile.
 - **A host is a name or a number,** as `example.com`, `192.0.2.7`, or `::1`. Finding the number of a name is the handler's work, and `unknown_host` is a name it could not find.
 - **Every failure is a value.** `refused` is a host that takes no connection at the port, `in_use` is a port another program holds, and `closed` is a connection the other side ended while this side wrote.
+- **Each case holds the host and the port,** written as `example.com:80`, as [Errors of the library](errors.md) says, and `failed` also holds what the system said. `listen_on`, `connect_to`, and `bind_to` hold the host and port they were given, and `send` the address it was given. `accept`, `read`, and `write` hold those of the `Listener` or `Connection`, and `receive` those of the `Socket`, which each keeps as the fields `host` and `port`, which a handler reads. A connection that `accept` gives keeps those of its listener. A value that a handler made has the host `""` and the port 0, and a call that succeeds does nothing for them.
+
+`NetError` has a `Fmt` that writes the address and then what went wrong, as the table shows.
+
+| Error | Message |
+| --- | --- |
+| `.unknown_host("example.com:80")` | `example.com:80: unknown host` |
+| `.refused("example.com:80")` | `example.com:80: connection refused` |
+| `.in_use("0.0.0.0:80")` | `0.0.0.0:80: address in use` |
+| `.closed("example.com:80")` | `example.com:80: connection closed` |
+| `.failed(("example.com:80", "connect: error 110"))` | `example.com:80: connect: error 110` |
 
 ## With a block
 
@@ -121,16 +132,16 @@ use std.net (net, release)
 
 fn ended[T](body: fn() -> T <net>) -> T {
   net(
-    listen_on: fn(host, port) { .err(.refused) },
-    accept: fn(l) { .err(.refused) },
+    listen_on: fn(host, port) { .err(.refused("{host}:{port}")) },
+    accept: fn(l) { .err(.refused("{l.host}:{l.port}")) },
     stop: fn(l) { n = release(l) },
-    connect_to: fn(host, port) { .err(.refused) },
-    read: fn(c, most) { .err(.closed) },
-    write: fn(c, bytes) { .err(.closed) },
+    connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
+    read: fn(c, most) { .err(.closed("{c.host}:{c.port}")) },
+    write: fn(c, bytes) { .err(.closed("{c.host}:{c.port}")) },
     close: fn(c) { n = release(c) },
-    bind_to: fn(host, port) { .err(.refused) },
-    send: fn(s, to, bytes) { .err(.closed) },
-    receive: fn(s, most) { .err(.closed) },
+    bind_to: fn(host, port) { .err(.refused("{host}:{port}")) },
+    send: fn(s, to, bytes) { .err(.closed("{to.host}:{to.port}")) },
+    receive: fn(s, most) { .err(.closed("{s.host}:{s.port}")) },
     unbind: fn(s) { n = release(s) },
     body: body,
   )
@@ -151,13 +162,13 @@ fn one_client[T](body: fn() -> T <net>) -> T {
     listen_on: fn(host, port) { .ok(listener(1)) },
     accept: fn(l) { .ok(connection(handle(l) + 1)) },
     stop: fn(l) { n = release(l) },
-    connect_to: fn(host, port) { .err(.refused) },
+    connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     read: fn(c, most) { .ok([]) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
-    bind_to: fn(host, port) { .err(.refused) },
-    send: fn(s, to, bytes) { .err(.closed) },
-    receive: fn(s, most) { .err(.closed) },
+    bind_to: fn(host, port) { .err(.refused("{host}:{port}")) },
+    send: fn(s, to, bytes) { .err(.closed("{to.host}:{to.port}")) },
+    receive: fn(s, most) { .err(.closed("{s.host}:{s.port}")) },
     unbind: fn(s) { n = release(s) },
     body: body,
   )
@@ -196,7 +207,7 @@ What follows is taken from how glibc (`resolv/`, `nss/nss_files`) and musl (`src
 | An answer with no address | `NXDOMAIN` or no address of either type goes on to the next name; no answer in time, or `SERVFAIL`, ends the lookup with `failed` | glibc | musl tries the next name after any failure, and a name that exists would be missed |
 | The order of the addresses | Those of `/etc/hosts` as they are, otherwise the `A` records and then the `AAAA` records, each as the nameserver gave them | neither | Both sort by RFC 6724, which needs the machine's own addresses |
 
-`unknown_host` holds the name that was asked. `failed` holds `lookup of the name: no nameserver answered in time` when the time was gone, and `lookup of the name: the nameserver failed` after a `SERVFAIL`.
+`unknown_host` holds the name that was asked, with the port of the connection, as `example.com:80`. `failed` holds that address and `lookup: no nameserver answered in time` when the time was gone, and `lookup: the nameserver failed` after a `SERVFAIL`.
 
 `std.dns` holds what needs no socket: `query` makes the message of a question and `read_reply` reads an answer as the table says, `hosts` and `config` read the two files, `candidates` gives the names to ask, and `ipv4` and `ipv6` read a number written with dots or colons, which `std.net` uses for a host too. A program has no use for them. The system's handler reads the files with the calls `openat` and `read`, which only Linux has.
 

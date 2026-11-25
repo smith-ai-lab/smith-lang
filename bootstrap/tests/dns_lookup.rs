@@ -401,7 +401,7 @@ fn a_nameserver_that_does_not_answer_is_asked_again_and_the_lookup_fails_when_th
         if targets::fingerprinting() {
             continue;
         }
-        assert_eq!(said.lines, ["failed lookup of a.test: no nameserver answered in time"], "{}", target.name());
+        assert_eq!(said.lines, ["failed lookup: no nameserver answered in time"], "{}", target.name());
         // Both kinds, sent twice, and not again after the second second.
         assert_eq!(said.questions, 4, "{}", target.name());
         assert!(before.elapsed() >= Duration::from_millis(1000), "{}", target.name());
@@ -416,11 +416,11 @@ fn a_name_that_does_not_exist_is_unknown_and_a_failing_nameserver_fails_the_look
         if targets::fingerprinting() {
             continue;
         }
-        assert_eq!(said.lines, ["unknown_host a.test"], "{}", target.name());
+        assert_eq!(said.lines, ["unknown_host a.test:80"], "{}", target.name());
         let said = run(target, "a.test", "", FAST, |s, q, from| {
             s.udp.send_to(&answer(q, 2, false, &[]), from).unwrap();
         });
-        assert_eq!(said.lines, ["failed lookup of a.test: the nameserver failed"], "{}", target.name());
+        assert_eq!(said.lines, ["failed lookup: the nameserver failed"], "{}", target.name());
     }
 }
 
@@ -466,7 +466,7 @@ fn a_lookup_in_a_task_lets_the_other_tasks_run_while_it_waits_and_one_with_no_gr
             continue;
         }
         let mut expected = vec!["tick"; 5];
-        expected.push("failed lookup of a.test: no nameserver answered in time");
+        expected.push("failed lookup: no nameserver answered in time");
         assert_eq!(said.lines, expected, "{}", target.name());
         // With no group the same lookup answers as it always did.
         let said = run_in("plain", target, "a.test", "", FAST, |s, q, from| {

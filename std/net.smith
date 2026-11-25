@@ -8,16 +8,22 @@ use std.text (Text, append_ascii, finish, text)
 pub struct Listener {
   handle: i64
   opened: bool
+  pub host: str
+  pub port: 0..65536
 }
 
 pub struct Connection {
   handle: i64
   opened: bool
+  pub host: str
+  pub port: 0..65536
 }
 
 pub struct Socket {
   handle: i64
   opened: bool
+  pub host: str
+  pub port: 0..65536
 }
 
 without Copy for Listener
@@ -34,10 +40,28 @@ pub struct Address {
 
 pub enum NetError {
   unknown_host: str
-  refused
-  in_use
-  closed
-  failed: str
+  refused: str
+  in_use: str
+  closed: str
+  failed: (str, str)
+}
+
+// What a person reads: the host and the port, and then what went wrong.
+impl Fmt[NetError] {
+  fn fmt(value: NetError) -> str <alloc> {
+    match value {
+      .unknown_host(address) { "{address}: unknown host" }
+      .refused(address) { "{address}: connection refused" }
+      .in_use(address) { "{address}: address in use" }
+      .closed(address) { "{address}: connection closed" }
+      .failed((address, said)) { "{address}: {said}" }
+    }
+  }
+}
+
+// The host and the port as an error names them, as `example.com:80`.
+fn address_text(host: str, port: 0..65536) -> str <alloc> {
+  "{host}:{port}"
 }
 
 pub effect net {
@@ -81,15 +105,15 @@ pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError
 // reads the number back with `handle`. A value made so is not one the system
 // opened, and the system's handler refuses it.
 pub fn listener(handle: Nat) -> Listener {
-  Listener(handle: wrapping_narrow(handle), opened: false)
+  Listener(handle: wrapping_narrow(handle), opened: false, host: "", port: 0)
 }
 
 pub fn connection(handle: Nat) -> Connection {
-  Connection(handle: wrapping_narrow(handle), opened: false)
+  Connection(handle: wrapping_narrow(handle), opened: false, host: "", port: 0)
 }
 
 pub fn socket(handle: Nat) -> Socket {
-  Socket(handle: wrapping_narrow(handle), opened: false)
+  Socket(handle: wrapping_narrow(handle), opened: false, host: "", port: 0)
 }
 
 pub trait Held[T] {
@@ -160,12 +184,12 @@ fn on_windows() -> bool {
 
 // What a value the system did not open is answered with: its handle is not one
 // the program owns, so no call is made with it.
-fn not_opened(call: str, h: i64) -> NetError <alloc> {
-  .failed("{call}: handle {h} is not one the system opened")
+fn not_opened(address: str, call: str, h: i64) -> NetError <alloc> {
+  .failed((address, "{call}: handle {h} is not one the system opened"))
 }
 
 // What the kernel gave, when it refused: minus its error number.
-fn failure(call: str, given: i64) -> NetError <alloc> {
+fn failure(address: str, call: str, given: i64) -> NetError <alloc> {
   code = 0 - given
   mac = on_macos()
   win = on_windows()
@@ -173,22 +197,22 @@ fn failure(call: str, given: i64) -> NetError <alloc> {
     // Winsock's numbers: the connection refused, the address in use, and the
     // connection reset, aborted, or shut down.
     if code == 10061 {
-      return .refused
+      return .refused(address)
     } else if code == 10048 or code == 10013 {
-      return .in_use
+      return .in_use(address)
     } else if code == 10054 or code == 10053 or code == 10058 {
-      return .closed
+      return .closed(address)
     }
-    return .failed("{call}: error {code}")
+    return .failed((address, "{call}: error {code}"))
   }
   if (not mac and code == 111) or (mac and code == 61) {
-    .refused
+    .refused(address)
   } else if (not mac and code == 98) or (mac and code == 48) {
-    .in_use
+    .in_use(address)
   } else if code == 32 or (not mac and code == 104) or (mac and code == 54) {
-    .closed
+    .closed(address)
   } else {
-    .failed("{call}: error {code}")
+    .failed((address, "{call}: error {code}"))
   }
 }
 
@@ -246,7 +270,7 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] <alloc> {
   }
   match ipv6(host) {
     .some(sixteen) { .ok(sockaddr(sixteen, port)) }
-    .none { .err(.failed("looking up a host name is not built")) }
+    .none { .err(.failed((address_text(host, port), "looking up a host name is not built"))) }
   }
 }
 
@@ -368,7 +392,7 @@ fn no_signal_wait() -> i64 {
 fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <alloc> {
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
-  if fd < 0 { return .err(failure("socket", fd)) }
+  if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
   one = number(1)
   var level: i64 = 1
   var name: i64 = 2
@@ -389,7 +413,7 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <al
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
-    return .err(failure("bind", bound))
+    return .err(failure(address_text(host, port), "bind", bound))
   }
   // The system holds this many connections that nothing has accepted, or as
   // many as it allows, and drops the next one's first packet when it holds
@@ -398,9 +422,9 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <al
   listening = __system(2, fd, 4096, 0, 0, 0, 0)
   if listening < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
-    return .err(failure("listen", listening))
+    return .err(failure(address_text(host, port), "listen", listening))
   }
-  .ok(Listener(handle: fd, opened: true))
+  .ok(Listener(handle: fd, opened: true, host: host, port: port))
 }
 
 // Waits until the descriptor can be read, as a task that a scheduler runs does,
@@ -416,7 +440,7 @@ fn wait_to_write(fd: i64) <task> {
 }
 
 fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
-  if not l.opened { return .err(not_opened("accept", l.handle)) }
+  if not l.opened { return .err(not_opened(address_text(l.host, l.port), "accept", l.handle)) }
   if __scheduled() {
     var fd: i64 = -1
     var failed: i64 = 0
@@ -433,16 +457,16 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
         break
       }
     }
-    if failed != 0 { return .err(failure("accept", failed)) }
-    if fd < 0 { return .err(.failed("accept: interrupted")) }
-    return .ok(Connection(handle: fd, opened: true))
+    if failed != 0 { return .err(failure(address_text(l.host, l.port), "accept", failed)) }
+    if fd < 0 { return .err(.failed((address_text(l.host, l.port), "accept: interrupted"))) }
+    return .ok(Connection(handle: fd, opened: true, host: l.host, port: l.port))
   }
   loop attempt in 0..64 {
     fd = __system(3, l.handle, 0, 0, 0, 0, 0)
-    if fd >= 0 { return .ok(Connection(handle: fd, opened: true)) }
-    if fd != -4 { return .err(failure("accept", fd)) }
+    if fd >= 0 { return .ok(Connection(handle: fd, opened: true, host: l.host, port: l.port)) }
+    if fd != -4 { return .err(failure(address_text(l.host, l.port), "accept", fd)) }
   }
-  .err(.failed("accept: interrupted"))
+  .err(.failed((address_text(l.host, l.port), "accept: interrupted")))
 }
 
 fn system_stop(l: take Listener) {
@@ -648,9 +672,9 @@ fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Pla
 // from the place it was asked; a failure of the nameserver is asked again at
 // once, four times at most, and any other code is ignored. A message that was
 // cut short is asked over TCP of the nameserver that sent it.
-fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[Option[List[List[Byte]]], NetError] <alloc, task> {
+fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], address: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[Option[List[List[Byte]]], NetError] <alloc, task> {
   ids = random([0, 0, 0, 0])
-  if ids.size < 4 { return .err(.failed("lookup of {host}: no random bytes")) }
+  if ids.size < 4 { return .err(.failed((address, "lookup: no random bytes"))) }
   first: u16 = ids[0] * 256 + ids[1]
   var second: u16 = ids[2] * 256 + ids[3]
   if second == first { second = bit_xor(first, 1) }
@@ -723,8 +747,8 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host:
     }
   }
   if not one.answered or not two.answered {
-    if failed { return .err(.failed("lookup of {host}: the nameserver failed")) }
-    return .err(.failed("lookup of {host}: no nameserver answered in time"))
+    if failed { return .err(.failed((address, "lookup: the nameserver failed"))) }
+    return .err(.failed((address, "lookup: no nameserver answered in time")))
   }
   var found: List[List[Byte]] = []
   loop a in 0..one.addresses.size { found = push(found, copy(one.addresses[a])) }
@@ -752,7 +776,7 @@ fn random_bytes(bytes: take List[Byte]) -> List[Byte] <alloc> {
 // when it has the name, and otherwise those the nameservers of
 // `/etc/resolv.conf` give for the first name of the list that has one. A name
 // that has none is `unknown_host`.
-pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, random: fn(take List[Byte]) -> List[Byte]) -> Result[List[List[Byte]], NetError] <alloc, task> {
+pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, named: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[List[List[Byte]], NetError] <alloc, task> {
   inside = hosts(hosts_text, host)
   if inside.size > 0 { return .ok(inside) }
   conf = config(resolv_text)
@@ -765,7 +789,7 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
     family = 2
     fd = __system(0, 2, 2, 0, 0, 0, 0)
   }
-  if fd < 0 { return .err(failure("socket", fd)) }
+  if fd < 0 { return .err(failure(named, "socket", fd)) }
   if family == 10 { dual_stack(fd) }
   var servers: List[Place] = []
   loop v in 0..conf.servers.size {
@@ -780,7 +804,7 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
   }
   names = candidates(host, conf)
   loop n in 0..names.size {
-    match ask_name(fd, servers, conf, names[n], host, random) {
+    match ask_name(fd, servers, conf, names[n], named, random) {
       .ok(found) {
         match found {
           .some(addresses) {
@@ -797,33 +821,33 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
     }
   }
   __system(9, fd, 0, 0, 0, 0, 0)
-  .err(.unknown_host(host))
+  .err(.unknown_host(named))
 }
 
 // Opens a connection to the place, as a number written with dots or colons is.
-fn connect_place(where: Place) -> Result[Connection, NetError] <alloc> {
+fn connect_place(where: Place, host: str, port: 0..65536) -> Result[Connection, NetError] <alloc> {
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
-  if fd < 0 { return .err(failure("socket", fd)) }
+  if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
   if where.family != 2 { dual_stack(fd) }
   connected = __system(4, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if connected < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
-    return .err(failure("connect", connected))
+    return .err(failure(address_text(host, port), "connect", connected))
   }
-  .ok(Connection(handle: fd, opened: true))
+  .ok(Connection(handle: fd, opened: true, host: host, port: port))
 }
 
 fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] <alloc, task> {
   match place(host, port) {
-    .ok(where) { return connect_place(where) }
+    .ok(where) { return connect_place(where, host, port) }
     .err(e) {
       if on_macos() { return .err(e) }
     }
   }
-  addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53, fn(bytes) { random_bytes(bytes) })
-  var last: NetError = .unknown_host(host)
+  addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53, address_text(host, port), fn(bytes) { random_bytes(bytes) })
+  var last: NetError = .unknown_host(address_text(host, port))
   loop a in 0..addresses.size {
-    match connect_place(sockaddr(addresses[a], port)) {
+    match connect_place(sockaddr(addresses[a], port), host, port) {
       .ok(c) { return .ok(c) }
       .err(e) { last = e }
     }
@@ -832,7 +856,7 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
 }
 
 fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc, task> {
-  if not c.opened { return .err(not_opened("read", c.handle)) }
+  if not c.opened { return .err(not_opened(address_text(c.host, c.port), "read", c.handle)) }
   if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
   if __scheduled() {
@@ -848,14 +872,14 @@ fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc,
       }
     }
     if got >= 0 { return .ok(__sized(buffer, got)) }
-    return .err(failure("read", got))
+    return .err(failure(address_text(c.host, c.port), "read", got))
   }
   loop attempt in 0..64 {
     got = __system(8, c.handle, buffer, most, 0, 0, 0)
     if got >= 0 { return .ok(__sized(buffer, got)) }
-    if got != -4 { return .err(failure("read", got)) }
+    if got != -4 { return .err(failure(address_text(c.host, c.port), "read", got)) }
   }
-  .err(.failed("read: interrupted"))
+  .err(.failed((address_text(c.host, c.port), "read: interrupted")))
 }
 
 // A number of bytes the kernel gave, which is not negative.
@@ -868,7 +892,7 @@ fn count(given: i64) -> Nat {
 }
 
 fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] <alloc, task> {
-  if not c.opened { return .err(not_opened("write", c.handle)) }
+  if not c.opened { return .err(not_opened(address_text(c.host, c.port), "write", c.handle)) }
   var sent: Nat = 0
   var flags: i64 = no_signal()
   // A task that a scheduler runs does not block: the call that does not wait is
@@ -882,11 +906,11 @@ fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] <allo
     } else if given == would_block() {
       if __scheduled() { wait_to_write(c.handle) }
     } else if given < 0 {
-      return .err(failure("write", given))
+      return .err(failure(address_text(c.host, c.port), "write", given))
     } else {
       match checked_add(sent, count(given)) {
         .some(n) { sent = n }
-        .none { return .err(.failed("write: too many bytes")) }
+        .none { return .err(.failed((address_text(c.host, c.port), "write: too many bytes"))) }
       }
     }
   }
@@ -903,29 +927,29 @@ fn system_close(c: take Connection) {
 fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] <alloc> {
   where = try place(host, port)
   fd = __system(0, where.family, 2, 0, 0, 0, 0)
-  if fd < 0 { return .err(failure("socket", fd)) }
+  if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
   if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
     __system(9, fd, 0, 0, 0, 0, 0)
-    return .err(failure("bind", bound))
+    return .err(failure(address_text(host, port), "bind", bound))
   }
-  .ok(Socket(handle: fd, opened: true))
+  .ok(Socket(handle: fd, opened: true, host: host, port: port))
 }
 
 fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] <alloc> {
-  if not s.opened { return .err(not_opened("send", s.handle)) }
+  if not s.opened { return .err(not_opened(address_text(s.host, s.port), "send", s.handle)) }
   where = try place(to.host, to.port)
   loop attempt in 0..64 {
     given = __system(7, s.handle, bytes, bytes.size, no_signal(), where.bytes, where.bytes.size)
     if given >= 0 { return .ok(()) }
-    if given != -4 { return .err(failure("send", given)) }
+    if given != -4 { return .err(failure(address_text(to.host, to.port), "send", given)) }
   }
-  .err(.failed("send: interrupted"))
+  .err(.failed((address_text(to.host, to.port), "send: interrupted")))
 }
 
 fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc> {
-  if not s.opened { return .err(not_opened("receive", s.handle)) }
+  if not s.opened { return .err(not_opened(address_text(s.host, s.port), "receive", s.handle)) }
   var buffer: List[Byte] = []
   if most > 0 { buffer = __reserve(most) }
   from = zeros(28)
@@ -933,13 +957,13 @@ fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetErro
   loop attempt in 0..64 {
     got = __system(8, s.handle, buffer, most, 0, from, length)
     if got >= 0 {
-      if from.size < 28 { return .err(.failed("receive: no address")) }
+      if from.size < 28 { return .err(.failed((address_text(s.host, s.port), "receive: no address"))) }
       port: 0..65536 = from[2] * 256 + from[3]
       return .ok((Address(host: host_text(from), port: port), __sized(buffer, got)))
     }
-    if got != -4 { return .err(failure("receive", got)) }
+    if got != -4 { return .err(failure(address_text(s.host, s.port), "receive", got)) }
   }
-  .err(.failed("receive: interrupted"))
+  .err(.failed((address_text(s.host, s.port), "receive: interrupted")))
 }
 
 fn system_unbind(s: take Socket) {

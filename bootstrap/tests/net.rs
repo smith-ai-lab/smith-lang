@@ -37,6 +37,10 @@ pub const ONCE: &[Test] = &[
         "a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them_naming_itself",
         a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them_naming_itself,
     ),
+    (
+        "each_case_of_a_net_error_is_written_as_its_address_and_what_went_wrong",
+        each_case_of_a_net_error_is_written_as_its_address_and_what_went_wrong,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -67,6 +71,10 @@ pub const MACHINE: &[Test] = &[
     (
         "a_failed_call_holds_its_name_and_the_systems_error_number",
         a_failed_call_holds_its_name_and_the_systems_error_number,
+    ),
+    (
+        "a_refused_connection_and_a_write_to_a_closed_one_say_the_host_and_the_port_they_were_opened_with",
+        a_refused_connection_and_a_write_to_a_closed_one_say_the_host_and_the_port_they_were_opened_with,
     ),
     (
         "now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given",
@@ -352,6 +360,37 @@ fn a_failed_call_holds_its_name_and_the_systems_error_number() {
     }
 }
 
+/// A connection that is refused names the host and the port it was asked for,
+/// and a write to a connection the other side closed names those it was opened
+/// with, which only the connection holds.
+fn a_refused_connection_and_a_write_to_a_closed_one_say_the_host_and_the_port_they_were_opened_with() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let nothing = ports::next();
+        let mut run = Started::new(target, &["refused_says", &nothing.to_string()]);
+        assert_eq!(
+            run.line(),
+            Some(format!("127.0.0.1:{nothing}: connection refused")),
+            "{}",
+            target.name()
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut run = Started::new(target, &["closed_says", &port.to_string()]);
+        let (stream, _) = listener.accept().unwrap();
+        drop(stream);
+        assert_eq!(
+            run.line(),
+            Some(format!("127.0.0.1:{port}: connection closed")),
+            "{}",
+            target.name()
+        );
+    }
+}
+
 fn now_is_the_milliseconds_since_1970_and_sleep_returns_after_at_least_as_many_as_it_is_given() {
     for target in clock() {
         targets::record(target, &[time_program(target)]);
@@ -453,13 +492,38 @@ fn a_handler_a_test_writes_answers_net_and_time_with_no_system_call() {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert!(!program.asks_the_kernel());
     let outcome = scalar::run(&program);
-    assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "refused 11\n");
+    assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "refused example.test:7 11\n");
     // The program under the handler is the program with none, which is
     // refused by a target that has no call to answer it with.
     for &target in Target::ALL.iter() {
         let bytes = targets::build(source.as_bytes(), target);
         assert!(bytes.is_ok(), "{}", target.name());
     }
+}
+
+/// Each case written by its `Fmt`: the address, and then what went wrong.
+fn each_case_of_a_net_error_is_written_as_its_address_and_what_went_wrong() {
+    let source = "use std.console (console, print)
+use std.net (NetError)
+
+fn main() <console, alloc> {
+  errors: List[NetError] = [
+    .unknown_host(\"example.com:80\"),
+    .refused(\"example.com:80\"),
+    .in_use(\"0.0.0.0:80\"),
+    .closed(\"example.com:80\"),
+    .failed((\"example.com:80\", \"connect: error 110\")),
+  ]
+  loop i in 0..errors.size { print(\"{errors[i]}\") }
+}
+";
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let outcome = scalar::run(&program);
+    assert_eq!(
+        String::from_utf8(outcome.stdout).unwrap(),
+        "example.com:80: unknown host\nexample.com:80: connection refused\n0.0.0.0:80: address in use\n\
+         example.com:80: connection closed\nexample.com:80: connect: error 110\n"
+    );
 }
 
 /// A handler answers `net` and `time`, and the code under it is what a
@@ -477,22 +541,22 @@ fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
 
 fn main() <console, alloc> {
   net(
-    listen_on: fn(host, port) { .err(.refused) },
-    accept: fn(l) { .err(.refused) },
+    listen_on: fn(host, port) { .err(.refused(host)) },
+    accept: fn(l) { .err(.refused(l.host)) },
     stop: fn(l) { n = release(l) },
-    connect_to: fn(host, port) { .err(.refused) },
+    connect_to: fn(host, port) { .err(.refused(\"{host}:{port}\")) },
     read: fn(c, most) { .ok([104, 101, 108, 108, 111]) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
-    bind_to: fn(host, port) { .err(.refused) },
+    bind_to: fn(host, port) { .err(.refused(host)) },
     send: fn(s, to, bytes) { .ok(()) },
-    receive: fn(s, most) { .err(.refused) },
+    receive: fn(s, most) { .err(.refused(s.host)) },
     unbind: fn(s) { n = release(s) }
   ) {
     time(now: { 11 }, sleep: fn(ms) { }) {
       match ask(\"x\") {
         .ok(bytes) { print(\"answered\") }
-        .err(.refused) { print(\"refused {now()}\") }
+        .err(.refused(address)) { print(\"refused {address} {now()}\") }
         .err(e) { print(\"another\") }
       }
     }

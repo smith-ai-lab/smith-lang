@@ -60,11 +60,11 @@ fn run() -> u64 <net, diverge, alloc> {{
 
 fn main() <console, alloc, diverge> {{
   r = net(
-    listen_on: fn(host, port) {{ .err(.refused) }},
-    accept: fn(l) {{ .err(.closed) }},
+    listen_on: fn(host, port) {{ .err(.refused(host)) }},
+    accept: fn(l) {{ .err(.closed(l.host)) }},
     stop: fn(l) {{ n = release(l) }},
-    connect_to: fn(host, port) {{ .err(.refused) }},
-    read: fn(c, most) {{ .err(.closed) }},
+    connect_to: fn(host, port) {{ .err(.refused(host)) }},
+    read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{
       print(\"wrote {{handle(c)}}\")
       .ok(())
@@ -73,9 +73,9 @@ fn main() <console, alloc, diverge> {{
       print(\"closed {{handle(c)}}\")
       n = release(c)
     }},
-    bind_to: fn(host, port) {{ .err(.refused) }},
-    send: fn(s, to, bytes) {{ .err(.closed) }},
-    receive: fn(s, most) {{ .err(.closed) }},
+    bind_to: fn(host, port) {{ .err(.refused(host)) }},
+    send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
+    receive: fn(s, most) {{ .err(.closed(s.host)) }},
     unbind: fn(s) {{ n = release(s) }},
     body: {{ run() }},
   )
