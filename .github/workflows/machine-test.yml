@@ -26,6 +26,21 @@ jobs:
         with:
           name: case-hashes
           path: ${{ runner.temp }}/case-hashes
+      # Whether Windows scans each executable the first time it is started is
+      # what the first tests that start one may be waiting on. This says
+      # whether real-time protection is on, and how long the first and the tenth
+      # newly written executable take to start. It changes nothing.
+      - name: Time the start of new executables
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "real-time protection: $((Get-MpComputerStatus).RealTimeProtectionEnabled)"
+          foreach ($i in 1..10) {
+            $exe = Join-Path $env:TEMP "probe-$i.exe"
+            Copy-Item "$env:SystemRoot\System32\whoami.exe" $exe
+            $t = Measure-Command { & $exe | Out-Null }
+            "start $i of a new executable: $([int]$t.TotalMilliseconds) ms"
+          }
       - name: Test
         env:
           SMITH_HASHES: ${{ runner.temp }}/case-hashes/case-hashes

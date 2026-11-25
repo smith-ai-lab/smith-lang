@@ -29,7 +29,9 @@ pub fn copy(from: &str, to: &Path) {
 /// elsewhere the copy is made in this process.
 #[cfg(not(unix))]
 pub fn copy(from: &str, to: &Path) {
+    let begin = std::time::Instant::now();
     std::fs::copy(from, to).unwrap();
+    crate::clock::say_if_slow(&format!("copying to {}", to.display()), begin);
 }
 
 /// Writes `bytes` to `to` as a file that can be run at once. The bytes go
@@ -52,5 +54,7 @@ pub fn write(to: &Path, bytes: &[u8]) {
 
 #[cfg(not(unix))]
 pub fn write(to: &Path, bytes: &[u8]) {
+    let begin = std::time::Instant::now();
     std::fs::write(to, bytes).unwrap();
+    crate::clock::say_if_slow(&format!("writing {}", to.display()), begin);
 }
