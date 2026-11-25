@@ -151,6 +151,12 @@ pub(super) struct Facts {
     /// facts about its fields are about. A version is never used twice.
     versions: HashMap<usize, usize>,
     epoch: usize,
+    /// While the ranges of the `var`s are solved, the range each `var` that is
+    /// solved holds now, by its place among the names, or none when it is
+    /// not known. The newest entry for a place is the one that counts.
+    steps: Vec<(usize, Option<Int>)>,
+    /// Whether the ranges of the `var`s are being solved.
+    pub(super) solving: bool,
 }
 
 /// How much is known at a moment, to go back to when a block ends.
@@ -158,6 +164,7 @@ pub(super) struct Mark {
     known: usize,
     constants: usize,
     held: usize,
+    steps: usize,
     versions: HashMap<usize, usize>,
 }
 
@@ -168,6 +175,7 @@ impl Facts {
             known: self.known.len(),
             constants: self.constants.len(),
             held: self.held.len(),
+            steps: self.steps.len(),
             versions: self.versions.clone(),
         }
     }
@@ -177,12 +185,16 @@ impl Facts {
         self.known.truncate(mark.known);
         self.constants.truncate(mark.constants);
         self.held.truncate(mark.held);
+        self.steps.truncate(mark.steps);
         self.versions.clone_from(&mark.versions);
     }
 
     /// The `var` at `at` may hold another value: nothing known of its
     /// fields so far is known of what it holds now.
     fn bump(&mut self, at: usize) {
+        if self.solving {
+            self.steps.push((at, None));
+        }
         self.epoch += 1;
         self.versions.insert(at, self.epoch);
     }
@@ -218,6 +230,19 @@ impl Facts {
 
     /// What the `var` at `at` holds, when it is tracked: the sum, or none
     /// when it is not known.
+    /// The range the `var` at `at` holds now, where it is known.
+    pub(super) fn step(&self, at: usize) -> Option<Int> {
+        self.steps
+            .iter()
+            .rfind(|(k, _)| *k == at)
+            .and_then(|(_, v)| *v)
+    }
+
+    /// The `var` at `at` was given a value of the range `held`.
+    pub(super) fn set_step(&mut self, at: usize, held: Int) {
+        self.steps.push((at, Some(held)));
+    }
+
     fn holds(&self, at: usize) -> Option<&Option<Lin>> {
         self.held.iter().rfind(|(k, _)| *k == at).map(|(_, v)| v)
     }
@@ -1841,6 +1866,7 @@ impl<'a> Checker<'a> {
             return self.quotient_fits(body, value, to);
         }
         let written = written_expr(value);
+        let before = self.errors.len();
         self.narrows(
             body,
             value,
@@ -1848,6 +1874,7 @@ impl<'a> Checker<'a> {
             (&written, value.pos()),
             "check the value first, or state it in a `requires`",
         );
+        self.explain_inferred(body, value, to, before);
     }
 }
 
