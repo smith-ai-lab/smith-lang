@@ -9,6 +9,7 @@ built:
   - "a function with effects passed by its name, whose effects are required of the function its name is written in"
   - "an effect the program declares, in a signature, and required of every caller of its operations, as `console` is"
   - "a warning at an effect a function lists and nothing in it needs, with the signature without it as the fix, not given for a function of an `impl` or one passed by its name as a value"
+  - "a group, `effects NAME = <e1, e2>`, which `pub` exports and `use` imports as any name, which may name other groups, which stands wherever effects are listed, and which is refused when it names itself; the warning at a group nothing in it uses; the fix that writes a group's name"
 ---
 
 # Effects
@@ -169,6 +170,33 @@ fn main() <console, alloc> {
 
 Three functions may list an effect they do not need, and are not warned of. A function of an `impl` has the signature its trait gives, and one implementation may need less than another. A function passed where a parameter's type allows an effect need not use it. And a function whose body holds a [`hole`](hole.md) is not finished. A `pub` function is warned of as any other: an effect is not listed to keep a place for later.
 
+## Naming a set of effects
+
+A program that lists the same effects in many signatures names them once, as a group, at the top level of a module.
+
+```
+use std.console (console, print)
+
+effects server = <console, alloc>
+
+fn handle(name: str) -> str <server> {
+  print("hey")
+  "hello {name}"
+}
+
+fn main() <server> {
+  print(handle("Ana"))
+}
+```
+
+This prints `hey` and then `hello Ana`. A group stands wherever an effect may be written: in a signature, in the type of a function, and in an operation of an effect. A list means the union of what it names, as a set, so `<server, console>` is `<console, alloc>`, and two signatures that differ only in whether they write a group or the effects it holds have the same type. A program written with groups builds the executable of the same program with the groups written out.
+
+A group may name other groups. A group that overlaps another, or that holds an effect the list also names, is accepted, and the effect counts once. Naming the same effect or the same group twice in one list is refused, as above. A group that names itself, directly or through other groups, is refused at its declaration, with the chain: "the group `a` names itself: a -> b -> a".
+
+`pub effects server = <console, alloc>` exports the group, and `use net (server)` imports it, by its name or as another with `as`, as any name.
+
+`smith check` warns of a group in a signature only when nothing in the group is used: "`handle` lists `server`, and nothing in it needs any of its effects". A group that is partly used is not warned of. Every fix for a missing effect in one function writes the whole list the function needs, once all of them are added. Where a fix writes effects, and a group in scope holds exactly the effects it would write beyond those the signature lists, the fix writes the group's name.
+
 ## The forms
 
 | Written | Means |
@@ -176,6 +204,7 @@ Three functions may list an effect they do not need, and are not warned of. A fu
 | `fn f() { ... }` | `f` is pure |
 | `fn f() <console> { ... }` | `f` may use the console |
 | `fn f() -> T <console, alloc> { ... }` | The effects follow the return type, in any order, each once |
+| `fn f() <server> { ... }` | `f` may use every effect the group `server` names |
 | `fn(A) -> B <console>` | A stored function that may use the console |
 | `fn(A) -> B` | A stored function that is pure |
 
