@@ -8,7 +8,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 
 ## The basics
 
-- [overview.md](overview.md): what Smith is for, the rules that hold throughout the language, and the four principles its design follows.
+- [overview.md](overview.md): what Smith is for, the rules that hold throughout the language, and the five principles its design follows.
 - [first-program.md](first-program.md): a program that starts at `main`, prints a line, and is run with `smith run`.
 - [functions.md](functions.md): typed parameters, a return type, a block whose last expression is its value, named arguments, defaults, and comments.
 - [bindings.md](bindings.md): how `x = e` defines an immutable name, which is never defined again while it can be used, how a binding states its type, and where a name can be used.

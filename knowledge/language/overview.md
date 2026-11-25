@@ -1,7 +1,7 @@
 ---
 type: specification
 title: Overview
-description: What Smith is for, the rules that hold throughout the language, and the four principles its design follows.
+description: What Smith is for, the rules that hold throughout the language, and the five principles its design follows.
 status: partial
 built:
   - "blocks in braces for every body, statements separated by line breaks, and a name never defined again where it can be used"
@@ -21,11 +21,12 @@ Smith's types are dependent: a type may mention a value, as `[n]f32` mentions `n
 
 A few rules hold throughout. Every body is a block in braces, statements are separated by newlines, and each program has one canonical formatting. A function's signature states everything a caller needs. Values are never shared by reference. Proofs are written in the source and only checked by the compiler.
 
-The design follows four principles:
+The design follows five principles:
 
 - Fewest features. Nothing speculative is included, and a feature is added only when real code needs it. Nothing is kept for the sake of what came before.
 - The syntax is fixed and its meaning is extensible through traits, as with operators, literals, `loop`, and `try`.
 - Effects are permissions. What a function may do is visible in its signature.
+- A state that is wrong cannot be written. A type holds only the values that mean something: a field that only some cases have belongs to those cases, as a body belongs to a `post` and not to a `get`, and parts that must agree are made together, as a body and its content type are. What a check while the program runs would catch, the type refuses where the program is built.
 - No dependencies. Everything is written in Smith, with no other language in a Smith program.
 
 Next: [A first program](first-program.md)
