@@ -16,7 +16,7 @@ built:
   - "a name for a bound in the type of a result, as `0..n` or `m..256`, which the function is shown to give and a caller knows, and in the type of a binding made with `=`, which is shown where it is written and known wherever the name is used, and a name in the type of a field, of a `var`, or inside another type refused with the reason, and a `var` or an unbound name refused as a bound"
   - "the `size` of a name as a bound, `0..xs.size` or `xs.size..256`, wherever a name is a bound, where `xs` is a `List` or a `Slice` that is a parameter or an `=` binding, and no other field and no bound that is worked out, such as `0..n + 1` or `0..g.rows`, which is refused with \"a bound is a whole number, a name, or the `size` of a name\""
   - "not the `size` of a `str` or of an array as a bound, as no fact is known of the size of a text"
-  - "not a name with no stated type given the smallest range that holds every value it is given, as [Inference](inference.md) says; today a `var` has the range of its first value"
+  - "a `var` with no stated type given the smallest range that holds every value it is given"
 ---
 
 # Number types

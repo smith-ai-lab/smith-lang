@@ -2,7 +2,14 @@
 type: specification
 title: Inference
 description: What is written at the top level is the contract and what is inside a body is solved from everything the body says, how a range is the smallest that holds every value a name is given, and the errors that say what was inferred.
-status: planned
+status: partial
+built:
+  - "a `var` with no stated type given the smallest range that holds the value it starts as and every value it is given, solved in the order the body is read, so that `n = n + 1` twice is a `0..3`, and what `arith` knows of the value last given still proves what it proved"
+  - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
+  - "a `var` that starts as a number written out and is given a value that depends on it where the range is not known, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
+  - "not a lambda's parameters inferred from the calls of a lambda bound to a name"
+  - "not `[]` and `.none` settled by a later use in the same body"
+  - "not a block with a `try` that says the type it gives"
 ---
 
 # Inference
@@ -49,7 +56,7 @@ fn pick(c: bool) -> 0..6 {
 }
 ```
 
-This is refused: "`x` is a `0..10`, inferred from `0` at line 4, `x = 5` at line 5, and `x = 9` at line 5, and its top is set by `x = 9` at line 5; `takes` at line 6 needs a `0..6`". The error names the range inferred, the assignment that set its top, and the use that needs less. The fix is to give `x` nothing above 5, or to check it first, as [Integer arithmetic](arithmetic.md#checking-first) shows.
+This is refused: "`x` is a `0..10`, inferred from `0` at line 4, `x = 5` at line 5, and `x = 9` at line 5, and its top is set by `x = 9` at line 5; the use at line 6 needs a `0..6`". The error names the range inferred, the assignment that set its top, and the use that needs less. The fix is to give `x` nothing above 5, or to check it first, as [Integer arithmetic](arithmetic.md#checking-first) shows.
 
 ## A var given a value one after another
 
@@ -81,7 +88,7 @@ fn last_given() -> 0..6 {
 
 ## A value that depends on itself in a loop
 
-A `var` that a [`loop`](loop.md) gives a value that depends on the `var` itself has no range that this page infers yet. It is refused, with the range to state.
+A `var` that a [`loop`](loop.md) gives a value that depends on the `var` itself has no range that this page infers yet. Where it starts as a number written out, it is refused, with the range to state.
 
 ```
 fn sum_to(n: 0..11) -> 0..101 {
@@ -91,7 +98,19 @@ fn sum_to(n: 0..11) -> 0..101 {
 }
 ```
 
-This is refused: "`acc` is changed by itself in this loop, so its range is not inferred yet: state it, as `var acc: 0..101 = 0`". A value that does not depend on the `var` is no such case, so `loop i in 0..n { last = i }` gives `last` the range of `i`.
+This is refused: "`acc` is changed by itself in this loop, so its range is not inferred yet", with the fix "state the range, as `var acc: 0..101 = 0`", the range of the first use that needs less. A value that does not depend on the `var` is no such case, so `loop i in 0..n { last = i }` gives `last` the range of `i`.
+
+A `var` that starts as a value that has a type keeps that range when it is given itself, and each assignment is proven to fit it.
+
+```
+fn steps(from: 0..100) -> 0..100 {
+  var i = from
+  loop j in 0..3 { if i < 99 { i = i + 1 } }
+  i
+}
+```
+
+`steps(5)` is `8`. `i` is a `0..100`, the range of `from`, and the `if` shows that `i + 1` fits it.
 
 ## A lambda's parameters
 

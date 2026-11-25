@@ -8,7 +8,7 @@ built:
   - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
-  - "not a `var` that a loop assigns given the range that holds every value it is given, so `var last = 0` with `last = i` compiles, as [Inference](inference.md) says; today it has the range of its first value"
+  - "a `var` that a loop gives a value that does not depend on it, given the range that holds every value it is given, and one that gives itself a value in a loop refused when it starts as a number written out, with the range to state"
 ---
 
 # `loop`
@@ -67,24 +67,24 @@ This prints `250`, `251`, and `252`. Here `j` is a `0..3`, so `x + j` is a `0..2
 A `var` with no stated type has the range that holds every value it is given, as [`var`](var.md#the-range-of-a-var) says, so a loop that gives it `i` makes it the range of `i`.
 
 ```
-fn last_index(n: 0..11) -> 0..10 {
+fn last_index(n: 0..11) -> 0..11 {
   var last = 0
   loop i in 0..n { last = i }
   last
 }
 ```
 
-`last_index(4)` is `3`. `last` holds the `0` and each `i`, so it is a `0..10`. A `var` that the loop gives a value that depends on the `var` itself has no range inferred yet, as [Inference](inference.md#a-value-that-depends-on-itself-in-a-loop) says, so it states its range.
+`last_index(4)` is `3`. `last` holds the `0` and each `i`, a `0..11`, so it is that. A `var` can state a narrower range, and then each assignment in the loop is proven to stay in it.
 
 ```
-fn total(n: 0..11) -> 0..101 {
-  var sum: 0..101 = 0
-  loop i in 0..n { sum = sum + i }
-  sum
+fn last_index(n: 0..11) -> 0..10 {
+  var last: 0..10 = 0
+  loop i in 0..n { last = i }
+  last
 }
 ```
 
-`total(4)` is `6`. Each assignment in the loop is proven to stay in the range of the `var`.
+`last_index(4)` is `3`. A `var` that the loop gives a value that depends on the `var` itself has no range inferred yet, as [Inference](inference.md#a-value-that-depends-on-itself-in-a-loop) says, so it states its range.
 
 ## Ending early with `break`
 

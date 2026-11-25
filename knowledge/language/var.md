@@ -5,7 +5,7 @@ description: Locals that change, declared with var, given a new value with =, an
 status: partial
 built:
   - "`var` and `=`, an error for assigning to a name that is not a `var`"
-  - "not a `var` with no stated type given the range that holds every value it is given, as [Inference](inference.md) says; today it has the range of its first value"
+  - "a `var` with no stated type given the smallest range that holds the value it starts as and every value it is given, in the order the body is read, as [Inference](inference.md) says"
 ---
 
 # Mutable locals
