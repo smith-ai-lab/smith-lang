@@ -1161,7 +1161,7 @@ impl<'a> Lowering<'a> {
         } else {
             no
         };
-        if narrowing == Narrowing::Saturating {
+        if narrowing == Narrowing::Clamp {
             let (least, greatest) = (out.int(narrow, to.min()), out.int(narrow, to.max()));
             let low = out.choose(below, least, r);
             return vec![out.choose(above, greatest, low)];
@@ -1218,7 +1218,7 @@ impl<'a> Lowering<'a> {
         } else {
             no
         };
-        if narrowing == Narrowing::Saturating {
+        if narrowing == Narrowing::Clamp {
             let (least, greatest) = (words(out, to.min()), words(out, to.max()));
             let (least, greatest) = (keep(out, &least), keep(out, &greatest));
             return r

@@ -673,17 +673,17 @@ pub(super) enum Narrowing {
     /// `wrapping_narrow`, which keeps the low bits.
     Wrapping,
     /// `clamp`, which gives the nearest value the type holds.
-    Saturating,
+    Clamp,
     /// `narrow`, which gives `.none` where the value does not fit.
-    Checked,
+    Narrow,
 }
 
 impl Narrowing {
     pub(super) fn name(self) -> &'static str {
         match self {
             Narrowing::Wrapping => "wrapping_narrow",
-            Narrowing::Saturating => "clamp",
-            Narrowing::Checked => "narrow",
+            Narrowing::Clamp => "clamp",
+            Narrowing::Narrow => "narrow",
         }
     }
 }
@@ -691,13 +691,9 @@ impl Narrowing {
 /// Which narrowing a call is of, if it is of one the compiler builds, which
 /// no function of the program takes the name of.
 pub(super) fn narrowing(defs: &Defs, call: &Call) -> Option<Narrowing> {
-    let named = [
-        Narrowing::Wrapping,
-        Narrowing::Saturating,
-        Narrowing::Checked,
-    ]
-    .into_iter()
-    .find(|n| n.name() == call.callee)?;
+    let named = [Narrowing::Wrapping, Narrowing::Clamp, Narrowing::Narrow]
+        .into_iter()
+        .find(|n| n.name() == call.callee)?;
     let (at, name) = (call.name_pos, call.callee.as_str());
     let taken = defs.function(at, name).is_some()
         || defs.struct_at(at, name).is_some()
@@ -1694,8 +1690,8 @@ impl<'a> Checker<'a> {
         };
         let (wanted, to) = match want {
             Want::Ty(Ty::Unknown | Ty::Flex(_)) => return Ty::Unknown,
-            Want::Ty(Ty::Int(to)) if narrowing != Narrowing::Checked => (Ty::Int(*to), *to),
-            Want::Ty(Ty::Enum(e, of)) if *e == defs.option && narrowing == Narrowing::Checked => {
+            Want::Ty(Ty::Int(to)) if narrowing != Narrowing::Narrow => (Ty::Int(*to), *to),
+            Want::Ty(Ty::Enum(e, of)) if *e == defs.option && narrowing == Narrowing::Narrow => {
                 match of.as_slice() {
                     [Ty::Int(to)] => (Ty::Enum(*e, of.clone()), *to),
                     _ => return self.narrow_unexpected(body, call, name, want),
