@@ -155,6 +155,9 @@ impl<'a> Checker<'a> {
         match &f.result {
             // A function that gives a function gives the one function it names.
             Some(t) if t.function => {
+                if let Some(g) = self.defs.returned_function(f, scope) {
+                    self.returned_effects(t.pos, g);
+                }
                 if self.defs.returned_function(f, scope).is_none()
                     && self.defs.returned_parameter(f).is_none()
                 {
@@ -172,6 +175,42 @@ impl<'a> Checker<'a> {
                 self.ty(t, scope);
             }
             None => {}
+        }
+    }
+
+    /// Reports the effects of function `g`, written at `value`, where it goes
+    /// into a function type, which `place` says, as a function type states no
+    /// effect. Whoever calls what is stored is checked against the type alone.
+    pub(super) fn stored_effects(&mut self, value: &Expr, g: usize, place: &str) {
+        let defs = self.defs;
+        let signature = &defs.signatures[g];
+        if let Some(effect) = signature.effects.first() {
+            let name = written_name(&defs.file.functions[g].name);
+            self.errors.push(Error::new(
+                value.pos(),
+                format!(
+                    "`{name}` needs the `{}` effect, and {place} states none, so a function that \
+                     needs one is not stored there",
+                    written_name(effect)
+                ),
+            ));
+        }
+    }
+
+    /// Reports the effect of function `g`, which a function gives as its result,
+    /// whose type states none.
+    fn returned_effects(&mut self, pos: Pos, g: usize) {
+        let defs = self.defs;
+        if let Some(effect) = defs.signatures[g].effects.first() {
+            let name = written_name(&defs.file.functions[g].name);
+            self.errors.push(Error::new(
+                pos,
+                format!(
+                    "`{name}` needs the `{}` effect, and this result type states none, so a \
+                     function that needs one is not given",
+                    written_name(effect)
+                ),
+            ));
         }
     }
 
