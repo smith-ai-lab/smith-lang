@@ -162,7 +162,21 @@ fn none() {
 
 This is refused: "an array of nothing has no element to say its type, so it is written where a type is expected", with the fix "write its type, as in `xs: List[Nat] = []`".
 
-A use settles it too: `xs = []` that is passed to a function whose parameter is a `List[0..256]` is that list. An option settles the same way, so `var o = .none` with `o = .some(7)` in one branch and `o` as the result of a function that gives an `Option[Nat]` is an `Option[Nat]`.
+A use settles it too: `xs = []` that is passed to a function whose parameter is a `List[0..256]` is that list. An option settles the same way, so `var o = .none` with `o = .some(7)` in one branch and `o` as the result of a function that gives an `Option[Nat]` is an `Option[Nat]`. A use gives the type where it holds everything that is put in, and where it does not, the elements are what is put in and the use is refused.
+
+```
+use std.list (push)
+
+fn small(xs: List[0..3]) -> Nat { xs.size }
+
+fn main() <alloc> {
+  var xs = []
+  xs = push(xs, 7)
+  n = small(xs)
+}
+```
+
+This is refused: "`xs` is a `List[7..8]`, inferred from `push(xs, 7)` at line 7; the use at line 8 needs a `List[0..3]`". A list that is only pushed to for another name is settled the same way, as `ys = push(xs, 4)` settles `xs`.
 
 ## A block with a try
 

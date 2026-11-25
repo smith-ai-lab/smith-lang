@@ -260,6 +260,14 @@ impl<'a> Checker<'a> {
             _ => Want::Any,
         };
         let list = self.expr(body, &call.args[0].value, &list_want);
+        // A list written with nothing, that is pushed to, has the elements pushed.
+        if let Ty::List(of) = &list
+            && of[0].unknown()
+            && !appends
+            && let Some(settled) = self.push_to_empty(body, call)
+        {
+            return settled;
+        }
         match list {
             Ty::Slice(_) => {
                 self.expr(body, &call.args[1].value, &Want::Ty(Ty::Unknown));
