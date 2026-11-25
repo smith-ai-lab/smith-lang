@@ -14,7 +14,7 @@ use std.fetch (FetchError, Request, fetch, send)
 
 fn keys_of(issuer: str) -> Result[List[Byte], FetchError] <fetch, alloc> {
   response = try send(Request(url: "{issuer}/.well-known/jwks.json"), 65536)
-  if response.status == 200 { .ok(response.body.bytes) } else { .err(.failed("status {response.status}")) }
+  if response.status == 200 { .ok(response.body.bytes) } else { .err(.failed((issuer, "status {response.status}"))) }
 }
 ```
 
@@ -58,14 +58,24 @@ enum FetchError {
   address: str
   unreachable: str
   untrusted: str
-  failed: str
-  too_big: str
+  failed: (str, str)
+  too_big: (str, Nat)
 }
 ```
 
+Each case holds the URL of the request, as [Errors of the library](errors.md) says, and `failed` also holds what was said, and `too_big` the limit. `FetchError` has a `Fmt` that writes the URL and then what went wrong.
+
+| Error | Message |
+| --- | --- |
+| `.address("example.com")` | `example.com: not an address` |
+| `.unreachable("https://example.com/keys")` | `https://example.com/keys: server not reached` |
+| `.untrusted("https://example.com/keys")` | `https://example.com/keys: certificate not trusted` |
+| `.failed(("https://example.com/keys", "status 500"))` | `https://example.com/keys: status 500` |
+| `.too_big(("https://example.com/keys", 65536))` | `https://example.com/keys: body longer than 65536 bytes` |
+
 - `send` gives the response of the server, whatever its status: a 404 is `.ok` of a response whose status is 404. It gives `.err` only when there is no response to give.
 - `address` is a `url` that is not one. `unreachable` is a server that could not be found or did not answer. `untrusted` is a server reached over `https` whose certificate does not show it is the server the address names. `failed` is anything else, with what was said.
-- **The body has a limit.** `send` takes the most bytes of body it will read. It stops reading once the body would pass the limit and gives `.err(.too_big(…))` with words that say so, and no more than the limit is held. The body it gives is a `Body[limit]`: the bytes, with the [proof](../language/proof-fields.md) that there are at most `limit` of them, so a function that needs a body of at most `n` bytes takes a `Body[n]`, or a `Response[n]`, and [`arith`](../language/arith.md) checks every call of it. A body is bytes, which [`std.utf8`](utf8.md) reads as text where it is text.
+- **The body has a limit.** `send` takes the most bytes of body it will read. It stops reading once the body would pass the limit and gives `.err(.too_big((url, limit)))`, and no more than the limit is held. The body it gives is a `Body[limit]`: the bytes, with the [proof](../language/proof-fields.md) that there are at most `limit` of them, so a function that needs a body of at most `n` bytes takes a `Body[n]`, or a `Response[n]`, and [`arith`](../language/arith.md) checks every call of it. A body is bytes, which [`std.utf8`](utf8.md) reads as text where it is text.
 - **An address that begins `https` is always checked.** No argument and no setting sends a request to a server whose certificate is not right, so `untrusted` cannot be turned off.
 - A response that sends the program to another address is given as it is, with its status and its `location`, and `send` follows nothing.
 
