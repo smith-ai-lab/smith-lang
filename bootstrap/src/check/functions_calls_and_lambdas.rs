@@ -159,6 +159,13 @@ impl<'a> Checker<'a> {
                     self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
                 }
             }
+            // A struct that holds functions is the one the body builds.
+            Some(t) if self.defs.implicit_result(t, scope).is_some() => {
+                let u = self.defs.implicit_result(t, scope).expect("checked");
+                if self.defs.returned_struct(f, u, scope).is_none() {
+                    self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
+                }
+            }
             Some(t) => {
                 self.ty(t, scope);
             }
@@ -688,12 +695,13 @@ impl<'a> Checker<'a> {
         Ty::Unknown
     }
 
-    /// The function with a name that the field a call is written on holds, when
-    /// the call is `name.field(...)` and the type of `name` is a struct whose
-    /// field has the type of that function.
-    fn function_in_field(&self, body: &Body<'a>, call: &Call) -> Option<usize> {
+    /// What the field a call is written on holds, when the call is
+    /// `name.field(...)` and the type of `name` is a struct whose field holds a
+    /// function: the function, once it is known, and otherwise the type of the
+    /// function the field is written with. Gives with it the type of `name`.
+    fn function_in_field(&self, body: &Body<'a>, call: &Call) -> Option<(Held, Ty)> {
         let (q, _) = call.qualifier.as_ref()?;
-        let (_, Ty::Struct(s, args)) = body.names.iter().rfind(|(n, _)| n == q)? else {
+        let (_, receiver @ Ty::Struct(s, args)) = body.names.iter().rfind(|(n, _)| n == q)? else {
             return None;
         };
         let defs = self.defs;
@@ -701,10 +709,17 @@ impl<'a> Checker<'a> {
             .fields
             .iter()
             .position(|f| f.name == call.callee)?;
-        match defs.fields[*s][i].subst(args) {
-            Ty::Named(g) => Some(g),
-            _ => None,
-        }
+        let held = match defs.fields[*s][i].subst(args) {
+            Ty::Named(g) => Held::Named(g),
+            _ => Held::Items(
+                defs.field_items[*s][i]
+                    .as_ref()?
+                    .iter()
+                    .map(|t| t.subst(args))
+                    .collect(),
+            ),
+        };
+        Some((held, receiver.clone()))
     }
 
     pub(super) fn call(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
@@ -726,7 +741,23 @@ impl<'a> Checker<'a> {
             },
             None => None,
         };
-        let in_field = through.or_else(|| self.function_in_field(body, call));
+        let field = if through.is_some() {
+            None
+        } else {
+            self.function_in_field(body, call)
+        };
+        if let Some((held, receiver)) = &field {
+            self.field_receivers.insert(addr(call), receiver.clone());
+            if let Held::Items(items) = held {
+                let given = self.value_call(body, call, items);
+                self.value_calls.remove(&addr(call));
+                return given;
+            }
+        }
+        let in_field = through.or(match field {
+            Some((Held::Named(g), _)) => Some(g),
+            _ => None,
+        });
         if let (Some((q, at)), None) = (&call.qualifier, in_field) {
             if let Some(e) = defs.enum_at(*at, q)
                 && !body.names.iter().any(|(n, _)| n == q)
@@ -1609,4 +1640,13 @@ fn filled(ty: &Ty) -> Ty {
         Ty::Enum(e, args) => Ty::Enum(*e, args.iter().map(filled).collect()),
         other => other.clone(),
     }
+}
+
+/// What a field that holds a function is, where a call is written on it.
+enum Held {
+    /// The function, which is known.
+    Named(usize),
+    /// The types of the parameters and the result of a function that is not
+    /// known yet, since the type parameter that stands for it is not settled.
+    Items(Vec<Ty>),
 }

@@ -177,6 +177,9 @@ pub struct Field {
     pub name: String,
     pub pos: Pos,
     pub ty: Type,
+    /// The function type the field is written with, when it is one: `ty` is
+    /// then the type parameter that stands for the function it holds.
+    pub function: Option<Type>,
     pub default: Option<Expr>,
     /// Where `pub` is, when the field is written with it.
     pub public: Option<Pos>,
@@ -1499,7 +1502,9 @@ impl Parser<'_> {
             // parameter that no source writes: the struct is a type of its own
             // for each function it holds, as the function a value of a
             // function type is must be known when the program is built.
+            let mut function = None;
             if ty.function {
+                function = Some(ty.clone());
                 let implicit = format!("{name}@function");
                 generics.push(Generic {
                     name: implicit.clone(),
@@ -1531,6 +1536,7 @@ impl Parser<'_> {
                 name,
                 pos,
                 ty,
+                function,
                 default,
                 public,
             });

@@ -1,6 +1,7 @@
 use std.console (console, print)
 
 fn half(x: f32) -> f32 { x * 0.5 }
+fn double(x: f32) -> f32 { x * 2.0 }
 
 fn twice(x: f32, f: fn(f32) -> f32) -> f32 { f(f(x)) }
 
@@ -8,7 +9,21 @@ struct Pricing {
   discount: fn(f32) -> f32
 }
 
+struct Shop {
+  name: str
+  pricing: Pricing
+}
+
 fn chosen() -> fn(f32) -> f32 { half }
+
+fn made() -> Pricing { Pricing(discount: double) }
+
+fn priced(p: Pricing, x: f32) -> f32 { p.discount(x) }
+
+fn sold(s: Shop, x: f32) -> f32 {
+  p = s.pricing
+  p.discount(x)
+}
 
 fn eight() -> f32 {
   f = half
@@ -32,6 +47,13 @@ fn quarter(x: f32) -> f32 {
   twice(x, f)
 }
 
+fn both() -> (f32, f32) {
+  (priced(Pricing(discount: half), 8.0), priced(Pricing(discount: double), 8.0))
+}
+
 fn main() <console, alloc> {
   print("{eight()} {sale_price(8.0)} {chosen_half(8.0)} {chosen_bound(8.0)} {quarter(8.0)}")
+  print("{both()} {priced(made(), 8.0)}")
+  shop = Shop(name: "a", pricing: Pricing(discount: double))
+  print("{shop.name} {sold(shop, 8.0)}")
 }

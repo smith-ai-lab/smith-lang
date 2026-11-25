@@ -28,6 +28,18 @@ pub const ONCE: &[Test] = &[
         || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Return, Hold::BindTheReturn]),
     ),
     (
+        "a_function_that_a_function_takes_in_a_struct_builds_to_the_bytes_of_the_call_written_directly",
+        || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Takes]),
+    ),
+    (
+        "a_function_that_a_struct_in_a_struct_holds_builds_to_the_bytes_of_the_call_written_directly",
+        || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Nested]),
+    ),
+    (
+        "a_function_that_a_struct_a_function_gives_holds_builds_to_the_bytes_of_the_call_written_directly",
+        || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Made]),
+    ),
+    (
         "a_function_that_is_returned_and_passed_builds_to_the_bytes_of_the_call_written_directly",
         || builds_to_the_bytes_of_the_call_written_directly(&[Hold::CallTheReturn]),
     ),
@@ -46,6 +58,12 @@ enum Hold {
     Return,
     BindTheReturn,
     CallTheReturn,
+    /// Given to a function that takes the struct that holds it.
+    Takes,
+    /// Held by a struct that a struct holds.
+    Nested,
+    /// Made by a function that gives the struct that holds it.
+    Made,
 }
 
 #[derive(Debug)]
@@ -103,6 +121,24 @@ impl Program {
             Hold::CallTheReturn => {
                 text += &format!("fn chosen() -> fn(Int) -> Int {{ f{k} }}\n\n");
                 text += &Self::main(&format!("  r = twice({x}, chosen())\n"));
+            }
+            Hold::Takes => {
+                text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
+                text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n\n";
+                text += &Self::main(&format!("  a = Held(run: f{k})\n  r = priced(a, {x})\n"));
+            }
+            Hold::Nested => {
+                text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
+                text += "struct Shop {\n  held: Held\n}\n\n";
+                text += "fn sold(s: Shop, x: Int) -> Int {\n  h = s.held\n  h.run(x)\n}\n\n";
+                text += &Self::main(&format!(
+                    "  s = Shop(held: Held(run: f{k}))\n  r = sold(s, {x})\n"
+                ));
+            }
+            Hold::Made => {
+                text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
+                text += &format!("fn made() -> Held {{ Held(run: f{k}) }}\n\n");
+                text += &Self::main(&format!("  h = made()\n  r = h.run({x})\n"));
             }
         }
         text

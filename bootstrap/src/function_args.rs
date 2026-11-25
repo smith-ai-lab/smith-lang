@@ -34,6 +34,7 @@ pub(crate) fn add(file: &mut File, source: &str, number: usize) {
                 name: p.name.clone(),
                 pos: p.pos,
                 ty: p.ty.clone(),
+                function: None,
                 default: p.default.clone(),
                 // The fields of the struct are those of the function, which
                 // any module that has the function may read.

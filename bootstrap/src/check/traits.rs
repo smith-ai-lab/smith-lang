@@ -508,6 +508,76 @@ impl<'a> Defs<'a> {
         Bound::Invalid
     }
 
+    /// How many functions the struct `s` holds that its type does not write:
+    /// each field of a function type holds one, and each field that holds a
+    /// struct that holds functions holds those. `visiting` is the structs being
+    /// counted, so that a struct that holds itself counts none for it.
+    pub(super) fn implicit_arity(&self, s: usize, visiting: &mut Vec<usize>) -> usize {
+        let def = &self.file.structs[s];
+        if def.alias.is_some() || visiting.contains(&s) {
+            return 0;
+        }
+        visiting.push(s);
+        let own = def.generics.iter().filter(|g| g.name.contains('@')).count();
+        let names: Vec<&str> = def.generics.iter().map(|g| g.name.as_str()).collect();
+        let held: usize = def
+            .fields
+            .iter()
+            .map(|f| self.implicit_held(&f.ty, &names, visiting))
+            .sum();
+        visiting.pop();
+        own + held
+    }
+
+    /// How many functions the structs named in `t` hold, whose type
+    /// parameters are `names`.
+    fn implicit_held(&self, t: &Type, names: &[&str], visiting: &mut Vec<usize>) -> usize {
+        let here = match self.type_at(t.pos, &t.name) {
+            Some(Item::Struct(u)) if !names.contains(&t.name.as_str()) && !t.name.is_empty() => {
+                self.implicit_arity(u, visiting)
+            }
+            _ => 0,
+        };
+        here + t
+            .args
+            .iter()
+            .map(|a| self.implicit_held(a, names, visiting))
+            .sum::<usize>()
+    }
+
+    /// Adds to `scope` the type parameters that stand for the functions held by
+    /// the structs the `types` name, which are not written, and remembers where
+    /// each struct is written. A function is `Copy` and `Discard`, so these are.
+    pub(super) fn add_implicit<'t>(
+        &self,
+        scope: &mut Scope,
+        types: impl Iterator<Item = &'t Type>,
+    ) {
+        fn visit(defs: &Defs, t: &Type, scope: &mut Scope) {
+            if let Some(Item::Struct(u)) = defs.type_at(t.pos, &t.name)
+                && !t.name.is_empty()
+                && !scope.names.contains(&t.name)
+                && defs.implicit[u] > 0
+            {
+                scope.implicit_at.insert(t.pos, scope.names.len());
+                for k in 0..defs.implicit[u] {
+                    scope
+                        .names
+                        .push(format!("{}@{}", t.name, scope.names.len() + k));
+                    scope.invalid.push(false);
+                    scope.copy.push(true);
+                    scope.discard.push(true);
+                }
+            }
+            for a in &t.args {
+                visit(defs, a, scope);
+            }
+        }
+        for t in types {
+            visit(self, t, scope);
+        }
+    }
+
     /// The type parameters of a definition, with the bounds and the
     /// `requires` lines that name a trait, with nothing reported.
     pub(super) fn scope(&self, generics: &[Generic], needs: &[Expr]) -> Scope {
@@ -517,6 +587,7 @@ impl<'a> Defs<'a> {
             invalid: vec![false; generics.len()],
             copy: vec![false; generics.len()],
             discard: vec![false; generics.len()],
+            implicit_at: Map::default(),
         };
         for (p, g) in generics.iter().enumerate() {
             match self.bound(&g.bound, &mut Vec::new()) {
