@@ -54,6 +54,14 @@ pub const ONCE: &[Test] = &[
         no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_value_the_var_has,
     ),
     (
+        "the_size_of_a_list_a_text_and_a_slice_is_below_two_to_the_48_wherever_it_is_read_from",
+        the_size_of_a_list_a_text_and_a_slice_is_below_two_to_the_48_wherever_it_is_read_from,
+    ),
+    (
+        "a_field_named_size_that_is_not_the_size_of_a_list_is_not_below_two_to_the_48",
+        a_field_named_size_that_is_not_the_size_of_a_list_is_not_below_two_to_the_48,
+    ),
+    (
         "the_time_to_check_loops_grows_with_their_number_and_no_faster",
         the_time_to_check_loops_grows_with_their_number_and_no_faster,
     ),
@@ -480,6 +488,131 @@ fn no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_v
             }
         }
     });
+}
+
+/// A place that a list, a text, or a slice can be read from, with the program
+/// that reads its size.
+#[derive(Clone, Debug)]
+struct Place {
+    /// The declarations the expression needs, and the type of what it is read
+    /// from.
+    declarations: String,
+    /// `f`'s parameter, if it takes one, and the lines before the expression.
+    parameter: String,
+    before: String,
+    /// What is read, which has a `size`.
+    expression: String,
+    /// What `main` gives `f`, and the effects `f` has.
+    argument: String,
+    effects: &'static str,
+    /// What `f` requires, a line, or none.
+    requires: &'static str,
+}
+
+fn places(g: &mut Gen) -> Place {
+    let ty = *g.pick(&["List[Nat]", "List[Byte]", "str", "List[str]", "Slice[Nat]"]);
+    let make = |ty: &str| match ty {
+        "str" => "\"abc\"".to_string(),
+        "Slice[Nat]" => "freeze([1, 2])".to_string(),
+        _ => "[]".to_string(),
+    };
+    let depth = 1 + g.below(2);
+    match g.below(5) {
+        // A field of a struct, and of a struct in a struct.
+        0 => {
+            let mut declarations = format!("struct S0 {{\n  items: {ty}\n}}\n");
+            let (mut path, mut value) = ("b.items".to_string(), format!("S0(items: {})", make(ty)));
+            for k in 1..depth {
+                declarations.push_str(&format!("\nstruct S{k} {{\n  inner: S{}\n}}\n", k - 1));
+                path = format!("b{}.items", ".inner".repeat(k));
+                value = format!("S{k}(inner: {value})");
+            }
+            Place {
+                declarations,
+                parameter: format!("b: S{}", depth - 1),
+                before: String::new(),
+                expression: path,
+                argument: value,
+                effects: "<alloc>",
+                requires: "",
+            }
+        }
+        // An element of a list of them.
+        1 => Place {
+            declarations: String::new(),
+            parameter: format!("xss: List[{ty}]"),
+            before: "  if xss.size == 0 {\n    return 0\n  }\n".to_string(),
+            expression: "xss[0]".to_string(),
+            argument: format!("[{}]", make(ty)),
+            effects: "<alloc>",
+            requires: "",
+        },
+        // A name that a tuple was taken apart into.
+        2 => Place {
+            declarations: String::new(),
+            parameter: format!("t: ({ty}, Nat)"),
+            before: "  (xs, n) = t\n".to_string(),
+            expression: "xs".to_string(),
+            argument: format!("({}, 1)", make(ty)),
+            effects: "<alloc>",
+            requires: "",
+        },
+        // What a call gives.
+        3 => Place {
+            declarations: format!("fn make() -> {ty} <alloc> {{ {} }}\n", make(ty)),
+            parameter: String::new(),
+            before: String::new(),
+            expression: "make()".to_string(),
+            argument: String::new(),
+            effects: "<alloc>",
+            requires: "",
+        },
+        // A name.
+        _ => Place {
+            declarations: String::new(),
+            parameter: format!("xs: {ty}"),
+            before: String::new(),
+            expression: "xs".to_string(),
+            argument: make(ty),
+            effects: "<alloc>",
+            requires: "",
+        },
+    }
+}
+
+impl Place {
+    fn program(&self, holds: &str) -> String {
+        let imports = "use std.list (freeze)\n\n";
+        with_header(format!(
+            "{imports}{}\nfn f({}) -> {holds} {}\n{}{{\n{}  {}.size\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{f({})}}\")\n}}\n",
+            self.declarations, self.parameter, self.effects, self.requires, self.before, self.expression, self.argument
+        ))
+    }
+}
+
+/// The size of a `List`, a `str`, or a `Slice` is below 2^48 wherever it is
+/// read from: a name, a field of a struct, an element of a list, a name a
+/// tuple was taken apart into, and what a call gives. A range that holds 2^48
+/// less one is accepted, and the range of one less is refused.
+fn the_size_of_a_list_a_text_and_a_slice_is_below_two_to_the_48_wherever_it_is_read_from() {
+    generate::check(9603, 30, places, |place| {
+        let source = place.program("0..281474976710656");
+        assert!(check(source.as_bytes()).is_ok(), "{:?} for\n{source}", check(source.as_bytes()));
+        let source = place.program("0..281474976710655");
+        assert!(check(source.as_bytes()).is_err(), "accepted\n{source}");
+    });
+}
+
+/// A field named `size` that holds a `Nat` is not the size of a list: nothing
+/// shows that it is below 2^48.
+fn a_field_named_size_that_is_not_the_size_of_a_list_is_not_below_two_to_the_48() {
+    let source = with_header(
+        "struct Sized {\n  size: Nat\n}\n\nfn f(s: Sized) -> 0..281474976710656 { s.size }\n\n\
+         fn main() <console, alloc> {\n  print(\"{f(Sized(size: 3))}\")\n}\n"
+            .to_string(),
+    );
+    assert!(check(source.as_bytes()).is_err(), "accepted\n{source}");
 }
 
 /// `loops` loops, each over an array and each adding to a `var` of its own,
