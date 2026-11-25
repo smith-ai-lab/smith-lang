@@ -63,7 +63,7 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints `100`. With no stated range, `var level = 0` and `level = 100` make `level` a `0..101`, the smallest range that holds both. A `var` that a [`loop`](loop.md#a-var-the-loop-changes) gives a value that depends on itself states its range, and each assignment in the loop is proven to stay in it.
+This prints `100`. With no stated range, `var level = 0` and `level = 100` make `level` a `0..101`, the smallest range that holds both. A `var` that starts as a number written out and that a [`loop`](loop.md#a-var-the-loop-changes) gives itself plus a value, or itself less a value, has the range that the number of passes bounds, as [Inference](inference.md#a-name-a-loop-changes-by-itself) says. A `var` that a loop gives a value that depends on itself in another way states its range, and each assignment in the loop is proven to stay in it.
 
 ## Accumulating
 

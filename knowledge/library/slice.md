@@ -17,6 +17,8 @@ built:
 
 A `Slice[T]` is a run of elements that cannot change. A [`List`](list.md) is what a program builds, and a `Slice` is what it has when the building is done.
 
+The `size` of a `Slice` is below 2 to the 48, as that of a [`List`](list.md) is, so a `loop` over one has fewer than 2 to the 48 passes.
+
 ```
 use std.bits (u64)
 use std.int (wrapping_mul)
