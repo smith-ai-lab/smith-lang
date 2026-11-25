@@ -162,11 +162,41 @@ impl Parser<'_> {
         })
     }
 
+    /// Parses a sum, and a range written as a value if `..` follows it, which
+    /// is the `Range` of the prelude with the two sums as its ends. Where
+    /// `..` belongs to an index, as `x[a..b]`, it is left for the index.
+    fn range(&mut self) -> Result<Expr, Error> {
+        let start = self.sum()?;
+        if self.tok() != &Tok::Punct("..") || self.in_index {
+            return Ok(start);
+        }
+        let op_pos = self.pos();
+        self.bump();
+        self.skip_newlines();
+        let end = self.sum()?;
+        let pos = start.pos();
+        let arg = |name: &str, value| Arg {
+            name: Some((name.to_string(), op_pos)),
+            value,
+            after: false,
+        };
+        Ok(Expr::Call(Call {
+            through: None,
+            type_args: Vec::new(),
+            qualifier: None,
+            callee: "Range".to_string(),
+            pos,
+            name_pos: op_pos,
+            args: vec![arg("start", start), arg("end", end)],
+            end: op_pos,
+        }))
+    }
+
     /// Parses an operand, and a comparison of it with another if `==` or
     /// `!=` follows. A comparison takes no other comparison as an operand
     /// unless it is in parentheses.
     pub(super) fn comparison(&mut self) -> Result<Expr, Error> {
-        let left = self.sum()?;
+        let left = self.range()?;
         let op = match self.tok() {
             Tok::Punct(op @ ("==" | "!=" | "<" | "<=" | ">" | ">=")) => *op,
             _ => return Ok(left),
@@ -177,7 +207,7 @@ impl Parser<'_> {
         let right = if self.tok() == &Tok::Keyword("not") {
             self.negation()?
         } else {
-            self.sum()?
+            self.range()?
         };
         if let Tok::Punct("==" | "!=" | "<" | "<=" | ">" | ">=") = self.tok() {
             return Err(Error::new(

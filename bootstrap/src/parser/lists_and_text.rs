@@ -30,6 +30,7 @@ fn interpolated(
         errors: Vec::new(),
         unbuilt: Vec::new(),
         no_lambda: false,
+        in_index: false,
         binds: Vec::new(),
         holes: Vec::new(),
         modules: modules.to_vec(),
@@ -87,7 +88,10 @@ impl Parser<'_> {
         if self.tok() == &Tok::Punct("..") {
             return self.piece(of, None, at);
         }
-        let mut index = self.either()?;
+        let in_index = std::mem::replace(&mut self.in_index, true);
+        let index = self.either();
+        self.in_index = in_index;
+        let mut index = index?;
         if self.tok() == &Tok::Punct("..") {
             return self.piece(of, Some(index), at);
         }

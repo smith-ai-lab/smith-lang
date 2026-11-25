@@ -28,6 +28,11 @@ struct Utf8Error {
   pub at: Nat
 }
 
+struct Range {
+  pub start: Nat
+  pub end: Nat
+}
+
 trait Eq[A, B = A] {
   fn eq(a: A, b: B) -> bool
 }
