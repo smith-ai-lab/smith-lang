@@ -34,7 +34,7 @@ The modules of the standard library, one file each, named for the module. A modu
 - [jwt.md](jwt.md): `std.jwt`, with `verify`, which gives the claims of a token only when its signature, time, issuer, and audience are right.
 - [oauth.md](oauth.md): `std.oauth`, with which a server is an OAuth resource server: it says which authorization server to use and lets in only a request with a token from it.
 - [random.md](random.md): random bits from a key, distributions as ordinary structs with the `Sample` and `LogProb` traits, and how a program adds its own.
-- [errors.md](errors.md): what every error type of the library holds, so its message says what failed and on what, and the `Fmt` that writes it.
+- [errors.md](errors.md): what each case of an error of the library holds, so its message says what failed and on what, and the `Fmt` that writes it.
 - [fs.md](fs.md): the `fs` effect, for files: a file open for a block, ranges of it read as values, and reading and writing a whole file.
 - [net.md](net.md): the `net` effect, for connections and datagrams, each a value used exactly once.
 - [store.md](store.md): the `store` effect, which keeps bytes under keys past the end of the program, and `save` and `load`, which keep any value that has `Serialize`.

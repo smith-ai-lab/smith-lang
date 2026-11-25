@@ -1,27 +1,24 @@
 ---
 type: specification
 title: Errors of the library
-description: Every error type of the standard library holds what its message needs, such as the path or the address, and has a Fmt that writes that message, so a main that returns it with try says what failed.
+description: Every error type of the standard library is an enum whose cases hold what the message needs, such as the path or the address, and has a Fmt that writes that message, so a main that returns it with try says what failed.
 ---
 
 # Errors of the library
 
-An operation of the standard library that can fail gives a `Result`, and its error is a value that says what failed and what it failed on. Each error type of a module that does something outside the program is a struct of two fields: what the operation was given that the message needs, and `kind`, an enum of the ways it fails.
+An operation of the standard library that can fail gives a `Result`, and its error is an [enum](../language/enums.md) of the ways it fails. Each case holds what the operation was given that a message needs, so the error says what failed and what it failed on. A case that has more to say holds a tuple.
 
 ```
-struct FsError {
-  path: str
-  kind: FsErrorKind
-}
-
-enum FsErrorKind {
-  missing
-  denied
-  failed: str
+enum FsError {
+  missing: str
+  denied: str
+  failed: (str, str)
 }
 ```
 
-A program that reacts to a failure matches `kind`. One that only reports it does not look inside.
+`missing` and `denied` hold the path. `failed` holds the path and what the system said.
+
+A program that reacts to a failure matches the case. One that only reports it does not look inside.
 
 ```
 use std.fs (fs, read_all, FsError)
@@ -30,10 +27,10 @@ fn load(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   match read_all(path) {
     .ok(bytes) { .ok(bytes) }
     .err(e) {
-      match e.kind {
-        .missing { .ok([]) }
-        .denied { .err(e) }
-        .failed(why) { .err(e) }
+      match e {
+        .missing(p) { .ok([]) }
+        .denied(p) { .err(e) }
+        .failed(p) { .err(e) }
       }
     }
   }
@@ -48,9 +45,9 @@ Each error type has a `Fmt`, so `"{e}"` is a line a person reads: what it was gi
 
 | Error | Message |
 | --- | --- |
-| `FsError(path: "missing.txt", kind: .missing)` | `missing.txt: no such file` |
-| `FsError(path: "secret.key", kind: .denied)` | `secret.key: permission denied` |
-| `FsError(path: "data.bin", kind: .failed("read: error 5"))` | `data.bin: read: error 5` |
+| `.missing("missing.txt")` | `missing.txt: no such file` |
+| `.denied("secret.key")` | `secret.key: permission denied` |
+| `.failed(("data.bin", "read: error 5"))` | `data.bin: read: error 5` |
 
 A [`main`](../language/main.md) that returns a `Result` writes its error with this `Fmt`, so a program that reads its files with `try` says what failed with nothing more written.
 
@@ -70,10 +67,10 @@ Where `photo.jpg` is not there, this writes `photo.jpg: no such file` to standar
 
 ## What each error holds
 
-| Module | Error | Holds |
+| Module | Error | Each case holds |
 | --- | --- | --- |
 | [`std.fs`](fs.md) | `FsError` | The path the operation was given, or the one the `File` was opened with |
 | [`std.net`](net.md) | `NetError` | The host and the port, as `example.com:80`, that the operation was given, or the one the handle was opened with |
 | [`std.fetch`](fetch.md) | `FetchError` | The URL of the request |
 
-What an error holds is copied into it when the operation fails, so an operation that succeeds costs nothing for it. A handle that the error of a later operation names, as a `File` or a `Connection`, keeps what it was opened with.
+What a case holds is copied into it when the operation fails, so an operation that succeeds costs nothing for it. A handle that the error of a later operation names, as a `File` or a `Connection`, keeps what it was opened with.
