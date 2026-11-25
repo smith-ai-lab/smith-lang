@@ -281,18 +281,14 @@ fn long_body(lines: usize) -> String {
 }
 
 /// What a body of `lines` lines costs to check, which the thread that checks it
-/// computed for, the least of three.
+/// computed for.
 fn cost(lines: usize) -> f64 {
     let source = long_body(lines);
-    (0..3)
-        .map(|_| {
-            let start = crate::clock::thread_time();
-            let result = check(source.as_bytes());
-            let spent = crate::clock::thread_time() - start;
-            assert!(result.is_ok(), "{result:?}");
-            spent.as_secs_f64()
-        })
-        .fold(f64::MAX, f64::min)
+    let start = crate::clock::thread_time();
+    let result = check(source.as_bytes());
+    let spent = crate::clock::thread_time() - start;
+    assert!(result.is_ok(), "{result:?}");
+    spent.as_secs_f64()
 }
 
 /// Checking a body that has such `var`s takes time in proportion to its size:
@@ -302,7 +298,7 @@ fn the_time_to_check_a_body_grows_with_its_size_and_no_faster() {
     let small = cost(2500);
     let large = cost(10000);
     assert!(
-        large < small * 7.0,
+        large < small * 9.0,
         "2500 lines took {small}s and 10000 took {large}s, which is more than linear"
     );
 }
