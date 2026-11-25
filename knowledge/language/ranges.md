@@ -6,7 +6,8 @@ status: partial
 built:
   - "`a..b` as the range of a `loop`, which runs in order and not at all when `a >= b`"
   - "`x[a..b]`, `x[..k]`, and `x[k..]` on a [`Slice`](../library/slice.md), a `Slice` that shares the memory of `x`, compiled when `arith` proves `a <= b` and `b <= x.size`, and a piece of a piece"
-  - "not a range outside a `loop` and an index, a range as a type, or a piece of an array, a text, or a list"
+  - "`a..b` written as a value, which is a `Range` of the prelude with `start` and `end`, both `Nat`, and whose ends `arith` knows as the ends that were written"
+  - "not a range as a type, or a piece of an array, a text, or a list"
 ---
 
 # Ranges and slices
@@ -38,6 +39,32 @@ fn pick[n: Nat](i: 0..n) -> Nat { i }
 ```
 
 `pick` takes a number below `n`, whatever `n` is, and gives it back as a `Nat`. A `0..n` has no value when `n` is `0`, since the range has no numbers, and it is a type all the same, as [Number types](number-types.md#a-range-as-a-type) says.
+
+## A range as a value
+
+A range written anywhere but the head of a `loop`, an index, and a type is a `Range`, a struct of [the prelude](prelude.md) with two fields, `start` and `end`, both `Nat`.
+
+```
+fn first(r: Range) -> Nat { r.start }
+
+fn demo() -> (Nat, Nat, Nat) {
+  r = 2..5
+  (r.start, r.end, first(1..4))
+}
+```
+
+`demo()` is `(2, 5, 1)`. Each end is a `Nat`, so an end that is negative or not a whole number is refused where the range is written. A `Range` has `Copy`, takes the bytes of its two `Nat` and nothing else, and says nothing about whether `start` is below `end`.
+
+[`arith`](arith.md) knows the ends that were written. After `r = a..b`, `r.start` is `a` and `r.end` is `b`, so a proof that needs `a <= b` from the range holds when `a <= b` is known.
+
+```
+fn between(xs: Slice[Byte], from: Nat, to: Nat) -> Nat
+  requires from <= to and to <= xs.size
+{
+  r = from..to
+  xs[r.start..r.end].size
+}
+```
 
 ## A slice
 
@@ -98,6 +125,7 @@ fn take_two(a: [4]Byte) -> [2]Byte { a[..2] }
 | Written | Is |
 | --- | --- |
 | `a..b` | The numbers from `a` up to `b`, excluding `b`, and the type that holds them |
+| `a..b` as a value | A `Range` with `start` `a` and `end` `b` |
 | `x[a..b]` | The elements of `x` from `a` up to `b`, of size `b - a`, compiled when `a <= b` and `b <= x.size` are proven |
 | `xs[a..b]` on a `List` | A lent piece of `xs`, for a function that reads |
 | `s[a..b]` on a `Slice` | A `Slice` that shares the memory of `s` |

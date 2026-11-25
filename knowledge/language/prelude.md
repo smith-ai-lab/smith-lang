@@ -6,6 +6,7 @@ status: partial
 built:
   - "every name below, `Int` and `Byte` among them, in scope in every file with no import"
   - "not a prelude without functions: today the functions of these traits, as `add`, `div`, `compare`, and `convert`, are bare names in every file, so a file's own function of one of those names is refused"
+  - "`Range`, a struct with `start` and `end`, both `Nat`, which `a..b` written as a value builds"
   - "not `Pos`"
   - "a name of the standard library outside the table, such as `print`, `console`, `push`, `narrow`, a `wrapping_` function, or the name of a size, is refused where a file uses it with no `use`, and the error names the module to import it from"
 ---
@@ -37,6 +38,7 @@ The prelude is not a module that a file imports, since its names are in scope al
 | `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Pow`, and `Neg` | The arithmetic operators |
 | `Index` | `x[i]` |
 | `Iterate`, and `Flow` | `loop v in x`, `break`, and `return` in one |
+| `Range` | A range written as a value, `a..b`, as [Ranges and slices](ranges.md#a-range-as-a-value) says |
 | `Exit` | What `main` returns |
 | `Fmt` and `Repr` | An expression in a string's braces |
 | `Convert` | Two types that meet in an operator, and a failure that `try` converts |
