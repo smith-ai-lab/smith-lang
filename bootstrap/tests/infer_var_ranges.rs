@@ -93,7 +93,7 @@ fn program(g: &mut Gen) -> Program {
 fn ranges(p: &Program) -> [(i128, i128); 2] {
     let mut total = [(p.start[0], p.start[0]), (p.start[1], p.start[1])];
     let mut now = p.start;
-    let mut grow = |v: usize, at: i128, total: &mut [(i128, i128); 2]| {
+    let grow = |v: usize, at: i128, total: &mut [(i128, i128); 2]| {
         total[v] = (total[v].0.min(at), total[v].1.max(at));
     };
     for s in &p.steps {
@@ -260,42 +260,49 @@ fn a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state() {
     }
 }
 
-/// A body of `lines` lines, each of which gives one of a few `var`s a value.
+/// A body of `lines` lines, each pair of which gives one of a few `var`s a value
+/// and reads it.
 fn long_body(lines: usize) -> String {
-    let mut out = String::from("fn f(c: Byte) {\n");
+    let mut out = String::from("fn need(x: 0..60) -> 0..60 { x }\n\nfn f(c: Byte) {\n");
     for v in 0..8 {
         out.push_str(&format!("  var v{v} = {v}\n"));
     }
-    for k in 0..lines {
+    for k in 0..lines / 2 {
         let v = k % 8;
         if k % 5 == 0 {
             out.push_str(&format!("  if c < {} {{ v{v} = {} }}\n", k % 7 + 1, k % 50));
         } else {
             out.push_str(&format!("  v{v} = {}\n", k % 50));
         }
+        out.push_str(&format!("  need(v{v})\n"));
     }
     out.push_str("}\n\nfn main() {\n  f(1)\n}\n");
     with_header(out)
 }
 
 /// What a body of `lines` lines costs to check, which the thread that checks it
-/// computed for.
-fn cost(lines: usize) -> std::time::Duration {
+/// computed for, the least of three.
+fn cost(lines: usize) -> f64 {
     let source = long_body(lines);
-    let start = crate::clock::thread_time();
-    lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-    crate::clock::thread_time() - start
+    (0..3)
+        .map(|_| {
+            let start = crate::clock::thread_time();
+            let result = lower(source.as_bytes());
+            let spent = crate::clock::thread_time() - start;
+            assert!(result.is_ok(), "{result:?}");
+            spent.as_secs_f64()
+        })
+        .fold(f64::MAX, f64::min)
 }
 
 /// Checking a body that has such `var`s takes time in proportion to its size:
 /// four times the lines take about four times as long, and far less than the
-/// sixteen times a body that is looked at once for each line would.
+/// sixteen times that looking at the body again for each line would.
 fn the_time_to_check_a_body_grows_with_its_size_and_no_faster() {
-    let _ = cost(250);
-    let small = cost(1000).as_secs_f64();
-    let large = cost(4000).as_secs_f64();
+    let small = cost(2500);
+    let large = cost(10000);
     assert!(
-        large < small * 8.0,
-        "1000 lines took {small}s and 4000 took {large}s, which is more than linear"
+        large < small * 7.0,
+        "2500 lines took {small}s and 10000 took {large}s, which is more than linear"
     );
 }
