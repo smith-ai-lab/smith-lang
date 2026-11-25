@@ -5,6 +5,7 @@ description: A function with a name used as a value, which can be passed, stored
 status: partial
 built:
   - "a function with a name passed to a call"
+  - "a function with a name bound to a name, stored in a field, and returned, each known when the program is built, and refused where which function it is depends on what the program does"
 ---
 
 # Function values
@@ -109,6 +110,28 @@ fn chosen_half(x: f32) -> f32 { chosen()(x) }
 
 `chosen_half(8.0)` is `4.0`. The result may also be bound first, as `f = chosen()` and then `f(x)`.
 
+## Which function it is is known when the program is built
+
+A value of a function type is one function, and which one is known when the program is built, so a call of it is a call of that function. A struct with a field of a function type is a type for each function it holds, as a struct with a type parameter is a type for each type it holds, and the field takes no bytes. The function is written in brackets where the type is written.
+
+```
+fn priced(p: Pricing[half], x: f32) -> f32 { p.discount(x) }
+```
+
+`Pricing[half]` is the `Pricing` that holds `half`. A function that returns a function names that function in its last expression, and a name bound to a function is that function.
+
+Two values that hold different functions where one type is needed are refused, since which function it is would depend on what the program does when it runs. These are the arms of an `if` or a `match`, two elements of a list, a `var` given one function and then another, and a function that returns one of two functions by a branch.
+
+```
+fn double(x: f32) -> f32 { x * 2.0 }
+
+fn pick(wide: bool) -> Pricing[half] {
+  if wide { Pricing(discount: double) } else { Pricing(discount: half) }
+}
+```
+
+This is refused at the first `Pricing(discount: double)`: "which function this is depends on what the program does when it runs, and a function value must be known when the program is built". A choice between functions is made where the function is called, by calling each one.
+
 ## The forms
 
 | Written | Is |
@@ -121,6 +144,7 @@ fn chosen_half(x: f32) -> f32 { chosen()(x) }
 | `sale.discount(x)` | The function in a field, called |
 | `-> fn(f32) -> f32` | A return type that is a function |
 | `chosen()(x)` | The function a call returns, called |
+| `Pricing[half]` | The struct that holds `half` in its function field |
 | `fn(v) { scale(v) }` | A lambda, the way to pass a function that has defaults |
 
 Next: [`with`](with.md)
