@@ -14,20 +14,36 @@ use crate::generate::{self, Gen};
 
 pub const ONCE: &[Test] = &[
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_1_of_4",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_1_of_8",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(0),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_2_of_4",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_2_of_8",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(1),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_3_of_4",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_3_of_8",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(2),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_4_of_4",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_4_of_8",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(3),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_5_of_8",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(4),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_6_of_8",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(5),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_7_of_8",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(6),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_8_of_8",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(7),
     ),
 ];
 
@@ -272,7 +288,7 @@ fn owners(n: &Node, k: &mut usize, parent: Option<usize>, owner: &mut HashMap<u6
 }
 
 fn every_connection_a_generated_tree_of_tasks_opened_is_closed_once(part: u64) {
-    generate::check_cases(4417, part * 15, 15, case, |c| {
+    generate::check_part(4417, 60, part, 8, case, |c| {
         let source = program(c);
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         assert_eq!(scalar::check(&program), Ok(()), "for {source}");
