@@ -77,6 +77,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
     fn write(asm: &mut Asm, stream: Stream, fail: usize) {
         let again = asm.label();
         let done = asm.label();
+        let failed = asm.label();
         for (i, r) in [X19, X20, X21].into_iter().enumerate() {
             asm.store(Place::Frame(SAVED + 8 * i as u32), r, 8);
         }
@@ -97,13 +98,20 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         asm.mov_w(X4, 0);
         asm.call(WRITE_FILE);
         // It gives a BOOL, which is 32 bits.
-        asm.cbz_w(X0, fail);
+        asm.cbz_w(X0, failed);
         asm.load(X0, 4, false, Place::Frame(WRITTEN));
-        asm.cbz_w(X0, fail);
+        asm.cbz_w(X0, failed);
         // add x19, x19, x0; sub x20, x20, x0; b again
         asm.word(0x8b00_0000 | X0 << 16 | X19 << 5 | X19);
         asm.word(0xcb00_0000 | X0 << 16 | X20 << 5 | X20);
         asm.branch(again);
+        // What the function kept in them is put back before it goes on, since a
+        // landing that follows the write reads it.
+        asm.bind(failed);
+        for (i, r) in [X19, X20, X21].into_iter().enumerate() {
+            asm.load(r, 8, false, Place::Frame(SAVED + 8 * i as u32));
+        }
+        asm.branch(fail);
         asm.bind(done);
         for (i, r) in [X19, X20, X21].into_iter().enumerate() {
             asm.load(r, 8, false, Place::Frame(SAVED + 8 * i as u32));

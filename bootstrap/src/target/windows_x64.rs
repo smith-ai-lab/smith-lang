@@ -78,6 +78,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
     fn write(asm: &mut Asm, stream: Stream, fail: usize) {
         let again = asm.label();
         let done = asm.label();
+        let failed = asm.label();
         asm.store(Place::Frame(RBX_AT), RBX, 8);
         asm.mov32(RCX, handle(stream));
         asm.call_slot(GET_STD_HANDLE);
@@ -96,13 +97,18 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         asm.store_stack_imm32(FIFTH_ARGUMENT, 0);
         asm.call_slot(WRITE_FILE);
         asm.test32(RAX);
-        asm.jcc(Z, fail);
+        asm.jcc(Z, failed);
         asm.load32_stack(RAX, WRITTEN);
         asm.test32(RAX);
-        asm.jcc(Z, fail);
+        asm.jcc(Z, failed);
         asm.add(RSI, RAX);
         asm.sub(RDI, RAX);
         asm.jmp(again);
+        // What the function kept in rbx is put back before it goes on, since a
+        // landing that follows the write reads it.
+        asm.bind(failed);
+        asm.load(RBX, 8, false, Place::Frame(RBX_AT));
+        asm.jmp(fail);
         asm.bind(done);
         asm.load(RBX, 8, false, Place::Frame(RBX_AT));
     }
