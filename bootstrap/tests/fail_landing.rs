@@ -26,6 +26,10 @@ pub const ONCE: &[Test] = &[
         a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_its_caller_owns,
     ),
     (
+        "a_function_that_holds_a_connection_and_calls_a_small_allocating_helper_that_is_inlined_closes_it_when_the_helper_runs_out_of_memory",
+        a_function_that_holds_a_connection_and_calls_a_small_allocating_helper_that_is_inlined_closes_it_when_the_helper_runs_out_of_memory,
+    ),
+    (
         "a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else",
         a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else,
     ),
@@ -170,6 +174,43 @@ fn owner(n: u64) -> u64 ! net, alloc {
 fn a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_its_caller_owns() {
     let lines = said(&program(OWNS_AND_INLINED, REPORT));
     assert_eq!(lines, ["closed 6", "closed 5", "out of memory", "1"]);
+}
+
+/// A function whose one request for memory is the literal of a list, which asks
+/// for what it holds all at once.
+fn a_big_literal() -> String {
+    let items = vec!["i"; 30000].join(", ");
+    format!(
+        "fn big(i: u64) -> List[u64] ! alloc {{
+  [{items}]
+}}
+
+fn owner(n: u64) -> u64 ! net, alloc {{
+  c = connection(n)
+  var kept: List[List[u64]] = []
+  loop i in 0..9223372036854775807 {{
+    kept = push(kept, big(i))
+  }}
+  close(c)
+  0
+}}
+"
+    )
+}
+
+fn a_function_that_holds_a_connection_and_calls_a_small_allocating_helper_that_is_inlined_closes_it_when_the_helper_runs_out_of_memory()
+ {
+    let source = program(&a_big_literal(), REPORT);
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    // The helper is no function of the program once its call is replaced, though
+    // a landing follows the call, and its request for memory is in the owner.
+    let inlined = scalar::inline(program);
+    assert!(
+        !inlined.functions.iter().any(|f| f.name.contains("big")),
+        "the helper is still called"
+    );
+    let lines = said(&source);
+    assert_eq!(lines, ["closed 5", "out of memory", "1"]);
 }
 
 fn a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else() {

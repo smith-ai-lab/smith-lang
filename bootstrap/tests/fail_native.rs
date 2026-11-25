@@ -28,6 +28,10 @@ pub const MACHINE: &[Test] = &[
         a_task_that_holds_a_connection_and_runs_out_of_memory_closes_it_and_the_peer_sees_the_end_of_the_file,
     ),
     (
+        "a_task_that_holds_a_connection_and_whose_write_the_system_refuses_closes_it_and_the_peer_sees_the_end_of_the_file",
+        a_task_that_holds_a_connection_and_whose_write_the_system_refuses_closes_it_and_the_peer_sees_the_end_of_the_file,
+    ),
+    (
         "a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file",
         a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file,
     ),
@@ -45,6 +49,7 @@ const PROGRAM: &str = include_str!("fail_native.smith");
 const ROUNDS: &str = include_str!("fail_rounds.smith");
 const PEER: &str = include_str!("fail_peer.smith");
 const CLOSED: &str = include_str!("fail_closed.smith");
+const PRINTING: &str = include_str!("fail_printing.smith");
 
 /// Runs the program, for each target that has the native unwinder, under a limit
 /// of address space, and says what it wrote and how it ended.
@@ -105,7 +110,7 @@ fn a_join_of_a_child_that_ran_out_of_memory_ends_the_program_with_the_status_1_a
 /// program, which goes on for 2.5 seconds, is still running.
 fn a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_child_ended_with_the_group_and_the_peer_sees_the_end_of_the_file()
  {
-    the_peer_sees_the_end_of_the_file(PEER, "fail_peer");
+    the_peer_sees_the_end_of_the_file(PEER, "fail_peer", false);
 }
 
 /// A task that holds the connection of a peer and runs out of memory at a call
@@ -113,13 +118,23 @@ fn a_task_that_starts_a_child_and_runs_out_of_memory_in_the_same_poll_has_the_ch
 /// and the program go on, and not when the group ends.
 fn a_task_that_holds_a_connection_and_runs_out_of_memory_closes_it_and_the_peer_sees_the_end_of_the_file()
  {
-    the_peer_sees_the_end_of_the_file(CLOSED, "fail_closed");
+    the_peer_sees_the_end_of_the_file(CLOSED, "fail_closed", false);
+}
+
+/// A task that holds the connection of a peer and writes through a small function
+/// that is inlined, and whose write the system refuses, closes it as it goes up.
+fn a_task_that_holds_a_connection_and_whose_write_the_system_refuses_closes_it_and_the_peer_sees_the_end_of_the_file()
+ {
+    the_peer_sees_the_end_of_the_file(PRINTING, "fail_printing", true);
 }
 
 /// Runs the program, which takes a connection of a peer and goes on for 2.5
 /// seconds after its group has ended, and asks that the peer reads the end of the
 /// file within 1.8 seconds, while the program is still running.
-fn the_peer_sees_the_end_of_the_file(source: &str, what: &str) {
+///
+/// With `reader_gone`, nothing reads standard output, so that a write is refused,
+/// and the signal for a write to a pipe nobody reads is ignored.
+fn the_peer_sees_the_end_of_the_file(source: &str, what: &str, reader_gone: bool) {
     for target in targets::runnable()
         .into_iter()
         .filter(|t| t.name().starts_with("linux"))
@@ -136,13 +151,20 @@ fn the_peer_sees_the_end_of_the_file(source: &str, what: &str) {
         let mut server = ports::serve(ports::all(), |port| {
             let mut child = Command::new("sh")
                 .arg("-c")
-                .arg("ulimit -v 60000; exec \"$0\" \"$@\"")
+                .arg("trap '' PIPE; ulimit -v 60000; exec \"$0\" \"$@\"")
                 .arg(&path)
                 .arg(port.to_string())
-                .stdout(Stdio::null())
+                .stdout(if reader_gone {
+                    Stdio::piped()
+                } else {
+                    Stdio::null()
+                })
                 .stderr(Stdio::piped())
                 .spawn()
                 .unwrap();
+            if reader_gone {
+                drop(child.stdout.take());
+            }
             // A program that cannot bind the port ends at once, and says so.
             std::thread::sleep(Duration::from_millis(300));
             match child.try_wait().unwrap() {

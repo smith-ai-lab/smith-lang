@@ -870,7 +870,14 @@ enum Up {
 fn landing_of(program: &Program, frame: &Frame) -> Option<usize> {
     let block = &program.functions[frame.function].blocks[frame.block];
     let call = frame.at.checked_sub(1)?;
-    if !matches!(block.instructions.get(call)?.op, Op::Call { .. }) {
+    if !matches!(
+        block.instructions.get(call)?.op,
+        Op::Call { .. }
+            | Op::System {
+                call: System::Allocate | System::Write(_) | System::Fail,
+                ..
+            }
+    ) {
         return None;
     }
     block.instructions[call..].iter().find(|i| {
@@ -955,8 +962,14 @@ impl Machine<'_> {
                     if self.in_landing || !(is_poll(&frame) || open.iter().any(is_poll)) {
                         return Err(Ended(status));
                     }
-                    // The frame that failed has no landing, since what failed in it
-                    // was not a call that it owns something across.
+                    // An instruction that failed in the frame, and that the function
+                    // owns something across, has a landing, which the frame runs first.
+                    if frame.entered && landing_of(program, &frame).is_some() {
+                        self.entering_landing = true;
+                        self.in_landing = true;
+                        continue;
+                    }
+                    // Otherwise the frame that failed has no landing.
                     let start = if is_poll(&frame) {
                         frame
                     } else {
@@ -1444,6 +1457,8 @@ impl Machine<'_> {
                         // poll of a task catches.
                         if count > self.left as u64 {
                             self.failed = Some(0);
+                            // The frame goes on from the request, if a landing follows it.
+                            *at = k + 1;
                             return Err(Ended(1));
                         }
                         self.left -= count as usize;
@@ -1592,6 +1607,7 @@ impl Machine<'_> {
                             panic!("a failure that is not a number")
                         };
                         self.failed = Some(kind);
+                        *at = k + 1;
                         return Err(Ended(1));
                     }
                     Op::System {

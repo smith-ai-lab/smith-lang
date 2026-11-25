@@ -1261,6 +1261,16 @@ fn passing(places: &[Passed], types: &[Type], base: u32) -> Vec<Loc> {
         .collect()
 }
 
+/// A way in to a landing: the return address of the call it follows, when there is
+/// one, the code that gives the failure and goes to the landing, the jump to the
+/// landing, and the code that gives the failure of a refusal first, with it.
+type WayIn = (
+    Option<usize>,
+    usize,
+    crate::scalar::Jump,
+    Option<(usize, u64)>,
+);
+
 /// What a function adds to be put back by a failure: the labels of the end of
 /// its code and of the code that puts back the registers it saved, and the one
 /// where a failure that reaches the frame of a poll goes on, which is the
@@ -1308,6 +1318,10 @@ struct Writer<'a, S> {
     /// The label at the return address of the call that was last made, which the
     /// landing of the call is found from.
     after_call: std::cell::Cell<Option<usize>>,
+    /// For an instruction that the system may refuse and a landing follows, the
+    /// code a refusal goes to, which gives the failure, and the way in to the
+    /// landing.
+    site: std::cell::Cell<Option<(usize, usize)>>,
     /// Where a request for memory that the system refuses goes: the failure 0
     /// when the program has a routine for it, and the end of the program when it
     /// has none.
@@ -1394,7 +1408,14 @@ fn function<S: System>(
         });
         if let (Some(u), End::Switch { jumps, .. }) = (unwinding_op, &block.end)
             && u > 0
-            && matches!(block.instructions[u - 1].op, Op::Call { .. })
+            && matches!(
+                block.instructions[u - 1].op,
+                Op::Call { .. }
+                    | Op::System {
+                        call: Call::Allocate | Call::Write(_) | Call::Fail,
+                        ..
+                    }
+            )
         {
             landing_of_call.insert((b, u - 1), jumps[0].clone());
         }
@@ -1447,6 +1468,7 @@ fn function<S: System>(
         through_at,
         fail_at,
         after_call: std::cell::Cell::new(None),
+        site: std::cell::Cell::new(None),
         resume: unwinding.map(|u| ResumeAt {
             next: u.next,
             stub: u.stub,
@@ -1506,7 +1528,7 @@ fn function<S: System>(
         })
         .collect();
     w.run(asm, &moves);
-    let mut entries: Vec<(usize, usize, crate::scalar::Jump)> = Vec::new();
+    let mut entries: Vec<WayIn> = Vec::new();
     let mut sites: Vec<(usize, usize)> = Vec::new();
     for (b, block) in f.blocks.iter().enumerate() {
         asm.bind(w.labels[b]);
@@ -1545,6 +1567,19 @@ fn function<S: System>(
                 fused = true;
                 continue;
             }
+            // An instruction that the system may refuse, which a landing follows, has a
+            // way in of its own that a refusal goes to, and a call has its return address.
+            let op_site = (fail_at.is_some()
+                && landing_of_call.contains_key(&(b, i))
+                && matches!(
+                    instruction.op,
+                    Op::System {
+                        call: Call::Allocate | Call::Write(_) | Call::Fail,
+                        ..
+                    }
+                ))
+            .then(|| (asm.label(), asm.label()));
+            w.site.set(op_site);
             match i.checked_sub(1).filter(|j| w.before_choice[b][*j]) {
                 Some(j) => w.choice(asm, &block.instructions[j], instruction),
                 None => w.instruction(asm, &instruction.results, &instruction.op),
@@ -1554,18 +1589,40 @@ fn function<S: System>(
             if fail_at.is_some()
                 && let Some(landing) = landing_of_call.get(&(b, i)).cloned()
             {
-                let after = w
-                    .after_call
-                    .take()
-                    .expect("a call leaves its return address");
-                let entry = asm.label();
-                entries.push((after, entry, landing));
+                match op_site {
+                    Some((stub, entry)) => {
+                        let kind = match instruction.op {
+                            Op::System {
+                                call: Call::Allocate,
+                                ..
+                            } => Some((stub, 0)),
+                            Op::System {
+                                call: Call::Write(_),
+                                ..
+                            } => Some((stub, 1)),
+                            _ => None,
+                        };
+                        entries.push((None, entry, landing, kind));
+                    }
+                    None => {
+                        let after = w
+                            .after_call
+                            .take()
+                            .expect("a call leaves its return address");
+                        entries.push((Some(after), asm.label(), landing, None));
+                    }
+                }
             }
         }
         w.end(asm, b);
     }
     // The way in to each landing keeps the failure, and goes to the landing.
-    for (after, entry, landing) in entries {
+    for (after, entry, landing, stub) in entries {
+        // A refusal of the system goes in by giving its failure first.
+        if let Some((stub, kind)) = stub {
+            asm.bind(stub);
+            asm.mov_imm(R11, kind);
+        }
         asm.bind(entry);
         asm.store(
             Place::Frame(fail_at.expect("a frame has room for it")),
@@ -1574,7 +1631,9 @@ fn function<S: System>(
         );
         // The landing is given what the jump of the choice gives it.
         w.jump(asm, &landing, usize::MAX);
-        sites.push((after, entry));
+        if let Some(after) = after {
+            sites.push((after, entry));
+        }
     }
     if let Some(u) = unwinding {
         // The failure that a refused request for memory is, which a call from
@@ -2798,7 +2857,13 @@ impl<S: System> Writer<'_, S> {
                     })
                     .collect();
                 self.run(asm, &moves);
-                S::write(asm, *stream, self.refused_write);
+                S::write(
+                    asm,
+                    *stream,
+                    self.site
+                        .take()
+                        .map_or(self.refused_write, |(stub, _)| stub),
+                );
             }
             Op::System {
                 call: Call::Read,
@@ -2860,19 +2925,23 @@ impl<S: System> Writer<'_, S> {
             Op::System {
                 call: Call::Fail,
                 args,
-            } => match self.unwind {
-                Some(routine) => {
+            } => match (self.site.take(), self.unwind) {
+                (Some((_, entry)), _) => {
+                    self.read_into(asm, R11, args[0]);
+                    asm.jmp(entry);
+                }
+                (None, Some(routine)) => {
                     self.read_into(asm, R11, args[0]);
                     asm.call(routine);
                 }
-                None => asm.jmp(self.fail),
+                (None, None) => asm.jmp(self.fail),
             },
             Op::System {
                 call: Call::Allocate,
                 args,
             } => {
                 self.read_into(asm, RSI, args[0]);
-                S::alloc(asm, self.refused);
+                S::alloc(asm, self.site.take().map_or(self.refused, |(stub, _)| stub));
                 self.finish(asm, results[0], RAX, true);
             }
         }
