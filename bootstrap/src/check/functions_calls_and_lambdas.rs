@@ -411,8 +411,7 @@ impl<'a> Checker<'a> {
         let has_try = exprs(values(&l.body))
             .into_iter()
             .any(|e| matches!(e, Expr::Match(m) if matches!(m.form, Form::Try)));
-        let mut again =
-            !quiet && has_try && !self.discovering && settled.unknown() && settled != Ty::Unknown;
+        let mut again = !quiet && has_try && !self.discovering && settled.unknown();
         // A block that was looked at already, to find what it gives, is not
         // looked at again for that.
         if again && let Some(found) = self.found.get(&addr(l)) {
