@@ -4,11 +4,11 @@
 
 use super::Part;
 use super::pe::{
-    self, ACCEPT, BIND, CLOSE_SOCKET, CONNECT, EXIT_PROCESS, GET_COMMAND_LINE, GET_SOCK_NAME,
-    GET_STD_HANDLE, LISTEN, MEM_COMMIT_RESERVE, MOST_PER_WRITE, Machine, PAGE_READWRITE, READ_FILE,
-    RECV_FROM, SEND_TO, SET_SOCK_OPT, SOCKET, STD_ERROR_HANDLE, STD_INPUT_HANDLE,
-    STD_OUTPUT_HANDLE, VIRTUAL_ALLOC, WRITE_FILE, WSA_GET_LAST_ERROR, WSA_STARTUP, process_prng,
-    socket_slot,
+    self, ACCEPT, BIND, CLOSE_HANDLE, CLOSE_SOCKET, CONNECT, CREATE_FILE, EXIT_PROCESS,
+    GET_COMMAND_LINE, GET_FILE_SIZE, GET_LAST_ERROR, GET_SOCK_NAME, GET_STD_HANDLE, LISTEN,
+    MEM_COMMIT_RESERVE, MOST_PER_WRITE, Machine, PAGE_READWRITE, READ_FILE, RECV_FROM, SEND_TO,
+    SET_SOCK_OPT, SOCKET, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, VIRTUAL_ALLOC,
+    WRITE_FILE, WSA_GET_LAST_ERROR, WSA_STARTUP, process_prng, socket_slot,
 };
 use super::x86_64::{
     self, Asm, NE, Place, R8, R9, R10, RAX, RBX, RCX, RDI, RDX, RSI, Reg, System, Z,
@@ -37,12 +37,14 @@ const RBX_AT: u32 = 48;
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let net = program.asks_the_network();
-    let (asm, data, parts) = if net {
-        x86_64::code::<Windows<true, true>>(program)
-    } else if program.reads() {
-        x86_64::code::<Windows<true, false>>(program)
-    } else {
-        x86_64::code::<Windows<false, false>>(program)
+    let files = program.asks_the_files();
+    let (asm, data, parts) = match (net, program.reads(), files) {
+        (true, _, true) => x86_64::code::<Windows<true, true, true>>(program),
+        (true, _, false) => x86_64::code::<Windows<true, true, false>>(program),
+        (false, true, true) => x86_64::code::<Windows<true, false, true>>(program),
+        (false, true, false) => x86_64::code::<Windows<true, false, false>>(program),
+        (false, false, true) => x86_64::code::<Windows<false, false, true>>(program),
+        (false, false, false) => x86_64::code::<Windows<false, false, false>>(program),
     };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = pe::imports(
@@ -51,6 +53,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.asks_for_entropy(),
         program.reads(),
         net,
+        files,
     );
     let mut at = 0;
     let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
@@ -61,11 +64,12 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
 }
 
 /// Whether the program reads standard input, which moves the slot of
-/// `ProcessPrng`, and whether it carries `net`, which asks for the sockets
-/// of `WS2_32.dll` and moves it again.
-struct Windows<const READS: bool, const NET: bool>;
+/// `ProcessPrng`, whether it carries `net`, which asks for the sockets
+/// of `WS2_32.dll` and moves it again, and whether it asks for the files, which
+/// imports more of `KERNEL32.dll` and moves them both.
+struct Windows<const READS: bool, const NET: bool, const FILES: bool>;
 
-impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
+impl<const READS: bool, const NET: bool, const FILES: bool> System for Windows<READS, NET, FILES> {
     const RESERVED: u32 = RESERVED;
     const STACK_BY_PAGE: bool = true;
     /// rsi and rdi, which calls preserve.
@@ -158,7 +162,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         let end = asm.label();
         asm.mov(RCX, RDI);
         asm.mov(RDX, RSI);
-        asm.call_slot(process_prng(READS, NET));
+        asm.call_slot(process_prng(READS, NET, FILES));
         asm.test32(RAX);
         asm.jcc(Z, refused);
         asm.mov32(RAX, 0);
@@ -181,7 +185,7 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
             asm.reserve_stack(512);
             asm.mov32(RCX, 0x0202);
             asm.stack_address(RDX, 32);
-            asm.call_slot(socket_slot(WSA_STARTUP));
+            asm.call_slot(socket_slot(WSA_STARTUP, FILES));
             asm.release_stack(512);
         }
     }
@@ -195,7 +199,10 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
     /// 64-bit number first. Those that give a socket give 64 bits.
     fn raw(asm: &mut Asm, call: Raw) {
         if call == Raw::Kind {
-            asm.mov32(RAX, if NET { 2 } else { 0 });
+            asm.mov32(RAX, if NET || FILES { 2 } else { 0 });
+            return;
+        }
+        if FILES && files_call(asm, call) {
             return;
         }
         let (function, int) = match call {
@@ -227,14 +234,14 @@ impl<const READS: bool, const NET: bool> System for Windows<READS, NET> {
         asm.mov(R8, RDX);
         asm.mov(RDX, RSI);
         asm.mov(RCX, RDI);
-        asm.call_slot(socket_slot(function));
+        asm.call_slot(socket_slot(function, FILES));
         if int {
             asm.sign_extend32(RAX, RAX);
         }
         let given = asm.label();
         asm.cmp_imm8(RAX, -1);
         asm.jcc(NE, given);
-        asm.call_slot(socket_slot(WSA_GET_LAST_ERROR));
+        asm.call_slot(socket_slot(WSA_GET_LAST_ERROR, FILES));
         asm.sign_extend32(RCX, RAX);
         asm.mov32(RAX, 0);
         asm.sub(RAX, RCX);
@@ -269,4 +276,148 @@ fn handle(stream: Stream) -> u32 {
         Stream::Stdout => STD_OUTPUT_HANDLE,
         Stream::Stderr => STD_ERROR_HANDLE,
     }
+}
+
+/// What a call of `KERNEL32.dll` that refused gives: minus the system's last
+/// error, or 0 where the error is one of `ended`, which a read gives at the end of
+/// what there is.
+fn refused(asm: &mut Asm, ended: &[i8]) {
+    let zero = asm.label();
+    let done = asm.label();
+    asm.call_slot(GET_LAST_ERROR);
+    for &code in ended {
+        asm.cmp_imm8(RAX, code);
+        asm.jcc(Z, zero);
+    }
+    asm.sign_extend32(RCX, RAX);
+    asm.mov32(RAX, 0);
+    asm.sub(RAX, RCX);
+    asm.jmp(done);
+    asm.bind(zero);
+    asm.mov32(RAX, 0);
+    asm.bind(done);
+}
+
+/// The most bytes one read or write of a file is asked for, and the errors that
+/// say a read has nothing more: the end of the file, and a pipe whose other end is
+/// closed.
+const ERROR_HANDLE_EOF: i8 = 38;
+const ERROR_BROKEN_PIPE: i8 = 109;
+/// `FILE_ATTRIBUTE_NORMAL` and `FILE_FLAG_BACKUP_SEMANTICS`, which opens a
+/// directory too, so that what is read of it is refused as the other systems do.
+const OPEN_FLAGS: u32 = 0x80 | 0x0200_0000;
+/// Where the call that is made keeps the `OVERLAPPED` that gives a place, and the
+/// count it gives back, in the room the call reserves above the 32 bytes the
+/// callee may use and the three arguments it takes on the stack.
+const OVERLAPPED: i8 = 64;
+const COUNT: i8 = 96;
+
+/// Makes the call of a file that the words ask for, which are those of the
+/// kernel of Linux, with `KERNEL32.dll`: `CreateFileW` with a path in UTF-16, an
+/// access, and a disposition, `ReadFile` and `WriteFile`, which take a place by an
+/// `OVERLAPPED`, `GetFileSizeEx` for the end of a file, and `CloseHandle`. It
+/// gives what the call gave, or minus the system's last error, and says whether
+/// the call was one of a file.
+fn files_call(asm: &mut Asm, call: Raw) -> bool {
+    let done = asm.label();
+    match call {
+        Raw::OpenAt => {
+            // The words are the directory, the path, the access, and the disposition.
+            let failed = asm.label();
+            asm.reserve_stack(64);
+            asm.mov(RCX, RSI);
+            asm.mov32(R8, 7);
+            asm.mov32(R9, 0);
+            asm.store(Place::Frame(32), R10, 8);
+            asm.mov32(RAX, OPEN_FLAGS);
+            asm.store(Place::Frame(40), RAX, 8);
+            asm.mov32(RAX, 0);
+            asm.store(Place::Frame(48), RAX, 8);
+            asm.call_slot(CREATE_FILE);
+            asm.cmp_imm8(RAX, -1);
+            asm.jcc(Z, failed);
+            asm.jmp(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        Raw::PRead | Raw::PWrite | Raw::Read | Raw::Write => {
+            // The words are the handle, the bytes, the count, and the place.
+            let places = matches!(call, Raw::PRead | Raw::PWrite);
+            let reads = matches!(call, Raw::PRead | Raw::Read);
+            let failed = asm.label();
+            asm.reserve_stack(128);
+            asm.mov32(RAX, 0);
+            if places {
+                asm.store(Place::Frame(OVERLAPPED as u32), RAX, 8);
+                asm.store(Place::Frame(OVERLAPPED as u32 + 8), RAX, 8);
+                asm.store(Place::Frame(OVERLAPPED as u32 + 16), R10, 8);
+                asm.store(Place::Frame(OVERLAPPED as u32 + 24), RAX, 8);
+            }
+            asm.mov(R8, RDX);
+            asm.mov32(RAX, MOST_PER_WRITE);
+            asm.cmp(R8, RAX);
+            asm.cmova(R8, RAX);
+            asm.mov(RCX, RDI);
+            asm.mov(RDX, RSI);
+            asm.stack_address(R9, COUNT);
+            if places {
+                asm.stack_address(RAX, OVERLAPPED);
+            } else {
+                asm.mov32(RAX, 0);
+            }
+            asm.store(Place::Frame(32), RAX, 8);
+            asm.call_slot(if reads { READ_FILE } else { WRITE_FILE });
+            asm.test32(RAX);
+            asm.jcc(Z, failed);
+            asm.load(RAX, 4, false, Place::Frame(COUNT as u32));
+            asm.jmp(done);
+            asm.bind(failed);
+            if reads {
+                refused(asm, &[ERROR_HANDLE_EOF, ERROR_BROKEN_PIPE]);
+            } else {
+                refused(asm, &[]);
+            }
+        }
+        Raw::LSeek => {
+            // The end of the file, which is what the kernel of Linux gives for a
+            // place of nothing from the end.
+            let failed = asm.label();
+            asm.reserve_stack(64);
+            asm.mov(RCX, RDI);
+            asm.stack_address(RDX, 32);
+            asm.call_slot(GET_FILE_SIZE);
+            asm.test32(RAX);
+            asm.jcc(Z, failed);
+            asm.load(RAX, 8, false, Place::Frame(32));
+            asm.jmp(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        Raw::FChmod => {
+            // A file of this system has no mode to make it one that runs.
+            asm.mov32(RAX, 0);
+            return true;
+        }
+        Raw::CloseFile => {
+            let failed = asm.label();
+            asm.reserve_stack(32);
+            asm.mov(RCX, RDI);
+            asm.call_slot(CLOSE_HANDLE);
+            asm.test32(RAX);
+            asm.jcc(Z, failed);
+            asm.mov32(RAX, 0);
+            asm.jmp(done);
+            asm.bind(failed);
+            refused(asm, &[]);
+        }
+        _ => return false,
+    }
+    asm.bind(done);
+    // Every path above reserved the same room, which is given back where they meet.
+    asm.release_stack(match call {
+        Raw::OpenAt | Raw::LSeek => 64,
+        Raw::CloseFile => 32,
+        _ => 128,
+    });
+    true
 }

@@ -10,7 +10,8 @@
 //! `socket`, `bind`, `listen`, `accept`, `connect`, `getsockname`,
 //! `setsockopt`, `sendto`, `recvfrom`, `close`, `clock_gettime`, and
 //! `nanosleep`, and in one that waits for the system with a scheduler, `kqueue`
-//! and `kevent`.
+//! and `kevent`, and in one that reads or writes files, `read`, `openat`, `pread`,
+//! `pwrite`, `lseek`, and `fchmod`.
 //! Nothing from the system is needed to build: the load commands that ask
 //! the loader for the library and its symbols, and the signature, are
 //! written here.
@@ -25,7 +26,7 @@ const SIGNATURE_PAGE: usize = 0x1000;
 /// The symbols a program may import from `libSystem`, in the order of their
 /// slots in `__got`. A program that never asks for memory imports only the
 /// first three.
-const IMPORTS: [&str; 20] = [
+const IMPORTS: [&str; 25] = [
     "_write",
     "___error",
     "__exit",
@@ -46,6 +47,11 @@ const IMPORTS: [&str; 20] = [
     "_nanosleep",
     "_kqueue",
     "_kevent",
+    "_openat",
+    "_pread",
+    "_pwrite",
+    "_lseek",
+    "_fchmod",
 ];
 /// `write`, which writes bytes to a file.
 pub const WRITE: usize = 0;
@@ -72,23 +78,19 @@ pub fn slot(call: Raw) -> usize {
         Raw::SetSockOpt => 12,
         Raw::SendTo => 13,
         Raw::RecvFrom => 14,
-        Raw::Close | Raw::CloseQueue => 15,
+        Raw::Close | Raw::CloseQueue | Raw::CloseFile => 15,
         Raw::ClockGetTime | Raw::Now => 16,
         Raw::NanoSleep => 17,
         Raw::Kqueue => 18,
         Raw::Kevent => 19,
-        Raw::Kind
-        | Raw::EpollCreate1
-        | Raw::EpollCtl
-        | Raw::EpollWait
-        | Raw::OpenAt
-        | Raw::Read
-        | Raw::Write
-        | Raw::PRead
-        | Raw::PWrite
-        | Raw::LSeek
-        | Raw::FChmod
-        | Raw::GetRandom => {
+        Raw::OpenAt => 20,
+        Raw::PRead => 21,
+        Raw::PWrite => 22,
+        Raw::LSeek => 23,
+        Raw::FChmod => 24,
+        Raw::Read => READ,
+        Raw::Write => WRITE,
+        Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::GetRandom => {
             unreachable!("which kernel it is, and what only Linux has, call nothing")
         }
     }
@@ -97,7 +99,16 @@ pub fn slot(call: Raw) -> usize {
 /// Whether the wrapper gives a C `int`, of which only the low 32 bits are
 /// what it gave, and not an `ssize_t`.
 pub fn gives_int(call: Raw) -> bool {
-    !matches!(call, Raw::SendTo | Raw::RecvFrom)
+    !matches!(
+        call,
+        Raw::SendTo
+            | Raw::RecvFrom
+            | Raw::Read
+            | Raw::Write
+            | Raw::PRead
+            | Raw::PWrite
+            | Raw::LSeek
+    )
 }
 
 /// The symbols a program imports: `mmap` only if it asks for memory, and
@@ -106,15 +117,19 @@ pub fn gives_int(call: Raw) -> bool {
 ///
 /// A program that reads standard input or uses the network or the clock
 /// imports every one, which costs it nothing it needs, as it asks for memory
-/// to hold what it reads.
+/// to hold what it reads. A program that asks for the files imports the calls
+/// of the files too, and no other program imports them.
 pub fn imports(
     allocates: bool,
     entropy: bool,
     reads: bool,
     kernel: bool,
+    files: bool,
 ) -> &'static [&'static str] {
-    if kernel {
+    if files {
         &IMPORTS
+    } else if kernel {
+        &IMPORTS[..20]
     } else if reads {
         &IMPORTS[..6]
     } else if entropy {
