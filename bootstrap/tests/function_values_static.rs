@@ -48,6 +48,10 @@ pub const ONCE: &[Test] = &[
         every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints,
     ),
     (
+        "a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result",
+        a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result,
+    ),
+    (
         "a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second",
         a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second,
     ),
@@ -232,17 +236,30 @@ enum Kind {
 #[derive(Debug)]
 struct Generated {
     adds: [u8; 3],
+    /// Whether each function prints, which needs the `console` effect.
+    loud: [bool; 3],
     argument: u8,
     source: String,
     printed: Vec<u8>,
+    /// Whether a function that needs an effect goes into a type that states
+    /// none, which the compiler refuses.
+    refused: bool,
 }
 
 fn generated(g: &mut Gen) -> Generated {
     let adds = [g.below(100) as u8, g.below(100) as u8, g.below(100) as u8];
     let argument = g.below(50) as u8;
+    let loud = [g.below(3) == 0, g.below(3) == 0, g.below(3) == 0];
+    let mut refused = false;
     let mut text = String::from("use std.console (console, print)\nuse std.int (wrapping_add)\n\n");
     for (k, add) in adds.iter().enumerate() {
-        text += &format!("fn f{k}(x: Int) -> Int {{ wrapping_add(x, {add}) }}\n");
+        if loud[k] {
+            text += &format!(
+                "fn f{k}(x: Int) -> Int <console> {{\n  print(\"side\")\n  wrapping_add(x, {add})\n}}\n"
+            );
+        } else {
+            text += &format!("fn f{k}(x: Int) -> Int {{ wrapping_add(x, {add}) }}\n");
+        }
         text += &format!("fn chosen{k}() -> fn(Int) -> Int {{ f{k} }}\n");
         text += &format!("fn made{k}() -> Held {{ Held(run: f{k}) }}\n");
     }
@@ -250,6 +267,8 @@ fn generated(g: &mut Gen) -> Generated {
     text += "fn ident(f: fn(Int) -> Int) -> fn(Int) -> Int { f }\n";
     text += "fn same(h: Held) -> Held { h }\n";
     text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n";
+    text += "fn apply(f: fn(Int) -> Int, x: Int) -> Int { f(x) }\n";
+    text += "fn via(h: Held, x: Int) -> Int { apply(h.run, x) }\n";
     text += "fn sold(s: Shop, x: Int) -> Int { s.held.run(x) }\n\n";
     text += "fn main() <console, alloc> {\n";
     // What each name holds, by its place among the names of its kind.
@@ -268,6 +287,7 @@ fn generated(g: &mut Gen) -> Generated {
             }
             1 => {
                 let k = g.below(3);
+                refused |= loud[k];
                 (format!("chosen{k}()"), Kind::Function, k)
             }
             2 => match of(&names, Kind::Function, g) {
@@ -279,11 +299,15 @@ fn generated(g: &mut Gen) -> Generated {
                 None => continue,
             },
             4 => match of(&names, Kind::Function, g) {
-                Some((f, _, k)) => (format!("Held(run: {f})"), Kind::Held, k),
+                Some((f, _, k)) => {
+                    refused |= loud[k];
+                    (format!("Held(run: {f})"), Kind::Held, k)
+                }
                 None => continue,
             },
             5 => {
                 let k = g.below(3);
+                refused |= loud[k];
                 (format!("made{k}()"), Kind::Held, k)
             }
             6 => match of(&names, Kind::Held, g) {
@@ -306,6 +330,7 @@ fn generated(g: &mut Gen) -> Generated {
             Kind::Held => {
                 calls.push((format!("{name}.run({x})"), held));
                 calls.push((format!("priced({name}, {x})"), held));
+                calls.push((format!("via({name}, {x})"), held));
                 calls.push((format!("same({name}).run({x})"), held));
             }
             Kind::Shop => {
@@ -318,24 +343,76 @@ fn generated(g: &mut Gen) -> Generated {
     let mut printed = Vec::new();
     for (call, held) in &calls {
         text += &format!("  print(\"{{{call}}}\")\n");
+        if loud[*held] {
+            printed.extend(b"side\n");
+        }
         printed.extend(format!("{}\n", argument as u32 + adds[*held] as u32).into_bytes());
     }
     text += "}\n";
     Generated {
         adds,
+        loud,
         argument,
         source: text,
         printed,
+        refused,
     }
 }
 
 /// Whatever the generated program holds in each of these ways, it prints what
 /// the call of the function it holds prints when it is written directly, and
-/// the scalar form it is lowered to is the one the evaluator runs.
+/// a function that needs an effect is never held where its type states none,
+/// so no program that is accepted runs an effect that a function along its
+/// way did not declare.
 fn every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints() {
     generate::check(4302, 150, generated, |p| {
-        let program = lower(p.source.as_bytes())
-            .unwrap_or_else(|e| panic!("{e:?} for\n{}\n{:?} {}", p.source, p.adds, p.argument));
+        let built = lower(p.source.as_bytes());
+        if p.refused {
+            let found = built.expect_err("a function with an effect is held in a type");
+            assert!(
+                found.iter().any(|e| e.message.contains("states none")),
+                "{found:?} for\n{}",
+                p.source
+            );
+            return;
+        }
+        let program = built.unwrap_or_else(|e| {
+            panic!("{e:?} for\n{}\n{:?} {:?} {}", p.source, p.adds, p.loud, p.argument)
+        });
         assert_eq!(scalar::run(&program).stdout, p.printed, "for\n{}", p.source);
     });
+}
+
+/// A function type states no effect, so a function that needs one is refused
+/// where it goes into a field or is given as a result, and is not refused where
+/// it is passed to a call, which is checked at the call.
+fn a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result() {
+    let head = "use std.console (console, print)\n\n\
+                fn loud(x: f32) -> f32 <console> {\n  print(\"side\")\n  x\n}\n\n\
+                fn twice_f(x: f32, f: fn(f32) -> f32) -> f32 { f(f(x)) }\n\n\
+                struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n\
+                fn quiet(p: Pricing) -> f32 { p.discount(1.0) }\n\n\
+                fn ret() -> fn(f32) -> f32 { loud }\n\n\
+                fn made() -> Pricing { Pricing(discount: loud) }\n\n";
+    let main = |body: &str| format!("{head}fn main() <console, alloc> {{\n{body}}}\n");
+    let refused = [
+        "  print(\"{quiet(Pricing(discount: loud))}\")\n",
+        "  f = loud\n  print(\"{quiet(Pricing(discount: f))}\")\n",
+        "  print(\"{ret()(1.0)}\")\n",
+        "  print(\"{quiet(made())}\")\n",
+    ];
+    for body in refused {
+        let source = main(body);
+        let found = check(source.as_bytes()).expect_err("refused");
+        assert!(
+            found.iter().any(|e| e.message.contains("`loud` needs the `console` effect, and")
+                && e.message.contains("states none")),
+            "{found:?} for\n{source}"
+        );
+    }
+    // Passed to a call, it is the caller's effect, and the caller declares it.
+    let passed = main("  print(\"{twice_f(1.0, loud)}\")\n");
+    assert!(check(passed.as_bytes()).is_ok(), "{:?}", check(passed.as_bytes()));
+    let silent = passed.replace("fn main() <console, alloc>", "fn main() <alloc>");
+    assert!(check(silent.as_bytes()).is_err());
 }

@@ -20,6 +20,8 @@ fn ident(f: fn(f32) -> f32) -> fn(f32) -> f32 { f }
 
 fn apply(f: fn(f32) -> f32, x: f32) -> f32 { f(x) }
 
+fn via(p: Pricing, x: f32) -> f32 { apply(p.discount, x) }
+
 fn same(p: Pricing) -> Pricing { p }
 
 fn local() -> Pricing {
@@ -65,5 +67,5 @@ fn main() <console, alloc> {
   shop = Shop(name: "a", pricing: Pricing(discount: double))
   print("{shop.name} {sold(shop, 8.0)} {shop.pricing.discount(8.0)}")
   p = Pricing(discount: half)
-  print("{apply(p.discount, 3.0)} {same(Pricing(discount: double)).discount(3.0)} {ident(double)(3.0)} {local().discount(3.0)}")
+  print("{apply(p.discount, 3.0)} {same(Pricing(discount: double)).discount(3.0)} {ident(double)(3.0)} {local().discount(3.0)} {via(p, 3.0)}")
 }

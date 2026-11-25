@@ -7847,6 +7847,9 @@ impl<'a> Checker<'a> {
                 let f = self.fn_values[&addr(value)];
                 let named = Ty::Named(f);
                 self.named.insert(addr(value));
+                if let Some(field) = vars.names[*p].strip_suffix("@function") {
+                    self.stored_effects(value, f, &format!("the type of the field `{field}`"));
+                }
                 let asks_function = vars
                     .requires
                     .iter()
@@ -7889,6 +7892,16 @@ impl<'a> Checker<'a> {
             }
             // A name that holds a function with a name is a function of that
             // function's type.
+            (Ty::Named(g), Ty::Param(p))
+                if !self.fn_values.contains_key(&addr(value))
+                    && vars.names[*p].ends_with("@function") =>
+            {
+                let field = vars.names[*p].trim_end_matches("@function").to_string();
+                self.stored_effects(value, *g, &format!("the type of the field `{field}`"));
+                if !unify(pattern, given, sol) {
+                    self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+                }
+            }
             (Ty::Named(g), Ty::Fn(_)) if !self.fn_values.contains_key(&addr(value)) => {
                 let items = Ty::func(defs.function_items(*g));
                 if !unify(pattern, &items, sol) {
@@ -8743,7 +8756,21 @@ impl<'a> Checker<'a> {
                                 if hidden(def, &def.fields[at], *pos) {
                                     self.errors.push(private_field(def, name, *pos));
                                 }
-                                defs.fields[s][at].subst(&args)
+                                match defs.fields[s][at].subst(&args) {
+                                    // A function that is not known yet is of the
+                                    // function type the field is written with.
+                                    Ty::Param(_) if defs.field_items[s][at].is_some() => {
+                                        let items = defs.field_items[s][at].as_ref();
+                                        Ty::func(
+                                            items
+                                                .expect("checked")
+                                                .iter()
+                                                .map(|t| t.subst(&args))
+                                                .collect(),
+                                        )
+                                    }
+                                    held => held,
+                                }
                             }
                             None => {
                                 self.errors.push(Error::new(

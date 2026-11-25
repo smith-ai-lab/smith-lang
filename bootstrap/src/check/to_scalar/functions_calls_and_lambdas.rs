@@ -513,6 +513,26 @@ impl<'a> Lowering<'a> {
                         args: Vec::new(),
                     }),
                 },
+                // A field that holds a function is the function its struct holds.
+                Expr::Field { of, name, .. }
+                    if matches!(self.typed.type_of(of, env), Ty::Struct(..)) =>
+                {
+                    let Ty::Struct(s, args) = self.typed.type_of(of, env) else {
+                        unreachable!("matched")
+                    };
+                    let defs = self.typed.defs;
+                    let at = (defs.file.structs[s].fields.iter())
+                        .position(|f| &f.name == name)
+                        .expect("checked");
+                    let Ty::Named(g) = defs.fields[s][at].subst(&args) else {
+                        unreachable!("checked")
+                    };
+                    self.expr(out, value, env);
+                    Func::Named(Instance {
+                        template: Template::Free(g),
+                        args: Vec::new(),
+                    })
+                }
                 // What gives a function with a name, a call or a field, is run for
                 // what it does, and gives no value.
                 _ => match self.typed.type_of(value, env) {
