@@ -8404,21 +8404,36 @@ impl<'a> Checker<'a> {
             end = match stmt {
                 Stmt::Define {
                     name, pos, value, ..
-                } if matches!(value, Expr::Lambda(_)) => {
-                    self.errors.push(Error::new(
-                        value.pos(),
-                        "a lambda cannot be bound to a name, as it is only passed to a call",
-                    ));
+                } if matches!(value, Expr::Lambda(_)) || lambda_choice(value).is_some() => {
+                    let message = match (value, lambda_choice(value)) {
+                        (_, Some(at)) => Error::new(at, WHICH_FUNCTION),
+                        (Expr::Lambda(l), _) if leaves_a_type_out(l) => Error::new(
+                            value.pos(),
+                            "a lambda bound to a name writes the type of each parameter and of its result, as `fn(v: f32) -> f32 { ... }`, since no function type decides them",
+                        ),
+                        _ => Error::new(
+                            value.pos(),
+                            "a lambda cannot be bound to a name, as it is only passed to a call",
+                        ),
+                    };
+                    self.errors.push(message);
                     if !body.names.iter().any(|(n, _)| n == name) {
                         body.names.push((name.clone(), Ty::Unknown));
                     }
                     End::Binding(*pos)
                 }
                 Stmt::Assign { pos, value, .. } if matches!(value, Expr::Lambda(_)) => {
-                    self.errors.push(Error::new(
-                        value.pos(),
-                        "a lambda cannot be bound to a name, as it is only passed to a call",
-                    ));
+                    self.errors.push(match value {
+                        Expr::Lambda(l) if leaves_a_type_out(l) => Error::new(
+                            value.pos(),
+                            "a lambda bound to a name writes the type of each parameter and of its result, as `fn(v: f32) -> f32 { ... }`, since no function type decides them",
+                        )
+,
+                        _ => Error::new(
+                            value.pos(),
+                            "a lambda cannot be bound to a name, as it is only passed to a call",
+                        ),
+                    });
                     End::Binding(*pos)
                 }
                 Stmt::Destructure { pattern, value, .. } if matches!(value, Expr::Lambda(_)) => {
@@ -10226,3 +10241,19 @@ fn slot_param(t: &Ty) -> Option<usize> {
 
 /// Where the places of `param_slot` begin, above every type parameter.
 const PARAM_SLOTS: usize = 1 << 20;
+
+/// Whether a lambda written with `fn` leaves out the type of a parameter or of
+/// its result. A block that takes nothing has no `fn` to write them after.
+fn leaves_a_type_out(l: &Lambda) -> bool {
+    !l.params.is_empty() && (l.types.iter().any(Option::is_none) || l.result.is_none())
+}
+
+/// Where a lambda ends an arm of an `if` or a `match` that is given to a name:
+/// a choice between lambdas, which is a choice between functions.
+fn lambda_choice(value: &Expr) -> Option<Pos> {
+    let Expr::Match(m) = value else { return None };
+    m.arms.iter().find_map(|arm| match arm.body.last() {
+        Some(Stmt::Expr(Expr::Lambda(l))) => Some(l.pos),
+        _ => None,
+    })
+}

@@ -60,6 +60,28 @@ pub const ONCE: &[Test] = &[
         },
     ),
     (
+        "a_lambda_that_leaves_its_types_out_where_a_function_type_decides_them_builds_to_the_bytes_of_the_one_that_writes_them",
+        || {
+            a_lambda_that_leaves_its_types_out_builds_to_the_bytes_of_the_call_written_directly(&[
+                Hold::Field,
+                Hold::Return,
+                Hold::BindTheReturn,
+                Hold::CallTheReturn,
+                Hold::Takes,
+                Hold::Nested,
+                Hold::Made,
+            ])
+        },
+    ),
+    (
+        "a_lambda_that_leaves_a_type_out_where_nothing_decides_it_is_refused_where_to_write_it",
+        a_lambda_that_leaves_a_type_out_where_nothing_decides_it_is_refused_where_to_write_it,
+    ),
+    (
+        "a_choice_between_lambdas_bound_to_a_name_is_refused_as_a_choice_between_functions",
+        a_choice_between_lambdas_bound_to_a_name_is_refused_as_a_choice_between_functions,
+    ),
+    (
         "a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept",
         a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept,
     ),
@@ -114,11 +136,14 @@ struct Program {
     hold: Hold,
     /// Whether the function is a lambda written where it is held.
     lambda: bool,
+    /// Whether that lambda leaves out its types.
+    bare: bool,
 }
 
-fn program_of(g: &mut Gen, holds: &[Hold], lambda: bool) -> Program {
+fn program_of(g: &mut Gen, holds: &[Hold], lambda: bool, bare: bool) -> Program {
     Program {
         lambda,
+        bare,
         held: g.below(3),
         adds: [g.below(200) as u8, g.below(200) as u8, g.below(200) as u8],
         argument: g.below(50) as u8,
@@ -130,7 +155,9 @@ impl Program {
     /// The function that is held, as a function with a name or as the lambda
     /// that is written with the same body.
     fn function(&self) -> String {
-        if self.lambda {
+        if self.bare {
+            format!("fn(x) {{ wrapping_add(x, {}) }}", self.adds[self.held])
+        } else if self.lambda {
             format!("fn(x: Int) -> Int {{ wrapping_add(x, {}) }}", self.adds[self.held])
         } else {
             format!("f{}", self.held)
@@ -215,16 +242,21 @@ impl Program {
 }
 
 fn builds_to_the_bytes_of_the_call_written_directly(holds: &[Hold]) {
-    builds_to_the_bytes(holds, false);
+    builds_to_the_bytes(holds, false, false);
 }
 
 /// The same, where the function is a lambda written where it is held.
 fn a_lambda_builds_to_the_bytes_of_the_call_written_directly(holds: &[Hold]) {
-    builds_to_the_bytes(holds, true);
+    builds_to_the_bytes(holds, true, false);
 }
 
-fn builds_to_the_bytes(holds: &[Hold], lambda: bool) {
-    generate::check(4301, 3, |g: &mut Gen| program_of(g, holds, lambda), |p| {
+/// The same, where the lambda leaves its types out.
+fn a_lambda_that_leaves_its_types_out_builds_to_the_bytes_of_the_call_written_directly(holds: &[Hold]) {
+    builds_to_the_bytes(holds, true, true);
+}
+
+fn builds_to_the_bytes(holds: &[Hold], lambda: bool, bare: bool) {
+    generate::check(4301, 3, |g: &mut Gen| program_of(g, holds, lambda, bare), |p| {
         let (value, direct) = (p.as_value(), p.called());
         if let Err(found) = check(value.as_bytes()) {
             panic!("{found:?} for\n{value}");
@@ -560,4 +592,30 @@ fn main() <console, alloc> {
 }
 "#;
     assert_eq!(scalar::run(&lower(source.as_bytes()).expect("builds")).stdout, b"1 a\n");
+}
+
+/// A lambda that leaves a type out where no function type decides it is refused
+/// with where to write the type, and not as one that holds something lent.
+fn a_lambda_that_leaves_a_type_out_where_nothing_decides_it_is_refused_where_to_write_it() {
+    for bound in ["fn(v) { v * 2.0 }", "fn(v: f32) { v * 2.0 }"] {
+        let source = format!("fn main() {{\n  f = {bound}\n}}\n");
+        let found = check(source.as_bytes()).expect_err("refused");
+        assert!(
+            found.iter().any(|e| e.message.contains("writes the type of each parameter")),
+            "{found:?} for\n{source}"
+        );
+    }
+}
+
+/// `f = if c { a } else { b }` of lambdas is a choice between functions, and is
+/// refused as one is.
+fn a_choice_between_lambdas_bound_to_a_name_is_refused_as_a_choice_between_functions() {
+    let source = "fn main() {\n  wide = true\n  f = if wide { fn(x: f32) -> f32 { x } } \
+                  else { fn(x: f32) -> f32 { x * 2.0 } }\n}\n";
+    let found = check(source.as_bytes()).expect_err("refused");
+    assert!(
+        found.iter().any(|e| e.message.contains("must be known when the program is built")),
+        "{found:?}"
+    );
+    assert!(found.iter().all(|e| !e.message.contains("stands alone")), "{found:?}");
 }
