@@ -7,7 +7,7 @@ built:
   - "a function with a name passed to a call"
   - "a function with a name bound to a name, stored in a field, and returned, each known when the program is built, and refused where which function it is depends on what the program does"
   - "a lambda that reads and assigns no name of its function, bound, stored, and returned in the same way, as [Lambdas](lambdas.md#where-a-lambda-may-go) says"
-  - "a lambda that reads names of its function, bound to a name and called in the same body"
+  - "a lambda that reads names of its function whose values are copied, bound, stored, and returned, holding those values, as [Lambdas](lambdas.md#where-a-lambda-may-go) says"
 ---
 
 # Function values

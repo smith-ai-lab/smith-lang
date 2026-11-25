@@ -82,8 +82,8 @@ pub const ONCE: &[Test] = &[
         a_choice_between_lambdas_bound_to_a_name_is_refused_as_a_choice_between_functions,
     ),
     (
-        "a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept",
-        a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept,
+        "a_lambda_that_needs_an_effect_is_refused_where_it_is_kept",
+        a_lambda_that_needs_an_effect_is_refused_where_it_is_kept,
     ),
     (
         "which_lambda_a_value_is_is_known_when_the_program_is_built",
@@ -529,24 +529,11 @@ fn a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result
     assert!(check(silent.as_bytes()).is_err());
 }
 
-/// A lambda that reads or assigns a name around it holds something lent, and
-/// a lambda that needs an effect is held where a type states none: each is
-/// refused where the lambda is kept.
-fn a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept() {
+/// A lambda that needs an effect is held where a type states none, so it is
+/// refused where it is kept.
+fn a_lambda_that_needs_an_effect_is_refused_where_it_is_kept() {
     let head = "use std.console (console, print)\n\n\
                 struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n";
-    let lent = [
-        "fn kept(rate: f32) -> Pricing {\n  Pricing(discount: fn(v: f32) -> f32 { v * rate })\n}\n",
-        "fn kept(rate: f32) -> fn(f32) -> f32 {\n  fn(v: f32) -> f32 { v * rate }\n}\n",
-    ];
-    for item in lent {
-        let source = format!("{head}{item}\nfn main() <console> {{\n  print(\"{{kept(1.0)}}\")\n}}\n");
-        let found = check(source.as_bytes()).expect_err("refused");
-        assert!(
-            found.iter().any(|e| e.message.starts_with("a lambda cannot be")),
-            "{found:?} for\n{source}"
-        );
-    }
     let loud = format!(
         "{head}fn kept() -> Pricing {{\n  Pricing(discount: fn(v: f32) -> f32 {{\n    print(\"x\")\n    v\n  }})\n}}\n\n\
          fn main() <console> {{\n  k = kept()\n}}\n"

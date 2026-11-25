@@ -80,14 +80,7 @@ fn block(
 ) {
     for (i, stmt) in body.iter_mut().enumerate() {
         match stmt {
-            Stmt::Define { value, .. } => {
-                value_of(cx, value, Kept::Anywhere, out);
-                if let Expr::Lambda(l) = value
-                    && let Some(env) = env_struct(cx, l)
-                {
-                    cx.envs.borrow_mut().push(env);
-                }
-            }
+            Stmt::Define { value, .. } => value_of(cx, value, Kept::Anywhere, out),
             Stmt::Expr(value) => {
                 let kept = match returned {
                     Some((at, Some(ty))) if at == i => Kept::Like(ty, &[]),
@@ -127,6 +120,8 @@ fn value_of(cx: &Cx, value: &mut Expr, kept: Kept, out: &mut Vec<Function>) {
                 let pos = l.pos;
                 out.push(f);
                 *value = Expr::Name { name, pos };
+            } else if let Some(env) = env_lambda(cx, l, kept) {
+                cx.envs.borrow_mut().push(env);
             }
         }
         Expr::Call(call) if is_struct(cx, call) => {
@@ -156,38 +151,61 @@ fn is_struct(cx: &Cx, call: &Call) -> bool {
         && cx.structs.contains_key(call.callee.as_str())
 }
 
-/// The function the lambda becomes, if it holds nothing lent and writes every
-/// type that its function would need.
-fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
-    // The type a parameter or the result is left out with is the one the
-    // function type that decides it has, when the lambda has as many parameters.
+/// The type of each parameter of a lambda and of its result, where it leaves
+/// some out: those the function type that decides them has, when the lambda has
+/// as many parameters. None when one is left out and nothing decides it.
+fn written_types(l: &Lambda, kept: Kept) -> Option<(Vec<Type>, Option<Type>)> {
     let like = match kept {
         Kept::Like(ty, _) if ty.args.len() == l.params.len() + 1 => Some(ty),
         _ => None,
     };
-    let params: Vec<Param> = l
-        .params
+    let params = l
+        .types
         .iter()
-        .zip(&l.types)
         .enumerate()
-        .map(|(i, ((name, pos), ty))| {
-            let ty = ty.clone().or_else(|| like.map(|t| t.args[i].clone()))?;
-            Some(Param {
-                name: name.clone(),
-                pos: *pos,
-                ty,
-                default: None,
-                take: false,
-                takes: Vec::new(),
-                effects: Vec::new(),
-            })
-        })
-        .collect::<Option<_>>()?;
+        .map(|(i, ty)| ty.clone().or_else(|| like.map(|t| t.args[i].clone())))
+        .collect::<Option<Vec<Type>>>()?;
     let result = match (&l.result, like) {
         (Some(r), _) => Some(r.clone()),
         (None, Some(t)) => Some(t.args[t.args.len() - 1].clone()).filter(|r| !r.name.is_empty()),
         (None, None) => return None,
     };
+    Some((params, result))
+}
+
+/// Whether a type that a function type writes names a type parameter of the
+/// struct whose field it is, which a lambda written elsewhere cannot name.
+fn names_struct_generic(kept: Kept, types: &[&Type]) -> bool {
+    let Kept::Like(_, generics) = kept else {
+        return false;
+    };
+    let mut named = HashSet::new();
+    for t in types {
+        type_names(t, &mut named);
+    }
+    named.iter().any(|n| generics.iter().any(|g| g.name == *n))
+}
+
+/// The function the lambda becomes, if it holds nothing lent and writes every
+/// type that its function would need.
+fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
+    // The type a parameter or the result is left out with is the one the
+    // function type that decides it has, when the lambda has as many parameters.
+    let (types, result) = written_types(l, kept)?;
+    let params: Vec<Param> = l
+        .params
+        .iter()
+        .zip(types)
+        .map(|((name, pos), ty)| Param {
+            name: name.clone(),
+            pos: *pos,
+            ty,
+            default: None,
+            take: false,
+            takes: Vec::new(),
+            effects: Vec::new(),
+        })
+        .collect();
     let own: HashSet<&str> = l.generics.iter().map(|g| g.name.as_str()).collect();
     let params: Vec<Param> = params
         .into_iter()
@@ -205,9 +223,14 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
     if let Some(result) = &result {
         type_names(result, &mut named);
     }
-    if let Kept::Like(_, generics) = kept
-        && named.iter().any(|n| generics.iter().any(|g| g.name == *n))
-    {
+    if names_struct_generic(
+        kept,
+        &params
+            .iter()
+            .map(|p| &p.ty)
+            .chain(&result)
+            .collect::<Vec<_>>(),
+    ) {
         return None;
     }
     if named
@@ -280,8 +303,25 @@ pub(crate) fn env_name(pos: super::Pos) -> String {
     format!("env@lambda@{}:{}", pos.line, pos.col)
 }
 
-/// The generic struct that holds what a lambda bound to a name reads of the
-/// function it is written in: the type parameters of the function, then one for
+/// The struct that holds what a lambda that is bound, stored, or returned reads,
+/// with the types it leaves out written as the function type that decides them
+/// has them. None as `env_struct` says, and when a type is left out that nothing
+/// decides.
+fn env_lambda(cx: &Cx, l: &mut Lambda, kept: Kept) -> Option<Struct> {
+    let (types, result) = written_types(l, kept)?;
+    if names_struct_generic(kept, &types.iter().chain(&result).collect::<Vec<_>>()) {
+        return None;
+    }
+    let mut written = l.clone();
+    written.types = types.into_iter().map(Some).collect();
+    written.result = result;
+    let env = env_struct(cx, &written)?;
+    *l = written;
+    Some(env)
+}
+
+/// The generic struct that holds what a lambda that is bound, stored, or
+/// returned reads of the function it is written in: the type parameters of the function, then one for
 /// each name it reads, and a field for each name. No source writes it, and
 /// the checker gives it the types the names have. None when the lambda leaves a
 /// type out, assigns a name of its function, or reads none.
