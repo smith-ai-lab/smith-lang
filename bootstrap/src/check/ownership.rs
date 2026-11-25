@@ -1206,6 +1206,12 @@ impl<'a> Walk<'a> {
                             .collect();
                         self.holding.insert(name.clone(), held);
                     }
+                    // A name bound to such a lambda holds what it holds.
+                    if let Expr::Name { name: from, .. } = value
+                        && let Some(held) = self.holding.get(from).cloned()
+                    {
+                        self.holding.insert(name.clone(), held);
+                    }
                     // A `var` that is bound again drops the value it held, if
                     // it did not hand it on.
                     let old = (st.as_ref())

@@ -1861,6 +1861,13 @@ impl<'a> Lowering<'a> {
                             template: Template::Free(*g),
                             args: Vec::new(),
                         })),
+                        // A name bound to a lambda that holds names holds it too.
+                        Ty::Struct(s, _) if self.typed.env_items.contains_key(s) => match written {
+                            Expr::Name { name: from, .. } => {
+                                out.find(from).and_then(|at| out.names()[at].func.clone())
+                            }
+                            _ => None,
+                        },
                         _ => None,
                     };
                     match out.find(name) {

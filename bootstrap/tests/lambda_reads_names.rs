@@ -182,6 +182,16 @@ fn a_name_that_a_bound_lambda_holds_is_not_given_away_before_the_last_call_of_th
             "{found:?} for\n{source}"
         );
     }
+    // A second name for the lambda holds what it holds.
+    let again = format!("{head}  g = f\n  n = eat(xs)\n  print(\"{{g(0)}} {{n}}\")\n}}\n");
+    let found = check(again.as_bytes()).expect_err("refused");
+    assert!(
+        found.iter().any(|e| e.message.contains("after it was given away") && e.message.contains("`g`")),
+        "{found:?} for\n{again}"
+    );
+    let second = format!("{head}  g = f\n  m = g(0)\n  n = eat(xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
+    let ran = scalar::run(&lower(second.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{second}")));
+    assert_eq!(ran.stdout, b"3 3\n");
     let late = format!("{head}  m = f(0)\n  n = eat(xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
     let ran = scalar::run(&lower(late.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{late}")));
     assert_eq!(ran.stdout, b"3 3\n");
