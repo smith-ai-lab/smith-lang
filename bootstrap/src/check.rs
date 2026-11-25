@@ -7872,11 +7872,11 @@ impl<'a> Checker<'a> {
     /// and gives how it ends.
     fn block<'e>(&mut self, body: &mut Body<'a>, stmts: &'e [Stmt], last: &Want) -> End<'e> {
         let mut end = End::Empty;
+        let first_return = stmts
+            .iter()
+            .position(|s| matches!(s, Stmt::Expr(Expr::Return { .. })));
         for (i, stmt) in stmts.iter().enumerate() {
             let is_last = i + 1 == stmts.len();
-            let first_return = stmts
-                .iter()
-                .position(|s| matches!(s, Stmt::Expr(Expr::Return { .. })));
             if first_return.is_some_and(|r| r + 1 == i) {
                 let at = match stmt {
                     Stmt::Define { pos, .. } | Stmt::Assign { pos, .. } => *pos,
