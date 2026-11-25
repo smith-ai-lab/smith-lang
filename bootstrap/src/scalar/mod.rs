@@ -461,6 +461,9 @@ pub enum Raw {
     LSeek,
     /// `fchmod(descriptor, mode)`.
     FChmod,
+    /// `close(descriptor)` of a file, which is `CloseHandle` on Windows, where a
+    /// socket is closed by `closesocket` and a file is not.
+    CloseFile,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1285,7 +1288,12 @@ impl Program {
                 i.op,
                 Op::System {
                     call: System::Raw(
-                        Raw::PRead | Raw::PWrite | Raw::Write | Raw::LSeek | Raw::FChmod
+                        Raw::PRead
+                            | Raw::PWrite
+                            | Raw::Write
+                            | Raw::LSeek
+                            | Raw::FChmod
+                            | Raw::CloseFile
                     ),
                     ..
                 }

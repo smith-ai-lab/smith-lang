@@ -20,13 +20,19 @@ const MACHINE: Machine = Machine {
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = arm64::code::<Macos>(program);
+    let files = program.asks_the_files();
+    let (asm, data, parts) = if files {
+        arm64::code::<Macos<true>>(program)
+    } else {
+        arm64::code::<Macos<false>>(program)
+    };
     let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = macho::imports(
         program.allocates(),
         program.asks_for_entropy(),
         program.reads(),
         program.asks_the_kernel() || program.waits_in_kqueue(),
+        files,
     );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
@@ -36,9 +42,11 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     (executable, super::shifted(parts, at))
 }
 
-struct Macos;
+/// `FILES` is whether the program asks for the files, which the calls of the
+/// files are built for, and which no other program is built with.
+struct Macos<const FILES: bool>;
 
-impl System for Macos {
+impl<const FILES: bool> System for Macos<FILES> {
     /// Room for x19 and x20, which the write below keeps its place and its
     /// length in, and puts back.
     const RESERVED: u32 = 16;
@@ -170,24 +178,38 @@ impl System for Macos {
             return;
         }
         // macOS has no `epoll`, and what is built for it is never run there.
-        if matches!(
+        // The calls of the files are `read`, `write`, and the wrappers that
+        // only a program that asks for the files imports, which gives minus 38
+        // in every other program, where it is never run.
+        let of_files = matches!(
             call,
-            Raw::EpollCreate1
-                | Raw::EpollCtl
-                | Raw::EpollWait
-                | Raw::OpenAt
+            Raw::OpenAt
                 | Raw::Read
                 | Raw::Write
                 | Raw::PRead
                 | Raw::PWrite
                 | Raw::LSeek
                 | Raw::FChmod
-                | Raw::GetRandom
-        ) {
+                | Raw::CloseFile
+        );
+        if matches!(
+            call,
+            Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::GetRandom
+        ) || of_files && !FILES
+        {
             asm.mov64(X0, -38i64 as u64);
             return;
         }
-        asm.call(macho::slot(call));
+        if call == Raw::OpenAt {
+            // `openat` takes the mode as a variadic argument, which this system
+            // passes on the stack and not in a register.
+            asm.reserve_stack(16);
+            asm.store(Place::Frame(0), X3, 8);
+            asm.call(macho::slot(call));
+            asm.release_stack(16);
+        } else {
+            asm.call(macho::slot(call));
+        }
         if macho::gives_int(call) {
             // sxtw x0, w0
             asm.word(0x9340_7c00 | X0 << 5 | X0);

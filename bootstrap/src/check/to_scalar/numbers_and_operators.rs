@@ -636,6 +636,7 @@ impl<'a> Lowering<'a> {
                     Write,
                     LSeek,
                     FChmod,
+                    CloseFile,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);
