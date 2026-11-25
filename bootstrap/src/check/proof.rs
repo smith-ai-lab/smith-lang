@@ -508,9 +508,12 @@ impl Builder<'_, '_> {
                     .get(&format!("{list}.size"))
                     .cloned()
             }
-            Expr::Field { .. } => match self.path(e) {
+            Expr::Field { of, name, .. } => match self.path(e) {
                 Some(path) => {
-                    let (lo, hi) = self.range_of(e);
+                    let (lo, mut hi) = self.range_of(e);
+                    if name == "size" {
+                        hi = hi.min(self.size_most(of));
+                    }
                     Some(self.variable(Key::Field(path, lo, hi)))
                 }
                 None => self.goal.then(|| self.fresh(e)),
@@ -709,7 +712,7 @@ impl Builder<'_, '_> {
 
     /// The sum the size of the list `of` stands for.
     pub(super) fn list_size(&mut self, of: &Expr) -> Option<Lin> {
-        let range = (0, u64::MAX as i128);
+        let range = (0, self.size_most(of));
         if self.facts.subst.is_some() {
             return None;
         }
@@ -724,6 +727,28 @@ impl Builder<'_, '_> {
     }
 
     /// Whether `e` is a name that holds a text.
+    /// The greatest the size of `of` can be: below 2 to the 48 for a list, a
+    /// slice, or a text that a name holds, as each element has at least a byte
+    /// and no address has more than 48 bits, and the greatest of its type for
+    /// any other. The one variable that a size is has this one range wherever
+    /// it is made.
+    fn size_most(&self, of: &Expr) -> i128 {
+        let full = u64::MAX as i128;
+        match of {
+            Expr::Name { name, .. } => {
+                let sized = (self.body.names.iter().rev())
+                    .find(|(n, _)| n == name)
+                    .is_some_and(|(_, t)| matches!(t, Ty::List(_) | Ty::Slice(_) | Ty::Text));
+                if sized { MAX_SIZE } else { full }
+            }
+            // The bytes of a text are the text.
+            Expr::Field { of, name, .. } if name == "bytes" && self.is_text(of) => {
+                self.size_most(of)
+            }
+            _ => full,
+        }
+    }
+
     fn is_text(&self, e: &Expr) -> bool {
         let Expr::Name { name, .. } = e else {
             return false;
@@ -1231,7 +1256,8 @@ impl<'a> Checker<'a> {
     /// `var` is given a version of its own first.
     fn give_list(&mut self, body: &mut Body<'a>, at: usize, value: &Expr) {
         let mut facts = std::mem::take(&mut body.facts);
-        let range = (0, u64::MAX as i128);
+        let sized = matches!(body.names[at].1, Ty::List(_) | Ty::Slice(_) | Ty::Text);
+        let range = (0, if sized { MAX_SIZE } else { u64::MAX as i128 });
         let mut builder = self.builder(body, &mut facts, false);
         let given = match value {
             Expr::List { items, .. } => Some(constant(items.len() as i128)),
