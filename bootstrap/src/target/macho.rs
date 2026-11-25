@@ -83,6 +83,11 @@ pub fn slot(call: Raw) -> usize {
         | Raw::EpollWait
         | Raw::OpenAt
         | Raw::Read
+        | Raw::Write
+        | Raw::PRead
+        | Raw::PWrite
+        | Raw::LSeek
+        | Raw::FChmod
         | Raw::GetRandom => {
             unreachable!("which kernel it is, and what only Linux has, call nothing")
         }

@@ -310,6 +310,12 @@ impl Target {
         if self == Target::Wasm && program.reads() {
             panic!("wasm does not read standard input yet: the program calls input");
         }
+        if !matches!(self, Target::LinuxX64 | Target::LinuxArm64) && program.asks_the_files() {
+            panic!(
+                "{} does not build files yet: the program carries fs",
+                self.name()
+            );
+        }
         let windows = matches!(self, Target::WindowsX64 | Target::WindowsArm64);
         if !matches!(
             self,
