@@ -102,9 +102,10 @@ fn a_literal_is_a_nat_where_one_is_needed_and_is_refused_when_it_does_not_fit() 
     }
 }
 
-/// `xs.size` and `s.size` have the type `Nat`: a function gives one as a `Nat`,
-/// and as any other whole number type it is refused with one error, as the
-/// size of a list or a text that a function takes is not shown to fit.
+/// `xs.size` and `s.size` have the type `Nat`, and are below 2 to the 48: a
+/// function gives one as a type that holds 2 to the 48, and as any other whole
+/// number type it is refused with one error, as the size of a list or a text
+/// that a function takes is not shown to fit.
 fn the_size_of_a_list_and_of_a_text_is_a_nat_and_no_other_type() {
     generate::check(3631, 6, |g: &mut Gen| g.below(6), |n| {
         let items = vec!["7"; *n].join(", ");
@@ -118,7 +119,7 @@ fn the_size_of_a_list_and_of_a_text_is_a_nat_and_no_other_type() {
                     "fn size_of(xs: {ty_of_xs}) -> {} {{ xs.size }}\n\nfn main() <console, alloc> {{\n  {given}\n  print(\"{{size_of(xs)}}\")\n}}\n",
                     ty.name
                 ));
-                if ty.name == "u64" {
+                if ty.min <= 0 && ty.max >= (1 << 48) - 1 {
                     assert_eq!(stdout(&source), format!("{n}\n"), "for\n{source}");
                 } else {
                     assert_eq!(mistakes(&source), 1, "for\n{source}");

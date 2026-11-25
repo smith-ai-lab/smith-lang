@@ -7,6 +7,8 @@
 //! the `var`, from the count of its passes and what a pass adds, so what a
 //! test expects shares nothing with the compiler.
 
+use std::collections::BTreeSet;
+
 use smith::scalar::{self, Outcome};
 use smith::{check, lower};
 
@@ -42,6 +44,14 @@ pub const ONCE: &[Test] = &[
     (
         "every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_does_not_fit_is_refused",
         every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_does_not_fit_is_refused,
+    ),
+    (
+        "a_net_change_of_a_pass_that_adds_and_takes_in_nested_loops_is_the_range_the_directed_program_has",
+        a_net_change_of_a_pass_that_adds_and_takes_in_nested_loops_is_the_range_the_directed_program_has,
+    ),
+    (
+        "no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_value_the_var_has",
+        no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_value_the_var_has,
     ),
     (
         "the_time_to_check_loops_grows_with_their_number_and_no_faster",
@@ -336,6 +346,138 @@ fn every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_
                 "a use that needs {need_lo}..{need_hi} was accepted, and the loop gives {lo}..={}\n{source}",
                 hi - 1
             );
+        }
+    });
+}
+
+/// A pass of an outer loop that adds `30` in an inner loop and then may take
+/// `1` is a change of `29..=30`, so the range is `0..=300`, and not the `-10`
+/// that charging the `1` against the start would give.
+fn a_net_change_of_a_pass_that_adds_and_takes_in_nested_loops_is_the_range_the_directed_program_has()
+ {
+    let program = |holds: &str| {
+        with_header(format!(
+            "fn f(c: bool) -> {holds} {{\n  var s = 0\n  loop i in 0..10 {{\n    loop j in 0..10 {{ s = s + 3 }}\n    if c {{ s = s - 1 }}\n  }}\n  s\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{f(true)}} {{f(false)}}\")\n}}\n"
+        ))
+    };
+    assert_eq!(
+        run(&program("0..301")),
+        Outcome {
+            stdout: b"290 300\n".to_vec(),
+            status: 0
+        }
+    );
+    assert!(!refused(&program("0..300")).is_empty());
+    assert!(!refused(&program("1..301")).is_empty());
+}
+
+/// A block of a generated program: it changes `s` by a number, or does so where
+/// `c` holds, or runs a body again and again.
+#[derive(Clone, Debug)]
+enum Node {
+    Change(i128),
+    IfC(Vec<Node>),
+    Rounds(usize, Vec<Node>),
+}
+
+fn nodes(g: &mut Gen, depth: usize) -> Vec<Node> {
+    (0..1 + g.below(3))
+        .map(|_| match g.below(if depth == 0 { 1 } else { 3 }) {
+            0 => Node::Change(g.below(7) as i128 - 3),
+            1 => Node::IfC(nodes(g, depth - 1)),
+            _ => Node::Rounds(1 + g.below(4), nodes(g, depth - 1)),
+        })
+        .collect()
+}
+
+fn written(nodes: &[Node], indent: usize, counter: &mut usize, out: &mut String) {
+    let pad = " ".repeat(indent);
+    for node in nodes {
+        match node {
+            Node::Change(0) => out.push_str(&format!("{pad}s = s + 0\n")),
+            Node::Change(d) if *d > 0 => out.push_str(&format!("{pad}s = s + {d}\n")),
+            Node::Change(d) => out.push_str(&format!("{pad}s = s - {}\n", -d)),
+            Node::IfC(body) => {
+                out.push_str(&format!("{pad}if c {{\n"));
+                written(body, indent + 2, counter, out);
+                out.push_str(&format!("{pad}}}\n"));
+            }
+            Node::Rounds(k, body) => {
+                *counter += 1;
+                out.push_str(&format!("{pad}loop i{counter} in 0..{k} {{\n"));
+                written(body, indent + 2, counter, out);
+                out.push_str(&format!("{pad}}}\n"));
+            }
+        }
+    }
+}
+
+/// Every value `s` can have after the nodes, from each of `from`, with each
+/// `if` taken or not each time it is met, and in `all` every value it has at any
+/// point on the way.
+fn reachable(
+    nodes: &[Node],
+    from: BTreeSet<i128>,
+    all: &mut BTreeSet<i128>,
+) -> BTreeSet<i128> {
+    let mut now = from;
+    all.extend(now.iter().copied());
+    for node in nodes {
+        now = match node {
+            Node::Change(d) => now.iter().map(|v| v + d).collect(),
+            Node::IfC(body) => {
+                let taken = reachable(body, now.clone(), all);
+                now.union(&taken).copied().collect()
+            }
+            Node::Rounds(k, body) => {
+                for _ in 0..*k {
+                    now = reachable(body, now, all);
+                }
+                now
+            }
+        };
+        all.extend(now.iter().copied());
+    }
+    now
+}
+
+/// For nested loops that add and take, with a branch in them, no use that
+/// needs a range that leaves out a value the `var` can end with is accepted:
+/// the range inferred holds every value the `var` has at any point.
+fn no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_value_the_var_has()
+ {
+    // The whole of it is in a loop, so that what is known after it is the range
+    // of the `var` and not what its last assignment gave.
+    let program_of = |g: &mut Gen| vec![Node::Rounds(1 + g.below(3), nodes(g, 2))];
+    generate::check(9602, 30, program_of, |body| {
+        let mut all = BTreeSet::new();
+        let finals = reachable(body, [1000].into(), &mut all);
+        let (least, most) = (*all.first().unwrap(), *all.last().unwrap());
+        let mut text = String::new();
+        written(body, 2, &mut 0, &mut text);
+        let program = |lo: i128, hi: i128| {
+            with_header(format!(
+                "fn needs(v: {lo}..{hi}) -> {lo}..{hi} {{ v }}\n\n\
+                 fn f(c: bool) -> Int {{\n  var s = 1000\n{text}  needs(s)\n}}\n\n\
+                 fn main() <console, alloc> {{\n  print(\"{{f(true)}} {{f(false)}}\")\n}}\n"
+            ))
+        };
+        for (lo, hi) in [(least, most), (least + 1, most + 1)] {
+            let source = program(lo, hi);
+            assert!(
+                check(source.as_bytes()).is_err(),
+                "a use that needs {lo}..{hi} was accepted, and `s` can be {least} and {most}\n{source}"
+            );
+        }
+        let source = program(least, most + 1);
+        if let Ok(program) = lower(source.as_bytes()) {
+            let out = scalar::run(&program);
+            let said = String::from_utf8(out.stdout).expect("text");
+            for value in said.split_whitespace() {
+                let value: i128 = value.parse().expect("a number");
+                assert!(finals.contains(&value), "{value} is not in {finals:?}\n{source}");
+            }
         }
     });
 }
