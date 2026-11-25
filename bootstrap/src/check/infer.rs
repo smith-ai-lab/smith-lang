@@ -16,7 +16,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::{Body, Checker, Int, Numbers, Ty, Want, written_expr};
+use super::{Body, Checker, Int, Numbers, Ty, Want, pattern_names, statements, written_expr};
 use crate::diag::{Error, Pos};
 use crate::parser::{Expr, Stmt};
 
@@ -35,6 +35,14 @@ pub(super) struct Solve {
     pub(super) in_loop: HashSet<Pos>,
     /// How each is written where it is defined.
     pub(super) names: HashMap<Pos, String>,
+    /// The `var`s whose value depends on the `var` itself where nothing says
+    /// what it holds, so that nothing says what the value is.
+    pub(super) stuck: HashSet<Pos>,
+    /// The `var`s first given a number written out.
+    pub(super) written: HashSet<Pos>,
+    /// How many errors the values of the `var`s in `stuck` gave, which the
+    /// refusal of the `var`s says.
+    pub(super) stuck_errors: usize,
 }
 
 /// What the last solved look left, which the look that is kept reads.
@@ -50,25 +58,30 @@ pub(super) struct Solved {
 
 /// Whether a block, or one inside it, defines a `var` with no type written.
 pub(super) fn has_inferred(stmts: &[Stmt]) -> bool {
-    fn expr(e: &Expr) -> bool {
-        match e {
-            Expr::Match(m) => expr(&m.of) || m.arms.iter().any(|a| has_inferred(&a.body)),
-            Expr::Call(c) => c.args.iter().any(|a| expr(&a.value)),
-            Expr::Arith { left, right, .. } => expr(left) || expr(right),
-            Expr::Field { of, .. } => expr(of),
-            _ => false,
-        }
-    }
-    stmts.iter().any(|s| match s {
-        Stmt::Define {
-            var: true,
-            ty: None,
-            ..
-        } => true,
-        Stmt::Define { value, .. } => expr(value),
-        Stmt::Expr(e) => expr(e),
-        _ => false,
+    statements(stmts).into_iter().any(|s| {
+        matches!(
+            s,
+            Stmt::Define {
+                var: true,
+                ty: None,
+                ..
+            }
+        )
     })
+}
+
+/// The names that a pattern gives a value, which a `var` with no type written
+/// is not solved for, as what a pattern gives is not read from its parts.
+pub(super) fn patterned(stmts: &[Stmt]) -> HashSet<String> {
+    statements(stmts)
+        .into_iter()
+        .filter_map(|s| match s {
+            Stmt::Destructure { pattern, .. } => Some(pattern_names(pattern)),
+            _ => None,
+        })
+        .flatten()
+        .map(|(name, _)| name.to_string())
+        .collect()
 }
 
 /// The range that holds a number written out, alone.
@@ -89,8 +102,8 @@ fn literal(value: &Expr) -> Option<Int> {
 impl<'a> Checker<'a> {
     /// Whether a `var` with no type written takes its range from what it is
     /// given, in the body being checked.
-    pub(super) fn infers(&self, body: &Body<'a>) -> bool {
-        self.infer_on && !matches!(body.numbers, Numbers::Off)
+    pub(super) fn infers(&self, body: &Body<'a>, name: &str) -> bool {
+        self.infer_on && !matches!(body.numbers, Numbers::Off) && !self.patterned.contains(name)
     }
 
     /// Checks the value a `var` with no type written is first given, and
@@ -121,11 +134,16 @@ impl<'a> Checker<'a> {
                     solve.totals.insert(pos, total);
                     solve.given.insert(pos, vec![(pos, text, first)]);
                     solve.names.insert(pos, name.to_string());
+                    if literal(value).is_some() {
+                        solve.written.insert(pos);
+                    }
                 }
                 total
             }
             None => self.solved.ranges.get(&pos).copied().unwrap_or(first),
         };
+        // The first value enters the range, which is wider where later values need it.
+        self.expect(body, value, &gives, &Ty::Int(total));
         (Ty::Int(total), Some(first))
     }
 
@@ -139,15 +157,25 @@ impl<'a> Checker<'a> {
         value: &Expr,
     ) {
         let def = self.inferred[&at];
+        self.assigning = Some((def, false));
+        let errors = self.errors.len();
         let gives = match literal(value) {
             Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
             None => self.expr(body, value, &Want::Any),
         };
+        let (_, read_itself) = self.assigning.take().expect("assigning");
         let looped = body.loops > 0 || body.outer_loops > 0;
+        let counted = !matches!(body.numbers, Numbers::Finding(_));
+        // What a value that reads the `var` gives is a bound only where the
+        // `var` was first given a number written out, as there is nothing
+        // else to say what it holds.
+        let written = self
+            .solve
+            .as_ref()
+            .is_some_and(|s| s.written.contains(&def));
         match gives {
-            Ty::Int(g) => {
+            Ty::Int(g) if !read_itself || written => {
                 let text = format!("{name} = {}", written_expr(value));
-                let counted = !matches!(body.numbers, Numbers::Finding(_));
                 if let Some(solve) = self.solve.as_mut().filter(|_| counted) {
                     let held = solve.totals.get(&def).copied().unwrap_or(g);
                     solve.totals.insert(def, held.hull(g).unwrap_or(held));
@@ -159,8 +187,19 @@ impl<'a> Checker<'a> {
                 body.facts.set_step(at, g);
             }
             gives => {
-                let needed = body.names[at].1.clone();
-                self.expect(body, value, &gives, &needed);
+                if read_itself && counted {
+                    if let Some(solve) = self.solve.as_mut() {
+                        solve.stuck.insert(def);
+                        solve.stuck_errors += self.errors.len() - errors;
+                        if looped {
+                            solve.in_loop.insert(def);
+                        }
+                    }
+                    body.facts.unset_step(at);
+                } else {
+                    let needed = body.names[at].1.clone();
+                    self.expect(body, value, &gives, &needed);
+                }
             }
         }
         self.assign(body, at, value);
@@ -169,12 +208,23 @@ impl<'a> Checker<'a> {
     /// The range the `var` at `at` holds where it is read, while ranges are
     /// solved: what the last assignment gave it, where nothing lies between,
     /// and otherwise what it has been given so far.
-    pub(super) fn read_inferred(&self, body: &Body<'a>, at: usize) -> Option<Ty> {
-        let solve = self.solve.as_ref()?;
+    pub(super) fn read_inferred(&mut self, body: &Body<'a>, at: usize) -> Option<Ty> {
+        self.solve.as_ref()?;
         let def = self.inferred.get(&at)?;
         if let Some(held) = body.facts.step(at) {
             return Some(Ty::Int(held));
         }
+        // Where the `var` is read to give itself a value, and nothing says
+        // what it holds, what it holds is not known: another value in the
+        // same call, or in the operator, says the type, and none refuses it.
+        if let Some((assigning, _)) = self.assigning.as_mut()
+            && assigning == def
+        {
+            let def = *def;
+            self.assigning = Some((def, true));
+            return Some(Ty::Unknown);
+        }
+        let solve = self.solve.as_ref()?;
         let so_far = solve.totals.get(def)?;
         let before = solve.before.get(def).copied().unwrap_or(*so_far);
         Some(Ty::Int(so_far.hull(before).unwrap_or(*so_far)))
