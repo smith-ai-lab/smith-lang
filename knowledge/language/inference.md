@@ -11,7 +11,7 @@ built:
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
-  - "not the parameters of a lambda bound to a name, inferred from the calls of it, which comes with a lambda bound to a name (#1114)"
+  - "not the parameters of a lambda bound to a name, inferred from the calls of it (#1114)"
 ---
 
 # Inference
@@ -208,7 +208,7 @@ fn gap(n: Nat) -> Nat {
 
 ## A lambda's parameters
 
-A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. A lambda cannot be bound to a name yet, so this holds when it can, as [Where a lambda may go](lambdas.md#where-a-lambda-may-go) says.
+A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. A lambda that leaves a parameter's type out is not yet bound to a name, so this is not built, as [Where a lambda may go](lambdas.md#where-a-lambda-may-go) says.
 
 ```
 fn doubled(a: 0..5) -> 0..9 {
