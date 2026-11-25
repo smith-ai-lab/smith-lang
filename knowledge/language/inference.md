@@ -8,6 +8,7 @@ built:
   - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
   - "a `var` that starts as a number written out and is given itself plus a value, or itself less a value, in a loop or after a branch, given the range its linear templates over the count of passes bound, where the passes are those of an array, a range, or a `List`, a `str`, or a `Slice` of a size below 2 to the 48, and refused, with the range, why, and the choices, where that range is not finite within 64 bits"
   - "a `var` that starts as a number written out and is given a value that depends on it in any other way, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
+  - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
   - "not the parameters of a lambda bound to a name, inferred from the calls of it, which comes with a lambda bound to a name (#1114)"
@@ -183,6 +184,28 @@ fn steps(from: 0..100) -> 0..100 {
 
 `steps(5)` is `8`. `i` is a `0..100`, the range of `from`, and the `if` shows that `i + 1` fits it.
 
+## When to write an invariant
+
+The templates bound one name by the passes of a loop. They do not find how one name stands to another, or a bound that each pass keeps and that the passes do not add up to. A program, most often one written by a model, states that once, as an [`invariant`](loop.md#an-invariant), and nothing runs for it.
+
+A name doubled on each pass has no template, so its range is stated, and a second name doubled with it is known to be the same number only if the loop says so.
+
+```
+fn gap(n: Nat) -> Nat {
+  var a: 0..65 = 1
+  var b: 0..65 = 1
+  loop i in 0..n invariant a == b {
+    if a < 33 {
+      a = a + a
+      b = b + b
+    }
+  }
+  a - b
+}
+```
+
+`gap(9)` is `0`. `a == b` holds when the loop starts, and a pass that doubles one doubles the other, so it holds at the end of the pass. Inside the `if`, `a < 33` and `a == b` show that `b + b` fits a `0..65`, and after the loop `a == b` shows that `a - b` fits a `Nat`. Without the invariant `b + b` and `a - b` are refused. Write one when a use of a name needs a fact about it that its range does not give, and the fact is a comparison of whole numbers that `arith` can prove from the start and from one pass. An invariant that cannot be proven is refused where it is stated, so it is never a promise the compiler takes on trust.
+
 ## A lambda's parameters
 
 A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. A lambda cannot be bound to a name yet, so this holds when it can, as [Where a lambda may go](lambdas.md#where-a-lambda-may-go) says.
@@ -279,6 +302,7 @@ This is refused at the `try`: "this block gives `u64`, which `try` cannot return
 | `n = n + 1`, twice, with no loop | Solved in order: `0`, `1`, and `2` give a `0..3` |
 | `acc = acc + x` in a loop, `acc` starting as a number written out | The start, and what the passes add or take away, by a template |
 | A `var` a loop changes in a way no template covers | Refused, with the range to state |
+| `loop i in a..b invariant e { ... }` | `e` is proven before the first pass and at the end of each pass, and is known in the block and after the loop |
 | `double = fn(v) { v * 2 }` and `double(a)` | `v` has the range of what it is called with |
 | `xs = []` and a later `push` | The element is the range of what is pushed |
 | A value that nothing settles | Refused, with where to state its type |
