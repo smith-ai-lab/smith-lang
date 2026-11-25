@@ -736,6 +736,17 @@ impl<'a> Checker<'a> {
         let effects = self.defs.file.fix_effects(body.owner(), &listed, &missing);
         let effects: Vec<&str> = effects.iter().map(|e| e.as_str()).collect();
         body.missing_at.push(self.errors.len());
+        if body.owner().name.starts_with("lambda@") {
+            self.errors.push(Error::new(
+                pos,
+                format!(
+                    "{what} needs the `{}` effect, and the type of a lambda that is bound, \
+                     stored, or returned states none",
+                    written_name(effect)
+                ),
+            ));
+            return;
+        }
         self.errors.push(
             Error::new(
                 pos,

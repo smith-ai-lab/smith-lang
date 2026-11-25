@@ -5901,7 +5901,9 @@ fn warnings(file: &File, reached: &[Item]) -> Vec<Error> {
     for (i, f) in
         (file.functions.iter().enumerate()).filter(|(_, f)| !crate::parser::is_operation(f))
     {
-        dead(Item::Fn(i), f.pos, &|| format!("the function `{}`", f.name));
+        if !f.name.starts_with("lambda@") {
+            dead(Item::Fn(i), f.pos, &|| format!("the function `{}`", f.name));
+        }
     }
     // The struct of the arguments of a function is made for `Function`, and is
     // not written, so it is nothing for the program to delete.
@@ -6127,7 +6129,7 @@ fn values(body: &[Stmt]) -> impl Iterator<Item = &Expr> {
     })
 }
 
-fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
+pub(crate) fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
     out.push(expr);
     match expr {
         Expr::Call(call) => {
@@ -6217,7 +6219,7 @@ fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
 
 /// Every statement of a body, and those of the blocks of each `match` and
 /// each lambda in them, each before those inside it.
-fn statements(body: &[Stmt]) -> Vec<&Stmt> {
+pub(crate) fn statements(body: &[Stmt]) -> Vec<&Stmt> {
     fn collect<'a>(body: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
         for (stmt, value) in body.iter().zip(values(body)) {
             out.push(stmt);
@@ -7888,7 +7890,11 @@ impl<'a> Checker<'a> {
             // bounds, is the type whose one value that function is.
             (Ty::Fn(_), Ty::Param(p))
                 if self.fn_values.contains_key(&addr(value))
-                    && (defs.bounded(vars, *p) || vars.names[*p].contains('@')) =>
+                    && (defs.bounded(vars, *p)
+                        || vars.names[*p].contains('@')
+                        || defs.file.functions[self.fn_values[&addr(value)]]
+                            .name
+                            .starts_with("lambda@")) =>
             {
                 let f = self.fn_values[&addr(value)];
                 let named = Ty::Named(f);
@@ -8310,7 +8316,7 @@ impl<'a> Checker<'a> {
             )),
             _ => {}
         }
-        if !body.missing_at.is_empty() {
+        if !body.missing_at.is_empty() && !f.name.starts_with("lambda@") {
             let listed: Vec<&str> = body.listed.iter().map(|e| written_name(e)).collect();
             let missing: Vec<&str> = body.missing.iter().map(|e| written_name(e)).collect();
             let effects = defs.file.fix_effects(f, &listed, &missing);

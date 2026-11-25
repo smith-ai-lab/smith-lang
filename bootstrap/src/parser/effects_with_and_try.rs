@@ -111,6 +111,7 @@ impl Block {
         while let Some((mut before, w)) = self.outer.pop() {
             let lambda = Expr::Lambda(Box::new(Lambda {
                 pos: w.pos,
+                generics: Vec::new(),
                 types: w.params.iter().map(|_| None).collect(),
                 params: w.params,
                 result: None,

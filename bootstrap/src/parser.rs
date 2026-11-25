@@ -11,6 +11,7 @@ use crate::lexer::{Piece, Tok, Token};
 
 mod effects_with_and_try;
 mod functions_calls_and_lambdas;
+mod lift;
 mod lists_and_text;
 mod numbers_and_operators;
 pub mod outline;
@@ -574,6 +575,8 @@ pub struct Over {
 pub struct Lambda {
     /// Where it starts: at `fn`, or at the `{` when it takes no parameters.
     pub pos: Pos,
+    /// The type parameters written in brackets after `fn`.
+    pub generics: Vec<Generic>,
     pub params: Vec<Named>,
     /// The type written for each parameter, if it is, and the one written for
     /// the result.
@@ -967,6 +970,9 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
         for pos in effects.iter().flat_map(|e| &e.public).flatten() {
             p.unbuilt.push(Error::unsupported(*pos, "`pub`"));
         }
+    }
+    if !library {
+        lift::lift(&mut functions, &structs);
     }
     if p.errors.is_empty() {
         Ok(File {

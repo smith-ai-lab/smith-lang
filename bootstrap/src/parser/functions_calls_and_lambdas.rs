@@ -472,8 +472,10 @@ impl Parser<'_> {
         let mut types = Vec::new();
         let mut result = None;
         let mut binds = Vec::new();
+        let mut generics = Vec::new();
         if self.tok() == &Tok::Keyword("fn") {
             self.bump();
+            generics = self.generics()?;
             self.expect_punct("(", "`(` and the lambda's parameters")?;
             self.skip_newlines();
             if self.tok() == &Tok::Punct(")") {
@@ -521,6 +523,7 @@ impl Parser<'_> {
         let (body, end) = body?;
         Ok(Lambda {
             pos,
+            generics,
             params,
             types,
             result,

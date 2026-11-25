@@ -44,6 +44,34 @@ pub const ONCE: &[Test] = &[
         || builds_to_the_bytes_of_the_call_written_directly(&[Hold::CallTheReturn]),
     ),
     (
+        "a_lambda_that_is_bound_stored_or_returned_builds_to_the_bytes_of_the_function_with_its_body",
+        || {
+            a_lambda_builds_to_the_bytes_of_the_call_written_directly(&[
+                Hold::Bind,
+                Hold::BindThenPass,
+                Hold::Field,
+                Hold::Return,
+                Hold::BindTheReturn,
+                Hold::CallTheReturn,
+                Hold::Takes,
+                Hold::Nested,
+                Hold::Made,
+            ])
+        },
+    ),
+    (
+        "a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept",
+        a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept,
+    ),
+    (
+        "which_lambda_a_value_is_is_known_when_the_program_is_built",
+        which_lambda_a_value_is_is_known_when_the_program_is_built,
+    ),
+    (
+        "a_lambda_that_writes_type_parameters_is_called_with_each_type",
+        a_lambda_that_writes_type_parameters_is_called_with_each_type,
+    ),
+    (
         "every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints",
         every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints,
     ),
@@ -84,10 +112,13 @@ struct Program {
     adds: [u8; 3],
     argument: u8,
     hold: Hold,
+    /// Whether the function is a lambda written where it is held.
+    lambda: bool,
 }
 
-fn program(g: &mut Gen, holds: &[Hold]) -> Program {
+fn program_of(g: &mut Gen, holds: &[Hold], lambda: bool) -> Program {
     Program {
+        lambda,
         held: g.below(3),
         adds: [g.below(200) as u8, g.below(200) as u8, g.below(200) as u8],
         argument: g.below(50) as u8,
@@ -96,6 +127,16 @@ fn program(g: &mut Gen, holds: &[Hold]) -> Program {
 }
 
 impl Program {
+    /// The function that is held, as a function with a name or as the lambda
+    /// that is written with the same body.
+    fn function(&self) -> String {
+        if self.lambda {
+            format!("fn(x: Int) -> Int {{ wrapping_add(x, {}) }}", self.adds[self.held])
+        } else {
+            format!("f{}", self.held)
+        }
+    }
+
     fn head(&self) -> String {
         let mut text = String::from("use std.console (console, print)\nuse std.int (wrapping_add)\n\n");
         for (k, add) in self.adds.iter().enumerate() {
@@ -111,48 +152,49 @@ impl Program {
 
     /// The program that holds the function in the way `hold` says.
     fn as_value(&self) -> String {
-        let (k, x) = (self.held, self.argument);
+        let x = self.argument;
+        let fv = self.function();
         let mut text = self.head();
         match self.hold {
-            Hold::Bind => text += &Self::main(&format!("  f = f{k}\n  r = f({x})\n")),
-            Hold::BindThenPass => text += &Self::main(&format!("  f = f{k}\n  r = twice({x}, f)\n")),
+            Hold::Bind => text += &Self::main(&format!("  f = {fv}\n  r = f({x})\n")),
+            Hold::BindThenPass => text += &Self::main(&format!("  f = {fv}\n  r = twice({x}, f)\n")),
             Hold::Field => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
-                text += &Self::main(&format!("  h = Held(run: f{k})\n  r = h.run({x})\n"));
+                text += &Self::main(&format!("  h = Held(run: {fv})\n  r = h.run({x})\n"));
             }
             Hold::Return => {
-                text += &format!("fn chosen() -> fn(Int) -> Int {{ f{k} }}\n\n");
+                text += &format!("fn chosen() -> fn(Int) -> Int {{ {fv} }}\n\n");
                 text += &Self::main(&format!("  r = chosen()({x})\n"));
             }
             Hold::BindTheReturn => {
-                text += &format!("fn chosen() -> fn(Int) -> Int {{ f{k} }}\n\n");
+                text += &format!("fn chosen() -> fn(Int) -> Int {{ {fv} }}\n\n");
                 text += &Self::main(&format!("  f = chosen()\n  r = f({x})\n"));
             }
             Hold::CallTheReturn => {
-                text += &format!("fn chosen() -> fn(Int) -> Int {{ f{k} }}\n\n");
+                text += &format!("fn chosen() -> fn(Int) -> Int {{ {fv} }}\n\n");
                 text += &Self::main(&format!("  r = twice({x}, chosen())\n"));
             }
             Hold::Takes => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
                 text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n\n";
-                text += &Self::main(&format!("  a = Held(run: f{k})\n  r = priced(a, {x})\n"));
+                text += &Self::main(&format!("  a = Held(run: {fv})\n  r = priced(a, {x})\n"));
             }
             Hold::Nested => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
                 text += "struct Shop {\n  held: Held\n}\n\n";
                 text += "fn sold(s: Shop, x: Int) -> Int {\n  h = s.held\n  h.run(x)\n}\n\n";
                 text += &Self::main(&format!(
-                    "  s = Shop(held: Held(run: f{k}))\n  r = sold(s, {x})\n"
+                    "  s = Shop(held: Held(run: {fv}))\n  r = sold(s, {x})\n"
                 ));
             }
             Hold::Wraps => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
                 text += "fn wrap(f: fn(Int) -> Int) -> Held { Held(run: f) }\n\n";
-                text += &Self::main(&format!("  r = wrap(f{k}).run({x})\n"));
+                text += &Self::main(&format!("  r = wrap({fv}).run({x})\n"));
             }
             Hold::Made => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
-                text += &format!("fn made() -> Held {{ Held(run: f{k}) }}\n\n");
+                text += &format!("fn made() -> Held {{ Held(run: {fv}) }}\n\n");
                 text += &Self::main(&format!("  h = made()\n  r = h.run({x})\n"));
             }
         }
@@ -173,7 +215,16 @@ impl Program {
 }
 
 fn builds_to_the_bytes_of_the_call_written_directly(holds: &[Hold]) {
-    generate::check(4301, 3, |g: &mut Gen| program(g, holds), |p| {
+    builds_to_the_bytes(holds, false);
+}
+
+/// The same, where the function is a lambda written where it is held.
+fn a_lambda_builds_to_the_bytes_of_the_call_written_directly(holds: &[Hold]) {
+    builds_to_the_bytes(holds, true);
+}
+
+fn builds_to_the_bytes(holds: &[Hold], lambda: bool) {
+    generate::check(4301, 3, |g: &mut Gen| program_of(g, holds, lambda), |p| {
         let (value, direct) = (p.as_value(), p.called());
         if let Err(found) = check(value.as_bytes()) {
             panic!("{found:?} for\n{value}");
@@ -444,4 +495,69 @@ fn a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result
     assert!(check(passed.as_bytes()).is_ok(), "{:?}", check(passed.as_bytes()));
     let silent = passed.replace("fn main() <console, alloc>", "fn main() <alloc>");
     assert!(check(silent.as_bytes()).is_err());
+}
+
+/// A lambda that reads or assigns a name around it holds something lent, and
+/// a lambda that needs an effect is held where a type states none: each is
+/// refused where the lambda is kept.
+fn a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_kept() {
+    let head = "use std.console (console, print)\n\n\
+                struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n";
+    let lent = [
+        "fn kept(rate: f32) -> f32 {\n  f = fn(v: f32) -> f32 { v * rate }\n  f(1.0)\n}\n",
+        "fn kept(rate: f32) -> Pricing {\n  Pricing(discount: fn(v: f32) -> f32 { v * rate })\n}\n",
+        "fn kept(rate: f32) -> fn(f32) -> f32 {\n  fn(v: f32) -> f32 { v * rate }\n}\n",
+    ];
+    for item in lent {
+        let source = format!("{head}{item}\nfn main() <console> {{\n  print(\"{{kept(1.0)}}\")\n}}\n");
+        let found = check(source.as_bytes()).expect_err("refused");
+        assert!(
+            found.iter().any(|e| e.message.starts_with("a lambda cannot be")),
+            "{found:?} for\n{source}"
+        );
+    }
+    let loud = format!(
+        "{head}fn kept() -> Pricing {{\n  Pricing(discount: fn(v: f32) -> f32 {{\n    print(\"x\")\n    v\n  }})\n}}\n\n\
+         fn main() <console> {{\n  k = kept()\n}}\n"
+    );
+    let found = check(loud.as_bytes()).expect_err("refused");
+    assert!(
+        found.iter().any(|e| e.message.contains("`console` effect") && e.message.contains("states none")),
+        "{found:?}"
+    );
+}
+
+/// Two different lambdas where one type is needed are refused, as two
+/// functions with names are, and each lambda is a type of its own.
+fn which_lambda_a_value_is_is_known_when_the_program_is_built() {
+    let head = "struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n";
+    let pick = format!(
+        "{head}fn pick(wide: bool) -> Pricing {{\n  if wide {{ Pricing(discount: fn(v: f32) -> f32 {{ v * 2.0 }}) }} \
+         else {{ Pricing(discount: fn(v: f32) -> f32 {{ v * 3.0 }}) }}\n}}\n\nfn main() {{\n  p = pick(true)\n}}\n"
+    );
+    let found = check(pick.as_bytes()).expect_err("refused");
+    assert!(
+        found.iter().any(|e| e.message.contains("must be known when the program is built")),
+        "{found:?}"
+    );
+    // Two lambdas of the same text, written twice, are each their own type, so a
+    // function that takes the struct is built once for each.
+    let both = format!(
+        "use std.console (console, print)\n\n{head}fn priced(p: Pricing, x: f32) -> f32 {{ p.discount(x) }}\n\n\
+         fn main() <console, alloc> {{\n  a = Pricing(discount: fn(v: f32) -> f32 {{ v * 2.0 }})\n  \
+         b = Pricing(discount: fn(v: f32) -> f32 {{ v * 3.0 }})\n  print(\"{{priced(a, 1.0)}} {{priced(b, 1.0)}}\")\n}}\n"
+    );
+    assert_eq!(scalar::run(&lower(both.as_bytes()).expect("builds")).stdout, b"2.0 3.0\n");
+}
+
+/// A lambda may write its own type parameters, and each call settles them.
+fn a_lambda_that_writes_type_parameters_is_called_with_each_type() {
+    let source = r#"use std.console (console, print)
+
+fn main() <console, alloc> {
+  same = fn[T](x: T) -> T { x }
+  print("{same(1)} {same("a")}")
+}
+"#;
+    assert_eq!(scalar::run(&lower(source.as_bytes()).expect("builds")).stdout, b"1 a\n");
 }
