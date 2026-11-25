@@ -30,8 +30,8 @@ pub const ONCE: &[Test] = &[
         a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_fits_is_accepted,
     ),
     (
-        "a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state",
-        a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state,
+        "a_var_that_a_loop_gives_itself_times_a_number_is_refused_at_the_assignment_with_the_range_to_state",
+        a_var_that_a_loop_gives_itself_times_a_number_is_refused_at_the_assignment_with_the_range_to_state,
     ),
     (
         "a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program",
@@ -279,11 +279,12 @@ fn a_use_that_needs_less_than_the_inferred_range_says_what_was_inferred_from_wha
     });
 }
 
-/// A `var` that a loop gives a value that depends on the `var` itself has no
-/// range inferred yet: the error says that it is changed by itself in the loop
-/// and that its range is not inferred, and the fix states a range.
+/// A `var` that a loop gives a value that depends on the `var` itself in a way
+/// no template covers has no range inferred: the error says that it is changed
+/// by itself in the loop and that its range is not inferred, and the fix states
+/// a range.
 fn a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state() {
-    for step in ["acc = acc + i", "acc = acc + 1"] {
+    for step in ["acc = acc * i", "acc = acc * 2"] {
         let source = with_header(format!(
             "fn sum(n: 0..11) -> 0..101 {{\n  var acc = 0\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\n\
              fn main() {{\n  x = sum(3)\n}}\n"
@@ -373,15 +374,15 @@ fn a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_
     );
 }
 
-/// `var sum = 0` that a `loop` gives itself plus the counter has no range
-/// inferred yet, and is refused at the assignment, with the range to state.
-fn a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state() {
+/// `var sum = 0` that a `loop` gives itself times a number has no range
+/// inferred, and is refused at the assignment, with the range to state.
+fn a_var_that_a_loop_gives_itself_times_a_number_is_refused_at_the_assignment_with_the_range_to_state() {
     let source = with_header(
-        "fn main() <console, alloc> {\n  var sum = 0\n  loop i in 0..5 { sum = sum + i }\n  print(\"{sum}\")\n}\n"
+        "fn main() <console, alloc> {\n  var sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
             .to_string(),
     );
     let errors = lower(source.as_bytes()).expect_err("a var changed by itself");
-    let at = line_of(&source, "loop i in 0..5 { sum = sum + i }");
+    let at = line_of(&source, "loop i in 0..5 { sum = sum * 2 }");
     let said = errors
         .iter()
         .find(|e| e.pos.line == at)
@@ -458,11 +459,11 @@ fn every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_a
 /// the `var` has so far is said in neither.
 fn a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program() {
     let source = with_header(
-        "fn main() <console> {\n  var sum = 0\n  loop i in 0..5 { sum = sum + i }\n  print(\"{sum}\")\n}\n"
+        "fn main() <console> {\n  var sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
             .to_string(),
     );
     let errors = lower(source.as_bytes()).expect_err("two mistakes");
-    let at = line_of(&source, "loop i in 0..5 { sum = sum + i }");
+    let at = line_of(&source, "loop i in 0..5 { sum = sum * 2 }");
     let print = line_of(&source, "print(\"{sum}\")");
     assert!(
         errors.iter().any(|e| e.pos.line == at

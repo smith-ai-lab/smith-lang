@@ -1,0 +1,375 @@
+//! A `var` that starts as a number written out, and that a `loop` gives itself
+//! plus a value or itself less a value, has the range that linear templates
+//! over the count of passes bound: it is accepted where that range is finite
+//! within 64 bits, and refused where it is not.
+//!
+//! Every generator knows the greatest and the least value its loop can give
+//! the `var`, from the count of its passes and what a pass adds, so what a
+//! test expects shares nothing with the compiler.
+
+use smith::scalar::{self, Outcome};
+use smith::{check, lower};
+
+use crate::Test;
+use crate::generate::{self, Gen};
+use crate::numbers::with_header;
+
+pub const ONCE: &[Test] = &[
+    (
+        "a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_use_that_needs_less_says",
+        a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_use_that_needs_less_says,
+    ),
+    (
+        "a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to_the_56",
+        a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to_the_56,
+    ),
+    (
+        "a_sum_of_nats_is_refused_with_the_range_why_and_the_choices",
+        a_sum_of_nats_is_refused_with_the_range_why_and_the_choices,
+    ),
+    (
+        "a_requires_that_bounds_the_size_of_a_list_makes_a_sum_of_nats_finite",
+        a_requires_that_bounds_the_size_of_a_list_makes_a_sum_of_nats_finite,
+    ),
+    (
+        "a_loop_that_counts_down_is_proven_where_it_cannot_pass_below_the_range",
+        a_loop_that_counts_down_is_proven_where_it_cannot_pass_below_the_range,
+    ),
+    (
+        "a_change_that_no_template_covers_is_refused_with_the_range_to_state",
+        a_change_that_no_template_covers_is_refused_with_the_range_to_state,
+    ),
+    (
+        "every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_does_not_fit_is_refused",
+        every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_does_not_fit_is_refused,
+    ),
+    (
+        "the_time_to_check_loops_grows_with_their_number_and_no_faster",
+        the_time_to_check_loops_grows_with_their_number_and_no_faster,
+    ),
+];
+
+fn run(source: &str) -> Outcome {
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
+    scalar::run(&program)
+}
+
+/// The messages of the errors of a program that is refused.
+fn refused(source: &str) -> Vec<String> {
+    let errors = lower(source.as_bytes()).expect_err("a program that is refused");
+    errors.into_iter().map(|e| e.message).collect()
+}
+
+/// The owner's program, which sums three numbers written out in a loop, prints
+/// `6`, and `acc` is a `0..10`, which the error of a use that needs less says.
+fn a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_use_that_needs_less_says()
+ {
+    let body = |after: &str| {
+        with_header(format!(
+            "fn main() <console, alloc> {{\n  xs = [1, 2, 3]\n  var acc = 0\n  loop x in xs {{\n    acc = acc + x\n  }}\n{after}}}\n"
+        ))
+    };
+    assert_eq!(
+        run(&body("  print(\"{acc}\")\n")),
+        Outcome {
+            stdout: b"6\n".to_vec(),
+            status: 0
+        }
+    );
+    let source = with_header(
+        "fn takes(v: 0..9) -> 0..9 { v }\n\nfn main() <alloc> {\n  xs = [1, 2, 3]\n  var acc = 0\n  loop x in xs {\n    acc = acc + x\n  }\n  y = takes(acc)\n}\n"
+            .to_string(),
+    );
+    let said = refused(&source);
+    assert!(
+        said.iter().any(|m| m.contains("`acc` is a `0..10`")
+            && m.contains("inferred")
+            && m.contains("needs a `0..9`")),
+        "{said:?}"
+    );
+}
+
+/// A count `if p(x) { n = n + 1 }` over a list is a `0..2^48`, and a sum of a
+/// `List[Byte]` is below 2^56, and both are proven.
+fn a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to_the_56() {
+    let count = |holds: &str| {
+        with_header(format!(
+            "fn evens(xs: List[Nat]) -> {holds} {{\n  var n = 0\n  loop x in xs {{\n    if x % 2 == 0 {{ n = n + 1 }}\n  }}\n  n\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{evens([1, 2, 4, 5])}}\")\n}}\n"
+        ))
+    };
+    assert_eq!(
+        run(&count("0..281474976710656")),
+        Outcome {
+            stdout: b"2\n".to_vec(),
+            status: 0
+        }
+    );
+    let said = refused(&count("0..281474976710655"));
+    assert!(
+        said.iter().any(|m| m.contains("`n` is a `0..281474976710656`")),
+        "{said:?}"
+    );
+    let sum = |holds: &str| {
+        with_header(format!(
+            "fn total(xs: List[Byte]) -> {holds} {{\n  var acc = 0\n  loop b in xs {{ acc = acc + b }}\n  acc\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{total([200, 100, 255])}}\")\n}}\n"
+        ))
+    };
+    assert_eq!(
+        run(&sum("0..72057594037927936")),
+        Outcome {
+            stdout: b"555\n".to_vec(),
+            status: 0
+        }
+    );
+    assert!(!refused(&sum("0..281474976710656")).is_empty());
+}
+
+/// A sum of a `List[Nat]` is refused: the error says the range and why, and
+/// gives the choices, and the compiler adds no check.
+fn a_sum_of_nats_is_refused_with_the_range_why_and_the_choices() {
+    let source = with_header(
+        "fn total(xs: List[Nat]) -> Nat {\n  var acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\nfn main() <alloc> {\n  y = total([1, 2])\n}\n"
+            .to_string(),
+    );
+    let errors = lower(source.as_bytes()).expect_err("a sum that is not finite");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    let said = &errors[0];
+    assert!(
+        said.message.contains("`acc`") && said.message.contains("64 bits"),
+        "{said:?}"
+    );
+    let fix = said.fix.as_deref().expect("a fix");
+    for choice in ["checked_add", "wrapping_add", "requires"] {
+        assert!(fix.contains(choice), "{fix}");
+    }
+}
+
+/// A `requires` that bounds the size is what the passes are bounded by.
+fn a_requires_that_bounds_the_size_of_a_list_makes_a_sum_of_nats_finite() {
+    let source = with_header(
+        "fn total(xs: List[0..1000]) -> 0..100001\n  requires xs.size <= 100\n{\n  var acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\n\
+         fn main() <console, alloc> {\n  xs: List[0..1000] = [5, 6]\n  if xs.size <= 100 {\n    print(\"{total(xs)}\")\n  }\n}\n"
+            .to_string(),
+    );
+    assert_eq!(
+        run(&source),
+        Outcome {
+            stdout: b"11\n".to_vec(),
+            status: 0
+        }
+    );
+}
+
+/// A loop that counts down, from a start, by a `1..4`, is proven where it
+/// cannot pass below the range.
+fn a_loop_that_counts_down_is_proven_where_it_cannot_pass_below_the_range() {
+    let down = |start: u32, holds: &str| {
+        with_header(format!(
+            "fn down(d: 1..4) -> {holds} {{\n  var n = {start}\n  loop i in 0..10 {{ n = n - d }}\n  n\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{down(3)}}\")\n}}\n"
+        ))
+    };
+    assert_eq!(
+        run(&down(100, "70..101")),
+        Outcome {
+            stdout: b"70\n".to_vec(),
+            status: 0
+        }
+    );
+    assert!(!refused(&down(100, "71..101")).is_empty());
+    // From a start below what ten passes can take, the use of a `Nat` is refused.
+    assert!(!refused(&down(20, "Nat")).is_empty());
+}
+
+/// A product, or any change the templates do not cover, is refused with the
+/// range to state.
+fn a_change_that_no_template_covers_is_refused_with_the_range_to_state() {
+    for step in ["acc = acc * 2", "acc = acc + acc"] {
+        let source = with_header(format!(
+            "fn f(n: 0..11) -> 0..2049 {{\n  var acc = 1\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\nfn main() <alloc> {{\n  x = f(3)\n}}\n"
+        ));
+        let said = refused(&source);
+        assert!(
+            said.iter()
+                .any(|m| m.contains("`acc`") && m.contains("changed by itself in this loop")),
+            "{said:?} for\n{source}"
+        );
+    }
+}
+
+/// A loop of one of the shapes the templates cover, with the least and the
+/// greatest the `var` can be after it, worked out from its passes and what a
+/// pass adds.
+#[derive(Clone, Debug)]
+struct Loop {
+    /// How the loop is written, and the signature and the call that print the
+    /// `var` for the input that makes it greatest and for the one that makes
+    /// it least.
+    signature: String,
+    body: String,
+    call_most: String,
+    call_least: String,
+    least: i128,
+    most: i128,
+}
+
+fn shapes(g: &mut Gen) -> Loop {
+    let start = g.below(40) as i128;
+    let takes = g.one_in(2);
+    let sign = if takes { "-" } else { "+" };
+    // A `var` that takes away starts high enough that it stays above zero.
+    let start = if takes { start + 8000 } else { start };
+    match g.below(4) {
+        0 => {
+            // The elements of an array of `k` bytes, each added or taken.
+            let k = 1 + g.below(6);
+            let all = |n: u8| vec![n.to_string(); k].join(", ");
+            let (lo, hi) = (0, 255 * k as i128);
+            Loop {
+                signature: format!("xs: [{k}]Byte"),
+                body: format!("loop x in xs {{ acc = acc {sign} x }}"),
+                call_most: format!("[{}]", all(if takes { 0 } else { 255 })),
+                call_least: format!("[{}]", all(if takes { 255 } else { 0 })),
+                least: if takes { start - hi } else { start + lo },
+                most: if takes { start - lo } else { start + hi },
+            }
+        }
+        1 => {
+            // A range of at most `n - 1` passes, each adding or taking a `d`,
+            // and of none where `n` is `0`.
+            let n = 2 + g.below(9) as i128;
+            let a = g.below(4) as i128;
+            let b = a + 1 + g.below(5) as i128;
+            let hi = (n - 1) * (b - 1);
+            let (full, empty) = (format!("{}, {}", n - 1, b - 1), format!("0, {a}"));
+            Loop {
+                signature: format!("n: 0..{n}, d: {a}..{b}"),
+                body: format!("loop i in 0..n {{ acc = acc {sign} d }}"),
+                call_most: if takes { empty.clone() } else { full.clone() },
+                call_least: if takes { full } else { empty },
+                least: if takes { start - hi } else { start },
+                most: if takes { start } else { start + hi },
+            }
+        }
+        2 => {
+            // A loop in a loop: the passes of both.
+            let n = 2 + g.below(5) as i128;
+            let k = 1 + g.below(4);
+            let all = |v: u8| vec![v.to_string(); k].join(", ");
+            let hi = (n - 1) * k as i128 * 255;
+            let (full, empty) = (
+                format!("{}, [{}]", n - 1, all(255)),
+                format!("0, [{}]", all(0)),
+            );
+            Loop {
+                signature: format!("n: 0..{n}, xs: [{k}]Byte"),
+                body: format!("loop i in 0..n {{ loop x in xs {{ acc = acc {sign} x }} }}"),
+                call_most: if takes { empty.clone() } else { full.clone() },
+                call_least: if takes { full } else { empty },
+                least: if takes { start - hi } else { start },
+                most: if takes { start } else { start + hi },
+            }
+        }
+        _ => {
+            // A count of the bytes of an array above a number.
+            let k = 1 + g.below(6);
+            let above = g.below(200);
+            let all = |n: usize| format!("[{}]", vec![n.to_string(); k].join(", "));
+            // Every element is above the number, or none is.
+            let (counted, none) = (all(255), all(0));
+            Loop {
+                signature: format!("xs: [{k}]Byte"),
+                body: format!("loop x in xs {{ if x > {above} {{ acc = acc {sign} 1 }} }}"),
+                call_most: if takes { none.clone() } else { counted.clone() },
+                call_least: if takes { counted } else { none },
+                least: if takes { start - k as i128 } else { start },
+                most: if takes { start } else { start + k as i128 },
+            }
+        }
+    }
+    .with_start(start)
+}
+
+impl Loop {
+    /// The loop with the start of its `var` written before it.
+    fn with_start(mut self, start: i128) -> Loop {
+        self.body = format!("var acc = {start}\n  {}", self.body);
+        self
+    }
+
+    /// The program that passes the `var` to a function that needs `lo..hi`.
+    fn needing(&self, lo: i128, hi: i128) -> String {
+        with_header(format!(
+            "fn needs(v: {lo}..{hi}) -> {lo}..{hi} {{ v }}\n\n\
+             fn f({}) -> Int {{\n  {}\n  needs(acc)\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(\"{{f({})}}\")\n  print(\"{{f({})}}\")\n}}\n",
+            self.signature, self.body, self.call_most, self.call_least
+        ))
+    }
+}
+
+/// For each loop the generator builds, a use that needs exactly the range the
+/// templates bound is accepted, and prints a value of it for the input that
+/// makes it greatest and for the one that makes it least; a use that needs a
+/// range that holds less, at either end, is refused, as a value is known that
+/// it does not hold.
+fn every_range_inferred_for_a_generated_loop_holds_for_every_input_and_one_that_does_not_fit_is_refused()
+ {
+    generate::check(9601, 24, shapes, |l| {
+        let (lo, hi) = (l.least, l.most + 1);
+        let source = l.needing(lo, hi);
+        let out = run(&source);
+        assert_eq!(
+            out,
+            Outcome {
+                stdout: format!("{}\n{}\n", l.most, l.least).into_bytes(),
+                status: 0
+            },
+            "{source}"
+        );
+        for (need_lo, need_hi) in [(lo, hi - 1), (lo + 1, hi)] {
+            let source = l.needing(need_lo, need_hi);
+            assert!(
+                check(source.as_bytes()).is_err(),
+                "a use that needs {need_lo}..{need_hi} was accepted, and the loop gives {lo}..={}\n{source}",
+                hi - 1
+            );
+        }
+    });
+}
+
+/// `loops` loops, each over an array and each adding to a `var` of its own,
+/// in one body.
+fn many_loops(loops: usize) -> String {
+    let mut out = String::from("fn f(xs: [4]Byte) -> Int {\n");
+    for k in 0..loops {
+        out.push_str(&format!("  var a{k} = {k}\n  loop x in xs {{ a{k} = a{k} + x }}\n"));
+    }
+    out.push_str("  a0\n}\n\nfn main() <alloc> {\n  y = f([1, 2, 3, 4])\n}\n");
+    with_header(out)
+}
+
+/// What checking `loops` loops costs, which the thread that checks them
+/// computed for.
+fn cost(loops: usize) -> f64 {
+    let source = many_loops(loops);
+    let start = crate::clock::thread_time();
+    let result = check(source.as_bytes());
+    let spent = crate::clock::thread_time() - start;
+    assert!(result.is_ok(), "{result:?}");
+    spent.as_secs_f64()
+}
+
+/// Five times the loops take about five times as long, far less than the
+/// twenty-five times that looking at the body again for each loop would. The
+/// bound leaves room for what a busy machine adds to a longer body.
+fn the_time_to_check_loops_grows_with_their_number_and_no_faster() {
+    let small = cost(60);
+    let large = cost(300);
+    assert!(
+        large < small * 14.0,
+        "60 loops took {small}s and 300 took {large}s, which is more than linear"
+    );
+}

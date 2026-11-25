@@ -10,15 +10,25 @@
 //! last. Code with no branch is solved in order: each assignment gives the
 //! `var` the range of its value, and the next line reads that range.
 //!
+//! A `var` that starts as a number written out, and that is given itself plus
+//! a value or itself less a value, is solved by linear templates over the count
+//! of times each such assignment runs, which is the product of the rounds of
+//! the loops around it, as `templates` says. Its range is the range of what it
+//! starts as and is otherwise given, widened by what those runs add or take
+//! away, and is refused where that is not within 64 bits.
+//!
 //! The look that is kept gives each such `var` its range as if it were
 //! written, so what `arith` proves, and what is built, is what stating that
 //! range gives.
 
 use std::collections::{HashMap, HashSet};
 
-use super::{Body, Checker, Int, Numbers, Ty, Want, pattern_names, statements, written_expr};
+use super::proof::MAX_SIZE;
+use super::{
+    Body, Checker, Int, Numbers, Ty, Want, exprs, pattern_names, statements, written_expr,
+};
 use crate::diag::{Error, Pos};
-use crate::parser::{Call, Expr, Stmt};
+use crate::parser::{ArithOp, Call, Expr, Over, Range, Stmt};
 
 /// What is learned of the `var`s while their ranges are solved, by the place
 /// of the statement that defines each.
@@ -57,6 +67,34 @@ pub(super) struct Solve {
     pub(super) wanted: HashMap<Pos, Ty>,
     /// What each was given: the place, how it is written, and the element.
     pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
+    /// How many `loop`s were around each `var` where it is defined.
+    pub(super) depth: HashMap<Pos, usize>,
+    /// What each `var` that starts as a number written out is given by
+    /// adding to itself or taking from itself, which a template solves.
+    pub(super) adds: HashMap<Pos, Vec<Add>>,
+    /// The `var`s whose adds do not make a range of 64 bits or less, with
+    /// the one that does not.
+    pub(super) unbounded: HashMap<Pos, Unbounded>,
+}
+
+/// One assignment of a `var` that adds a value to itself, or takes it away.
+#[derive(Clone, Debug)]
+pub(super) struct Add {
+    pub(super) pos: Pos,
+    pub(super) text: String,
+    /// The range of what one pass adds.
+    pub(super) low: i128,
+    pub(super) high: i128,
+    /// How many times at most it runs while the `var` lives, if that is known.
+    pub(super) times: Option<u128>,
+    /// Whether it takes away, and does not add.
+    pub(super) takes: bool,
+}
+
+/// What stops the range of a `var` that adds to itself from being one.
+#[derive(Clone, Debug)]
+pub(super) struct Unbounded {
+    pub(super) add: Add,
 }
 
 impl Solve {
@@ -93,6 +131,10 @@ pub(super) struct Solved {
     /// The `var`s that are refused for being changed by themselves, which the
     /// look that is kept does not check against a range.
     pub(super) refused: HashSet<Pos>,
+    /// The `var`s whose range a template gave, whose assignments that add to
+    /// themselves the look that is kept does not check against it, as the
+    /// count of passes is what shows that they fit.
+    pub(super) templated: HashSet<Pos>,
     /// The element type of each list or option written with nothing to say it.
     pub(super) elems: HashMap<Pos, Ty>,
     /// What each list or option written with nothing was given.
@@ -203,11 +245,13 @@ impl<'a> Checker<'a> {
         }
         let text = written_expr(value);
         let counted = !matches!(body.numbers, Numbers::Finding(_));
+        let depth = self.rounds.len();
         let total = match self.solve.as_mut() {
             Some(solve) => {
                 let before = solve.before.get(&pos).copied().unwrap_or(first);
                 let total = before.hull(first).unwrap_or(first);
                 if counted {
+                    solve.depth.insert(pos, depth);
                     solve.totals.insert(pos, total);
                     solve.given.insert(pos, vec![(pos, text, first)]);
                     solve.names.insert(pos, name.to_string());
@@ -427,6 +471,10 @@ impl<'a> Checker<'a> {
             self.assign(body, at, value);
             return;
         }
+        if self.self_add(body, at, (name, pos), value) {
+            self.assign(body, at, value);
+            return;
+        }
         self.assigning = Some((def, false));
         let gives = match literal(value) {
             Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
@@ -591,6 +639,233 @@ impl<'a> Checker<'a> {
         self.errors[from].message = message;
     }
 
+    /// Whether `value` is `name` with something added or taken away, which a
+    /// template solves.
+    pub(super) fn adds_to(&self, name: &str, value: &Expr) -> bool {
+        let Expr::Arith {
+            op, left, right, ..
+        } = value
+        else {
+            return false;
+        };
+        let is_name = |e: &Expr| matches!(e, Expr::Name { name: n, .. } if n == name);
+        let reads = |e: &Expr| {
+            exprs([e])
+                .into_iter()
+                .any(|e| matches!(e, Expr::Name { name: n, .. } if n == name))
+        };
+        match op {
+            ArithOp::Add => (is_name(left) && !reads(right)) || (is_name(right) && !reads(left)),
+            ArithOp::Sub => is_name(left) && !reads(right),
+            _ => false,
+        }
+    }
+
+    /// How many rounds the `loop` over the range `r` has at most: the greatest
+    /// the end can be, less the least the start can be.
+    pub(super) fn range_rounds(&mut self, body: &mut Body<'a>, r: &Range) -> Option<u128> {
+        let (from, _) = self.known_range(body, &r.from)?;
+        let (_, to) = self.known_range(body, &r.to)?;
+        Some(u128::try_from(to.checked_sub(from)?).unwrap_or(0))
+    }
+
+    /// How many rounds the `loop` over `o`, of the type `given`, has at most:
+    /// the size of an array, and for a `List`, a `str`, or a `Slice`, the
+    /// bound on its size, which is below 2 to the 48.
+    pub(super) fn over_rounds(
+        &mut self,
+        body: &mut Body<'a>,
+        o: &Over,
+        given: &Ty,
+    ) -> Option<u128> {
+        match given {
+            Ty::Array(_, n) => Some(u128::from(*n)),
+            Ty::List(_) | Ty::Slice(_) | Ty::Text => {
+                let most = self
+                    .known_size(body, &o.value)
+                    .map_or(MAX_SIZE, |(_, hi)| hi.min(MAX_SIZE));
+                Some(u128::try_from(most).unwrap_or(0))
+            }
+            _ => None,
+        }
+    }
+
+    /// Checks `name = name + e`, `name = e + name`, and `name = name - e`,
+    /// where `name` is a `var` that starts as a number written out, and notes
+    /// what one pass adds, which `templates` turns into a range. Where `e`
+    /// reads `name`, or its range is not known, this is not such a value.
+    fn self_add(
+        &mut self,
+        body: &mut Body<'a>,
+        at: usize,
+        (name, pos): (&str, Pos),
+        value: &Expr,
+    ) -> bool {
+        let def = self.inferred[&at];
+        let written = self
+            .solve
+            .as_ref()
+            .is_some_and(|s| s.written.contains(&def));
+        let Expr::Arith {
+            op, left, right, ..
+        } = value
+        else {
+            return false;
+        };
+        let is_name = |e: &Expr| matches!(e, Expr::Name { name: n, .. } if n == name);
+        let (delta, negated) = match op {
+            ArithOp::Add if is_name(left) => (&**right, false),
+            ArithOp::Add if is_name(right) => (&**left, false),
+            ArithOp::Sub if is_name(left) => (&**right, true),
+            _ => return false,
+        };
+        let reads = exprs([delta])
+            .into_iter()
+            .any(|e| matches!(e, Expr::Name { name: n, .. } if n == name));
+        if !written || reads || body.lambdas > 0 || body.outer_loops > 0 {
+            return false;
+        }
+        let gives = match literal(delta) {
+            Some(r) => self.expr(body, delta, &Want::Ty(Ty::Int(r))),
+            None => self.expr(body, delta, &Want::Any),
+        };
+        let Ty::Int(g) = gives else {
+            return false;
+        };
+        let counted = !matches!(body.numbers, Numbers::Finding(_));
+        let (mut low, mut high) = (g.min(), g.max());
+        if literal(delta).is_none()
+            && counted
+            && let Some((lo, hi)) = self.known_range(body, delta)
+            && lo <= hi
+        {
+            (low, high) = (low.max(lo), high.min(hi));
+        }
+        if g.ends().is_none() {
+            return false;
+        }
+        let (low, high) = if negated { (-high, -low) } else { (low, high) };
+        let from = self
+            .solve
+            .as_ref()
+            .and_then(|s| s.depth.get(&def))
+            .copied()
+            .unwrap_or(0);
+        let times = self.rounds[from.min(self.rounds.len())..]
+            .iter()
+            .try_fold(1u128, |n, r| n.checked_mul((*r)?));
+        if counted && let Some(solve) = self.solve.as_mut() {
+            let looped = body.loops > 0;
+            solve.adds.entry(def).or_default().push(Add {
+                pos,
+                text: format!("{name} = {}", written_expr(value)),
+                low,
+                high,
+                times,
+                takes: negated,
+            });
+            if looped {
+                solve.in_loop.insert(def);
+            }
+        }
+        body.facts.unset_step(at);
+        true
+    }
+
+    /// The range of each `var` that adds to itself: the range that holds what
+    /// it starts as and what it is given otherwise, and then, for each add,
+    /// at most as many times as it runs, the least and the greatest of what
+    /// they come to. This is the linear template `start + passes * low <= x`
+    /// and `x <= start + passes * high`, which holds before the first pass and
+    /// after each pass, as each pass adds between `low` and `high`.
+    pub(super) fn templates(&self, solve: &mut Solve) {
+        let defs: Vec<Pos> = solve.adds.keys().copied().collect();
+        for def in defs {
+            let adds = solve.adds[&def].clone();
+            let Some(base) = solve.given.get(&def).and_then(|g| {
+                g.iter()
+                    .map(|(_, _, r)| *r)
+                    .reduce(|a, b| a.hull(b).unwrap_or(a))
+            }) else {
+                continue;
+            };
+            let Some((mut low, mut high)) = base.ends() else {
+                continue;
+            };
+            let mut failed = None;
+            for add in &adds {
+                let reach = |step: i128| -> Option<i128> {
+                    let n = i128::try_from(add.times.or((step == 0).then_some(0))?).ok()?;
+                    step.checked_mul(n)
+                };
+                let (down, up) = (reach(add.low), reach(add.high));
+                match (down, up) {
+                    (Some(down), Some(up)) => {
+                        match (low.checked_add(down.min(0)), high.checked_add(up.max(0))) {
+                            (Some(l), Some(h)) => (low, high) = (l, h),
+                            _ => failed = failed.or(Some(add.clone())),
+                        }
+                    }
+                    _ => failed = failed.or(Some(add.clone())),
+                }
+            }
+            let range = Int::between(low, high).filter(|r| !r.wide());
+            match (failed, range) {
+                (None, Some(range)) => {
+                    solve.totals.insert(def, range);
+                    for add in &adds {
+                        solve.given.entry(def).or_default().push((
+                            add.pos,
+                            add.text.clone(),
+                            range,
+                        ));
+                    }
+                }
+                (failed, _) => {
+                    let add = failed.unwrap_or_else(|| adds[0].clone());
+                    solve.unbounded.insert(def, Unbounded { add });
+                    solve.stuck.insert(def);
+                    solve.stuck_at.entry(def).or_insert(adds[0].pos);
+                }
+            }
+        }
+    }
+
+    /// The error for a `var` that adds to itself in a loop, where what it
+    /// comes to is not a range of 64 bits or less.
+    pub(super) fn not_finite(&self, def: Pos, solve: &Solve) -> Error {
+        let name = solve.names.get(&def).map_or("it", |n| n.as_str());
+        let Some(Unbounded { add }) = solve.unbounded.get(&def) else {
+            return self.grows_by_itself(def, solve);
+        };
+        let step = self.defs.text(
+            &Ty::Int(Int::between(add.low, add.high).unwrap_or(Int::I64)),
+            &super::Scope::default(),
+        );
+        let passes = match add.times {
+            Some(n) => format!("at most {n} times"),
+            None => "a number of times that is not known when the program is built".to_string(),
+        };
+        let place = if solve.in_loop.contains(&def) {
+            "in this loop"
+        } else {
+            "here"
+        };
+        Error::new(
+            add.pos,
+            format!(
+                "`{name}` is changed by itself {place}, and its range is not finite within 64 bits: \
+                 `{}` adds a `{step}`, {passes}",
+                add.text
+            ),
+        )
+        .with_fix(format!(
+            "write `checked_{op}`, which gives an `Option` and costs one comparison, where it is \
+             seen; or `wrapping_{op}`; or a `requires` that bounds the size",
+            op = if add.takes { "sub" } else { "add" }
+        ))
+    }
+
     /// The error for a `var` that is changed by itself, so that its range has
     /// not stopped growing.
     pub(super) fn grows_by_itself(&self, def: Pos, solve: &Solve) -> Error {
@@ -611,7 +886,7 @@ impl<'a> Checker<'a> {
             .map_or(String::new(), |(_, text, _)| text.clone());
         Error::new(
             solve.stuck_at.get(&def).copied().unwrap_or(def),
-            format!("`{name}` is changed by itself {place}, so its range is not inferred yet",),
+            format!("`{name}` is changed by itself {place}, so its range is not inferred",),
         )
         .with_fix(format!(
             "state the range, as `var {name}: {range} = {first}`"

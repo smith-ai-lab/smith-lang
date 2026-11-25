@@ -19,6 +19,10 @@ use super::{
 use crate::diag::{Error, Pos};
 use crate::parser::{ArithOp, Call, Expr, Form, Function, Loop, Pattern, Range, Stmt};
 
+/// The greatest size of a `List`, a `Slice`, or a `str`, which is below 2 to the
+/// 48: each element has at least a byte, and no address has more than 48 bits.
+pub(super) const MAX_SIZE: i128 = (1 << 48) - 1;
+
 /// What a variable of `arith` stands for.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Key {
@@ -260,6 +264,37 @@ impl Facts {
         self.ids.insert(key, self.keys.len() - 1);
         self.keys.len() - 1
     }
+}
+
+/// The least and the greatest value of the sum `lin`, from the range of each
+/// variable it is a sum of, cut by each fact that bounds that variable alone.
+fn known_bounds(facts: &Facts, lin: &Lin) -> Option<(i128, i128)> {
+    let (mut low, mut high) = (lin.constant, lin.constant);
+    for (&id, &k) in &lin.terms {
+        let (mut lo, mut hi) = facts.keys[id].range()?;
+        for f in &facts.known {
+            let Formula::Ge(l) = f else { continue };
+            let mut one = l.terms.iter();
+            let (Some((&at, &c)), None) = (one.next(), one.next()) else {
+                continue;
+            };
+            if at != id || c == 0 {
+                continue;
+            }
+            // `c * x + constant >= 0`.
+            if c > 0 {
+                lo = lo.max(
+                    (-l.constant).div_euclid(c) + i128::from((-l.constant).rem_euclid(c) != 0),
+                );
+            } else {
+                hi = hi.min(l.constant.div_euclid(-c));
+            }
+        }
+        let (a, b) = (k.checked_mul(lo)?, k.checked_mul(hi)?);
+        low = low.checked_add(a.min(b))?;
+        high = high.checked_add(a.max(b))?;
+    }
+    Some((low, high))
 }
 
 /// Turns expressions into sums of variables.
@@ -673,7 +708,7 @@ impl Builder<'_, '_> {
     }
 
     /// The sum the size of the list `of` stands for.
-    fn list_size(&mut self, of: &Expr) -> Option<Lin> {
+    pub(super) fn list_size(&mut self, of: &Expr) -> Option<Lin> {
         let range = (0, u64::MAX as i128);
         if self.facts.subst.is_some() {
             return None;
@@ -1710,35 +1745,20 @@ impl<'a> Checker<'a> {
         let mut facts = std::mem::take(&mut body.facts);
         let mut builder = self.builder(body, &mut facts, true);
         let lin = builder.lin(value).filter(|_| !builder.overflow);
-        let found = lin.and_then(|lin| {
-            let (mut low, mut high) = (lin.constant, lin.constant);
-            for (&id, &k) in &lin.terms {
-                let (mut lo, mut hi) = facts.keys[id].range()?;
-                for f in &facts.known {
-                    let Formula::Ge(l) = f else { continue };
-                    let mut one = l.terms.iter();
-                    let (Some((&at, &c)), None) = (one.next(), one.next()) else {
-                        continue;
-                    };
-                    if at != id || c == 0 {
-                        continue;
-                    }
-                    // `c * x + constant >= 0`.
-                    if c > 0 {
-                        lo = lo.max(
-                            (-l.constant).div_euclid(c)
-                                + i128::from((-l.constant).rem_euclid(c) != 0),
-                        );
-                    } else {
-                        hi = hi.min(l.constant.div_euclid(-c));
-                    }
-                }
-                let (a, b) = (k.checked_mul(lo)?, k.checked_mul(hi)?);
-                low = low.checked_add(a.min(b))?;
-                high = high.checked_add(a.max(b))?;
-            }
-            Some((low, high))
-        });
+        let found = lin.and_then(|lin| known_bounds(&facts, &lin));
+        body.facts = facts;
+        found
+    }
+
+    /// The range of the size of the list, slice, or text `of`, from its type
+    /// and what is known of it: at most 2 to the 48 less one.
+    pub(super) fn known_size(&mut self, body: &mut Body<'a>, of: &Expr) -> Option<(i128, i128)> {
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let lin = builder.list_size(of);
+        let found = lin
+            .and_then(|lin| known_bounds(&facts, &lin))
+            .map(|(lo, hi)| (lo, hi.min(MAX_SIZE)));
         body.facts = facts;
         found
     }
