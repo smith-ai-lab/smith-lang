@@ -275,6 +275,20 @@ pub(super) fn withouts(defs: &Defs, errors: &mut Vec<Error>) -> Vec<(usize, Def)
         };
         let ty = w.ty.as_str();
         let d = if let Some(s) = defs.struct_at(w.ty_pos, ty) {
+            if let Some(named) = &defs.file.structs[s].alias {
+                errors.push(
+                    Error::new(
+                        w.ty_pos,
+                        format!(
+                            "`{ty}` is another name for `{}`, and `without` is written for a \
+                             struct or an enum",
+                            super::written_type(named)
+                        ),
+                    )
+                    .with_fix("write a `struct` to make a type of its own"),
+                );
+                continue;
+            }
             Def::Struct(s)
         } else if let Some(e) = defs.enum_at(w.ty_pos, ty) {
             Def::Enum(e)

@@ -77,13 +77,27 @@ The error is "the alias `A` names itself: A -> B -> A". A type that holds itself
 
 An alias has no `impl`, trait, or `without` of its own. It is the type it names, so `impl Fmt[Port]` is an `impl` for `0..65536`, which is where [An impl lives](impl-placement.md) says it goes.
 
-An error names the alias where the program wrote the alias.
+`without` is written for a struct or an enum, so it is refused for an alias.
 
 ```
-a: Port = 70000
+type Bytes = List[Byte]
+without Copy for Bytes
 ```
 
-The error is "`70000` does not fit `Port`, which holds 0 to 65535".
+The error is "`Bytes` is another name for `List[Byte]`, and `without` is written for a struct or an enum", with the fix "write a `struct` to make a type of its own".
+
+## Errors say the type as it is written
+
+An error says a type as the place that needs it writes it: the alias where the place writes the alias, and the type where it writes the type.
+
+```
+type Port = 0..65536
+
+fn open(p: Port) -> Int { 1 }
+fn width(w: 0..65536) -> Int { 1 }
+```
+
+`open("a")` gives "this gives text, where a `Port` is needed", and `width("a")` gives "this gives text, where a `0..65536` is needed". The same holds for a binding with a type, as in `a: Port = 70000`, whose error is "`70000` does not fit `Port`, which holds 0 to 65535", and for a result type.
 
 ## The forms
 
@@ -95,5 +109,6 @@ The error is "`70000` does not fit `Port`, which holds 0 to 65535".
 | `type A = B` and `type B = List[A]` | Refused: an alias names itself |
 | `Pair[Int, Int]` | Refused: `Pair` takes 1 type argument |
 | `impl Fmt[Port]` | An `impl` for `0..65536` |
+| `without Copy for Bytes` | Refused: `Bytes` is not a struct or an enum |
 
 Next: [Projects](projects.md)

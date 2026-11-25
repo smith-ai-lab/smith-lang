@@ -32,6 +32,14 @@ pub const ONCE: &[Test] = &[
         "an_alias_has_no_impl_of_its_own_and_an_error_names_the_alias",
         an_alias_has_no_impl_of_its_own_and_an_error_names_the_alias,
     ),
+    (
+        "an_error_names_a_type_as_the_place_that_needs_it_writes_it",
+        an_error_names_a_type_as_the_place_that_needs_it_writes_it,
+    ),
+    (
+        "without_for_an_alias_is_refused_and_the_dead_code_warning_calls_it_an_alias",
+        without_for_an_alias_is_refused_and_the_dead_code_warning_calls_it_an_alias,
+    ),
 ];
 
 /// The types an alias may name, with a value of each, and the number of type
@@ -188,4 +196,45 @@ fn an_alias_has_no_impl_of_its_own_and_an_error_names_the_alias() {
     );
     assert!(named.iter().any(|m| m.contains("`Port`")), "{named:?}");
     assert!(named.iter().all(|m| !m.contains("u16")), "{named:?}");
+}
+
+fn an_error_names_a_type_as_the_place_that_needs_it_writes_it() {
+    generate::check(94, 6, |g| (g.below(2) == 0, g.below(2) == 0), |&(alias_first, annotation)| {
+        let (a, b) = if alias_first { ("open", "width") } else { ("width", "open") };
+        let place = |name: &str| {
+            if name == "open" {
+                "fn open(p: Port) -> Int { 1 }\n"
+            } else {
+                "fn width(w: 0..65536) -> Int { 1 }\n"
+            }
+        };
+        let note = if annotation { "  n: Port = \"x\"\n" } else { "" };
+        let text = format!(
+            "use std.console (console, print)\n\ntype Port = 0..65536\n\n{}{}\nfn main() <console> {{\n  open(\"a\")\n  width(\"b\")\n{note}  print(\"x\")\n}}\n",
+            place(a),
+            place(b),
+        );
+        let found = messages(&text);
+        let needed = |m: &String, ty: &str| m.contains(&format!("where a `{ty}` is needed"));
+        // The call that writes the alias says it, and the call that writes the
+        // range says the range, in one program.
+        assert_eq!(found.iter().filter(|m| needed(m, "Port")).count(), 1 + usize::from(annotation), "{found:?}");
+        assert_eq!(found.iter().filter(|m| needed(m, "0..65536")).count(), 1, "{found:?}");
+    });
+}
+
+fn without_for_an_alias_is_refused_and_the_dead_code_warning_calls_it_an_alias() {
+    let source = with_imports(
+        "use std.console (console, print)\n\ntype Bytes = List[Byte]\nwithout Copy for Bytes\n\nfn main() <console> {\n  print(\"x\")\n}\n",
+    );
+    let errors = smith::check(source.as_bytes()).expect_err("an alias has no `without`");
+    assert!(
+        errors.iter().any(|e| e.message.contains("`Bytes` is another name for `List[Byte]`")
+            && e.fix.as_deref().is_some_and(|f| f.contains("write a `struct`"))),
+        "{errors:?}"
+    );
+    let dead = messages(
+        "use std.console (console, print)\n\ntype Bytes = List[Byte]\n\nfn main() <console> {\n  print(\"x\")\n}\n",
+    );
+    assert!(dead.iter().any(|m| m.contains("the alias `Bytes` is dead code")), "{dead:?}");
 }

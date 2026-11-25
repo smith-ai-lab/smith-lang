@@ -1183,13 +1183,20 @@ impl<'a> Checker<'a> {
             let mark = body.extra.len();
             body.extra
                 .extend(self.lambda_effects(signature, param, &arg.value));
-            let gives = self.expr(body, &arg.value, &wanted);
+            let defs = self.defs;
+            let written = param.and_then(|i| signature.written.get(i).cloned().flatten());
+            let here = param.map_or(Ty::Unknown, |i| signature.params[i].1.clone());
+            let gives = defs.writing(&here, written.clone(), || {
+                self.expr(body, &arg.value, &wanted)
+            });
             body.extra.truncate(mark);
             match param {
                 Some(i) => {
                     let pattern = &signature.params[i].1;
                     self.comparing = comparing;
-                    self.fit(body, &arg.value, &gives, pattern, &mut sol, vars);
+                    defs.writing(&here, written, || {
+                        self.fit(body, &arg.value, &gives, pattern, &mut sol, vars)
+                    });
                     self.comparing = false;
                 }
                 None if gives == Ty::Nothing => {
@@ -1240,9 +1247,14 @@ impl<'a> Checker<'a> {
                 }
                 t => Want::Ty(t),
             };
-            let gives = self.expr(body, value, &wanted);
+            let defs = self.defs;
+            let written = signature.written.get(i).cloned().flatten();
+            let here = signature.params[i].1.clone();
+            let gives = defs.writing(&here, written.clone(), || self.expr(body, value, &wanted));
             self.comparing = comparing;
-            self.fit(body, value, &gives, pattern, &mut sol, vars);
+            defs.writing(&here, written, || {
+                self.fit(body, value, &gives, pattern, &mut sol, vars)
+            });
             self.comparing = false;
         }
         // The two sides of a comparison that are two ranges are taken as the

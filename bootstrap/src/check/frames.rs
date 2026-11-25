@@ -85,6 +85,7 @@ impl<'a> Checker<'a> {
         };
         let frame = Ty::Struct(frame, Vec::new());
         let one = |name: &str, ty: Ty, gives: Ty| Signature {
+            written: Vec::new(),
             scope: Scope::default(),
             params: vec![(name.to_string(), ty)],
             defaults: vec![false],
@@ -98,6 +99,7 @@ impl<'a> Checker<'a> {
                 // The lambda may carry the effects of the function it is
                 // written in and no others, as the work of `spawn` does.
                 let signature = Signature {
+                    written: Vec::new(),
                     params: vec![("work".to_string(), Ty::Fn(vec![Ty::Param(0)]))],
                     gives: frame,
                     fn_effects: vec![Vec::new()],
@@ -139,6 +141,7 @@ impl<'a> Checker<'a> {
                     Ty::Nothing
                 };
                 let signature = Signature {
+                    written: Vec::new(),
                     scope: Scope::default(),
                     defaults: vec![false; params.len()],
                     fn_effects: vec![Vec::new(); params.len()],
