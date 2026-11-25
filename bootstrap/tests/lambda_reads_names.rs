@@ -28,6 +28,10 @@ pub const ONCE: &[Test] = &[
         a_lambda_that_reads_a_name_of_a_function_with_type_parameters_is_called_with_each_type,
     ),
     (
+        "a_lambda_that_reads_a_value_of_a_type_parameter_is_built_for_each_type",
+        a_lambda_that_reads_a_value_of_a_type_parameter_is_built_for_each_type,
+    ),
+    (
         "a_lambda_that_reads_a_lent_value_or_assigns_a_name_of_its_function_is_refused_where_it_is_bound",
         a_lambda_that_reads_a_lent_value_or_assigns_a_name_of_its_function_is_refused_where_it_is_bound,
     ),
@@ -129,10 +133,21 @@ fn a_lambda_that_reads_a_name_of_a_function_with_type_parameters_is_called_with_
     assert_eq!(ran.stdout, b"1 1.5\n");
 }
 
+/// A lambda that reads a name whose type is a type parameter of its function, or
+/// holds one, is called at each type the function is called at.
+fn a_lambda_that_reads_a_value_of_a_type_parameter_is_built_for_each_type() {
+    let source = "use std.console (console, print)\n\n\
+                  fn count[T](xs: List[T]) -> Nat {\n  size = fn(i: Nat) -> Nat { xs.size }\n  size(0)\n}\n\n\
+                  fn main() <console, alloc> {\n  a: List[Nat] = [1, 2, 3]\n  b: List[str] = [\"a\", \"b\"]\n  \
+                  print(\"{count(a)} {count(b)}\")\n}\n";
+    let ran = scalar::run(&lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
+    assert_eq!(ran.stdout, b"3 2\n");
+}
+
 fn a_lambda_that_reads_a_lent_value_or_assigns_a_name_of_its_function_is_refused_where_it_is_bound() {
     let head = "use std.console (console, print)\nuse std.bits (u8)\n\n";
     let refused = [
-        "fn kept(xs: List[f32]) -> f32 {\n  g = fn(i: u8) -> f32 { xs[0] }\n  g(0)\n}\n",
+        "fn kept(rate: f32) -> f32 {\n  var xs: List[f32] = [rate]\n  g = fn(i: u8) -> f32 { xs[0] }\n  xs.push(1.0)\n  g(0)\n}\n",
         "fn kept(rate: f32) -> f32 {\n  var n: f32 = rate\n  g = fn(x: f32) -> f32 {\n    n = n + x\n    n\n  }\n  g(1.0)\n}\n",
     ];
     for item in refused {
