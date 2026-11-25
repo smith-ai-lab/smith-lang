@@ -42,6 +42,14 @@ pub(super) struct Solve {
     pub(super) written: HashSet<Pos>,
     /// The first assignment of each `var` in `stuck` that reads it.
     pub(super) stuck_at: HashMap<Pos, Pos>,
+    /// The element type each list or option that is written with nothing to
+    /// say it had at the end of the look before, and what it has from what it
+    /// is given and used for so far in this look.
+    pub(super) before_elems: HashMap<Pos, Ty>,
+    pub(super) elems: HashMap<Pos, Ty>,
+    /// The names that were first given a list or an option written with
+    /// nothing to say its element type.
+    pub(super) empties: HashSet<Pos>,
 }
 
 /// What the last solved look left, which the look that is kept reads.
@@ -56,6 +64,8 @@ pub(super) struct Solved {
     /// The `var`s that are refused for being changed by themselves, which the
     /// look that is kept does not check against a range.
     pub(super) refused: HashSet<Pos>,
+    /// The element type of each list or option written with nothing to say it.
+    pub(super) elems: HashMap<Pos, Ty>,
 }
 
 /// Whether a block, or one inside it, defines a `var` with no type written.
@@ -68,8 +78,33 @@ pub(super) fn has_inferred(stmts: &[Stmt]) -> bool {
                 ty: None,
                 ..
             }
-        )
+        ) || matches!(s, Stmt::Define { ty: None, value, .. } if is_empty(value))
     })
+}
+
+/// Whether a value is a list of nothing, or the case `.none`, which say
+/// nothing of the type of their elements.
+fn is_empty(value: &Expr) -> bool {
+    match value {
+        Expr::List { items, .. } => items.is_empty(),
+        Expr::Case {
+            name,
+            payload: None,
+            ..
+        } => name == "none",
+        _ => false,
+    }
+}
+
+/// What two element types, one of a list or an option, make together: the
+/// range that holds both ranges, or the type that both are, or none.
+fn joined(a: &Ty, b: &Ty) -> Option<Ty> {
+    match (a, b) {
+        (Ty::Unknown, t) | (t, Ty::Unknown) => Some(t.clone()),
+        (Ty::Int(x), Ty::Int(y)) => x.hull(*y).map(Ty::Int),
+        (x, y) if x == y => Some(x.clone()),
+        _ => None,
+    }
 }
 
 /// The names that a pattern gives a value, which a `var` with no type written
@@ -153,6 +188,110 @@ impl<'a> Checker<'a> {
         (Ty::Int(total), Some(first))
     }
 
+    /// Whether a value says nothing of the type of its elements, in a body
+    /// where such a type is solved from what the name is given and used for.
+    pub(super) fn infers_empty(&self, body: &Body<'a>, value: &Expr) -> bool {
+        self.infer_on
+            && !matches!(body.numbers, Numbers::Off)
+            && is_empty(value)
+            && match value {
+                Expr::Case { .. } => self.defs.case_of(self.defs.option, "none").is_some(),
+                _ => true,
+            }
+    }
+
+    /// Checks a list of nothing, or `.none`, given to a name: the type is the
+    /// one the name is given and used for, and is none until one does.
+    pub(super) fn infer_empty(&mut self, body: &mut Body<'a>, pos: Pos, value: &Expr) -> Ty {
+        let known = match self.solve.as_ref() {
+            Some(solve) => solve.before_elems.get(&pos),
+            None => self.solved.elems.get(&pos),
+        }
+        .cloned();
+        let element = known.clone().unwrap_or(Ty::Unknown);
+        let ty = match value {
+            Expr::List { .. } => Ty::List(vec![element]),
+            _ => Ty::Enum(self.defs.option, vec![element]),
+        };
+        if self.solve.is_none() && known.is_none() {
+            // Nothing settled it, which the check of the value says.
+            return self.expr(body, value, &Want::Any);
+        }
+        self.expr(body, value, &Want::Ty(ty.clone()));
+        if let Some(solve) = self.solve.as_mut() {
+            solve.empties.insert(pos);
+            if let Some(known) = known {
+                solve.elems.insert(pos, known);
+            }
+        }
+        ty
+    }
+
+    /// The element type of the list or option `def` was given or used for.
+    fn settle_element(&mut self, def: Pos, element: &Ty) {
+        if element.unknown() {
+            return;
+        }
+        let Some(solve) = self.solve.as_mut() else {
+            return;
+        };
+        let held = solve.elems.get(&def).cloned().unwrap_or(Ty::Unknown);
+        if let Some(both) = joined(&held, element) {
+            solve.elems.insert(def, both);
+        }
+    }
+
+    /// Notes that a use needs `needed` of the list or option that `value`
+    /// names, which says the type of its elements.
+    pub(super) fn note_element(&mut self, body: &Body<'a>, value: &Expr, needed: &Ty) {
+        let Expr::Name { name, .. } = value else {
+            return;
+        };
+        let element = match needed {
+            Ty::List(args) => args.first(),
+            Ty::Enum(e, args) if *e == self.defs.option => args.first(),
+            _ => None,
+        };
+        fn open(t: &Ty) -> bool {
+            matches!(t, Ty::Param(_) | Ty::Flex(_)) || t.args().iter().any(open)
+        }
+        let element = element.filter(|e| !open(e));
+        let (Some(element), Some(at)) = (element, body.names.iter().rposition(|(n, _)| n == name))
+        else {
+            return;
+        };
+        if let Some(def) = self.inferred.get(&at).copied()
+            && self
+                .solve
+                .as_ref()
+                .is_some_and(|s| s.empties.contains(&def))
+        {
+            self.settle_element(def, &element.clone());
+        }
+    }
+
+    /// The type of a value that is put in a list: the range that holds a number
+    /// written out alone, and otherwise the range its type has, cut to what is
+    /// known of it where it is.
+    fn given_range(&mut self, body: &mut Body<'a>, value: &Expr) -> Ty {
+        let gives = match literal(value) {
+            Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
+            None => self.expr(body, value, &Want::Any),
+        };
+        let counted = !matches!(body.numbers, Numbers::Finding(_));
+        match gives {
+            Ty::Int(g) if literal(value).is_none() && counted => {
+                match self.known_range(body, value).and_then(|(lo, hi)| {
+                    Int::between(lo.max(g.min()), hi.min(g.max())).filter(|_| lo <= hi)
+                }) {
+                    Some(tight) => Ty::Int(tight),
+                    None => Ty::Int(g),
+                }
+            }
+            gives => gives,
+        }
+    }
+
     /// Checks `name = value`, where `name` is a `var` whose range is solved:
     /// the value gives it its range so far and the next line reads it.
     pub(super) fn infer_assign(
@@ -163,6 +302,42 @@ impl<'a> Checker<'a> {
         value: &Expr,
     ) {
         let def = self.inferred[&at];
+        if self
+            .solve
+            .as_ref()
+            .is_some_and(|s| s.empties.contains(&def))
+        {
+            // `xs = push(xs, e)` puts `e` in the list: its elements are those it has
+            // and the range of `e`.
+            if let Expr::Call(call) = value
+                && call.callee == "push"
+                && let [list, item] = call.args.as_slice()
+                && matches!(&list.value, Expr::Name { name: n, .. } if n == name)
+            {
+                let held = self.given_range(body, &item.value);
+                self.settle_element(def, &held);
+                self.assign(body, at, value);
+                return;
+            }
+            // A case with a number written out as what it holds is that number.
+            let want = match value {
+                Expr::Case {
+                    payload: Some(inside),
+                    ..
+                } if let Some(r) = literal(inside) => {
+                    Want::Ty(Ty::Enum(self.defs.option, vec![Ty::Int(r)]))
+                }
+                _ => Want::Ty(body.names[at].1.clone()),
+            };
+            let gives = self.expr(body, value, &want);
+            if let Ty::List(args) | Ty::Enum(_, args) = &gives
+                && let Some(element) = args.first()
+            {
+                self.settle_element(def, &element.clone());
+            }
+            self.assign(body, at, value);
+            return;
+        }
         self.assigning = Some((def, false));
         let gives = match literal(value) {
             Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
