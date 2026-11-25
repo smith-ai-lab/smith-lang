@@ -36,6 +36,8 @@ This prints `200 -3`. `0..256` holds 0 to 255, and `-5..6` holds -5 to 5. A type
 
 Say what a number holds in its type, as narrowly as the function means it. A parameter that is an index is a `0..xs.size`, not a `Nat` with a `requires`, and a sum is left as the range arithmetic gives it. `saturating_`, `checked_`, and `wrapping_` are for arithmetic that is meant to saturate, to fail, or to wrap, and never a way to make a sum fit a type it would have fitted with a narrower one.
 
+A name with no stated type has the range that its body gives it: the smallest that holds every value it is given, as [Inference](inference.md) says. `n = 5` is a `5..6`, and a `var` given `0` and then `9` is a `0..10`.
+
 ## A range as a type
 
 `a..b` holds `a` and every whole number above it up to `b`, and it excludes `b`, as a range is written in [Ranges and slices](ranges.md). Its least value is `a` and its greatest is `b - 1`.
@@ -230,6 +232,7 @@ How many bytes a range takes, and in what form, is the compiler's choice, and a 
 | `Int`, `Nat`, `Pos`, `Byte` | The 64-bit signed range, the 64-bit range from 0, the 64-bit range from 1, and `0..256`, with no import |
 | `u8` to `u64`, `i8` to `i64` | The ranges that fill 8 to 64 bits, imported from `std.bits` |
 | `f16`, `bf16`, `f32`, `f64` | A float of 16, 16, 32, or 64 bits |
+| A name with no stated type | The smallest range that holds every value it is given |
 | A range where a wider one is expected | Accepted, with nothing written |
 | A range where a narrower one is expected | Accepted where it is shown to fit, or taken in by `narrow` or `clamp`, refused otherwise |
 | `a == b`, `a < b`, and the rest | A `bool`, for any two ranges |

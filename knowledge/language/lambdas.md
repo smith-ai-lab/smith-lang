@@ -53,7 +53,7 @@ fn quarter(x: f32) -> f32 {
 Here `fn(v) { v * 0.5 }` is the `f` of `twice`, so `quarter(8.0)` is `2.0`.
 
 - The types of a lambda's parameters and of its result are those of the function type it is passed as, so `v` is an `f32`. A lambda may write them as a function does, `fn(v: f32) -> f32 { v * 0.5 }`, each one or none. A type that is written and is not the one the function type needs is refused at the type.
-- A lambda uses the type parameters of the function it is written in, and may write its own, as [Where a lambda may go](#where-a-lambda-may-go) shows. When nothing decides the type of its parameters, it writes them.
+- A lambda uses the type parameters of the function it is written in, and may write its own, as [Where a lambda may go](#where-a-lambda-may-go) shows. A lambda bound to a name and called in the same body has its parameters inferred from those calls, as [Inference](inference.md#a-lambdas-parameters) says. When nothing decides the type of its parameters, it writes them.
 - A lambda has as many parameters as that function type. `twice(x) fn(a, b) { a }` is refused: "this lambda takes 2 parameters, where a `fn(f32) -> f32` is needed, which takes 1".
 - The value of a lambda is the last expression of its block, as for a function. Its block may have several lines.
 

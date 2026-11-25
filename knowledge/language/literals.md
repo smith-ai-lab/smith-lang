@@ -266,7 +266,7 @@ Where nothing says what type it is, an array written in brackets is an array of 
 xs = [1, 2, 3, 4]
 ```
 
-`xs` is a `[4]1..5`: four elements, each at least `1` and below `5`. It is taken wherever a `List`, a `Slice`, or an array of a wider element is needed, as a range is taken where a wider one is, so `total(xs)` compiles for a `total` that takes a `List[Nat]`. Elements that no one type holds, as `[1, "a"]`, are refused. An array of nothing, `[]`, has no element to say its type, so it is written where a type is expected.
+`xs` is a `[4]1..5`: four elements, each at least `1` and below `5`. It is taken wherever a `List`, a `Slice`, or an array of a wider element is needed, as a range is taken where a wider one is, so `total(xs)` compiles for a `total` that takes a `List[Nat]`. Elements that no one type holds, as `[1, "a"]`, are refused. An array of nothing, `[]`, has no element to say its type, so a later use in the same body settles it, as [Inference](inference.md#a-list-or-an-option-that-a-later-use-settles) says, and it is refused where nothing does.
 
 ## The forms
 

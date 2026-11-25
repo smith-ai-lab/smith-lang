@@ -32,7 +32,7 @@ A `var` may state its type, as a binding does: `var word: str = "first"`. It alw
 
 ## Giving it a new value of its type
 
-A `var` keeps the type of its first value, so a new value of another type is refused. The range of a whole number is part of its type, as the next section says.
+A `var` has one type, so a new value of another type is refused. The range of a whole number is part of its type, as the next section says.
 
 ```
 use std.console (console, print)
@@ -50,7 +50,7 @@ A name is never defined where it can already be used, `var` or not. `var word = 
 
 ## The range of a `var`
 
-A `var` with no stated type has the range of what it is first given. A value outside that range is refused, with the fix to state the range of the `var`.
+A `var` with no stated type has the range that its body gives it: the smallest that holds every value it is given, as [Inference](inference.md) says. A value that its use does not hold is refused, with the range inferred, where it was inferred from, and the use that needs less.
 
 ```
 use std.console (console, print)
@@ -62,7 +62,7 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints `100`. Without the stated range, `var level = 0` is a `0..1`, and `level = 100` is refused, as `100` is not in it. So a `var` that a [`loop`](loop.md#a-var-the-loop-changes) adds to states its range, and each assignment in the loop is proven to stay in it.
+This prints `100`. With no stated range, `var level = 0` and `level = 100` make `level` a `0..101`, the smallest range that holds both. A `var` that a [`loop`](loop.md#a-var-the-loop-changes) gives a value that depends on itself states its range, and each assignment in the loop is proven to stay in it.
 
 ## Accumulating
 
@@ -104,4 +104,4 @@ A [lambda](lambdas.md) written in the function may assign its `var`s. A `var` is
 | `x = e` | Gives the `var` `x` a new value |
 | `x += e`, `x -= e`, `x *= e`, `x /= e` | Adds `e` to `x`, subtracts it, multiplies by it, or divides by it |
 
-Next: [`if`](if.md)
+Next: [Inference](inference.md)

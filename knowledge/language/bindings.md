@@ -9,7 +9,7 @@ built:
 
 # Bindings
 
-A binding gives a name to a value. `x = e` defines the name `x` as the value of `e`, and `x` has that value from then on.
+A binding gives a name to a value. `x = e` defines the name `x` as the value of `e`, and `x` has that value, and the type of that value, from then on.
 
 ```
 fn hypot(a: f32, b: f32) -> f32 {
@@ -50,7 +50,7 @@ fn main() <console> {
 }
 ```
 
-This prints `typed`. Most bindings do not state their type, because the type of the value is already known, and `word = "typed"` means the same. A value of another type is refused.
+This prints `typed`. Most bindings do not state their type, because what the body says already settles it, as [Inference](inference.md) shows, and `word = "typed"` means the same. A value of another type is refused.
 
 ```
 use std.console (console, print)

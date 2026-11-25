@@ -13,6 +13,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [functions.md](functions.md): typed parameters, a return type, a block whose last expression is its value, named arguments, defaults, and comments.
 - [bindings.md](bindings.md): how `x = e` defines an immutable name, which is never defined again while it can be used, how a binding states its type, and where a name can be used.
 - [var.md](var.md): locals that change, declared with `var`, given a new value with `=`, and accumulated into with `+=`, `-=`, `*=`, and `/=`.
+- [inference.md](inference.md): what is written at the top level is the contract and what is inside a body is solved, a whole number the smallest range that holds every value it is given, and the errors that say what was inferred.
 - [if.md](if.md): `if` as an expression that chooses between blocks, `else if`, and the words `not`, `and`, and `or`.
 - [structs.md](structs.md): structs with named fields and defaults, reading a field, assigning to a field of a `var`, and a definition at the top level of a file.
 - [tuples.md](tuples.md): tuples that group values without names, patterns that take them apart and assign, and the empty tuple.
