@@ -822,6 +822,8 @@ struct Signature {
     /// The type parameters its types are written among.
     scope: Scope,
     params: Vec<(String, Ty)>,
+    /// How each parameter's type is written, in a file that has an alias.
+    written: Vec<Option<String>>,
     /// Whether each parameter has a default, so that a call may leave it
     /// out.
     defaults: Vec<bool>,
@@ -845,6 +847,7 @@ impl Signature {
         Signature {
             scope: Scope::default(),
             params: vec![("status".to_string(), Ty::Int(Int::U8))],
+            written: Vec::new(),
             defaults: vec![false],
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
@@ -857,6 +860,7 @@ impl Signature {
         Signature {
             scope: Scope::default(),
             params: vec![("text".to_string(), Ty::Text)],
+            written: Vec::new(),
             defaults: vec![false],
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
@@ -969,9 +973,12 @@ struct Defs<'a> {
     /// How many defaults of type parameters are being resolved inside one
     /// another, so that a default that names its own type ends.
     default_depth: Cell<u8>,
-    /// The type each alias that a program wrote stands for, with the alias as
-    /// it was written, so that an error names the alias.
-    aliased: RefCell<Vec<(Ty, String)>>,
+    /// Whether the file has an alias, so that an error says a type as it is
+    /// written where it is.
+    has_alias: bool,
+    /// The type a place needs and how the place writes it, while that place is
+    /// checked, so that an error says the type as it is written there.
+    written_here: RefCell<Option<(Ty, String)>>,
     /// How the program's own code wrote `i64` and `u8`, so that an error
     /// names a type as the program wrote it.
     spelled: Cell<Spelled>,
@@ -1250,14 +1257,7 @@ impl<'a> Defs<'a> {
                     return Ty::Unknown;
                 }
                 let inner = self.quietly(named, &self.scope(&self.file.structs[s].generics, &[]));
-                let ty = inner.subst(&args);
-                if closed(&ty) {
-                    let mut aliased = self.aliased.borrow_mut();
-                    if !aliased.iter().any(|(t, _)| *t == ty) {
-                        aliased.push((ty.clone(), written_type(t)));
-                    }
-                }
-                return ty;
+                return inner.subst(&args);
             }
             return if self.cyclic[s] {
                 Ty::Unknown
@@ -1517,8 +1517,23 @@ impl<'a> Defs<'a> {
             .collect()
     }
 
+    /// Runs `check` with errors saying `ty` as `written`, the way the place that
+    /// needs it writes it, when the file has an alias.
+    fn writing<R>(&self, ty: &Ty, written: Option<String>, check: impl FnOnce() -> R) -> R {
+        let Some(written) = written.filter(|_| self.has_alias) else {
+            return check();
+        };
+        let saved = self.written_here.replace(Some((ty.clone(), written)));
+        let result = check();
+        self.written_here.replace(saved);
+        result
+    }
+
     fn signature_read(&self, f: &Function, scope: Scope) -> Signature {
         Signature {
+            written: (f.params.iter())
+                .map(|p| self.has_alias.then(|| written_type(&p.ty)))
+                .collect(),
             params: (f.params.iter())
                 .map(|p| (p.name.clone(), self.quietly(&p.ty, &scope)))
                 .collect(),
@@ -1563,7 +1578,7 @@ impl<'a> Defs<'a> {
 
     /// How a type is written, with the type parameters of `scope`.
     fn text(&self, ty: &Ty, scope: &Scope) -> String {
-        if let Some((_, name)) = self.aliased.borrow().iter().find(|(t, _)| t == ty) {
+        if let Some((_, name)) = self.written_here.borrow().as_ref().filter(|(t, _)| t == ty) {
             return name.clone();
         }
         match ty {
@@ -2516,7 +2531,8 @@ fn check_file(
         result: prelude_item(&file, Kind::Enum, "Result"),
         withouts: Vec::new(),
         default_depth: Cell::new(0),
-        aliased: RefCell::new(Vec::new()),
+        has_alias: file.structs.iter().any(|s| s.alias.is_some()),
+        written_here: RefCell::new(None),
         spelled: Cell::new(Spelled::default()),
         bound_params: RefCell::new(Vec::new()),
     };
@@ -5510,7 +5526,11 @@ fn warnings(file: &File, reached: &[Item]) -> Vec<Error> {
     // not written, so it is nothing for the program to delete.
     for (i, s) in (file.structs.iter().enumerate()).filter(|(_, s)| !s.name.contains('.')) {
         dead(Item::Struct(i), s.pos, &|| {
-            format!("the struct `{}`", s.name)
+            format!(
+                "the {} `{}`",
+                if s.alias.is_some() { "alias" } else { "struct" },
+                s.name
+            )
         });
     }
     for (i, e) in file.enums.iter().enumerate() {
@@ -7646,8 +7666,13 @@ impl<'a> Checker<'a> {
                 let t = t.text(&view, self.defs);
                 self.ends_with_nothing(f, pos, &t)
             }
-            (End::Value(gives, value), Some(_)) => {
-                self.expect(&mut body, value, &gives, &view.gives)
+            (End::Value(gives, value), Some(result)) => {
+                let written =
+                    matches!(result, Written::Source(_)).then(|| result.text(&view, self.defs));
+                let defs = self.defs;
+                defs.writing(&view.gives, written, || {
+                    self.expect(&mut body, value, &gives, &view.gives)
+                })
             }
             (
                 End::Value(
@@ -7854,8 +7879,12 @@ impl<'a> Checker<'a> {
                                 }
                                 Some(t) => {
                                     let needed = self.ty(t, body.scope);
-                                    let gives = self.expr(body, value, &Want::Ty(needed.clone()));
-                                    self.expect(body, value, &gives, &needed);
+                                    let defs = self.defs;
+                                    defs.writing(&needed, Some(written_type(t)), || {
+                                        let gives =
+                                            self.expr(body, value, &Want::Ty(needed.clone()));
+                                        self.expect(body, value, &gives, &needed);
+                                    });
                                     needed
                                 }
                                 None if (matches!(value, Expr::Number { .. })
@@ -7923,8 +7952,11 @@ impl<'a> Checker<'a> {
                     let gives = match ty {
                         Some(t) => {
                             let needed = self.ty(t, body.scope);
-                            let gives = self.expr(body, value, &Want::Ty(needed.clone()));
-                            self.expect(body, value, &gives, &needed);
+                            let defs = self.defs;
+                            defs.writing(&needed, Some(written_type(t)), || {
+                                let gives = self.expr(body, value, &Want::Ty(needed.clone()));
+                                self.expect(body, value, &gives, &needed);
+                            });
                             needed
                         }
                         None => self.expr(body, value, &Want::Any),
@@ -9365,20 +9397,5 @@ fn alias_cycles(defs: &mut Defs, errors: &mut Vec<Error>) {
                 defs.cyclic[s] = true;
             }
         }
-    }
-}
-
-/// Whether a type holds no type parameter and no unknown type.
-fn closed(ty: &Ty) -> bool {
-    match ty {
-        Ty::Param(_) | Ty::Unknown | Ty::Flex(_) => false,
-        Ty::Struct(_, items)
-        | Ty::Enum(_, items)
-        | Ty::Tuple(items)
-        | Ty::List(items)
-        | Ty::Slice(items)
-        | Ty::Array(items, _)
-        | Ty::Fn(items) => items.iter().all(closed),
-        _ => true,
     }
 }

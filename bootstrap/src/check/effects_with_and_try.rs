@@ -165,6 +165,7 @@ pub(super) fn is_arena_call(defs: &Defs, call: &Call) -> bool {
 /// `alloc`, and gives what the call gives.
 pub(super) fn arena_signature() -> Signature {
     Signature {
+        written: Vec::new(),
         scope: Scope {
             names: vec!["T".to_string()],
             invalid: vec![false],
@@ -337,6 +338,7 @@ impl<'a> Defs<'a> {
         fn_effects[params.len() - 1] = vec![def.name.clone()];
         let count = own + 1;
         Signature {
+            written: Vec::new(),
             scope: Scope {
                 names: (0..count).map(|_| "T".to_string()).collect(),
                 invalid: vec![false; count],
@@ -373,6 +375,7 @@ impl<'a> Defs<'a> {
         let mut fn_effects = vec![Vec::new(); params.len()];
         fn_effects[params.len() - 1] = vec![def.name.clone()];
         Signature {
+            written: Vec::new(),
             scope: Scope {
                 names: vec!["T".to_string()],
                 invalid: vec![false],
