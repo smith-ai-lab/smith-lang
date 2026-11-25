@@ -44,6 +44,36 @@ pub(super) const PROVIDED: &[Provided] = &[
         through: None,
     },
     Provided {
+        effect: "fs",
+        operation: "open_file",
+        through: Some("system_open_file"),
+    },
+    Provided {
+        effect: "fs",
+        operation: "create_file",
+        through: Some("system_create_file"),
+    },
+    Provided {
+        effect: "fs",
+        operation: "close_file",
+        through: Some("system_close_file"),
+    },
+    Provided {
+        effect: "fs",
+        operation: "size",
+        through: Some("system_size"),
+    },
+    Provided {
+        effect: "fs",
+        operation: "read",
+        through: Some("system_read"),
+    },
+    Provided {
+        effect: "fs",
+        operation: "write",
+        through: Some("system_write"),
+    },
+    Provided {
         effect: "net",
         operation: "listen_on",
         through: Some("system_listen_on"),

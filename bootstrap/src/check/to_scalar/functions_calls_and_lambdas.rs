@@ -114,12 +114,13 @@ pub(super) fn stops(body: &[Stmt], breaks: bool, returns: bool) -> bool {
     values(body).any(|e| one(e, breaks, returns))
 }
 
-/// Whether an effect is one that waits for the system: `net` and `time` of the
-/// library.
+/// Whether an effect is one that waits for the system: `net`, `fs`, and `time` of
+/// the library.
 pub(super) fn of_a_waiting_effect(defs: &Defs, effect: &str) -> bool {
     defs.effect_named(effect).is_some_and(|at| {
         let e = &defs.file.effects[at];
-        crate::check::of_std(e.pos) && matches!(crate::check::written_name(&e.name), "net" | "time")
+        crate::check::of_std(e.pos)
+            && matches!(crate::check::written_name(&e.name), "net" | "fs" | "time")
     })
 }
 

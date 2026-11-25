@@ -293,6 +293,7 @@ fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
         Ty::Param(_) => return true,
         Ty::Struct(s, _) if Some(*s) == defs.task => return true,
         Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
+        Ty::Struct(s, _) if Some(*s) == defs.file_handle => return true,
         Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
         Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
             .map(|t| t.subst(args))
@@ -309,11 +310,48 @@ fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
     any
 }
 
+/// The effects whose handles a value of the type holds: `net` for a connection,
+/// a listener, or a socket, and `fs` for a `File`.
+fn handle_effects(defs: &Defs, ty: &Ty) -> Vec<&'static str> {
+    fn walk(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>, found: &mut Vec<&'static str>) {
+        let parts: Vec<Ty> = match ty {
+            Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => {
+                if !found.contains(&"net") {
+                    found.push("net");
+                }
+                return;
+            }
+            Ty::Struct(s, _) if Some(*s) == defs.file_handle => {
+                if !found.contains(&"fs") {
+                    found.push("fs");
+                }
+                return;
+            }
+            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
+                .map(|t| t.subst(args))
+                .collect(),
+            Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+            _ => return,
+        };
+        if seen.contains(ty) {
+            return;
+        }
+        seen.push(ty.clone());
+        parts.iter().for_each(|t| walk(defs, t, seen, found));
+        seen.pop();
+    }
+    let mut found = Vec::new();
+    walk(defs, ty, &mut Vec::new(), &mut found);
+    found
+}
+
 /// Whether a value of the type holds a handle of `net`, which a type parameter
 /// does not say.
 fn holds_handle(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
     let parts: Vec<Ty> = match ty {
         Ty::Struct(s, _) if defs.handles.iter().any(|(h, _)| h == s) => return true,
+        Ty::Struct(s, _) if Some(*s) == defs.file_handle => return true,
         Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
         Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
             .map(|t| t.subst(args))
@@ -478,7 +516,7 @@ struct Walk<'a> {
     bound: HashMap<String, (Pos, usize)>,
     /// The names bound to a value that holds a handle of `net`, with the type as
     /// it is written, which the exit of a task that is asked to end closes.
-    handles: HashMap<String, String>,
+    handles: HashMap<String, (String, Vec<&'static str>)>,
     /// The name a loop's element stands for, which what is read of the element
     /// is read of.
     alias: HashMap<String, String>,
@@ -639,8 +677,13 @@ impl<'a> Walk<'a> {
             return;
         }
         if holds_handle(self.defs, ty, &mut Vec::new()) {
-            self.handles
-                .insert(name.to_string(), self.defs.text(ty, self.scope));
+            self.handles.insert(
+                name.to_string(),
+                (
+                    self.defs.text(ty, self.scope),
+                    handle_effects(self.defs, ty),
+                ),
+            );
         } else {
             self.handles.remove(name);
         }
@@ -1998,8 +2041,8 @@ impl<'a> Walk<'a> {
                 .map(Dropped::whole)
                 .collect()
         });
-        // A function that holds a handle of `net` while it may wait has the handler
-        // close it if the task is asked to end, so it must carry `net`.
+        // A function that holds a handle of `net`, or a `File`, while it may wait
+        // must carry the effect of the handle, which a handler answers.
         let held = (st.as_ref()).and_then(|moved| {
             (moved.own.iter().filter(|o| o.depth >= base)).find_map(|o| {
                 self.handles
@@ -2007,20 +2050,18 @@ impl<'a> Walk<'a> {
                     .map(|t| (o.name.clone(), t.clone()))
             })
         });
-        if let Some((_, ty)) = held
+        if let Some((_, (ty, needed))) = held
             && self.may_wait(call)
-            && !self
-                .f
-                .effects
-                .iter()
-                .any(|(e, _)| super::written_name(e) == "net")
+            && let Some(effect) = needed.into_iter().find(|effect| {
+                !(self.f.effects.iter()).any(|(e, _)| super::written_name(e) == *effect)
+            })
         {
             let message = format!(
-                "`{}` holds a `{ty}` while it may wait, so it must carry `net`",
+                "`{}` holds a `{ty}` while it may wait, so it must carry `{effect}`",
                 self.f.name
             );
             if let Some(error) = self.error(call.pos, message) {
-                error.fix = Some("add `net` to its effects".to_string());
+                error.fix = Some(format!("add `{effect}` to its effects"));
             }
         }
         self.record(Site::Cancel(addr(call)), owned);
@@ -2036,7 +2077,10 @@ impl<'a> Walk<'a> {
                     defs.effect_named(e).is_some_and(|at| {
                         let e = &defs.file.effects[at];
                         super::of_std(e.pos)
-                            && matches!(super::written_name(&e.name), "net" | "time" | "task")
+                            && matches!(
+                                super::written_name(&e.name),
+                                "net" | "fs" | "time" | "task"
+                            )
                     })
                 })
             })
