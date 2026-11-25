@@ -2495,6 +2495,38 @@ pub(super) fn ends_in_exit(stmts: &[Stmt]) -> bool {
     }
 }
 
+/// The formula with the variable `from` as the variable `to`.
+fn renamed(f: &Formula, from: usize, to: usize) -> Formula {
+    match f {
+        Formula::Ge(l) => {
+            let mut l = l.clone();
+            if let Some(k) = l.terms.remove(&from) {
+                *l.terms.entry(to).or_insert(0) += k;
+            }
+            Formula::Ge(l)
+        }
+        Formula::And(items) => Formula::And(items.iter().map(|f| renamed(f, from, to)).collect()),
+        Formula::Or(items) => Formula::Or(items.iter().map(|f| renamed(f, from, to)).collect()),
+    }
+}
+
+/// Whether a `break` in the statements ends the loop they are the body of:
+/// one in a loop or a lambda inside them ends that one.
+fn has_break(stmts: &[Stmt]) -> bool {
+    fn breaks(e: &Expr) -> bool {
+        match e {
+            Expr::Break { .. } => true,
+            Expr::Loop(_) | Expr::Lambda(_) => false,
+            _ => {
+                let mut inside = Vec::new();
+                super::blocks(e, &mut inside);
+                inside.into_iter().any(has_break)
+            }
+        }
+    }
+    super::values(stmts).any(breaks)
+}
+
 /// Whether the variable `id` stands for a value of a name, or of a field of
 /// one, that is defined at or after the place `outer` among the names, and is
 /// gone once the block it is in ends.
@@ -2571,6 +2603,277 @@ impl<'a> Checker<'a> {
             };
             body.facts.held.push((at, Some(held)));
         }
+    }
+
+    /// Gives the counter at `at`, which an invariant names, a number of its
+    /// own, wide enough to hold the one after the greatest the counter has.
+    /// Gives the variable of the counter, that of the new number, and the
+    /// type to put back.
+    fn another_number(
+        &mut self,
+        body: &mut Body<'a>,
+        facts: &mut Facts,
+        at: usize,
+    ) -> Option<(usize, usize, Ty)> {
+        let Ty::Int(t) = body.names[at].1.clone() else {
+            return None;
+        };
+        let wide = Int::between(-(1i128 << 100), 1i128 << 100)?;
+        let real = facts.id(Key::Name(at, t.min(), t.max()));
+        let own = facts.id(Key::Name(at, wide.min(), wide.max()));
+        let held = std::mem::replace(&mut body.names[at].1, Ty::Int(wide));
+        Some((real, own, held))
+    }
+
+    /// What each invariant of `l` says, where the names are as they are now.
+    /// None for one that `arith` does not read.
+    fn read_invariants(
+        &mut self,
+        body: &mut Body<'a>,
+        facts: &mut Facts,
+        l: &Loop,
+    ) -> Vec<Option<Formula>> {
+        l.invariants
+            .iter()
+            .map(|e| self.said(body, facts, e, true))
+            .collect()
+    }
+
+    /// Reports each invariant of `l` that `arith` cannot prove from the facts
+    /// it has, at the invariant or at `pos`.
+    fn refuse_unproven(
+        &mut self,
+        facts: &Facts,
+        l: &Loop,
+        said: Vec<Option<Formula>>,
+        when: &str,
+        pos: Option<Pos>,
+    ) {
+        for (e, goal) in l.invariants.iter().zip(said) {
+            let used = background(facts, goal.iter());
+            if goal.as_ref().is_some_and(|g| proves(&used, g)) {
+                continue;
+            }
+            self.errors.push(
+                Error::new(
+                    pos.unwrap_or_else(|| e.pos()),
+                    format!(
+                        "cannot prove that the invariant `{}` holds {when}",
+                        written_contract(&|_| None, e)
+                    ),
+                )
+                .with_fix(
+                    "state an invariant that holds at the start and that each pass keeps, \
+                     or give `arith` the facts it needs with an `if` or a `requires`",
+                ),
+            );
+        }
+    }
+
+    /// Before the first pass of a `loop` that has invariants, with the counter
+    /// of a range, if it has one, the last name: `arith` must prove that each
+    /// invariant holds, with the counter as the first end of the range.
+    pub(super) fn invariants_before(&mut self, body: &mut Body<'a>, l: &Loop, r: Option<&Range>) {
+        if l.invariants.is_empty() || !Self::decided(body) || body.contract {
+            return;
+        }
+        let mark = body.facts.mark();
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut held = None;
+        let mut when = "before the first pass".to_string();
+        let ready = match r {
+            None => true,
+            Some(r) => {
+                let at = body.names.len() - 1;
+                when = format!(
+                    "before the first pass, where `{}` is `{}`",
+                    r.name,
+                    written_expr(&r.from)
+                );
+                match self.another_number(body, &mut facts, at) {
+                    Some((_, own, was)) => {
+                        held = Some((at, was));
+                        let from = {
+                            let mut builder = self.builder(body, &mut facts, false);
+                            let from = builder.lin(&r.from);
+                            if builder.overflow { None } else { from }
+                        };
+                        match from.and_then(|from| self.equal(body, &mut facts, own, &from)) {
+                            Some(tie) => {
+                                facts.known.push(tie);
+                                true
+                            }
+                            None => false,
+                        }
+                    }
+                    None => false,
+                }
+            }
+        };
+        if ready {
+            let said = self.read_invariants(body, &mut facts, l);
+            self.refuse_unproven(&facts, l, said, &when, None);
+        }
+        if let Some((at, was)) = held {
+            body.names[at].1 = was;
+        }
+        facts.reset(&mark);
+        body.facts = facts;
+    }
+
+    /// Notes that each invariant of `l` holds at the start of a pass, where
+    /// the vars the loop assigns hold what they held when it began.
+    pub(super) fn assume_invariants(&mut self, body: &mut Body<'a>, l: &Loop) {
+        if l.invariants.is_empty() || !Self::decided(body) {
+            return;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        for said in self
+            .read_invariants(body, &mut facts, l)
+            .into_iter()
+            .flatten()
+        {
+            facts.known.push(said);
+        }
+        body.facts = facts;
+    }
+
+    /// At the end of a pass of a `loop` that has invariants, which the next
+    /// pass starts with: `arith` must prove that each holds, with the counter
+    /// of a range, if it has one, as one more than it is, from the facts of
+    /// the start of the pass.
+    pub(super) fn invariants_after_pass(
+        &mut self,
+        body: &mut Body<'a>,
+        l: &Loop,
+        r: Option<&Range>,
+    ) {
+        if l.invariants.is_empty() || !Self::decided(body) || body.contract || ends_in_exit(&l.body)
+        {
+            return;
+        }
+        let mark = body.facts.mark();
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut held = None;
+        let mut when = "after a pass".to_string();
+        let ready = match r {
+            None => true,
+            Some(r) => {
+                when = format!("after a pass, where `{}` is one more", r.name);
+                match body.names.iter().rposition(|(n, _)| n == &r.name) {
+                    Some(at) => match self.another_number(body, &mut facts, at) {
+                        Some((real, own, was)) => {
+                            held = Some((at, was));
+                            let mut next = Lin {
+                                terms: BTreeMap::from([(real, 1)]),
+                                constant: 1,
+                            };
+                            next.constant = 1;
+                            match self.equal(body, &mut facts, own, &next) {
+                                Some(tie) => {
+                                    facts.known.push(tie);
+                                    true
+                                }
+                                None => false,
+                            }
+                        }
+                        None => false,
+                    },
+                    None => false,
+                }
+            }
+        };
+        if ready {
+            let said = self.read_invariants(body, &mut facts, l);
+            self.refuse_unproven(&facts, l, said, &when, Some(l.end));
+        }
+        if let Some((at, was)) = held {
+            body.names[at].1 = was;
+        }
+        facts.reset(&mark);
+        body.facts = facts;
+    }
+
+    /// After a `loop` that has invariants and that no `break` ends, which has
+    /// run every pass: each invariant holds, with the counter of a range, if
+    /// it has one, as the greater of its two ends. The vars the loop assigned
+    /// are each one value now, which the invariants say something of.
+    pub(super) fn invariants_after_loop(
+        &mut self,
+        body: &mut Body<'a>,
+        l: &Loop,
+        r: Option<&Range>,
+        assigned: &[usize],
+    ) {
+        if l.invariants.is_empty() || !Self::decided(body) || has_break(&l.body) {
+            return;
+        }
+        for &at in assigned {
+            let Ty::Int(t) = &body.names[at].1 else {
+                continue;
+            };
+            body.facts.fresh += 1;
+            let key = Key::Fresh(body.facts.fresh, t.min(), t.max());
+            let id = body.facts.id(key);
+            let held = Lin {
+                terms: BTreeMap::from([(id, 1)]),
+                constant: 0,
+            };
+            body.facts.held.push((at, Some(held)));
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let Some(r) = r else {
+            for said in self
+                .read_invariants(body, &mut facts, l)
+                .into_iter()
+                .flatten()
+            {
+                facts.known.push(said);
+            }
+            body.facts = facts;
+            return;
+        };
+        let Some(wide) = Int::between(-(1i128 << 100), 1i128 << 100) else {
+            body.facts = facts;
+            return;
+        };
+        let at = body.names.len();
+        body.names.push((r.name.clone(), Ty::Int(wide)));
+        let id = facts.id(Key::Name(at, wide.min(), wide.max()));
+        let own = Lin {
+            terms: BTreeMap::from([(id, 1)]),
+            constant: 0,
+        };
+        let (from, to) = {
+            let mut builder = self.builder(body, &mut facts, false);
+            let (from, to) = (builder.lin(&r.from), builder.lin(&r.to));
+            if builder.overflow {
+                (None, None)
+            } else {
+                (from, to)
+            }
+        };
+        if let (Some(from), Some(to)) = (from, to)
+            && let (Some(over_from), Some(over_to), Some(is_from), Some(is_to)) = (
+                self.sum(body, &mut facts, &own, &from, 0),
+                self.sum(body, &mut facts, &own, &to, 0),
+                self.equal(body, &mut facts, id, &from),
+                self.equal(body, &mut facts, id, &to),
+            )
+        {
+            // The number is a variable of its own from here on, and not the
+            // variable of the name that is gone.
+            facts.fresh += 1;
+            let key = Key::Fresh(facts.fresh, wide.min(), wide.max());
+            let number = facts.id(key);
+            let said = self.read_invariants(body, &mut facts, l);
+            let ties = [over_from, over_to, Formula::Or(vec![is_from, is_to])];
+            for f in said.into_iter().flatten().chain(ties) {
+                facts.known.push(renamed(&f, id, number));
+            }
+        }
+        body.names.pop();
+        body.facts = facts;
     }
 
     /// The `var`s that are tracked, among `assigned`, are no longer known.

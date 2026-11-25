@@ -538,6 +538,9 @@ pub struct Loop {
     pub over: Option<Over>,
     /// The measure of an open-ended `loop decreases e`.
     pub decreases: Option<Expr>,
+    /// What a `loop i in a..b` states as true at the start of each pass, one
+    /// expression for each `invariant`.
+    pub invariants: Vec<Expr>,
     pub body: Vec<Stmt>,
     /// Where the `}` that closes the body is.
     pub end: Pos,
@@ -2382,6 +2385,7 @@ impl Parser<'_> {
         self.bump();
         let mut decreases = None;
         let mut over = None;
+        let mut invariants = Vec::new();
         let mut lead = Vec::new();
         let range = match self.tok() {
             Tok::Punct("{") => None,
@@ -2414,7 +2418,9 @@ impl Parser<'_> {
                 let no_lambda = std::mem::replace(&mut self.no_lambda, true);
                 let head = self.range_head();
                 self.no_lambda = no_lambda;
-                match head? {
+                let head = head?;
+                invariants = self.invariants()?;
+                match head {
                     (from, Some(to)) => Some(Range {
                         name,
                         pos: at,
@@ -2440,9 +2446,32 @@ impl Parser<'_> {
             range,
             over,
             decreases,
+            invariants,
             body,
             end,
         })
+    }
+
+    /// Parses the `invariant`s that follow the head of a `loop`, each an
+    /// expression, and each of which may start on a line of its own.
+    fn invariants(&mut self) -> Result<Vec<Expr>, Error> {
+        let mut found = Vec::new();
+        loop {
+            let before = self.at;
+            self.skip_newlines();
+            if !matches!(self.tok(), Tok::Ident(name) if name == "invariant") {
+                // The `{` that opens the body may follow on a line of its own.
+                if found.is_empty() || self.tok() != &Tok::Punct("{") {
+                    self.at = before;
+                }
+                return Ok(found);
+            }
+            self.bump();
+            let no_lambda = std::mem::replace(&mut self.no_lambda, true);
+            let statement = self.expr();
+            self.no_lambda = no_lambda;
+            found.push(statement?);
+        }
     }
 
     /// Parses what a `loop` runs over: `a..b`, or a value alone, whose
