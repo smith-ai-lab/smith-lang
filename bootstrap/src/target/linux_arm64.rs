@@ -61,6 +61,10 @@ impl System for Linux {
         // cmn x0, #EINTR; b.eq again; b fail
         asm.word(0xb100_001f | EINTR << 10 | X0 << 5);
         asm.cond(EQ, again);
+        // What the function kept in them is put back before it goes on, since a
+        // landing that follows the write reads it.
+        asm.load(X19, 8, false, Place::Frame(0));
+        asm.load(X20, 8, false, Place::Frame(8));
         asm.branch(fail);
         asm.bind(done);
         asm.load(X19, 8, false, Place::Frame(0));

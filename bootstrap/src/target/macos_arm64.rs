@@ -56,6 +56,7 @@ impl System for Macos {
         let done = asm.label();
         let refused = asm.label();
         let interrupted = asm.label();
+        let failed = asm.label();
         asm.bind(again);
         asm.cbz(X20, done);
         asm.mov_w(X0, fd(stream));
@@ -72,13 +73,18 @@ impl System for Macos {
         asm.bind(refused);
         // A write of nothing is refused; a failed one may be interrupted.
         asm.cond(LT, interrupted);
-        asm.branch(fail);
+        asm.branch(failed);
         asm.bind(interrupted);
         asm.call(ERROR);
-        // ldr w0, [x0]; cmp w0, #EINTR; b.eq again; b fail
+        // ldr w0, [x0]; cmp w0, #EINTR; b.eq again; b failed
         asm.word(0xb940_0000 | X0 << 5 | X0);
         asm.word(0x7100_001f | EINTR << 10 | X0 << 5);
         asm.cond(EQ, again);
+        // What the function kept in x19 and x20 is put back before it goes on, since
+        // a landing that follows the write reads it.
+        asm.bind(failed);
+        asm.load(X19, 8, false, Place::Frame(0));
+        asm.load(X20, 8, false, Place::Frame(8));
         asm.branch(fail);
         asm.bind(done);
         asm.load(X19, 8, false, Place::Frame(0));

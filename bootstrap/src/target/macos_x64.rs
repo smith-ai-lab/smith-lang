@@ -56,6 +56,7 @@ impl System for Macos {
         let done = asm.label();
         let refused = asm.label();
         let interrupted = asm.label();
+        let failed = asm.label();
         asm.bind(again);
         asm.test(R12);
         asm.jcc(Z, done);
@@ -71,11 +72,16 @@ impl System for Macos {
         asm.bind(refused);
         // A write of nothing is refused; a failed one may be interrupted.
         asm.jcc(L, interrupted);
-        asm.jmp(fail);
+        asm.jmp(failed);
         asm.bind(interrupted);
         asm.call_slot(ERROR);
         asm.cmp_load32_imm8(RAX, EINTR as i8);
         asm.jcc(Z, again);
+        // What the function kept in rbx and r12 is put back before it goes on, since
+        // a landing that follows the write reads it.
+        asm.bind(failed);
+        asm.load(RBX, 8, false, Place::Frame(0));
+        asm.load(R12, 8, false, Place::Frame(8));
         asm.jmp(fail);
         asm.bind(done);
         asm.load(RBX, 8, false, Place::Frame(0));
