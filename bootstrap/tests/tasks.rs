@@ -117,30 +117,70 @@ fn fetch_one_and_fetch_both_give_what_the_page_says_under_a_handler_of_fetch() {
     assert_eq!(said, "one 2\nboth 2 2\nsecond failed\n");
 }
 
-/// A program that spawns `spawned` children, each of which says its number and
-/// gives a different value, joins the first `joined` of them, and says that the
-/// block ended and what the joined ones gave.
-fn counting(spawned: usize, joined: usize) -> String {
-    let mut s = String::from("fn group() -> u64 <console, alloc> {\n  with tasks()\n");
-    for k in 0..spawned {
-        s += &format!("  t{k} = spawn {{\n    print(\"c{k}\")\n    v: u64 = {}\n    v\n  }}\n", k + 1);
+/// The text of a program with one function for each `(spawned, joined)`: it
+/// spawns `spawned` children, each of which says its number and gives a
+/// different value, joins the first `joined` of them, and gives what they gave.
+/// Its `main` calls the functions in order and says `end` and what each gave
+/// after what its children said.
+fn counting(cases: &[(usize, usize)]) -> String {
+    let mut s = String::new();
+    for (i, &(spawned, joined)) in cases.iter().enumerate() {
+        s += &format!("fn group{i}() -> u64 <console, alloc> {{\n  with tasks()\n");
+        for k in 0..spawned {
+            s += &format!("  t{k} = spawn {{\n    print(\"c{k}\")\n    v: u64 = {}\n    v\n  }}\n", k + 1);
+        }
+        s += "  var total: u64 = 0\n";
+        for k in 0..joined {
+            s += &format!("  total = wrapping_add(total, wrapping_mul(join(t{k}), {}))\n", 1000u64.pow(k as u32 % 3));
+        }
+        s += "  total\n}\n\n";
     }
-    s += "  var total: u64 = 0\n";
-    for k in 0..joined {
-        s += &format!("  total = wrapping_add(total, wrapping_mul(join(t{k}), {}))\n", 1000u64.pow(k as u32 % 3));
+    s += "fn main() <console, alloc> {\n";
+    for i in 0..cases.len() {
+        s += &format!("  print(\"end {{group{i}()}}\")\n");
     }
-    s += "  total\n}\n\nfn main() <console, alloc> {\n  total = group()\n  print(\"end {total}\")\n}\n";
+    s += "}\n";
     program(&s)
+}
+
+/// What each of the cases says, as `counting` makes them and runs them as one
+/// program, which is lowered once: what it says, cut after each `end` line.
+fn counted(cases: &[(usize, usize)]) -> Vec<String> {
+    let said = run(&counting(cases));
+    let mut each: Vec<String> = said.split_inclusive('\n').fold(vec![String::new()], |mut each, line| {
+        each.last_mut().unwrap().push_str(line);
+        if line.starts_with("end ") {
+            each.push(String::new());
+        }
+        each
+    });
+    assert_eq!(each.pop().as_deref(), Some(""), "{said}");
+    assert_eq!(each.len(), cases.len(), "{said}");
+    each
 }
 
 /// A child that is joined runs exactly once, no child runs twice, and nothing
 /// runs after the block, so the last line is the one the program says after it.
+/// The cases are lowered as one program, as lowering the library of tasks takes
+/// the time of a case, and a case that shrinking tries is lowered alone.
 fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
-    generate::check(330, 24, |g| {
+    let draw = |g: &mut Gen| {
         let spawned = 1 + g.below(5);
         (spawned, g.below(spawned + 1))
-    }, |&(spawned, joined)| {
-        let said = run(&counting(spawned, joined));
+    };
+    let mut distinct: Vec<(usize, usize)> = Vec::new();
+    for case in 0..24 {
+        let input = generate::sample(330, case, draw);
+        if !distinct.contains(&input) {
+            distinct.push(input);
+        }
+    }
+    let known: Vec<String> = counted(&distinct);
+    generate::check(330, 24, draw, |&(spawned, joined)| {
+        let said = match distinct.iter().position(|d| *d == (spawned, joined)) {
+            Some(at) => known[at].clone(),
+            None => counted(&[(spawned, joined)]).remove(0),
+        };
         let lines: Vec<&str> = said.lines().collect();
         let (last, children) = lines.split_last().expect("lines");
         assert!(last.starts_with("end "), "{said} for {spawned} {joined}");
@@ -158,13 +198,41 @@ fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
     });
 }
 
-/// `fetch_twice`, `snapshot`, and a function that gives what a child read.
+/// The text of a program with `snapshot` for each pair, and `twice`, whose
+/// `main` says what each `snapshot` gives and what `twice` gives, one line each.
+fn sharing(cases: &[(u64, u64)]) -> String {
+    let mut s = String::new();
+    for (i, (a, b)) in cases.iter().enumerate() {
+        s += &format!(
+            "fn snapshot{i}() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\n"
+        );
+    }
+    s += "fn twice(x: str) -> (u64, u64) {\n  with tasks()\n  ta = spawn { wrapping_add(x.size, 1) }\n  tb = spawn { wrapping_mul(x.size, 2) }\n  (join(ta), join(tb))\n}\n\nfn main() <console, alloc> {\n  (p, q) = twice(\"abc\")\n";
+    for i in 0..cases.len() {
+        s += &format!("  print(\"{{snapshot{i}()}} {{p}} {{q}}\")\n");
+    }
+    s += "}\n";
+    program(&s)
+}
+
+/// `snapshot`, `twice`, and a function that gives what a child read. The cases
+/// are run as one program, and a case that shrinking tries is run alone.
 fn an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn() {
-    generate::check(331, 20, |g| (g.below(1000) as u64, 1 + g.below(1000) as u64), |&(a, b)| {
-        let source = program(&format!(
-            "fn snapshot() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\nfn twice(x: str) -> (u64, u64) {{\n  with tasks()\n  ta = spawn {{ wrapping_add(x.size, 1) }}\n  tb = spawn {{ wrapping_mul(x.size, 2) }}\n  (join(ta), join(tb))\n}}\n\nfn main() <console, alloc> {{\n  (p, q) = twice(\"abc\")\n  print(\"{{snapshot()}} {{p}} {{q}}\")\n}}\n"
-        ));
-        assert_eq!(run(&source), format!("{} 4 6\n", b + a + 1));
+    let draw = |g: &mut Gen| (g.below(1000) as u64, 1 + g.below(1000) as u64);
+    let all: Vec<(u64, u64)> = (0..20).map(|case| generate::sample(331, case, draw)).collect();
+    let known = run(&sharing(&all));
+    let known: Vec<&str> = known.lines().collect();
+    assert_eq!(known.len(), all.len(), "{known:?}");
+    generate::check(331, 20, draw, |&(a, b)| {
+        let alone;
+        let said = match all.iter().position(|c| *c == (a, b)) {
+            Some(at) => known[at],
+            None => {
+                alone = run(&sharing(&[(a, b)]));
+                alone.trim_end()
+            }
+        };
+        assert_eq!(said, format!("{} 4 6", b + a + 1));
     });
 }
 
