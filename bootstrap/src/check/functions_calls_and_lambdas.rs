@@ -445,6 +445,21 @@ impl<'a> Checker<'a> {
             let outer_discovering = self.discovering;
             self.discovering = outer_discovering || again;
             let end = self.block(body, &l.body, &want);
+            // A `try` in a block that the call does not give a type is refused
+            // for what the block gives, which is the type it leaves with.
+            if result.unknown() && !settled.unknown() {
+                let gives = defs.text(&settled, body.scope);
+                for error in &mut self.errors[before..] {
+                    if error
+                        .message
+                        .starts_with("there is no implementation of `Try` for")
+                    {
+                        error.message = format!(
+                            "this block gives `{gives}`, which `try` cannot return a failure from"
+                        );
+                    }
+                }
+            }
             self.discovering = outer_discovering;
             body.lambdas -= 1;
             body.returns = outer_returns;
