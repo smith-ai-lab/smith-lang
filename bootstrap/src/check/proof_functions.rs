@@ -37,6 +37,7 @@ impl<'a> Checker<'a> {
             returns: Ty::Nothing,
             returned: None,
             lambdas: 0,
+            kept: 0,
         };
         // What the proof's caller owes is what it knows.
         for requirement in &def.requires {

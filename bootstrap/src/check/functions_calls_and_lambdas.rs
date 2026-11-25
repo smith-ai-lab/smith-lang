@@ -155,26 +155,76 @@ impl<'a> Checker<'a> {
         match &f.result {
             // A function that gives a function gives the one function it names.
             Some(t) if t.function => {
-                if let Some(g) = self.defs.returned_function(f, scope) {
+                if let Some(Ty::Named(g)) = self.defs.returned_function(f, scope) {
                     self.returned_effects(t.pos, g);
                 }
                 if self.defs.returned_function(f, scope).is_none()
                     && self.defs.returned_parameter(f).is_none()
                 {
-                    self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
+                    self.errors.extend(self.which_function(f, scope, t.pos));
                 }
             }
             // A struct that holds functions is the one the body builds.
             Some(t) if self.defs.implicit_result(t, scope).is_some() => {
                 let u = self.defs.implicit_result(t, scope).expect("checked");
                 if self.defs.returned_struct(f, u, scope).is_none() {
-                    self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
+                    self.errors.extend(self.which_function(f, scope, t.pos));
                 }
             }
             Some(t) => {
                 self.ty(t, scope);
             }
             None => {}
+        }
+    }
+
+    /// The error for a function whose result is a function, or holds one, that is
+    /// not known from its body: a lambda that is given and reads a name that is
+    /// not a parameter, whose type is not known before the body is checked, or a
+    /// choice between functions. A lambda that reads a value that is lent is
+    /// refused where it is written, and says so there.
+    fn which_function(&self, f: &Function, scope: &Scope, at: Pos) -> Option<Error> {
+        let defs = self.defs;
+        let mut found = Vec::new();
+        for tail in super::tails(&f.body) {
+            super::walk(tail, &mut found);
+        }
+        let lambdas: Vec<&Lambda> = found
+            .into_iter()
+            .filter_map(|e| match e {
+                Expr::Lambda(l) if defs.env_of(l).is_some() => Some(&**l),
+                _ => None,
+            })
+            .collect();
+        let local = lambdas.iter().find_map(|l| {
+            let s = defs.env_of(l)?;
+            let field = defs.file.structs[s]
+                .fields
+                .iter()
+                .find(|field| !f.params.iter().any(|p| p.name == field.name))?;
+            Some((l.pos, field.name.as_str()))
+        });
+        // Each lambda that is given reads a parameter whose value is lent.
+        let lent = !lambdas.is_empty()
+            && lambdas.iter().all(|l| {
+                let s = defs.env_of(l).expect("checked");
+                defs.file.structs[s].fields.iter().any(|field| {
+                    (f.params.iter().find(|p| p.name == field.name)).is_some_and(|p| {
+                        !ownership::copies(defs, scope, &defs.quietly(&p.ty, scope))
+                    })
+                })
+            });
+        match local {
+            Some((pos, name)) => Some(Error::new(
+                pos,
+                format!(
+                    "a lambda that is given reads only the parameters of its function, as \
+                     what a function gives is known before its body is checked, and this one \
+                     reads `{name}`"
+                ),
+            )),
+            None if lent => None,
+            None => Some(Error::new(at, WHICH_FUNCTION)),
         }
     }
 
@@ -276,6 +326,7 @@ impl<'a> Checker<'a> {
             returns: Ty::Nothing,
             returned: None,
             lambdas: 0,
+            kept: 0,
         };
         let gives = self.expr(&mut body, value, &Want::Ty(needed.clone()));
         self.expect(&mut body, value, &gives, needed);
@@ -407,9 +458,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Binds a name to a lambda that reads names of its function: its body is
-    /// checked where it is written, and the name has the type of the struct that
-    /// holds what it reads, at the types those names have.
+    /// Binds a name to a lambda that reads names of its function, which is
+    /// called in the same body.
     pub(super) fn bind_env<'e>(
         &mut self,
         body: &mut Body<'a>,
@@ -417,6 +467,28 @@ impl<'a> Checker<'a> {
         pos: Pos,
         l: &'e Lambda,
     ) -> End<'e> {
+        let held = self.held_lambda(body, l, "bound to a name", false);
+        if body.names.iter().any(|(n, _)| n == name) {
+            self.errors.push(self.defined_twice(body, name, pos));
+        } else {
+            body.names.push((name.to_string(), held));
+        }
+        End::Binding(pos)
+    }
+
+    /// Checks a lambda that reads names of its function, where it is bound to a
+    /// name, stored in a field, or returned, which `place` says. Its body is
+    /// checked where it is written, and it has the type of the struct that holds
+    /// what it reads, at the types those names have. A lambda that is `kept`,
+    /// stored or returned, carries no effect, as the type that holds it states
+    /// none.
+    pub(super) fn held_lambda(
+        &mut self,
+        body: &mut Body<'a>,
+        l: &Lambda,
+        place: &str,
+        kept: bool,
+    ) -> Ty {
         let defs = self.defs;
         let s = defs.env_of(l).expect("a struct for the lambda");
         let fields = &defs.file.structs[s].fields;
@@ -428,11 +500,12 @@ impl<'a> Checker<'a> {
                 Some((_, ty)) => ty.clone(),
                 None => Ty::Unknown,
             };
-            // A value that is not copied and that a `var` holds could change or
-            // move after the lambda is bound, so it is refused as one that is lent.
+            // A value that is not copied is lent to a lambda that is kept, which
+            // outlives it. One that a `var` holds could change or move after a
+            // lambda that is bound reads it, so it is refused as one that is lent.
             if !ty.unknown()
                 && !ownership::copies(defs, body.scope, &ty)
-                && body.vars.contains(&field.name)
+                && (kept || body.vars.contains(&field.name))
             {
                 lent = true;
             }
@@ -441,23 +514,21 @@ impl<'a> Checker<'a> {
         if lent {
             self.errors.push(Error::new(
                 l.pos,
-                "a lambda cannot be bound to a name, as it is only passed to a call",
+                format!("a lambda cannot be {place}, as it is only passed to a call"),
             ));
         }
         let unknown = vec![Ty::Unknown; l.params.len() + 1];
-        let held = match self.lambda(body, l, &unknown, false) {
-            Ty::Fn(items) if !lent => {
-                self.env_items.insert(s, items);
-                Ty::Struct(s, args)
-            }
-            _ => Ty::Unknown,
-        };
-        if body.names.iter().any(|(n, _)| n == name) {
-            self.errors.push(self.defined_twice(body, name, pos));
-        } else {
-            body.names.push((name.to_string(), held));
+        let listed = kept.then(|| std::mem::take(&mut body.listed));
+        body.kept += usize::from(kept);
+        let checked = self.lambda(body, l, &unknown, false);
+        body.kept -= usize::from(kept);
+        if let Some(listed) = listed {
+            body.listed = listed;
         }
-        End::Binding(pos)
+        match checked {
+            Ty::Fn(_) if !lent => Ty::Struct(s, args),
+            _ => Ty::Unknown,
+        }
     }
 
     /// Checks a lambda passed where a function is needed whose parameters
@@ -852,6 +923,10 @@ impl<'a> Checker<'a> {
             .position(|f| f.name == name)?;
         Some(match defs.fields[*s][i].subst(args) {
             Ty::Named(g) => Held::Named(g),
+            // A lambda that reads names is of the type of its own parameters.
+            Ty::Struct(e, held) if defs.env_lambda(e).is_some() => {
+                Held::Items(defs.env_items(e, &held).expect("checked"))
+            }
             _ => Held::Items(
                 defs.field_items[*s][i]
                     .as_ref()?
@@ -872,6 +947,12 @@ impl<'a> Checker<'a> {
             Some(inner) => match self.expr(body, inner, &Want::Any) {
                 Ty::Named(g) => Some(g),
                 Ty::Unknown => return self.unknown_call(body, call),
+                Ty::Struct(e, held) if defs.env_lambda(e).is_some() => {
+                    let items = defs.env_items(e, &held).expect("checked");
+                    let given = self.value_call(body, call, &items);
+                    self.value_calls.remove(&addr(call));
+                    return given;
+                }
                 other => {
                     let given = defs.describe(&other, body.scope);
                     self.errors.push(Error::new(
@@ -941,10 +1022,8 @@ impl<'a> Checker<'a> {
         }
         if let Some((_, Ty::Struct(s, args))) = body.names.iter().rfind(|(n, _)| n == name)
             && call.qualifier.is_none()
-            && let Some(items) = self.env_items.get(s)
+            && let Some(items) = defs.env_items(*s, args)
         {
-            let own = defs.file.structs[*s].generics.len() - defs.file.structs[*s].fields.len();
-            let items: Vec<Ty> = items.iter().map(|t| t.subst(&args[..own])).collect();
             return self.value_call(body, call, &items);
         }
         if let Some((_, Ty::Fn(items))) = body.names.iter().rfind(|(n, _)| n == name) {

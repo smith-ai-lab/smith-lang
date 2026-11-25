@@ -9,8 +9,8 @@ built:
   - "a lambda that gives away a value of the function it is written in, passed to a parameter that takes its function"
   - "a lambda that reads and assigns no name of the function it is written in and writes the type of each parameter and of its result, bound to a name, stored in a field, and returned, each known when the program is built, and one that writes type parameters after `fn`"
   - "a lambda that leaves out the type of a parameter or of its result where it is stored in a field or returned, which it takes from the function type of the field or of the result, and a choice between lambdas given to a name, refused as a choice between functions is"
-  - "a lambda that reads names of its function, copies the values they have where it is bound, and is called in the same body, as the paragraph below says; stored in a field and returned it is not built (#1114)"
-  - "not a lambda that leaves out a type where it is bound, which is refused with where to write it, and not the parameters of a lambda bound to a name inferred from the calls of it, as [Inference](inference.md#a-lambdas-parameters) says (#1114)"
+  - "a lambda that reads names of its function, holds the values they have as fields of the value that holds it, bound to a name and called in the same body, and stored in a field or returned when what it reads is copied, as the paragraph below says"
+  - "not a lambda that leaves out a type where it is bound, which is refused with where to write it, and not the parameters of a lambda bound to a name inferred from the calls of it, as [Inference](inference.md#a-lambdas-parameters) says (#1138, #1139)"
 ---
 
 # Lambdas
@@ -178,7 +178,7 @@ Braces are the body of a construct or a lambda, and nothing else. Four rules fol
 
 A lambda is a value, so it goes where a value goes: it is passed to a call, bound to a name, stored in a field, and returned. One rule decides which lambdas may leave the function they are written in, and it is the rule for every value: [a lent value is not stored or returned](take.md#lending).
 
-A lambda is lent the names around it that it reads or assigns. So a lambda that reads or assigns a name of its function holds something lent, and it is passed to a parameter of a function type and nowhere else. The function that receives it may call it, or pass it on to such a parameter of another function, and may not store or return it, whether its parameter lends the lambda or takes it. So the lambda never outlives the names it uses, and what it does happens inside the call it is written at.
+A lambda is lent the names around it that it reads or assigns, except those it reads whose values are copied, of which it holds a copy. So a lambda that assigns a name of its function, or reads one whose value is not copied, holds something lent, and it is passed to a parameter of a function type and nowhere else. The function that receives it may call it, or pass it on to such a parameter of another function, and may not store or return it, whether its parameter lends the lambda or takes it. So the lambda never outlives the names it uses, and what it does happens inside the call it is written at.
 
 ```
 fn scaled(x: f32, rate: f32) -> f32 {
@@ -186,7 +186,7 @@ fn scaled(x: f32, rate: f32) -> f32 {
 }
 ```
 
-A lambda that uses no name around it, or only names it [takes](take.md#a-function-that-is-called-once), holds nothing lent, and may be kept. Here `halve` is bound, then passed.
+A lambda that uses no name around it, or only names it [takes](take.md#a-function-that-is-called-once) or names whose values are copied, holds nothing lent, and may be kept. Here `halve` is bound, then passed.
 
 ```
 fn quarter(x: f32) -> f32 {
@@ -216,7 +216,23 @@ struct Step[F] {
 
 A lambda that takes nothing is a block alone, `{ 1.0 }`, and a block alone is a lambda only as the argument of a call, so `x = { 1.0 }` is refused, as a block that stands alone is not an expression, and `fn() { 1.0 }` is refused too, as a lambda with no parameters is a block alone. A lambda that is bound takes at least one parameter.
 
-A lambda that is stored or returned is built today only when it reads and assigns no name of its function. A lambda that is bound to a name may also read names of its function whose values are copied, and holds those values as they are where it is bound, so a later assignment of a `var` it reads does not change it: with `k: f32 = 3.0` and `f = fn(x: f32) -> f32 { x * k }`, `f(2.0)` gives `6.0`. It is called in the body it is written in, and costs nothing, as its body is the call written out. What it reads that is not copied, such as a list a function is lent, is held as it is, and is lent to the lambda for as long as the lambda can be called: giving the name away, as an argument of a `take` parameter, before the last call of the lambda is refused as a use after it was given away, at the call, saying that the lambda holds it, and giving it away after the last call is fine. One that reads a `var` that is not copied, or assigns a name of its function, is refused as one that holds something lent is. Where it is stored in a field or returned, it may leave out the type of a parameter and of its result, and takes each from the function type of the field or of the result: `Pricing(discount: fn(x) { x * 0.5 })`, and `fn chosen() -> fn(f32) -> f32 { fn(x) { x * 0.5 } }`. Where it is bound to a name, no function type decides its types, so it writes them: `f = fn(v) { v * 2.0 }` is refused, "a lambda bound to a name writes the type of each parameter and of its result, since no function type decides them". A lambda that is bound and leaves a type out, with its parameters inferred from the calls of it, is not built yet.
+A lambda that reads names of its function holds the values they have where it is written, as the fields of the value that holds it, so a later assignment of a `var` it reads does not change it: with `k: f32 = 3.0` and `f = fn(x: f32) -> f32 { x * k }`, `f(2.0)` gives `6.0`. It is bound, stored in a field, and returned as a lambda that reads nothing is, has a type of its own as it has, and costs nothing, as a call of it is its body written where it is called.
+
+```
+struct Pricing {
+  discount: fn(f32) -> f32
+}
+
+fn scaler(k: f32) -> fn(f32) -> f32 {
+  fn(x: f32) -> f32 { x * k }
+}
+
+fn sale(rate: f32) -> Pricing {
+  Pricing(discount: fn(v: f32) -> f32 { v - rate })
+}
+```
+
+`scaler(3.0)(2.0)` is `6.0`, and `sale(1.0).discount(5.0)` is `4.0`. Each call of `scaler` and of `sale` gives a lambda that holds the values it was called with. A lambda that is returned reads the parameters of its function and no other name, since what a function gives is known before its body is checked: one that reads a name the function defines is refused, "a lambda that is given reads only the parameters of its function, as what a function gives is known before its body is checked, and this one reads `doubled`". Where it is stored or returned, it holds only what is copied, as a value that is lent to the lambda would outlive what lends it. A lambda that is bound is called in the body it is written in, so what it reads that is not copied, such as a list a function is lent, is held as it is, and is lent to the lambda for as long as the lambda can be called: giving the name away, as an argument of a `take` parameter, before the last call of the lambda is refused as a use after it was given away, at the call, saying that the lambda holds it, and giving it away after the last call is fine. It is not returned, or stored in what a function returns, by the name it is bound to, as what it holds is lent. One that reads a `var` that is not copied, or assigns a name of its function, is refused as one that holds something lent is. Where it is stored in a field or returned, it may leave out the type of a parameter and of its result, and takes each from the function type of the field or of the result: `Pricing(discount: fn(x) { x * 0.5 })`, and `fn chosen() -> fn(f32) -> f32 { fn(x) { x * 0.5 } }`. Where it is bound to a name, no function type decides its types, so it writes them: `f = fn(v) { v * 2.0 }` is refused, "a lambda bound to a name writes the type of each parameter and of its result, since no function type decides them". A lambda that is bound and leaves a type out, with its parameters inferred from the calls of it, is not built yet.
 
 A lambda that holds something lent is refused where it is bound, stored, or returned: "a lambda cannot be bound to a name, as it is only passed to a call", and its two likes for a field and a result. A lambda that needs an effect is refused where it is stored or returned, as a function with a name is, since the type of a field states none.
 

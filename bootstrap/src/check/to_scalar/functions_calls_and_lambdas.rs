@@ -617,10 +617,14 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    /// Binds a name to a lambda that reads names of its function: the name
-    /// holds the values of the names it read, as of now, and the lambda, whose
-    /// body is lowered where it is called.
-    pub(super) fn bind_env(&mut self, out: &mut Out<'a>, name: &str, l: &'a Lambda, env: &[Ty]) {
+    /// The type and the values of a lambda that reads names of its function:
+    /// the values of the names it read, as of now, which are what it holds.
+    pub(super) fn env_value(
+        &mut self,
+        out: &mut Out<'a>,
+        l: &'a Lambda,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
         let defs = self.typed.defs;
         let s = defs.env_of(l).expect("a struct for the lambda");
         let fields = &defs.file.structs[s].fields;
@@ -632,9 +636,38 @@ impl<'a> Lowering<'a> {
             args.push(out.names()[at].ty.clone());
             values.extend(out.read(at));
         }
-        out.define(name, Ty::Struct(s, args), values);
+        (Ty::Struct(s, args), values)
+    }
+
+    /// Binds a name to a lambda that reads names of its function: the name
+    /// holds the values of the names it read, as of now, and the lambda, whose
+    /// body is lowered where it is called.
+    pub(super) fn bind_env(&mut self, out: &mut Out<'a>, name: &str, l: &'a Lambda, env: &[Ty]) {
+        let (ty, values) = self.env_value(out, l, env);
+        out.define(name, ty, values);
         let at = out.find(name).expect("defined");
         out.names_mut()[at].func = Some(Func::Lambda(l, out.at, env.to_vec()));
+    }
+
+    /// The names a lambda of struct `s` read, each standing for the value that
+    /// the lambda holds, from the values of the lambda.
+    fn held_names(&self, s: usize, args: &[Ty], values: &[form::Value]) -> Vec<Bound<'a>> {
+        let defs = self.typed.defs;
+        let mut held = Vec::new();
+        let mut from = 0;
+        for (field, ty) in defs.file.structs[s].fields.iter().zip(&defs.fields[s]) {
+            let ty = ty.subst(args);
+            let size = self.size(&ty);
+            held.push(Bound {
+                name: field.name.clone(),
+                ty,
+                values: values[from..from + size].to_vec(),
+                func: None,
+                home: None,
+            });
+            from += size;
+        }
+        held
     }
 
     /// Lowers a call of a name that holds a function. A lambda's body is
@@ -658,36 +691,70 @@ impl<'a> Lowering<'a> {
         env: &[Ty],
         quiet: bool,
     ) -> (Ty, Vec<form::Value>) {
+        let frame = out.at;
         let at = out.find(&call.callee).expect("checked");
         let local = &out.names()[at];
-        let func = local.func.clone().expect("a function");
-        let mut held = Vec::new();
-        let items = match local.ty.clone() {
-            Ty::Fn(items) => items,
+        let (held, items) = match local.ty.clone() {
+            Ty::Fn(items) => (Vec::new(), items),
+            // The names the lambda read stand for the values it holds.
             Ty::Struct(s, args) => {
-                // The names the lambda read stand for the values it holds.
-                let defs = self.typed.defs;
-                let own = defs.file.structs[s].generics.len() - defs.file.structs[s].fields.len();
-                let mut from = 0;
-                for (field, ty) in defs.file.structs[s].fields.iter().zip(&defs.fields[s]) {
-                    let ty = ty.subst(&args);
-                    let size = self.size(&ty);
-                    held.push(Bound {
-                        name: field.name.clone(),
-                        ty,
-                        values: local.values[from..from + size].to_vec(),
-                        func: None,
-                        home: None,
-                    });
-                    from += size;
-                }
-                self.typed.env_items[&s]
-                    .iter()
-                    .map(|t| t.subst(&args[..own]))
-                    .collect()
+                let held = self.held_names(s, &args, &local.values);
+                let items = self.typed.defs.env_items(s, &args);
+                (held, items.expect("a lambda that holds names"))
             }
             _ => unreachable!("checked"),
         };
+        let func = match local.func.clone() {
+            Some(func) => func,
+            // A lambda a function gave is where it is written, for its body.
+            None => self.held_func(&local.ty, frame),
+        };
+        self.run_held(out, call, (func, held, items), env, quiet)
+    }
+
+    /// The lambda that a value of a struct that holds what a lambda reads holds,
+    /// whose body is lowered where it is called, in `frame`. It reads only what
+    /// it holds, so it needs no frame of the function that wrote it.
+    fn held_func(&self, ty: &Ty, frame: usize) -> Func<'a> {
+        let Ty::Struct(s, args) = ty else {
+            unreachable!("checked")
+        };
+        let defs = self.typed.defs;
+        let (lambda, _) = defs.env_lambda(*s).expect("a lambda that holds names");
+        let def = &defs.file.structs[*s];
+        let own = def.generics.len() - def.fields.len();
+        Func::Lambda(lambda, frame, args[..own].to_vec())
+    }
+
+    /// Lowers a call of a lambda that a value holds the names of: the body is
+    /// lowered where it is called, with the names it read standing for the values
+    /// it holds.
+    pub(super) fn call_env(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        (s, args): (usize, Vec<Ty>),
+        values: Vec<form::Value>,
+        env: &[Ty],
+    ) -> (Ty, Vec<form::Value>) {
+        let defs = self.typed.defs;
+        let held = self.held_names(s, &args, &values);
+        let items = defs.env_items(s, &args).expect("a lambda that holds names");
+        let func = self.held_func(&Ty::Struct(s, args), out.at);
+        self.run_held(out, call, (func, held, items), env, false)
+    }
+
+    /// Runs the function a call of a value that holds one calls, with the names
+    /// `held` standing for what it holds, and `items` the types of its parameters
+    /// and of its result, the result last.
+    fn run_held(
+        &mut self,
+        out: &mut Out<'a>,
+        call: &'a Call,
+        (func, held, items): (Func<'a>, Vec<Bound<'a>>, Vec<Ty>),
+        env: &[Ty],
+        quiet: bool,
+    ) -> (Ty, Vec<form::Value>) {
         let (gives, params) = items.split_last().expect("a result");
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
         let mut next = 0;

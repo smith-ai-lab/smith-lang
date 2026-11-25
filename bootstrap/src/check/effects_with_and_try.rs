@@ -727,6 +727,17 @@ impl<'a> Checker<'a> {
             ));
             return;
         }
+        if body.kept > 0 {
+            self.errors.push(Error::new(
+                pos,
+                format!(
+                    "{what} needs the `{}` effect, and the type of a lambda that is bound, \
+                     stored, or returned states none",
+                    written_name(effect)
+                ),
+            ));
+            return;
+        }
         if body.missing.iter().any(|m| m == effect) {
             return;
         }

@@ -2133,6 +2133,7 @@ impl<'a> Checker<'a> {
             returns: Ty::Nothing,
             returned: None,
             lambdas: 0,
+            kept: 0,
         };
         for e in &f.requires {
             self.contract(&mut body, e);

@@ -11,7 +11,7 @@ built:
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
-  - "not the parameters of a lambda bound to a name, inferred from the calls of it (#1114)"
+  - "not the parameters of a lambda bound to a name, inferred from the calls of it (#1139)"
 ---
 
 # Inference

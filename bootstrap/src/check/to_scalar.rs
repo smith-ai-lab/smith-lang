@@ -78,6 +78,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         asking: false,
         closing: false,
         defining_frame: false,
+        through_values: None,
         made_frame: None,
         through: None,
         through_scheduled: false,
@@ -192,6 +193,9 @@ struct Lowering<'a> {
     /// Whether the value being lowered is the one a name is defined as, which a
     /// call of `__frame` may be, and the lambda it made a frame of when it was.
     defining_frame: bool,
+    /// What the call that gives the function a call calls gave, as in `chosen()(x)`,
+    /// or what the struct that holds it is, as in `shop.pricing.discount(x)`.
+    through_values: Option<(Ty, Vec<form::Value>)>,
     made_frame: Option<usize>,
     /// The function that detaches the children a value of each type holds, by
     /// its place among the program's functions.
@@ -1862,12 +1866,14 @@ impl<'a> Lowering<'a> {
                             args: Vec::new(),
                         })),
                         // A name bound to a lambda that holds names holds it too.
-                        Ty::Struct(s, _) if self.typed.env_items.contains_key(s) => match written {
-                            Expr::Name { name: from, .. } => {
-                                out.find(from).and_then(|at| out.names()[at].func.clone())
+                        Ty::Struct(s, _) if self.typed.defs.env_lambda(*s).is_some() => {
+                            match written {
+                                Expr::Name { name: from, .. } => {
+                                    out.find(from).and_then(|at| out.names()[at].func.clone())
+                                }
+                                _ => None,
                             }
-                            _ => None,
-                        },
+                        }
                         _ => None,
                     };
                     match out.find(name) {
@@ -2144,6 +2150,10 @@ impl<'a> Lowering<'a> {
                 self.compare_mixed(out, call, env)
             }
             Expr::Call(call) => match self.callee_after_through(out, call, env) {
+                Callee::Env(s, args) => {
+                    let values = self.held_values(out, call, s);
+                    self.call_env(out, call, (s, args), values, env)
+                }
                 Callee::Construct(s, args) => {
                     let inner = args.clone();
                     let values = self.construction(out, call, s, env, &inner);
@@ -2333,6 +2343,8 @@ impl<'a> Lowering<'a> {
                 let (ty, address, scalars) = self.element_at(out, expr, env);
                 (ty, self.load(out, address, &scalars))
             }
+            // A lambda that reads names, stored or returned, is the values it holds.
+            Expr::Lambda(l) if defs.env_of(l).is_some() => self.env_value(out, l, env),
             Expr::Lambda(_) => unreachable!("checked"),
             Expr::Loop(l) => {
                 match &l.over {
@@ -2844,10 +2856,30 @@ impl<'a> Lowering<'a> {
     /// What a call runs, after the call that gives the function it calls, as
     /// in `chosen()(x)`, is run for what it does, as an argument is.
     fn callee_after_through(&mut self, out: &mut Out<'a>, call: &'a Call, env: &[Ty]) -> Callee {
-        if let Some(inner) = &call.through {
-            self.expr(out, inner, env);
+        let given = (call.through.as_ref()).map(|inner| self.expr(out, inner, env));
+        let callee = self.typed.callee(call, env);
+        self.through_values = given;
+        callee
+    }
+
+    /// The values of the lambda that a call calls, which holds the values of what
+    /// it read: those of the call that gave it, or of its field in the struct
+    /// that holds it.
+    fn held_values(&mut self, out: &mut Out<'a>, call: &'a Call, s: usize) -> Vec<form::Value> {
+        let (ty, values) = match (self.through_values.take(), &call.qualifier) {
+            (Some(given), _) => given,
+            (None, Some((q, _))) => {
+                let at = out.find(q).expect("checked");
+                (out.names()[at].ty.clone(), out.read(at))
+            }
+            (None, None) => unreachable!("checked"),
+        };
+        // What gave the lambda is the lambda itself, or the struct that holds it.
+        if matches!(ty, Ty::Struct(held, _) if held == s) {
+            return values;
         }
-        self.typed.callee(call, env)
+        let (start, size) = self.offset(&ty, &[(call.callee.clone(), call.name_pos)]);
+        values[start..start + size].to_vec()
     }
 
     /// Lowers a `match` on what the block of a `loop` over a value gives,

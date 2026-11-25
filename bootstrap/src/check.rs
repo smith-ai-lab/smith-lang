@@ -946,6 +946,12 @@ struct Defs<'a> {
     /// with, which is what a call of it is checked against while the function
     /// it holds is not known.
     field_items: Vec<Vec<Option<Vec<Ty>>>>,
+    /// For each struct the parser made to hold what a lambda reads, the lambda,
+    /// and the types of its parameters and of its result, the result last,
+    /// among the type parameters of the function it is written in.
+    env_lambdas: Vec<Option<(&'a Lambda, Vec<Ty>)>>,
+    /// The struct of each lambda it is made for, by where the lambda is written.
+    env_at: Map<Pos, usize>,
     enum_scopes: Vec<Scope>,
     /// The type each case of each enum holds, if it holds one, among the
     /// enum's type parameters.
@@ -1103,11 +1109,27 @@ impl<'a> Defs<'a> {
         })
     }
 
-    /// The struct that holds what a lambda bound to a name reads, if the parser
-    /// made one for it.
+    /// The struct that holds what a lambda bound to a name, stored in a field,
+    /// or returned reads, if the parser made one for it.
     pub(crate) fn env_of(&self, l: &Lambda) -> Option<usize> {
-        let name = crate::parser::env_name(l.pos);
-        self.file.structs.iter().position(|s| s.name == name)
+        self.env_at.get(&l.pos).copied()
+    }
+
+    /// The lambda that struct `s` holds the values of what it reads, and the
+    /// types of its parameters and of its result, the result last, among the
+    /// type parameters of the struct that stand for those of its function.
+    pub(crate) fn env_lambda(&self, s: usize) -> Option<&(&'a Lambda, Vec<Ty>)> {
+        self.env_lambdas.get(s)?.as_ref()
+    }
+
+    /// The types of the parameters and of the result of the lambda that a value
+    /// of struct `s`, with the type arguments `args`, holds, if `s` is one that
+    /// holds what a lambda reads.
+    pub(crate) fn env_items(&self, s: usize, args: &[Ty]) -> Option<Vec<Ty>> {
+        let (_, items) = self.env_lambda(s)?;
+        let def = &self.file.structs[s];
+        let own = def.generics.len() - def.fields.len();
+        Some(items.iter().map(|t| t.subst(&args[..own])).collect())
     }
 
     /// The struct the name written at `pos` is, as `function` finds a function.
@@ -1617,7 +1639,7 @@ impl<'a> Defs<'a> {
                 .collect(),
             gives: match &f.result {
                 Some(t) if t.function => match self.returned_function(f, &scope) {
-                    Some(g) => Ty::Named(g),
+                    Some(held) => held,
                     // A function that is a parameter gives the function it is given.
                     None if self.returned_parameter(f).is_some() => self.quietly(t, &scope),
                     None => Ty::Unknown,
@@ -1671,12 +1693,12 @@ impl<'a> Defs<'a> {
     /// type: the one that each end of its body gives, which is the same in each
     /// block of an `if` or a `match` that ends it. Nothing when that is not one
     /// function, as which function it is would depend on what the program does.
-    pub(crate) fn returned_function(&self, f: &Function, scope: &Scope) -> Option<usize> {
+    pub(crate) fn returned_function(&self, f: &Function, scope: &Scope) -> Option<Ty> {
         match self.ends_of(f, scope)?.as_slice() {
-            [Holds::Func(Ty::Named(g)), rest @ ..]
-                if rest.iter().all(|h| *h == Holds::Func(Ty::Named(*g))) =>
+            [Holds::Func(t @ (Ty::Named(_) | Ty::Struct(..))), rest @ ..]
+                if rest.iter().all(|h| *h == Holds::Func(t.clone())) =>
             {
-                Some(*g)
+                Some(t.clone())
             }
             _ => None,
         }
@@ -1770,6 +1792,28 @@ impl<'a> Defs<'a> {
                     };
                 }
                 Some(Holds::Func(Ty::Named(self.function(*pos, name)?)))
+            }
+            // A lambda that reads names holds the values of those of them that are
+            // parameters, whose types are written, which a function that gives it
+            // is known by before its body is checked. A lambda that is bound holds
+            // what is lent as it is, so only one that reads what is copied is given.
+            Expr::Lambda(l) => {
+                let s = self.env_of(l)?;
+                let (f, scope) = own?;
+                let def = &self.file.structs[s];
+                let mut args: Vec<Ty> = (0..def.generics.len() - def.fields.len())
+                    .map(Ty::Param)
+                    .collect();
+                for field in &def.fields {
+                    let p = f.params.iter().find(|p| p.name == field.name)?;
+                    // What is lent is not given, as a value that is lent is not returned.
+                    let ty = self.quietly(&p.ty, scope);
+                    if ty.holds_fn() || !ownership::copies(self, scope, &ty) {
+                        return None;
+                    }
+                    args.push(ty);
+                }
+                Some(Holds::Func(Ty::Struct(s, args)))
             }
             Expr::Call(call) if call.qualifier.is_none() && call.through.is_none() => {
                 if let Some(u) = self.struct_at(call.name_pos, &call.callee) {
@@ -1938,6 +1982,13 @@ impl<'a> Defs<'a> {
             Ty::Text => TEXT.to_string(),
             Ty::Int(int) => self.spelling(*int).to_string(),
             Ty::Float(float) => float.written().to_string(),
+            // A lambda that holds the values of what it reads is of the function
+            // type it has, as no source writes the struct that holds them.
+            Ty::Struct(s, args) if self.env_lambda(*s).is_some() => {
+                let items = self.env_items(*s, args).expect("checked");
+                let items: Vec<String> = items.iter().map(|t| self.text(t, scope)).collect();
+                function_text(&items)
+            }
             Ty::Struct(_, args) | Ty::Enum(_, args) => {
                 let name = self.type_name(ty);
                 if args.is_empty() {
@@ -1971,6 +2022,9 @@ impl<'a> Defs<'a> {
         match ty {
             Ty::Text => "text".to_string(),
             Ty::Nothing | Ty::Unknown => "nothing".to_string(),
+            Ty::Struct(s, _) if self.env_lambda(*s).is_some() => {
+                "a lambda that reads names of its function".to_string()
+            }
             ty => format!("a `{}`", self.text(ty, scope)),
         }
     }
@@ -2833,6 +2887,8 @@ fn check_file(
         cyclic_enums: vec![false; file.enums.len()],
         implicit: vec![0; file.structs.len()],
         field_items: Vec::new(),
+        env_lambdas: Vec::new(),
+        env_at: Map::default(),
         struct_scopes: Vec::new(),
         fields: Vec::new(),
         enum_scopes: Vec::new(),
@@ -2930,6 +2986,10 @@ fn check_file(
                 .collect()
         })
         .collect();
+    defs.env_lambdas = env_lambdas(&defs);
+    defs.env_at = (defs.env_lambdas.iter().enumerate())
+        .filter_map(|(s, l)| Some((l.as_ref()?.0.pos, s)))
+        .collect();
     defs.enum_scopes = file
         .enums
         .iter()
@@ -3022,7 +3082,6 @@ fn check_file(
         found: HashMap::new(),
         settled: false,
         value_calls: Set::default(),
-        env_items: Map::default(),
         fn_values: Map::default(),
         named: Set::default(),
         named_calls: Map::default(),
@@ -3110,7 +3169,6 @@ fn check_file(
         drops: checker.drops,
         widened: checker.widened,
         value_calls: checker.value_calls,
-        env_items: checker.env_items,
         fn_values: checker.fn_values,
         named: checker.named,
         named_calls: checker.named_calls,
@@ -6423,6 +6481,9 @@ enum Callee {
     /// The function a name holds, which a parameter or a lambda's parameter
     /// was given.
     Value,
+    /// A lambda that a field or a call gives, which holds the values of the
+    /// names it read: the struct that holds them, with its type arguments.
+    Env(usize, Vec<Ty>),
     /// A function the compiler builds, which only the prelude calls.
     Intrinsic,
     /// `__system`, `__reserve`, or `__sized`, which the library's `std.net` and
@@ -6676,9 +6737,6 @@ struct Typed<'a> {
     widened: HashMap<usize, Int>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
-    /// For the struct that holds what a lambda bound to a name reads, the types
-    /// of the parameters of the lambda and of its result, last.
-    env_items: Map<usize, Vec<Ty>>,
     /// The names of functions passed as values, by their addresses, with
     /// the function each names.
     fn_values: Map<usize, usize>,
@@ -6807,9 +6865,21 @@ impl<'a> Typed<'a> {
                 .fields
                 .iter()
                 .position(|f| f.name == call.callee)
-            && let Ty::Named(g) = defs.fields[s][i].subst(&args)
         {
-            return run(g);
+            match defs.fields[s][i].subst(&args) {
+                Ty::Named(g) => return run(g),
+                Ty::Struct(e, held) if defs.env_lambda(e).is_some() => {
+                    return Callee::Env(e, held);
+                }
+                _ => {}
+            }
+        }
+        if let Some(inner) = call.through.as_deref()
+            && !matches!(inner, Expr::Field { .. })
+            && let Ty::Struct(e, held) = self.type_of(inner, env)
+            && defs.env_lambda(e).is_some()
+        {
+            return Callee::Env(e, held);
         }
         if let Some(&f) = self.named_calls.get(&addr(call))
             && (call.qualifier.is_some() || call.through.is_some())
@@ -6925,6 +6995,7 @@ impl<'a> Typed<'a> {
             | Callee::End
             | Callee::Case(_)
             | Callee::Value
+            | Callee::Env(..)
             | Callee::Intrinsic
             | Callee::Kernel
             | Callee::Frames(_)
@@ -7170,9 +7241,6 @@ struct Checker<'a> {
     lambda_base: Map<usize, usize>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
-    /// For the struct that holds what a lambda bound to a name reads, the types
-    /// of the parameters of the lambda and of its result, last.
-    env_items: Map<usize, Vec<Ty>>,
     /// The names of functions passed as values, by their addresses, with
     /// the function each names.
     fn_values: Map<usize, usize>,
@@ -7533,6 +7601,9 @@ struct Body<'a> {
     returned: Option<Ty>,
     /// How many lambdas the code being checked is inside.
     lambdas: usize,
+    /// How many of those are stored in a field or returned, which carry no
+    /// effect, as the type that holds one states none.
+    kept: usize,
 }
 
 impl<'a> Body<'a> {
@@ -8255,6 +8326,7 @@ impl<'a> Checker<'a> {
             returns: view.gives.clone(),
             returned: None,
             lambdas: 0,
+            kept: 0,
         };
         body.facts.solving = self.solve.is_some();
         if let Template::Free(_) = template {
@@ -8472,6 +8544,10 @@ impl<'a> Checker<'a> {
                     );
                     body.define(binds);
                     End::Binding(pattern.pos())
+                }
+                Stmt::Expr(value @ Expr::Lambda(l)) if self.defs.env_of(l).is_some() => {
+                    let held = self.held_lambda(body, l, "returned", true);
+                    End::Value(held, value)
                 }
                 Stmt::Expr(value @ Expr::Lambda(l)) => {
                     let message = if is_last && matches!(last, Want::Ty(_)) {
@@ -8901,6 +8977,10 @@ impl<'a> Checker<'a> {
                 self.case(body, None, name, *pos, at, payload.as_deref(), want)
             }
             Expr::Match(m) => self.match_expr(body, m, want),
+            // A lambda that reads names, stored in a field.
+            Expr::Lambda(l) if defs.env_of(l).is_some() => {
+                self.held_lambda(body, l, "stored in a field", true)
+            }
             Expr::Lambda(l) => match want {
                 Want::Ty(Ty::Fn(items)) => self.lambda(body, l, items, false),
                 Want::Ty(Ty::Unknown) => {
@@ -10020,7 +10100,9 @@ impl<'a> Checker<'a> {
         let before = self.errors.len();
         let mut unknown = false;
         for arg in &call.args {
-            if let Expr::Lambda(l) = &arg.value {
+            if let Expr::Lambda(l) = &arg.value
+                && defs.env_of(l).is_none()
+            {
                 self.errors.push(Error::new(
                     l.pos,
                     "a lambda cannot be stored in a field, as it is only passed to a call",
@@ -10080,6 +10162,26 @@ impl<'a> Checker<'a> {
                             self.fit(body, &arg.value, &gives, pattern, &mut sol, vars)
                         });
                         self.settled = false;
+                        // A lambda that reads names is of the function type the
+                        // field is written with.
+                        if let (Ty::Struct(e, held), Some(declared)) =
+                            (&gives, &defs.field_items[s][i])
+                            && let Some(items) = defs.env_items(*e, held)
+                        {
+                            let wanted: Vec<Ty> = (declared.iter())
+                                .map(|t| t.subst(&sol_types(&sol)))
+                                .collect();
+                            if !wanted.iter().any(Ty::unknown) && wanted != items {
+                                let (given, needed) = (Ty::func(items), Ty::func(wanted));
+                                let message = self.mismatch(
+                                    body,
+                                    &arg.value,
+                                    defs.describe(&given, body.scope),
+                                    defs.describe(&needed, body.scope),
+                                );
+                                self.errors.push(Error::new(arg.value.pos(), message));
+                            }
+                        }
                     }
                     None => self.errors.push(Error::new(
                         *pos,
@@ -10127,6 +10229,52 @@ impl<'a> Checker<'a> {
 /// Whether a function is a proof: its result is a statement.
 fn is_proof(f: &Function) -> bool {
     f.result.as_ref().is_some_and(|t| t.statement.is_some())
+}
+
+/// The lambda that each struct the parser made for one holds the values of what
+/// it reads, with the types its parameters and its result are written with.
+fn env_lambdas<'a>(defs: &Defs<'a>) -> Vec<Option<(&'a Lambda, Vec<Ty>)>> {
+    let file = defs.file;
+    if !file
+        .structs
+        .iter()
+        .any(|s| s.name.starts_with("env@lambda@"))
+    {
+        return vec![None; file.structs.len()];
+    }
+    let mut found: Map<String, &'a Lambda> = Map::default();
+    for f in &file.functions {
+        for stmt in statements(&f.body) {
+            let (Stmt::Define { value, .. }
+            | Stmt::Destructure { value, .. }
+            | Stmt::Assign { value, .. }
+            | Stmt::Expr(value)) = stmt;
+            let mut all = Vec::new();
+            walk(value, &mut all);
+            for e in all {
+                if let Expr::Lambda(l) = e {
+                    found.insert(crate::parser::env_name(l.pos), l);
+                }
+            }
+        }
+    }
+    (file.structs.iter().enumerate())
+        .map(|(i, s)| {
+            let l = *found.get(&s.name)?;
+            let scope = &defs.struct_scopes[i];
+            let mut items: Vec<Ty> = l
+                .types
+                .iter()
+                .map(|t| t.as_ref().map_or(Ty::Unknown, |t| defs.quietly(t, scope)))
+                .collect();
+            items.push(
+                l.result
+                    .as_ref()
+                    .map_or(Ty::Nothing, |t| defs.quietly(t, scope)),
+            );
+            Some((l, items))
+        })
+        .collect()
 }
 
 /// Reports each alias that names itself, directly or through
