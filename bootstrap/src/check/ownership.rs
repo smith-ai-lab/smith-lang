@@ -464,6 +464,11 @@ struct Walk<'a> {
     inside: Vec<Frame>,
     /// The names that were used after they were given away.
     reused: HashSet<String>,
+    /// For a name bound to a lambda that reads names of its function, the names
+    /// it holds, which it lends for as long as it can be called.
+    holding: HashMap<String, Vec<String>>,
+    /// The lambda whose call reads the names it holds.
+    via: Option<String>,
     /// Where the values that may hold a child are dropped.
     drops: &'a mut Drops,
     /// How deep in the blocks, the arms, and the lambdas the walk is.
@@ -510,6 +515,8 @@ pub(super) fn check(
         breaks: Vec::new(),
         inside: Vec::new(),
         reused: HashSet::new(),
+        holding: HashMap::new(),
+        via: None,
         drops,
         depth: 0,
         bound: HashMap::new(),
@@ -911,8 +918,11 @@ impl<'a> Walk<'a> {
             }
         }
         if let Some((_, at)) = moved.gone.iter().find(|(p, _)| overlap(p, &path)) {
+            let holder = (self.via.as_ref())
+                .map(|f| format!(", and `{f}` holds it"))
+                .unwrap_or_default();
             let message = format!(
-                "`{}` is used here, after it was given away at {}:{}",
+                "`{}` is used here, after it was given away at {}:{}{holder}",
                 written(&path),
                 at.line,
                 at.col
@@ -1068,6 +1078,21 @@ impl<'a> Walk<'a> {
                 None
             }
             Expr::Call(call) => {
+                // A call of a lambda that holds names reads them, so they are
+                // not given away while it can still be called.
+                if call.qualifier.is_none()
+                    && let Some(held) = self.holding.get(&call.callee).cloned()
+                {
+                    self.via = Some(call.callee.clone());
+                    for name in held {
+                        let read = Expr::Name {
+                            name: name.clone(),
+                            pos: call.name_pos,
+                        };
+                        self.read(st, &read, (name, Vec::new()), Flow::Lend);
+                    }
+                    self.via = None;
+                }
                 self.call(st, call);
                 None
             }
@@ -1173,6 +1198,14 @@ impl<'a> Walk<'a> {
                     name, value, pos, ..
                 } => {
                     let l = self.eval(st, value, Flow::Bind);
+                    if let Expr::Lambda(lambda) = value
+                        && let Some(s) = self.defs.env_of(lambda)
+                    {
+                        let held = (self.defs.file.structs[s].fields.iter())
+                            .map(|f| f.name.clone())
+                            .collect();
+                        self.holding.insert(name.clone(), held);
+                    }
                     // A `var` that is bound again drops the value it held, if
                     // it did not hand it on.
                     let old = (st.as_ref())
