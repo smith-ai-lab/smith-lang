@@ -608,7 +608,7 @@ impl<'a> Checker<'a> {
         let defs = self.defs;
         let sig = &defs.signatures[f];
         let name = &defs.file.functions[f].name;
-        let error = if !sig.scope.names.is_empty() {
+        let error = if !sig.scope.names.is_empty() && !name.starts_with("lambda@") {
             Error::unsupported(pos, "passing a function with type parameters as a value")
         } else if sig.params.iter().any(|(_, t)| t.holds_fn()) {
             Error::unsupported(pos, "passing a function that takes a function as a value")
