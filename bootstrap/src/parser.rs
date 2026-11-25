@@ -12,6 +12,7 @@ use crate::lexer::{Piece, Tok, Token};
 mod effects_with_and_try;
 mod functions_calls_and_lambdas;
 mod lift;
+pub(crate) use lift::env_name;
 mod lists_and_text;
 mod numbers_and_operators;
 pub mod outline;
@@ -972,7 +973,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
         }
     }
     if !library {
-        lift::lift(&mut functions, &structs);
+        lift::lift(&mut functions, &mut structs);
     }
     if p.errors.is_empty() {
         Ok(File {
