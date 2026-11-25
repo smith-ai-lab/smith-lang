@@ -37,6 +37,7 @@ mod core_term;
 mod effects_with_and_try;
 mod frames;
 mod functions_calls_and_lambdas;
+mod infer;
 mod lists_and_text;
 mod names;
 mod numbers_and_operators;
@@ -2631,6 +2632,10 @@ fn check_file(
         types: HashMap::new(),
         drops: ownership::Drops::default(),
         widened: HashMap::new(),
+        infer_on: false,
+        solve: None,
+        solved: infer::Solved::default(),
+        inferred: HashMap::new(),
         comparing: false,
         discovering: false,
         found: HashMap::new(),
@@ -6689,6 +6694,16 @@ struct Checker<'a> {
     /// The expressions that give a range where a wider one is needed, by
     /// their addresses, with the wider range each is taken as.
     widened: HashMap<usize, Int>,
+    /// Whether the body being checked has a `var` with no type written,
+    /// whose range its values give it.
+    infer_on: bool,
+    /// What is learned while the ranges of those `var`s are solved.
+    solve: Option<infer::Solve>,
+    /// What the solving found, which the look that is kept reads.
+    solved: infer::Solved,
+    /// The `var`s of the body whose range is solved, by their place among the
+    /// names, with the place of the statement that defines each.
+    inferred: HashMap<usize, Pos>,
     /// Whether the arguments being fitted are those of a comparison, whose
     /// two sides are taken as the smallest range that holds both.
     comparing: bool,
@@ -7333,6 +7348,9 @@ impl<'a> Checker<'a> {
     /// Reports a value that gives `given` where `needed` is needed.
     fn expect(&mut self, body: &mut Body<'a>, value: &Expr, given: &Ty, needed: &Ty) {
         let defs = self.defs;
+        if let Ty::Int(n) = needed {
+            self.note_need(body, value, *n);
+        }
         match (given, needed) {
             (_, Ty::Unknown) | (Ty::Unknown, _) => {}
             (g, n)
@@ -7527,6 +7545,31 @@ impl<'a> Checker<'a> {
             self.proof_function(f);
             return;
         }
+        let errors = self.errors.len();
+        self.infer_on = infer::has_inferred(&self.defs.view(template).f.body);
+        self.solved = infer::Solved::default();
+        self.solve = None;
+        if self.infer_on {
+            self.solve_ranges(template);
+        }
+        self.look_twice(template);
+        self.infer_on = false;
+        if self.errors.len() == errors {
+            let view = self.defs.view(template);
+            let scope = self.extended.get(&addr(view.f)).unwrap_or(view.scope);
+            ownership::check(
+                self.defs,
+                &self.types,
+                (view.f, scope, &view.params),
+                &mut self.errors,
+                &mut self.drops,
+            );
+        }
+    }
+
+    /// Looks at the body twice: first at how the numbers bound to names are
+    /// used, which decides their types, and then with them decided.
+    fn look_twice(&mut self, template: Template) {
         USES.with(|u| *u.borrow_mut() = Uses::default());
         let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
         let places = self.run_body(template, Numbers::Finding(Vec::new()));
@@ -7560,17 +7603,50 @@ impl<'a> Checker<'a> {
             decided.insert(*pos, decision);
         }
         self.run_body(template, Numbers::Decided(decided));
-        if self.errors.len() == errors {
-            let view = self.defs.view(template);
-            let scope = self.extended.get(&addr(view.f)).unwrap_or(view.scope);
-            ownership::check(
-                self.defs,
-                &self.types,
-                (view.f, scope, &view.params),
-                &mut self.errors,
-                &mut self.drops,
-            );
-        }
+    }
+
+    /// Finds the range of each `var` with no type written: the body is looked
+    /// at again, with what it says of each so far, until no range grows. A
+    /// `var` that still grows after as many looks as there are `var`s is
+    /// changed by itself, and is refused.
+    fn solve_ranges(&mut self, template: Template) {
+        let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
+        let widened = self.widened.clone();
+        let mut before: HashMap<Pos, Int> = HashMap::new();
+        let mut looks = 0;
+        let last = loop {
+            self.solve = Some(infer::Solve {
+                before: before.clone(),
+                ..infer::Solve::default()
+            });
+            self.look_twice(template);
+            self.errors.truncate(errors);
+            self.refusals = refusals;
+            self.no_impl = no_impl;
+            let solve = self.solve.take().expect("solving");
+            looks += 1;
+            let grown: Vec<Pos> = solve
+                .totals
+                .iter()
+                .filter(|(p, t)| before.get(*p) != Some(*t))
+                .map(|(p, _)| *p)
+                .collect();
+            if grown.is_empty() || looks > solve.totals.len() + 1 {
+                if !grown.is_empty() {
+                    let mut grown = grown;
+                    grown.sort();
+                    for def in grown {
+                        let error = self.grows_by_itself(def, &solve);
+                        self.errors.push(error);
+                    }
+                }
+                break solve;
+            }
+            before = solve.totals;
+        };
+        self.widened = widened;
+        self.solved.ranges = last.totals;
+        self.solved.given = last.given;
     }
 
     /// One look at the body of a function, which gives the places of the
@@ -7592,6 +7668,7 @@ impl<'a> Checker<'a> {
                     && !BUILT_IN_EFFECTS.contains(&effect);
             }
         }
+        self.inferred.clear();
         let mut body = Body {
             f: Some(f),
             default: None,
@@ -7617,6 +7694,7 @@ impl<'a> Checker<'a> {
             returned: None,
             lambdas: 0,
         };
+        body.facts.solving = self.solve.is_some();
         if let Template::Free(_) = template {
             for requirement in &f.requires {
                 self.assume(&mut body, requirement, true);
@@ -7835,7 +7913,12 @@ impl<'a> Checker<'a> {
                     match (defined, ty, var) {
                         (Some(at), None, false) => {
                             let needed = body.names[at].1.clone();
-                            if body.vars.contains(name) {
+                            if body.vars.contains(name)
+                                && self.solve.is_some()
+                                && self.inferred.contains_key(&at)
+                            {
+                                self.infer_assign(body, at, (name, *pos), value);
+                            } else if body.vars.contains(name) {
                                 let gives = self.expr(body, value, &Want::Ty(needed.clone()));
                                 self.expect(body, value, &gives, &needed);
                                 self.assign(body, at, value);
@@ -7846,6 +7929,7 @@ impl<'a> Checker<'a> {
                         }
                         _ => {
                             let mut named = Vec::new();
+                            let mut first = None;
                             let bound = match ty {
                                 Some(t)
                                     if t.range.as_ref().is_some_and(|(a, b)| {
@@ -7887,6 +7971,11 @@ impl<'a> Checker<'a> {
                                     });
                                     needed
                                 }
+                                None if *var && defined.is_none() && self.infers(body) => {
+                                    let (bound, held) = self.infer_var(body, *pos, name, value);
+                                    first = held;
+                                    bound
+                                }
                                 None if (matches!(value, Expr::Number { .. })
                                     || matches!(value, Expr::Match(m) if literal_blocks(m)))
                                     && !matches!(body.numbers, Numbers::Off) =>
@@ -7903,6 +7992,12 @@ impl<'a> Checker<'a> {
                                 if *var {
                                     body.vars.push(name.clone());
                                     self.track_var(body, value);
+                                    if let Some(held) = first {
+                                        self.inferred.insert(body.names.len() - 1, *pos);
+                                        if self.solve.is_some() {
+                                            body.facts.set_step(body.names.len() - 1, held);
+                                        }
+                                    }
                                 } else {
                                     self.assume_binding(body, value);
                                     self.note_bounds(body, &named);
@@ -8084,7 +8179,14 @@ impl<'a> Checker<'a> {
             } => self.float_literal(body, expr, (text, *negative), *pos, want),
             Expr::Interp { pos, parts } => self.interpolation(body, *pos, parts),
             Expr::Name { name, pos } => {
-                if let Some((_, ty)) = body.names.iter().rfind(|(n, _)| n == name) {
+                if let Some(read) = body
+                    .names
+                    .iter()
+                    .rposition(|(n, _)| n == name)
+                    .and_then(|at| self.read_inferred(body, at))
+                {
+                    read
+                } else if let Some((_, ty)) = body.names.iter().rfind(|(n, _)| n == name) {
                     ty.clone()
                 } else if let (Some(f), None) = (defs.function(*pos, name), &body.default) {
                     self.function_value(body, expr, f, *pos)
