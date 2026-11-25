@@ -8,6 +8,8 @@ built:
   - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
+  - "an `invariant` after the head of a `loop` over a range, a `List`, or a `str`, which `arith` proves holds before the first pass, with the counter as the first end, and holds at the end of each pass, with the counter one more, from its holding at the start of the pass, and which it uses in the block and, where no `break` ends the loop, after it, with the counter as the greater of the two ends"
+  - "not an `invariant` that is not a comparison of whole numbers, joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
   - "a `var` that a loop gives a value that does not depend on it, given the range that holds every value it is given, one that adds to itself or takes from itself given the range its templates over the count of passes bound, and one that gives itself a value in any other way refused when it starts as a number written out, with the range to state"
 ---
 
@@ -85,6 +87,45 @@ fn last_index(n: 0..11) -> 0..10 {
 ```
 
 `last_index(4)` is `3`. A `var` that starts as a number written out and that the loop gives itself plus a value, as `acc = acc + x`, has its range from the number of passes, as [Inference](inference.md#a-name-a-loop-changes-by-itself) says, so a sum of the bytes of an array or a count over a list is a range with nothing written. A change that no template covers states its range.
+
+## An invariant
+
+A loop may state a fact that holds at the start of every pass, an `invariant`. It is for what [the templates](inference.md#a-name-a-loop-changes-by-itself) do not find: how one name stands to another, or to the counter.
+
+```
+fn total(xs: [8]0..4) -> 0..25 {
+  var acc: 0..25 = 0
+  loop i in 0..8 invariant acc <= 3 * i {
+    acc = acc + xs[i]
+  }
+  acc
+}
+```
+
+`total([3, 3, 3, 3, 3, 3, 3, 3])` is `24`. Each element is at most `3`, so a pass adds at most `3` to `acc`. [`arith`](arith.md) proves two things of the invariant, and searches for nothing: that it holds before the first pass, where `i` is `0` and `acc` is `0`, and that it holds at the end of a pass if it holds at the start of it, where the next pass has `i` one more. It then knows `acc <= 3 * i` in the block, so `acc + xs[i]` is at most `3 * 7 + 3` and fits a `0..25`, which it does not know without the invariant, as `acc` may be anything the type holds when a pass begins. A `var` that the loop assigns is in the invariant what it holds at the start of the pass, and the counter is the counter of that pass.
+
+An invariant is never computed when the program runs, so it adds nothing to the executable, as a [`decreases`](open-loop.md#a-loop-that-is-proven-to-end) does not. A loop may have more than one `invariant`, each on its line, and the `{` that opens the block may follow them on a line of its own.
+
+```
+fn gap() -> Nat {
+  var a: 0..11 = 0
+  var b: 0..11 = 0
+  loop i in 0..10
+    invariant a == i
+    invariant b == a
+  {
+    a = a + 1
+    b = b + 1
+  }
+  a - b
+}
+```
+
+`gap()` is `0`. An invariant is also what is known after the loop, where nothing ends it with a `break`: the last pass left it holding with `i` as the end of the range, or as the first end where the loop ran no pass. So `b <= a` is known, and `a - b` fits a `Nat`. A `break` may end the loop in the middle of a pass, where the invariant need not hold, so after such a loop nothing of it is known.
+
+An invariant that is false when the loop starts is refused at the invariant: "cannot prove that the invariant `acc <= 3 * i` holds before the first pass, where `i` is `0`". One that a pass breaks is refused where the pass ends, at the `}`: "cannot prove that the invariant `acc <= 3 * i` holds after a pass, where `i` is one more". With `0..5` in place of the `0..4` of `total`, a pass adds up to `4`, and it is refused so. An invariant that is not a comparison of whole numbers, joined with `and`, `or`, and `not`, is refused the same way, as nothing is proven of it.
+
+A `loop` over a list or a `str` takes an `invariant` too, with no counter: it names only what is outside the loop, and holds before the first pass, at the end of each pass, and after the loop. [Inference](inference.md#when-to-write-an-invariant) says when to write one.
 
 ## Ending early with `break`
 
@@ -243,6 +284,7 @@ This prints `2`, `1`, and `0`.
 | `loop i in a..b` with `a >= b` | No rounds |
 | `loop i in reversed(a..b) { e }` | The same numbers, from the last to the first |
 | `loop v in x { e }` | The block with `v` as each element of the array `x`, in order |
+| `loop i in a..b invariant e { e2 }` | The same, with `e` proven before the first pass and at the end of each pass, and known in the block and after the loop |
 | `break` | Ends the nearest `loop` |
 
 Next: [The open-ended loop](open-loop.md)

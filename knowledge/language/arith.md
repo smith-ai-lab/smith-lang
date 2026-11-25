@@ -10,6 +10,7 @@ built:
   - "and the range of what `bit_and`, `bit_or`, `bit_xor`, `shift_right`, and `shift_left` give, of an unsigned number or, for a shift left, of any whole number, from what is known of the numbers they are given"
   - "and, for a `var` of a whole number, outside a loop as inside one, what it was last given, where no assignment to it lies between that and the use on any path, an `if`, a `match`, a loop that may run no time, an earlier round of a loop, and a lambda each counting as one that may lie between"
   - "and `/` and `%`, whose divisor `arith` must prove is not zero, and, for a signed number, that the least number is not divided by -1 where the result would not fit, and which it treats as one unknown quantity of the range of the result, or as the number itself when both sides are literals, with what is true of every pair said of it: for a divisor that is a literal above zero, the quotient times it is within less than the divisor of the dividend, and the remainder is the dividend less that; for an unsigned dividend, neither is above it, and the remainder is below the divisor"
+  - "and, from the `invariant` of a `loop`, what it says, in the block and, where no `break` ends the loop, after it, the invariant itself being proven before the first pass and at the end of each pass, with the counter one more, from the facts of the start of the pass"
   - "and `+`, `-`, and `*` on a `Nat`, proven as on any whole number, with the fix \"check the operands first\", as a `Nat` has no wrapping, saturating, or checked function"
   - "not the facts of a `match` block, or a proof held in a value"
 ---
@@ -183,6 +184,20 @@ fn up(x: Byte) -> Byte { if x < 64 { shift_left(x, 2) + 3 } else { 0 } }
 
 It claims no more. `bit_and(x, 63) + 200` is refused, since 63 + 200 does not fit a `u8`, and so is `bit_or(x, y) + 248` with `x < 8` and `y < 9`, which is below 16. Nothing is known of what these give for a number that may be negative but the range of its size, and a shift by an amount that is not proven is refused, as [Bit operations](bits.md) says.
 
+**An invariant of a `loop`.** What the invariant says holds at the start of each pass, so it is a fact in the block, with the counter as the counter of the pass and each `var` the loop assigns as what it held when the pass began. `arith` proves it first: before the first pass, with the counter as the first end of the range, and at the end of each pass, with the counter one more, from the facts of the start of the pass and what the pass did. Nothing is searched for, so it proves only an invariant that holds as it is written.
+
+```
+fn total(xs: [8]0..4) -> 0..25 {
+  var acc: 0..25 = 0
+  loop i in 0..8 invariant acc <= 3 * i {
+    acc = acc + xs[i]
+  }
+  acc
+}
+```
+
+`total([3, 3, 3, 3, 3, 3, 3, 3])` is `24`. `acc <= 3 * i` is a fact in the block, so `acc + xs[i]` is at most `3 * 7 + 3`. It is a fact after the loop too, where no `break` ends it, with the counter as the greater of the two ends of the range, so `acc` is at most `24` there. [`loop`](loop.md#an-invariant) says what is refused.
+
 **A contract.** The function's own `requires`, and the `ensures` of a function that was called, are facts. [Contracts](contracts.md) says how.
 
 **A proof held in a value.** Every proof it can see, as a value or as a field of a value, is a fact. [A struct that holds a proof](proof-fields.md) says how a value comes to hold one.
@@ -267,6 +282,7 @@ The author supplies the missing fact in one of three ways: with a [`requires`](c
 | What a caller owes | The `requires` of the function |
 | What a function gave | The `ensures` of a function that was called |
 | What a bit operation gave | The numbers it was given |
+| What an invariant says | The `invariant` of the `loop`, once proven |
 | A proof | A value or field that holds one |
 
 Next: [Contracts](contracts.md)
