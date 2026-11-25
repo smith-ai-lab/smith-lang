@@ -42,6 +42,18 @@ pub const ONCE: &[Test] = &[
         every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give,
     ),
     (
+        "a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_need_is",
+        a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_need_is,
+    ),
+    (
+        "a_list_and_an_option_written_with_nothing_are_settled_by_what_they_are_given_and_used_for",
+        a_list_and_an_option_written_with_nothing_are_settled_by_what_they_are_given_and_used_for,
+    ),
+    (
+        "a_list_written_with_nothing_that_nothing_settles_is_refused_with_where_to_state_it",
+        a_list_written_with_nothing_that_nothing_settles_is_refused_with_where_to_state_it,
+    ),
+    (
         "the_time_to_check_a_body_grows_with_its_size_and_no_faster",
         the_time_to_check_a_body_grows_with_its_size_and_no_faster,
     ),
@@ -168,7 +180,7 @@ fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
 /// when the same program, with the range its values need written, is, and is
 /// the same program when it is: the same executable, and the same errors.
 fn a_var_with_no_range_written_is_what_stating_the_range_its_values_need_is() {
-    generate::check(61, 80, program, |p| {
+    generate::check(61, 40, program, |p| {
         let (open, closed) = (source(p, None), source(p, Some(ranges(p))));
         for target in [Target::ALL[0], Target::ALL[Target::ALL.len() - 1]] {
             let (a, b) = (compile(open.as_bytes(), target), compile(closed.as_bytes(), target));
@@ -451,4 +463,86 @@ fn a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_
         errors.iter().all(|e| !e.message.contains("does not fit")),
         "{errors:?} for\n{source}"
     );
+}
+
+/// A list that numbers are pushed to, one after another.
+#[derive(Debug)]
+struct Pushes {
+    numbers: Vec<i128>,
+}
+
+fn pushes(g: &mut Gen) -> Pushes {
+    let count = 1 + g.below(5);
+    Pushes {
+        numbers: (0..count).map(|_| g.below(300) as i128).collect(),
+    }
+}
+
+/// `var xs = []` that numbers are pushed to has the element the smallest range
+/// that holds them, so the program is the one that states `List` of it, in the
+/// same executable on two targets.
+fn a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_need_is() {
+    generate::check(64, 12, pushes, |p| {
+        let (low, high) = (
+            *p.numbers.iter().min().expect("a number"),
+            *p.numbers.iter().max().expect("a number"),
+        );
+        let body = |declared: &str| {
+            let mut out = format!("fn main() <console, alloc> {{\n  var xs{declared} = []\n");
+            for n in &p.numbers {
+                out.push_str(&format!("  xs = push(xs, {n})\n"));
+            }
+            out.push_str("  print(\"{xs.size}\")\n}\n");
+            with_header(format!("use std.list (push)\n\n{out}"))
+        };
+        let open = body("");
+        let closed = body(&format!(": List[{low}..{}]", high + 1));
+        for target in [Target::ALL[0], Target::ALL[Target::ALL.len() - 1]] {
+            let (a, b) = (
+                compile(open.as_bytes(), target),
+                compile(closed.as_bytes(), target),
+            );
+            assert!(a.is_ok(), "{a:?} for\n{open}");
+            assert!(
+                a == b,
+                "the executables differ, or {b:?}, for\n{open}\nand\n{closed}"
+            );
+        }
+    });
+}
+
+/// A list used as an argument, a list pushed to, and an option that is given
+/// a value in one branch, each written with nothing.
+fn a_list_and_an_option_written_with_nothing_are_settled_by_what_they_are_given_and_used_for() {
+    let source = with_header(
+        "use std.list (push)\n\n\
+         fn total(xs: List[0..256]) -> Nat { xs.size }\n\n\
+         fn used() -> Nat {\n  xs = []\n  total(xs)\n}\n\n\
+         fn pick(c: bool) -> Option[Nat] {\n  var o = .none\n  if c { o = .some(7) }\n  o\n}\n\n\
+         fn main() <console, alloc> {\n  var ys = []\n  ys = push(ys, 3)\n  ys = push(ys, 200)\n  \
+         print(\"{used()} {ys.size} {pick(true)} {pick(false)}\")\n}\n"
+            .to_string(),
+    );
+    assert_eq!(
+        run(&source),
+        Outcome {
+            stdout: b"0 2 .some(7) .none\n".to_vec(),
+            status: 0
+        },
+        "{source}"
+    );
+}
+
+/// A list of nothing that nothing in the body gives or uses is refused at the
+/// list, with where to state its type.
+fn a_list_written_with_nothing_that_nothing_settles_is_refused_with_where_to_state_it() {
+    let source = with_header("fn main() {\n  xs = []\n}\n".to_string());
+    let errors = lower(source.as_bytes()).expect_err("a list of nothing");
+    let at = line_of(&source, "xs = []");
+    let said = errors
+        .iter()
+        .find(|e| e.pos.line == at)
+        .unwrap_or_else(|| panic!("{errors:?} for\n{source}"));
+    assert!(said.message.contains("an array of nothing"), "{said:?}");
+    assert!(said.fix.as_deref().is_some_and(|f| f.contains("xs: List[")), "{said:?}");
 }

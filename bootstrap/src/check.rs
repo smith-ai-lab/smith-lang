@@ -7358,6 +7358,7 @@ impl<'a> Checker<'a> {
         if let Ty::Int(n) = needed {
             self.note_need(body, value, *n);
         }
+        self.note_element(body, value, needed);
         match (given, needed) {
             (_, Ty::Unknown) | (Ty::Unknown, _) => {}
             (g, n)
@@ -7407,6 +7408,7 @@ impl<'a> Checker<'a> {
         vars: &Scope,
     ) {
         let defs = self.defs;
+        self.note_element(body, value, pattern);
         match (given, pattern) {
             (_, Ty::Unknown) | (Ty::Unknown, _) => {}
             (Ty::Nothing, pattern) if !matches!(pattern, Ty::Nothing | Ty::Param(_)) => {
@@ -7622,11 +7624,13 @@ impl<'a> Checker<'a> {
         let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
         let widened = self.widened.clone();
         let mut before: HashMap<Pos, Int> = HashMap::new();
+        let mut before_elems: HashMap<Pos, Ty> = HashMap::new();
         let mut looks = 0;
         let mut refused = HashSet::new();
         let last = loop {
             self.solve = Some(infer::Solve {
                 before: before.clone(),
+                before_elems: before_elems.clone(),
                 ..infer::Solve::default()
             });
             self.look_twice(template);
@@ -7641,7 +7645,9 @@ impl<'a> Checker<'a> {
                 .filter(|(p, t)| before.get(*p) != Some(*t))
                 .map(|(p, _)| *p)
                 .collect();
-            if grown.is_empty() || looks > solve.totals.len() + 1 {
+            let settled = solve.elems == before_elems;
+            if (grown.is_empty() && settled) || looks > solve.totals.len() + solve.empties.len() + 1
+            {
                 let mut stuck: Vec<Pos> = solve.stuck.iter().copied().collect();
                 stuck.extend(grown);
                 stuck.sort();
@@ -7666,11 +7672,13 @@ impl<'a> Checker<'a> {
                 break solve;
             }
             before = solve.totals;
+            before_elems = solve.elems;
         };
         self.widened = widened;
         self.solved.ranges = last.totals;
         self.solved.given = last.given;
         self.solved.refused = refused;
+        self.solved.elems = last.elems;
     }
 
     /// One look at the body of a function, which gives the places of the
@@ -7960,6 +7968,7 @@ impl<'a> Checker<'a> {
                         _ => {
                             let mut named = Vec::new();
                             let mut first = None;
+                            let mut registered = false;
                             let bound = match ty {
                                 Some(t)
                                     if t.range.as_ref().is_some_and(|(a, b)| {
@@ -8001,6 +8010,10 @@ impl<'a> Checker<'a> {
                                     });
                                     needed
                                 }
+                                None if defined.is_none() && self.infers_empty(body, value) => {
+                                    registered = true;
+                                    self.infer_empty(body, *pos, value)
+                                }
                                 None if *var && defined.is_none() && self.infers(body, name) => {
                                     let (bound, held) = self.infer_var(body, *pos, name, value);
                                     first = held;
@@ -8019,6 +8032,9 @@ impl<'a> Checker<'a> {
                                 self.errors.push(self.defined_twice(body, name, *pos));
                             } else {
                                 body.names.push((name.clone(), bound));
+                                if registered {
+                                    self.inferred.insert(body.names.len() - 1, *pos);
+                                }
                                 if *var {
                                     body.vars.push(name.clone());
                                     self.track_var(body, value);

@@ -7,9 +7,9 @@ built:
   - "a `var` with no stated type given the smallest range that holds the value it starts as and every value it is given, solved in the order the body is read, so that `n = n + 1` twice is a `0..3`, and what `arith` knows of the value last given still proves what it proved"
   - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
   - "a `var` that starts as a number written out and is given a value that depends on it where the range is not known, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
-  - "not a lambda's parameters inferred from the calls of a lambda bound to a name"
-  - "not `[]` and `.none` settled by a later use in the same body"
-  - "not a block with a `try` that says the type it gives"
+  - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
+  - "a block with a `try` that the call gives no type, refused with the type the block gives"
+  - "not the parameters of a lambda bound to a name, inferred from the calls of it, which comes with a lambda bound to a name (#1114)"
 ---
 
 # Inference
@@ -114,7 +114,7 @@ fn steps(from: 0..100) -> 0..100 {
 
 ## A lambda's parameters
 
-A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound.
+A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. A lambda cannot be bound to a name yet, so this holds when it can, as [Where a lambda may go](lambdas.md#where-a-lambda-may-go) says.
 
 ```
 fn doubled(a: 0..5) -> 0..9 {
@@ -141,7 +141,9 @@ This is refused: "`v` is a `300..301`, inferred from the call `go(300)` at line 
 A value that says nothing of its element type takes it from what the body does with it. `[]` and `.none` are settled by a later use in the same body, and the element is the smallest range that holds every value put in.
 
 ```
-fn one() -> List[1..2] {
+use std.list (push)
+
+fn one() -> List[1..2] <alloc> {
   var xs = []
   xs = push(xs, 1)
   xs
@@ -158,7 +160,9 @@ fn none() {
 }
 ```
 
-This is refused: "the type of the elements of `xs` is not settled by anything in `none`: state it, as `xs: List[Nat] = []`".
+This is refused: "an array of nothing has no element to say its type, so it is written where a type is expected", with the fix "write its type, as in `xs: List[Nat] = []`".
+
+A use settles it too: `xs = []` that is passed to a function whose parameter is a `List[0..256]` is that list. An option settles the same way, so `var o = .none` with `o = .some(7)` in one branch and `o` as the result of a function that gives an `Option[Nat]` is an `Option[Nat]`.
 
 ## A block with a try
 

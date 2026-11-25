@@ -7,7 +7,7 @@ built:
   - "lambdas passed to a call, after it or by name, and function types on parameters"
   - "a lambda that writes the types of its parameters and of its result"
   - "a lambda that gives away a value of the function it is written in, passed to a parameter that takes its function"
-  - "not the parameters of a lambda bound to a name and called in the same body inferred from those calls, as [Inference](inference.md#a-lambdas-parameters) says; today it writes them"
+  - "not the parameters of a lambda bound to a name, inferred from the calls of it, as [Inference](inference.md#a-lambdas-parameters) says, which comes with a lambda bound to a name (#1114)"
 ---
 
 # Lambdas
