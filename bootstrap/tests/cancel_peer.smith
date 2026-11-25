@@ -6,7 +6,7 @@ use std.task (spawn, task, tasks)
 use std.time (sleep, time)
 
 // Waits for the peer to say something, which it never does.
-fn hold(c: take Connection) ! net, task, alloc {
+fn hold(c: take Connection) <net, task, alloc> {
   r = read(c, 1)
   close(c)
 }
@@ -14,7 +14,7 @@ fn hold(c: take Connection) ! net, task, alloc {
 // Takes one connection and gives it to a child in a group of its own, which
 // ends after `pause` milliseconds: a child that has run waits for a read by
 // then, and one that has not, as a `pause` of 0 says, has not run at all.
-fn one_round(l: Listener, pause: u64) -> Result[(), NetError] ! net, time, alloc {
+fn one_round(l: Listener, pause: u64) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
   spawn { hold(c) }
@@ -23,21 +23,21 @@ fn one_round(l: Listener, pause: u64) -> Result[(), NetError] ! net, time, alloc
 }
 
 // Takes `rounds` connections one after another.
-fn rounds_of(l: Listener, pause: u64, rounds: u64) -> Result[(), NetError] ! net, time, alloc {
+fn rounds_of(l: Listener, pause: u64, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
   loop round in 0..rounds {
     try one_round(l, pause)
   }
   .ok(())
 }
 
-fn session(port: 0..65536, pause: u64, rounds: u64) -> Result[(), NetError] ! net, time, alloc {
+fn session(port: 0..65536, pause: u64, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
   listen("127.0.0.1", port, fn(l) { rounds_of(l, pause, rounds) })
 }
 
 // The program goes on for a while after the last group ends, so that a
 // connection that is closed then is closed by the group's end and not by the
 // program's.
-fn main(args: List[str]) -> Result[(), NetError] ! net, time, alloc, diverge {
+fn main(args: List[str]) -> Result[(), NetError] <net, time, alloc, diverge> {
   if args.size < 3 { return .ok(()) }
   port: Result[0..65536, ReadError] = from_text("port", args[0])
   pause: Result[u64, ReadError] = from_text("pause", args[1])

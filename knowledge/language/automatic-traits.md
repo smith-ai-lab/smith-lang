@@ -67,7 +67,7 @@ struct Door {
   key: Key
 }
 
-fn main() ! console {
+fn main() <console> {
   a = Door(key: Key(secret: "a"))
   if a == a { print("same") }
 }

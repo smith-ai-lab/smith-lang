@@ -35,7 +35,7 @@ fn text(bytes: take List[Byte]) -> str {
 
 // What `echo_once` of the library's page does, with a line to say that the
 // listener is open, so that a test connects after it and not before.
-fn once(port: 0..65536) -> Result[(), NetError] ! console, net, alloc {
+fn once(port: 0..65536) -> Result[(), NetError] <console, net, alloc> {
   with l = listen("127.0.0.1", port)
   print("ready")
   c = try accept(l)
@@ -44,12 +44,12 @@ fn once(port: 0..65536) -> Result[(), NetError] ! console, net, alloc {
   result
 }
 
-fn turn(c: Connection) -> Result[(), NetError] ! net, alloc {
+fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   bytes = try read(c, 4096)
   write(c, freeze(bytes))
 }
 
-fn drain(c: Connection) -> Result[List[Byte], NetError] ! net, alloc {
+fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
   var all: List[Byte] = []
   loop round in 0..2000000 {
     chunk = try read(c, 4096)
@@ -59,7 +59,7 @@ fn drain(c: Connection) -> Result[List[Byte], NetError] ! net, alloc {
   .ok(all)
 }
 
-fn send_back(c: Connection) -> Result[Nat, NetError] ! net, alloc {
+fn send_back(c: Connection) -> Result[Nat, NetError] <net, alloc> {
   all = try drain(c)
   size = all.size
   try write(c, freeze(all))
@@ -67,7 +67,7 @@ fn send_back(c: Connection) -> Result[Nat, NetError] ! net, alloc {
 }
 
 // Reads until the other side finishes sending, and then sends all of it back.
-fn everything(port: 0..65536) -> Result[Nat, NetError] ! console, net, alloc {
+fn everything(port: 0..65536) -> Result[Nat, NetError] <console, net, alloc> {
   with l = listen("127.0.0.1", port)
   print("ready")
   c = try accept(l)
@@ -77,20 +77,20 @@ fn everything(port: 0..65536) -> Result[Nat, NetError] ! console, net, alloc {
 }
 
 // What `ask` of the library's page does, at the port a test gives.
-fn ask(port: 0..65536, question: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn ask(port: 0..65536, question: str) -> Result[List[Byte], NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   try write(c, question.bytes)
   read(c, 4096)
 }
 
-fn datagram(port: 0..65536) -> Result[(Address, List[Byte]), NetError] ! console, net, alloc {
+fn datagram(port: 0..65536) -> Result[(Address, List[Byte]), NetError] <console, net, alloc> {
   with s = bind("127.0.0.1", port)
   print("ready")
   receive(s, 1024)
 }
 
 // Writes until the other side's close is told, which a write after it gives.
-fn writing(port: 0..65536) -> Result[(), NetError] ! net, alloc {
+fn writing(port: 0..65536) -> Result[(), NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   var block: List[Byte] = []
   loop k in 0..65536 { block = push(block, 7) }
@@ -101,25 +101,25 @@ fn writing(port: 0..65536) -> Result[(), NetError] ! net, alloc {
   .ok(())
 }
 
-fn listening(port: 0..65536) -> Result[(), NetError] ! net {
+fn listening(port: 0..65536) -> Result[(), NetError] <net> {
   with l = listen("127.0.0.1", port)
   .ok(())
 }
 
 // An address that no interface of the machine holds, which the system refuses.
-fn elsewhere(port: 0..65536) -> Result[(), NetError] ! net {
+fn elsewhere(port: 0..65536) -> Result[(), NetError] <net> {
   with l = listen("192.0.2.7", port)
   .ok(())
 }
 
-fn answer(what: Result[(), NetError]) ! console {
+fn answer(what: Result[(), NetError]) <console> {
   match what {
     .ok(()) { print("ok") }
     .err(e) { print(name(e)) }
   }
 }
 
-fn at(port: str, then: fn(0..65536)) ! console {
+fn at(port: str, then: fn(0..65536)) <console> {
   number: Result[0..65536, ReadError] = from_text("port", port)
   match number {
     .ok(p) { then(p) }
@@ -127,7 +127,7 @@ fn at(port: str, then: fn(0..65536)) ! console {
   }
 }
 
-fn main(args: List[str]) ! console, net, alloc {
+fn main(args: List[str]) <console, net, alloc> {
   if args.size == 0 {
     print("usage")
     return

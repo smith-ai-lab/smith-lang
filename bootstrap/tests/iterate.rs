@@ -325,7 +325,7 @@ fn program(lines: &[Item], walked: &Walked, form: Form) -> String {
         Walked::Down(_) => DOWN,
     };
     format!(
-        "use std.console (console, print)\nuse std.int (wrapping_add)\n\n{setup}{function}\nfn main() ! console, alloc {{\n  c: {} = {}\n  print(\"{{f(c)}}\")\n}}\n",
+        "use std.console (console, print)\nuse std.int (wrapping_add)\n\n{setup}{function}\nfn main() <console, alloc> {{\n  c: {} = {}\n  print(\"{{f(c)}}\")\n}}\n",
         walked.type_name(),
         walked.written()
     )
@@ -384,7 +384,7 @@ fn over_places(lines: &[Item], places: bool) -> String {
     };
     let int = if block.contains("wrapping_add") { "use std.int (wrapping_add)\n" } else { "" };
     format!(
-        "use std.console (console, print)\n{int}\nfn f(xs: List[Int]) -> Int {{\nvar acc: Int = 0\n{head}{block}}}\nacc\n}}\n\nfn main() ! console, alloc {{\n  xs: List[Int] = [1, 2, 3]\n  print(\"{{f(xs)}}\")\n}}\n"
+        "use std.console (console, print)\n{int}\nfn f(xs: List[Int]) -> Int {{\nvar acc: Int = 0\n{head}{block}}}\nacc\n}}\n\nfn main() <console, alloc> {{\n  xs: List[Int] = [1, 2, 3]\n  print(\"{{f(xs)}}\")\n}}\n"
     )
 }
 
@@ -434,7 +434,7 @@ fn a_loop_over_a_text_gives_its_bytes() {
         },
         |text| {
             let source = format!(
-                "use std.console (console, print)\n\nfn main() ! console, alloc {{\n  loop b in \"{text}\" {{ print(\"{{b}}\") }}\n  s = \"{text}\"\n  loop b in s {{ print(\"{{b}}\") }}\n}}\n"
+                "use std.console (console, print)\n\nfn main() <console, alloc> {{\n  loop b in \"{text}\" {{ print(\"{{b}}\") }}\n  s = \"{text}\"\n  loop b in s {{ print(\"{{b}}\") }}\n}}\n"
             );
             let bytes: String = text.bytes().map(|b| format!("{b}\n")).collect();
             let expected = Outcome {
@@ -463,7 +463,7 @@ fn a_loop_over_a_type_with_no_iterate_is_one_error_that_names_the_type_and_itera
                 format!("struct {name} {{\n  n: Byte\n}}\n\nfn make() -> {name} {{ {name}(n: 1) }}\n")
             };
             let source = format!(
-                "use std.console (console, print)\n\n{definition}\nfn main() ! console, alloc {{\n  c = make()\n  loop v in c {{ print(\"x\") }}\n}}\n"
+                "use std.console (console, print)\n\n{definition}\nfn main() <console, alloc> {{\n  c = make()\n  loop v in c {{ print(\"x\") }}\n}}\n"
             );
             let found = errors(&source);
             assert_eq!(found.len(), 1, "{found:?} for {source}");
@@ -482,7 +482,7 @@ fn gives_away(head: &str, defined_inside: bool) -> String {
         ("  k = Key(secret: 1)\n", "print(\"{spend(k)}\")")
     };
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Key {{\n  secret: u64\n}}\n\nwithout Copy for Key\n\n{DOWN}fn spend(k: take Key) -> u64 {{ k.secret }}\n\nfn main() ! console, alloc {{\n{outside}  xs: List[Int] = [1, 2]\n  loop v in {head} {{\n    {inside}\n  }}\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Key {{\n  secret: u64\n}}\n\nwithout Copy for Key\n\n{DOWN}fn spend(k: take Key) -> u64 {{ k.secret }}\n\nfn main() <console, alloc> {{\n{outside}  xs: List[Int] = [1, 2]\n  loop v in {head} {{\n    {inside}\n  }}\n}}\n"
     )
 }
 
@@ -520,24 +520,24 @@ impl Iterate[Countdown, i32] {
 
 ";
     let each = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn main() ! console, alloc {{\n  each(Countdown(from: 3)) fn(v) {{\n    print(\"{{v}}\")\n    if v == 2 {{ .stop }} else {{ .go }}\n  }}\n  print(\"done\")\n}}\n"
+        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn main() <console, alloc> {{\n  each(Countdown(from: 3)) fn(v) {{\n    print(\"{{v}}\")\n    if v == 2 {{ .stop }} else {{ .go }}\n  }}\n  print(\"done\")\n}}\n"
     );
     assert_eq!(evaluate(&each), Outcome { stdout: b"3\n2\ndone\n".to_vec(), status: 0 });
     let largest = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn largest(c: Countdown) -> i32 {{\n  var top = 0\n  loop v in c {{ if v > top {{ top = v }} }}\n  top\n}}\n\nfn first_small(c: Countdown) -> i32 {{\n  var found = 0\n  loop v in c {{\n    if v < 3 {{\n      found = v\n      break\n    }}\n  }}\n  found\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{largest(Countdown(from: 3))}}\")\n  print(\"{{first_small(Countdown(from: 5))}}\")\n}}\n"
+        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn largest(c: Countdown) -> i32 {{\n  var top = 0\n  loop v in c {{ if v > top {{ top = v }} }}\n  top\n}}\n\nfn first_small(c: Countdown) -> i32 {{\n  var found = 0\n  loop v in c {{\n    if v < 3 {{\n      found = v\n      break\n    }}\n  }}\n  found\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{largest(Countdown(from: 3))}}\")\n  print(\"{{first_small(Countdown(from: 5))}}\")\n}}\n"
     );
     assert_eq!(evaluate(&largest), Outcome { stdout: b"3\n2\n".to_vec(), status: 0 });
     // The block of a loop is checked where it is written, against the effects
     // of the function that has the loop.
     let show = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn show(c: Countdown) ! alloc {{\n  loop v in c {{ print(\"{{v}}\") }}\n}}\n\nfn main() ! console, alloc {{\n  show(Countdown(from: 2))\n}}\n"
+        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn show(c: Countdown) <alloc> {{\n  loop v in c {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  show(Countdown(from: 2))\n}}\n"
     );
     let found = errors(&show);
     assert!(found.iter().any(|e| e.message.contains("console")), "{found:?}");
 }
 
 fn a_function_may_be_named_each_and_a_loop_over_a_list_still_runs() {
-    let source = "use std.console (console, print)\n\nfn each(f: fn(str) -> str) -> str { f(\"q\") }\n\nfn main() ! console, alloc {\n  print(each() fn(v) { v })\n  xs: List[Byte] = [7, 8]\n  loop x in xs { print(\"{x}\") }\n}\n";
+    let source = "use std.console (console, print)\n\nfn each(f: fn(str) -> str) -> str { f(\"q\") }\n\nfn main() <console, alloc> {\n  print(each() fn(v) { v })\n  xs: List[Byte] = [7, 8]\n  loop x in xs { print(\"{x}\") }\n}\n";
     assert_eq!(evaluate(source), Outcome { stdout: b"q\n7\n8\n".to_vec(), status: 0 });
 }
 
@@ -545,7 +545,7 @@ fn a_function_may_be_named_each_and_a_loop_over_a_list_still_runs() {
 /// for `stop`, and then which `Flow` the call `call` gave.
 fn tracing(functions: &str, setup: &str, call: &str, stop: i64) -> String {
     format!(
-        "use std.console (console, print)\n\n{functions}\nfn main() ! console, alloc {{\n{setup}  r = {call} fn(v) {{\n    print(\"{{v}}\")\n    if v == {stop} {{ .stop }} else {{ .go }}\n  }}\n  match r {{\n    .stop {{ print(\"stop\") }}\n    .go {{ print(\"go\") }}\n  }}\n}}\n"
+        "use std.console (console, print)\n\n{functions}\nfn main() <console, alloc> {{\n{setup}  r = {call} fn(v) {{\n    print(\"{{v}}\")\n    if v == {stop} {{ .stop }} else {{ .go }}\n  }}\n  match r {{\n    .stop {{ print(\"stop\") }}\n    .go {{ print(\"go\") }}\n  }}\n}}\n"
     )
 }
 

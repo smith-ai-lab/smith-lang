@@ -17,7 +17,7 @@ A small set of names is in scope in every file with no `use`. It is called the p
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello")
 }
 ```
@@ -67,7 +67,7 @@ A name that is not in the table is imported. That holds for the rest of the stan
 use std.fs (FsError, fs, read_all)
 use std.list (push)
 
-fn lines_of(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
+fn lines_of(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   read_all(path)
 }
 ```

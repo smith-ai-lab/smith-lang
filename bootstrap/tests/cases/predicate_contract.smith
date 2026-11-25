@@ -21,6 +21,6 @@ fn plus(x: Byte) -> Byte
   x + 100
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{pick(3, 4)} {room(7)} {lt(1, 2)} {plus(5)}")
 }

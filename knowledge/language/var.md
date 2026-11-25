@@ -14,7 +14,7 @@ built:
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   var word = "first"
   print(word)
   word = "second"
@@ -37,7 +37,7 @@ A `var` keeps the type of its first value, so a new value of another type is ref
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   var word = "a"
   word = 5
   print(word)
@@ -55,7 +55,7 @@ A `var` with no stated type has the range of what it is first given. A value out
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var level: 0..101 = 0
   level = 100
   print("{level}")
@@ -82,7 +82,7 @@ fn grow(start: f32, rate: f32) -> f32 {
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var n: 0..11 = 0
   n += 1
   print("{n}")

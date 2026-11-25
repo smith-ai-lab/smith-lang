@@ -30,7 +30,7 @@ An operation is written as a function with no body.
 
 The declaration gives two things, and nothing else is generated.
 
-- Each operation is an ordinary function that carries the effect. `now()` has the signature `fn now() -> u64 ! time`.
+- Each operation is an ordinary function that carries the effect. `now()` has the signature `fn now() -> u64 <time>`.
 - The effect's name is a function that handles it. It takes a lambda for each operation, named as the operation is, and the body to run. Calling it is to an effect what calling a struct's name is to a struct: the arguments are given by name.
 
 ## An operation carries its effect
@@ -40,7 +40,7 @@ Because `now` carries `time`, a caller must have `time`, as for any function wit
 ```
 use std.bits (u64)
 
-fn stamp() -> u64 ! time { now() }
+fn stamp() -> u64 <time> { now() }
 ```
 
 `print` is an operation of `console` in the same way, so a function that calls it without `console` is refused: "`print` needs the `console` effect, which `greet` does not declare". [Effects](effects.md) shows the whole refusal.
@@ -92,16 +92,16 @@ pub effect ledger {
   fn record(line: str)
 }
 
-pub fn pay(amount: Nat) ! ledger, alloc {
+pub fn pay(amount: Nat) <ledger, alloc> {
   record("paid {amount}")
 }
 
-pub fn audit[T](body: fn() -> T ! ledger) -> T ! console {
+pub fn audit[T](body: fn() -> T <ledger>) -> T <console> {
   ledger(record: fn(line) { print(line) }, body: body)
 }
 ```
 
-Another module imports `ledger`, writes `! ledger` on its own functions, calls `pay`, and runs under `audit`. It cannot call `record`: `use app.ledger (record)` is refused as any private name is. It cannot handle `ledger` either, since a handler names every operation, and one it cannot name it cannot give a function for. That is one error, at the effect's name in the handler, which lists the operations that are private: "`ledger` has operations that are private to `app.ledger`, so it cannot be handled here: `record`", with the fix "write `pub` before `record` in `app/ledger.smith`". So what is recorded is what this module's functions record, and nothing else.
+Another module imports `ledger`, writes `<ledger>` on its own functions, calls `pay`, and runs under `audit`. It cannot call `record`: `use app.ledger (record)` is refused as any private name is. It cannot handle `ledger` either, since a handler names every operation, and one it cannot name it cannot give a function for. That is one error, at the effect's name in the handler, which lists the operations that are private: "`ledger` has operations that are private to `app.ledger`, so it cannot be handled here: `record`", with the fix "write `pub` before `record` in `app/ledger.smith`". So what is recorded is what this module's functions record, and nothing else.
 
 An effect that any program may ask and answer, as `log` above, marks each operation `pub`.
 

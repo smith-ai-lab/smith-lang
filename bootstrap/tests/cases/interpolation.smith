@@ -1,8 +1,8 @@
 use std.console (console, print)
 
-fn greet(name: str) -> str ! alloc { "hello {name}" }
+fn greet(name: str) -> str <alloc> { "hello {name}" }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(greet("world"))
   print("point \{{greet("a")}, b\}")
 }

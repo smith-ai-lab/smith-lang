@@ -97,7 +97,7 @@ fn groups(g: &mut Gen) -> Groups {
 /// The source of a program that prints what `f` gives for each subject.
 fn printing(n: &Groups) -> String {
     let mut source = function(n.ty.name, &n.literals);
-    source.push_str("\nfn main() ! console, alloc {\n");
+    source.push_str("\nfn main() <console, alloc> {\n");
     for (i, s) in n.subjects.iter().enumerate() {
         source.push_str(&format!("  x{i}: {} = {s}\n  print(\"{{f(x{i})}}\")\n", n.ty.name));
     }
@@ -140,7 +140,7 @@ fn instructions(ty: &str, literals: &[i128], subject: i128) -> Vec<u64> {
     let mut source = function(ty, literals);
     let expected = model(literals, subject);
     source.push_str(&format!(
-        "\nfn main() ! console {{\n  x: {ty} = {subject}\n  if f(x) == {expected} {{ print(\"yes\") }} else {{ print(\"no\") }}\n}}\n"
+        "\nfn main() <console> {{\n  x: {ty} = {subject}\n  if f(x) == {expected} {{ print(\"yes\") }} else {{ print(\"no\") }}\n}}\n"
     ));
     let source = with_header(source);
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));

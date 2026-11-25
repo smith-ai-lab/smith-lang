@@ -31,7 +31,7 @@ fn reversed(a: [4]u32) -> [4]u32 {
   b
 }
 
-fn depth(n: Nat, a: [4]u32) -> u32 ! alloc
+fn depth(n: Nat, a: [4]u32) -> u32 <alloc>
   decreases n
 {
   if n == 0 {
@@ -48,7 +48,7 @@ fn pick(h: Holder, at: Nat) -> u32 {
   if at < 4 { h.cells[at] } else { 0 }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var w: [4]u32 = [1, 2, 3, 4]
   loop i in 0..4 {
     w[i] = wrapping_add(w[i], 10)

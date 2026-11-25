@@ -120,7 +120,7 @@ fn a_name_that_is_also_a_case_a_field_a_parameter_or_a_local_means_each_where_it
         if called.is_empty() {
             return;
         }
-        let mut main = format!("use std.console (console, print)\n{uses}\nfn main() ! console, alloc {{\n");
+        let mut main = format!("use std.console (console, print)\n{uses}\nfn main() <console, alloc> {{\n");
         for (name, _) in &called {
             let callee = if c.through { format!("via_{name}") } else { name.clone() };
             main.push_str(&format!("  print(\"{{{callee}()}}\")\n"));

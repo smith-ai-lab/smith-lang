@@ -148,7 +148,7 @@ fn two_lists_or_slices_are_equal_when_they_have_the_same_size_and_equal_elements
         // A tuple or an `Option` that holds a list gives it away.
         let generic = if *place < 2 { " {same(xs, ys)}" } else { "" };
         let program = with_header(format!(
-            "struct Record {{\n  number: Nat\n  text: str\n}}\n\nfn same[T: Eq](x: T, y: T) -> bool {{ x == y }}\n\nfn main() ! console, alloc {{\n  xs: {collection}[{ty}] = {a}\n  ys: {collection}[{ty}] = {b}\n  print(\"{held}{generic}\")\n}}\n"
+            "struct Record {{\n  number: Nat\n  text: str\n}}\n\nfn same[T: Eq](x: T, y: T) -> bool {{ x == y }}\n\nfn main() <console, alloc> {{\n  xs: {collection}[{ty}] = {a}\n  ys: {collection}[{ty}] = {b}\n  print(\"{held}{generic}\")\n}}\n"
         ));
         let want = match place {
             0 | 1 => format!("{0} {0}\n", xs == ys),
@@ -161,7 +161,7 @@ fn two_lists_or_slices_are_equal_when_they_have_the_same_size_and_equal_elements
 fn a_list_whose_element_has_no_eq_is_refused_naming_the_element_in_every_place() {
     let program = |ty: &str, make: &str, ask: &str| {
         with_header(format!(
-            "struct Hidden {{\n  key: str\n}}\n\nwithout Eq for Hidden\n\nfn main() ! console, alloc {{\n  xs: {ty} = {make}\n  ys: {ty} = {make}\n  print(\"{{{ask}}}\")\n}}\n"
+            "struct Hidden {{\n  key: str\n}}\n\nwithout Eq for Hidden\n\nfn main() <console, alloc> {{\n  xs: {ty} = {make}\n  ys: {ty} = {make}\n  print(\"{{{ask}}}\")\n}}\n"
         ))
     };
     for (ty, make, ask) in [
@@ -190,7 +190,7 @@ fn a_slice_is_written_as_a_list_is_alone_and_in_a_tuple_a_struct_and_an_option()
             let items: Vec<String> = numbers.iter().map(u64::to_string).collect();
             let text = format!("[{}]", items.join(", "));
             let program = with_header(format!(
-                "struct Held {{\n  items: Slice[Nat]\n}}\n\nfn main() ! console, alloc {{\n  xs: Slice[Nat] = {text}\n  print(\"{{xs}} {{repr(xs)}}\")\n  t: (Slice[Nat], Nat) = (xs, 1)\n  print(\"{{t}}\")\n  h = Held(items: xs)\n  print(\"{{h}}\")\n  o: Option[Slice[Nat]] = .some(xs)\n  print(\"{{o}}\")\n}}\n"
+                "struct Held {{\n  items: Slice[Nat]\n}}\n\nfn main() <console, alloc> {{\n  xs: Slice[Nat] = {text}\n  print(\"{{xs}} {{repr(xs)}}\")\n  t: (Slice[Nat], Nat) = (xs, 1)\n  print(\"{{t}}\")\n  h = Held(items: xs)\n  print(\"{{h}}\")\n  o: Option[Slice[Nat]] = .some(xs)\n  print(\"{{o}}\")\n}}\n"
             ));
             let want = format!(
                 "{text} {text}\n({text}, 1)\nHeld(items: {text})\n.some({text})\n"

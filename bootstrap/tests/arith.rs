@@ -146,7 +146,7 @@ fn pair(g: &mut Gen) -> Pair {
 fn an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it() {
     generate::check(90, 150, pair, |p| {
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = {2}\n  {3}print(\"{{{4}}}\")\n}}\n",
+            "fn main() <console, alloc> {{\n  a: {0} = {1}\n  b: {0} = {2}\n  {3}print(\"{{{4}}}\")\n}}\n",
             p.ty.name,
             lit(p.a),
             lit(p.b),
@@ -326,7 +326,7 @@ fn boxed(g: &mut Gen) -> Boxed {
     }
     Boxed {
         source: with_header(format!(
-            "{source_fn}\nfn main() ! console, alloc {{\n{calls}}}\n"
+            "{source_fn}\nfn main() <console, alloc> {{\n{calls}}}\n"
         )),
         fits: fits_all,
         written: operation,
@@ -494,7 +494,7 @@ fn facts_and_goal(g: &mut Gen) -> Facts {
     body.push_str("  } else {\n    0\n  }\n");
     let t = ty.name;
     let source = with_header(format!(
-        "fn f(x: {t}, y: {t}) -> {t} {{\n{body}}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
+        "fn f(x: {t}, y: {t}) -> {t} {{\n{body}}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
     ));
     let mut fits_all = true;
     for x in -8..=8 {
@@ -536,7 +536,7 @@ fn each_operation_of_an_expression_is_proven_by_itself() {
         for (first, second, a) in [("+", "-", ty.max()), ("-", "+", ty.min())] {
             // `a + b - c` is `a` when `b` and `c` are 1, which fits.
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  a: {0} = {1}\n  b: {0} = 1\n  c: {0} = 1\n  r: {0} = a {first} b {second} c\n  print(\"{{r}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  a: {0} = {1}\n  b: {0} = 1\n  c: {0} = 1\n  r: {0} = a {first} b {second} c\n  print(\"{{r}}\")\n}}\n",
                 ty.name, a
             ));
             assert!(check(source.as_bytes()).is_ok(), "{source}");
@@ -559,7 +559,7 @@ fn each_operation_of_an_expression_is_proven_by_itself() {
 fn a_product_of_two_values_that_are_not_constants_is_refused() {
     for ty in INTS.iter().filter(|t| t.bits == 64) {
         let source = with_header(format!(
-            "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 0 and x <= 1 and y >= 0 and y <= 1 {{\n    x * y\n  }} else {{\n    0\n  }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
+            "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 0 and x <= 1 and y >= 0 and y <= 1 {{\n    x * y\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
             ty.name
         ));
         let errors = check(source.as_bytes()).expect_err("a product of two unknowns");
@@ -592,7 +592,7 @@ fn an_accepted_operation_is_the_one_instruction_and_tests_nothing() {
         for op in OPS {
             let lowered = |operation: &str| {
                 let source = with_header(format!(
-                    "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 1 and x <= 2 and y >= 0 and y <= 1 {{\n    {operation}\n  }} else {{\n    0\n  }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(2, 1)}}\")\n}}\n",
+                    "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 1 and x <= 2 and y >= 0 and y <= 1 {{\n    {operation}\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(2, 1)}}\")\n}}\n",
                     ty.name
                 ));
                 lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"))
@@ -681,7 +681,7 @@ fn operators_group_as_the_precedence_table_says() {
             (text, value_of(&t))
         },
         |(text, value)| {
-            let source = with_header(format!("fn main() ! console, alloc {{\n  print(\"{{{text}}}\")\n}}\n"));
+            let source = with_header(format!("fn main() <console, alloc> {{\n  print(\"{{{text}}}\")\n}}\n"));
             assert_eq!(
                 run(&source),
                 Outcome {

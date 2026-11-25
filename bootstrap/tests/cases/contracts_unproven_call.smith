@@ -11,6 +11,6 @@ fn after(x: Byte) -> Byte {
   next(x)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{after(3)}")
 }

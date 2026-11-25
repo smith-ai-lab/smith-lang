@@ -99,7 +99,7 @@ const VECTORS: [([u64; 2], [u64; 2], [u64; 2]); 3] = [
 /// The generator the page gives is the one Random123 publishes, for the three
 /// vectors that file holds, and the Rust model is it too.
 fn threefry_gives_the_published_vectors() {
-    let mut body = String::from("fn main() ! console, alloc {\n");
+    let mut body = String::from("fn main() <console, alloc> {\n");
     for (i, (counter, key, _)) in VECTORS.iter().enumerate() {
         body += &format!(
             "  r{i} = threefry(Words(first: {}, second: {}), Words(first: {}, second: {}))\n  print(\"{{hex(r{i}.first, 16, false)}} {{hex(r{i}.second, 16, false)}}\")\n",
@@ -131,7 +131,7 @@ fn seeds(g: &mut Gen) -> Vec<u64> {
 /// `split` makes of it, are those the model gives; and the three differ.
 fn bits_and_split_and_seeded_give_what_the_model_of_the_generator_gives_for_every_seed() {
     generate::check(160, 12, seeds, |seeds| {
-        let mut body = String::from("fn main() ! console, alloc {\n");
+        let mut body = String::from("fn main() <console, alloc> {\n");
         for (i, seed) in seeds.iter().enumerate() {
             body += &format!(
                 "  (a{i}, b{i}) = split(seeded({seed}))\n  print(\"{{bits(seeded({seed}))}} {{bits(a{i})}} {{bits(b{i})}}\")\n"
@@ -162,7 +162,7 @@ fn bits_and_split_and_seeded_give_what_the_model_of_the_generator_gives_for_ever
 
 /// A key given to `bits` or `split` is given away, so a second use is refused.
 fn a_key_is_used_once() {
-    let twice = format!("{HEAD}fn main() ! console, alloc {{\n  key = seeded(1)\n  print(\"{{bits(key)}} {{bits(key)}}\")\n}}\n");
+    let twice = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(key)}} {{bits(key)}}\")\n}}\n");
     let Err(errors) = check(twice.as_bytes()) else {
         panic!("a key was used twice");
     };
@@ -170,13 +170,13 @@ fn a_key_is_used_once() {
         errors.iter().any(|e| e.message.contains("key")),
         "{errors:?}"
     );
-    let once = format!("{HEAD}fn main() ! console, alloc {{\n  key = seeded(1)\n  print(\"{{bits(key)}}\")\n}}\n");
+    let once = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(key)}}\")\n}}\n");
     assert!(check(once.as_bytes()).is_ok());
 }
 
 /// A program that prints the bits of a fresh key twice, by two keys.
 const FRESH: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.entropy (entropy)\nuse std.random (bits, fresh)\n\n\
-fn main() ! console, entropy, alloc {\n  print(\"{bits(fresh())} {bits(fresh())}\")\n}\n";
+fn main() <console, entropy, alloc> {\n  print(\"{bits(fresh())} {bits(fresh())}\")\n}\n";
 
 /// For every target this machine runs, a fresh key is not the same twice in one
 /// run, and not the same in two runs.

@@ -13,7 +13,7 @@ Most programs read a whole file, or write one.
 ```
 use std.fs (fs, read_all, write_all, FsError)
 
-fn copy(from: str, to: str) -> Result[(), FsError] ! fs, alloc {
+fn copy(from: str, to: str) -> Result[(), FsError] <fs, alloc> {
   bytes = try read_all(from)
   write_all(to, bytes)
 }
@@ -29,7 +29,7 @@ Both are written in Smith with the operations below, and a program that needs le
 ```
 use std.fs (fs, open, read, size, FsError)
 
-fn header(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
+fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   with f = open(path)
   read(f, 0..64)
 }
@@ -49,7 +49,7 @@ effect fs {
   fn create_file(path: str, executable: bool = false) -> Result[File, FsError]
   fn close_file(f: take File)
   fn size(f: File) -> Result[Nat, FsError]
-  fn read(f: File, range: Range) -> Result[List[Byte], FsError] ! alloc
+  fn read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc>
   fn write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError]
 }
 ```

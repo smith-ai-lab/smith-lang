@@ -306,7 +306,7 @@ fn function(name: &str, kind: &Kind, context: Context, with_case: bool) -> Strin
 fn with_main(declarations: &str, functions: &str, names: &[&str], xs: &[u64], effects: &str) -> String {
     let list: Vec<String> = xs.iter().map(|x| x.to_string()).collect();
     let mut source = format!("{declarations}{functions}");
-    source += &format!("fn main() ! {effects} {{\n  xs: List[u64] = [{}]\n  loop i in 0..xs.size {{\n", list.join(", "));
+    source += &format!("fn main() <{effects}> {{\n  xs: List[u64] = [{}]\n  loop i in 0..xs.size {{\n", list.join(", "));
     for name in names {
         source += &format!("    print(\"{{{name}(xs[i])}}\")\n");
     }
@@ -452,7 +452,7 @@ enum Phase {
   stop
 }
 
-fn run(n: u64) -> u64 ! diverge {
+fn run(n: u64) -> u64 <diverge> {
   var phase: Phase = .up
   var total: u64 = 0
   var rounds: u64 = 0
@@ -497,7 +497,7 @@ fn read_again_program(g: &mut Gen) -> Program {
     let xs = numbers(g);
     let declarations = "enum Shape {\n  circle: u64\n  square: u64\n  none\n}\n";
     let functions = "\
-fn describe(n: u64) -> u64 ! console, alloc {
+fn describe(n: u64) -> u64 <console, alloc> {
   s: Shape = if n < 3 { .circle(n) } else { .none }
   r: u64 = match s {
     .circle(v) { wrapping_add(v, 1) }
@@ -524,7 +524,7 @@ fn describe(n: u64) -> u64 ! console, alloc {
 fn effects_program(g: &mut Gen) -> Program {
     let xs = numbers(g);
     let functions = "\
-fn shown(e: Option[u64]) -> u64 ! console, alloc {
+fn shown(e: Option[u64]) -> u64 <console, alloc> {
   print(\"seen\")
   match e {
     .some(v) { v }
@@ -532,11 +532,11 @@ fn shown(e: Option[u64]) -> u64 ! console, alloc {
   }
 }
 
-fn once(n: u64) -> u64 ! console, alloc {
+fn once(n: u64) -> u64 <console, alloc> {
   shown(if n < 3 { .some(n) } else { .none })
 }
 
-fn pushed(n: u64) -> u64 ! alloc {
+fn pushed(n: u64) -> u64 <alloc> {
   var l: List[u64] = [0]
   e: Option[u64] = if n < 3 { .some(n) } else { .none }
   l = push(l, wrapping_add(n, 5))

@@ -24,7 +24,7 @@ A plain `+`, `-`, or `*` gives the exact range of its result, so it cannot fail 
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a: 0..256 = 20
   b: 0..256 = 5
   print("{a + b} {a - b} {a * b}")
@@ -93,7 +93,7 @@ fn gap(a: 0..256, b: 0..256) -> 0..256 {
   if a >= b { a - b } else { 0 }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{next(7)} {next(255)} {gap(5, 3)} {gap(3, 5)}")
 }
 ```
@@ -125,7 +125,7 @@ fn next_saturating(i: Byte) -> Byte { clamp(i + 1) }
 
 fn floor(x: Int) -> Byte { clamp(x) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{next_saturating(255)} {next_saturating(7)} {floor(-3)} {floor(300)}")
 }
 ```
@@ -164,7 +164,7 @@ use std.int (clamp)
 
 fn level(x: f64) -> Byte { clamp(x) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{level(2.4)} {level(2.5)} {level(3.5)} {level(-7.0)} {level(1e30)}")
 }
 ```
@@ -253,7 +253,7 @@ use std.int (wrapping_add, wrapping_mul, wrapping_sub)
 
 fn next_wrapping(i: Byte) -> Byte { wrapping_add(i, 1) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x: Byte = 0
   y: -128..128 = 100
   print("{next_wrapping(255)} {next_wrapping(7)}")

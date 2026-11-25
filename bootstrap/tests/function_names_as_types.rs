@@ -87,7 +87,7 @@ impl Program {
             }
         }
         text += "fn told[F: Described](f: F) -> str {\n  Described.describe(f)\n}\n\n";
-        text += "fn main() ! console {\n";
+        text += "fn main() <console> {\n";
         for k in &self.asked {
             text += &format!("  print(told(f{k}))\n");
         }
@@ -158,7 +158,7 @@ fn a_parameter_typed_with_a_functions_name_is_given_that_function_and_called_as_
                 source += &format!("fn f{k}(x: i32) -> i32 {{ {} }}\n", k as i32 + *add as i32);
             }
             source += "\nfn pick(f: f0) -> i32 { 7 }\n\nfn run(f: f0) -> i32 { f(3) }\n\n";
-            source += "fn main() ! console, alloc {\n  print(\"{pick(f0)}\")\n  print(\"{run(f0)}\")\n}\n";
+            source += "fn main() <console, alloc> {\n  print(\"{pick(f0)}\")\n  print(\"{run(f0)}\")\n}\n";
             let found = errors(&source);
             assert!(found.is_empty(), "{found:?} for\n{source}");
             assert_eq!(
@@ -188,7 +188,7 @@ fn a_function_given_for_a_type_parameter_that_a_trait_bounds_settles_it_and_a_la
              trait Described[F] {{\n  fn describe(f: F) -> str\n}}\n\n\
              impl Described[one] {{\n  fn describe(f: one) -> str {{ \"one\" }}\n}}\n\n\
              fn told[F: Described](f: F) -> str {{\n  Described.describe(f)\n}}\n\n\
-             fn main() ! console {{\n  print(told({arg}))\n}}\n"
+             fn main() <console> {{\n  print(told({arg}))\n}}\n"
         )
     };
     let accepted = program("one");
@@ -209,7 +209,7 @@ fn a_function_given_for_a_type_parameter_nothing_bounds_is_refused_as_it_was_and
             "use std.bits (i32)\nuse std.console (console, print)\n\n\
              fn one(x: i32) -> i32 {{ x }}\n\n\
              fn keep{params} -> i32 {{ 1 }}\n\n\
-             fn main() ! console, alloc {{\n  print(\"{{keep({arg})}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  print(\"{{keep({arg})}}\")\n}}\n"
         )
     };
     let unbounded = errors(&program("[T](f: T)", "one"));

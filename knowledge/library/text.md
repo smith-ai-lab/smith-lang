@@ -55,8 +55,8 @@ struct Text {
 }
 
 fn text() -> Text
-fn append(t: take Text, s: str) -> Text ! alloc
-fn append_ascii(t: take Text, b: 0..128) -> Text ! alloc
+fn append(t: take Text, s: str) -> Text <alloc>
+fn append_ascii(t: take Text, b: 0..128) -> Text <alloc>
 fn finish(t: take Text) -> str
 ```
 
@@ -71,11 +71,11 @@ Its field is not `pub`, so nothing is put in it but through these functions, and
 use std.console (console, print)
 use std.text (append, append_ascii, finish, text)
 
-fn pair(name: str, value: str) -> str ! alloc {
+fn pair(name: str, value: str) -> str <alloc> {
   text() |> append(name) |> append_ascii('=') |> append(value) |> finish()
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(pair("depth", "3"))
 }
 ```
@@ -87,7 +87,7 @@ Bytes that are not known to be valid become a text first, through [`utf8`](../la
 ```
 use std.text (append_ascii, text)
 
-fn wrong(b: Byte) -> Text ! alloc { append_ascii(text(), b) }
+fn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }
 ```
 
 `wrong` is refused, because a `Byte` may be 128 or above, which is no character alone.

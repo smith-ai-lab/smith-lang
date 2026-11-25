@@ -12,7 +12,7 @@ fn both(a: Option[str]) -> Result[str, str] {
   .ok("done")
 }
 
-fn main() ! console {
+fn main() <console> {
   match both(.none) {
     .ok(text) { print(text) }
     .err(why) { print(why) }

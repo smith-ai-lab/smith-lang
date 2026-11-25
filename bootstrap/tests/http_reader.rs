@@ -44,8 +44,8 @@ const PROGRAM: &str = "use std.bits (u64, u8)\nuse std.console (console, print)\
 struct Note {\n  text: str\n}\n\n\
 struct Args {\n  id: u64\n  limit: Option[u8]\n  size: u8 = 20\n  note: Option[Note]\n}\n\n\
 fn kind(p: Problem) -> str {\n  match p {\n    .missing(m) { \"missing\" }\n    .malformed { \"malformed\" }\n    .shape(s) { \"shape\" }\n    .range(n) { \"range\" }\n    .case(c) { \"case\" }\n    .unknown(u) { \"unknown\" }\n    .twice(t) { \"twice\" }\n  }\n}\n\n\
-fn shown(n: Option[u8]) -> str ! alloc {\n  match n {\n    .some(v) { \"{v}\" }\n    .none { \"-\" }\n  }\n}\n\n\
-fn run(path: take List[Part], query: take List[Part], body: str) ! console, alloc {\n  p = Describe[Args].describe(no_params())\n  r = reading(params_of(p), path, query, body)\n  got: Result[Args, ReadError] = FromRequest[Args].from_request(r)\n  match got {\n    .ok(a) {\n      text = match a.note {\n        .some(n) { n.text }\n        .none { \"-\" }\n      }\n      print(\"ok {a.id} {shown(a.limit)} {a.size} {text}\")\n    }\n    .err(e) { print(\"err {e.path} {kind(e.problem)}\") }\n  }\n}\n\n";
+fn shown(n: Option[u8]) -> str <alloc> {\n  match n {\n    .some(v) { \"{v}\" }\n    .none { \"-\" }\n  }\n}\n\n\
+fn run(path: take List[Part], query: take List[Part], body: str) <console, alloc> {\n  p = Describe[Args].describe(no_params())\n  r = reading(params_of(p), path, query, body)\n  got: Result[Args, ReadError] = FromRequest[Args].from_request(r)\n  match got {\n    .ok(a) {\n      text = match a.note {\n        .some(n) { n.text }\n        .none { \"-\" }\n      }\n      print(\"ok {a.id} {shown(a.limit)} {a.size} {text}\")\n    }\n    .err(e) { print(\"err {e.path} {kind(e.problem)}\") }\n  }\n}\n\n";
 
 /// How a generated request spells each part, and what the rule says of it.
 #[derive(Clone, Debug)]
@@ -158,7 +158,7 @@ fn call(r: &Request) -> String {
 fn the_parameters_of_a_function_are_read_from_the_path_the_query_and_the_body_as_their_types() {
     let requests = |g: &mut Gen| (0..10).map(|_| request(g)).collect::<Vec<Request>>();
     generate::check(8301, 2, requests, |all| {
-        let mut source = format!("{PROGRAM}fn main() ! console, alloc {{\n");
+        let mut source = format!("{PROGRAM}fn main() <console, alloc> {{\n");
         let mut expected = String::new();
         for r in all {
             source += &call(r);
@@ -173,7 +173,7 @@ fn the_names_of_the_parameters_are_told_in_order_with_the_ones_of_the_body_marke
     let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.describe (Describe)\nuse std.http (no_params, params_of)\n\n\
 struct Note {\n  text: str\n}\n\n\
 struct Args {\n  id: u64\n  words: Option[str]\n  flag: bool\n  note: Note\n  tags: List[str]\n}\n\n\
-fn main() ! console, alloc {\n  p = Describe[Args].describe(no_params())\n  loop each in params_of(p) {\n    print(\"{each.name} {each.body}\")\n  }\n}\n";
+fn main() <console, alloc> {\n  p = Describe[Args].describe(no_params())\n  loop each in params_of(p) {\n    print(\"{each.name} {each.body}\")\n  }\n}\n";
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
     assert_eq!(
         printed(source),
@@ -187,7 +187,7 @@ fn every_executable_reads_the_parameters_of_a_request_as_the_evaluator_does() {
         Request { id: Some("7"), limit: Some("300"), size: None, body: None },
         Request { id: None, limit: None, size: None, body: None },
     ];
-    let mut source = format!("{PROGRAM}fn main() ! console, alloc {{\n");
+    let mut source = format!("{PROGRAM}fn main() <console, alloc> {{\n");
     for r in &requests {
         source += &call(r);
     }

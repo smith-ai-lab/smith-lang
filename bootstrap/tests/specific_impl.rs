@@ -64,7 +64,7 @@ fn of_the_impls_that_fit_a_use_the_one_for_the_fewest_types_is_the_one_used() {
                 );
             }
         }
-        source += "fn main() ! console, alloc {\n  strs: List[str] = []\n  ps: List[P] = []\n";
+        source += "fn main() <console, alloc> {\n  strs: List[str] = []\n  ps: List[P] = []\n";
         let mut expected = String::new();
         for (value, fits) in FITS {
             // The impl for fewest types is the last of the chain that is written.
@@ -95,7 +95,7 @@ impl[T] Respond[T]\n  requires Serialize[T]\n{\n  fn respond(value: T) -> str { 
 struct Page {\n  title: str\n}\n\nstruct Plain {\n  title: str\n}\n\n\
 impl Respond[Page] {\n  fn respond(value: Page) -> str { \"page\" }\n}\n\n\
 fn send[T](x: T) -> str\n  requires Serialize[T]\n{\n  Respond[T].respond(x)\n}\n\n\
-fn main() ! console {\n  print(send(Page(title: \"a\")))\n  print(send(Plain(title: \"a\")))\n}\n";
+fn main() <console> {\n  print(send(Page(title: \"a\")))\n  print(send(Plain(title: \"a\")))\n}\n";
     assert_eq!(printed(source), "page\njson\n");
 }
 
@@ -103,7 +103,7 @@ fn two_impls_that_fit_with_neither_for_fewer_types_are_refused() {
     let source = "use std.console (console, print)\n\ntrait R[T] {\n  fn r(x: T) -> str\n}\n\nstruct P {\n  a: str\n}\n\n\
 impl[T] R[(T, P)] {\n  fn r(x: (T, P)) -> str { \"first\" }\n}\n\n\
 impl[U] R[(P, U)] {\n  fn r(x: (P, U)) -> str { \"second\" }\n}\n\n\
-fn main() ! console {\n  print(R[(P, P)].r((P(a: \"a\"), P(a: \"b\"))))\n}\n";
+fn main() <console> {\n  print(R[(P, P)].r((P(a: \"a\"), P(a: \"b\"))))\n}\n";
     let errors = check(source.as_bytes()).expect_err("refused");
     assert!(
         errors.iter().any(|e| e.message.contains("already implemented")),

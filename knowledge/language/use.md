@@ -26,7 +26,7 @@ A module uses another module's names by listing them in a `use`: the module's na
 ```
 use db.transaction (Transaction, begin, commit)
 
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   commit(t)
 }
@@ -50,7 +50,7 @@ Every name a file uses from another module is named in its `use` line. Importing
 ```
 use app.log (log, write)
 
-fn greet() ! log {
+fn greet() <log> {
   write("hello")
 }
 ```
@@ -60,7 +60,7 @@ fn greet() ! log {
 ```
 use app.log (log)
 
-fn greet() ! log {
+fn greet() <log> {
   write("hello")
 }
 ```
@@ -91,7 +91,7 @@ impl Shown[Mine] {
   fn show(x: Mine) -> str { "shown" }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(Shown.show(Mine(n: 1)))
 }
 ```
@@ -117,7 +117,7 @@ This is refused at the second `use`. Modules are not built, so no words are quot
 use db.transaction (begin)
 use ui.animation (begin as start)
 
-fn open(db: Db, view: View) ! net, ui {
+fn open(db: Db, view: View) <net, ui> {
   t = begin(db)
   a = start(view)
 }
@@ -136,7 +136,7 @@ The names in a list are written in the order the formatter gives them, which is 
 A name used and not imported is an error, and the error names the module to import it from.
 
 ```
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   commit(t)
 }
@@ -162,7 +162,7 @@ All `use` lines sit at the top of the file, one per module. Two names from one m
 use db.transaction (Transaction, begin, commit)
 use model.tokenizer (decode, encode)
 
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   commit(t)
 }

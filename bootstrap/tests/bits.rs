@@ -121,7 +121,7 @@ fn expected(kinds: &[(&str, i64)]) -> BTreeMap<String, i64> {
 /// parameters and body written.
 fn with(params: &str, gives: &str, requires: &str, body: &str, args: &str) -> String {
     with_header(format!(
-        "fn f({params}) -> {gives}\n{requires}{{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({args})}}\")\n}}\n"
+        "fn f({params}) -> {gives}\n{requires}{{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n"
     ))
 }
 
@@ -240,7 +240,7 @@ fn a_shift_compiles_exactly_when_its_amount_is_proven_below_the_bits_of_the_type
                     ty.bits
                 };
                 let source = with_header(format!(
-                    "fn f(x: {0}, by: Byte) -> {0}\n  requires by <= {limit}\n{{\n  {function}(x, by)\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 0)}}\")\n}}\n",
+                    "fn f(x: {0}, by: Byte) -> {0}\n  requires by <= {limit}\n{{\n  {function}(x, by)\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 0)}}\")\n}}\n",
                     ty.name
                 ));
                 let fits = limit < below;
@@ -373,7 +373,7 @@ fn what_arith_knows_of_a_value_that_goes_to_a_narrower_type_and_of_no_narrowing(
         known.push(format!("x <= {k}"));
         let program = |value: &str, needed: i128, requires: &str| {
             with_header(format!(
-                "fn g(y: {to_t}) -> {to_t}\n  requires y <= {needed}\n{{\n  y\n}}\n\nfn f(x: {from_t}) -> {to_t}\n{requires}{{\n  y: {to_t} = {value}\n  g(y)\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1)}}\")\n}}\n",
+                "fn g(y: {to_t}) -> {to_t}\n  requires y <= {needed}\n{{\n  y\n}}\n\nfn f(x: {from_t}) -> {to_t}\n{requires}{{\n  y: {to_t} = {value}\n  g(y)\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1)}}\")\n}}\n",
                 to_t = to.name,
                 from_t = from.name,
             ))
@@ -488,7 +488,7 @@ fn program(r: &Range) -> String {
         )
     };
     with_header(format!(
-        "fn g(y: {t}) -> {t}\n  requires y <= {needs}\n{{\n  y\n}}\n\nfn f({params}) -> {t}\n  requires {requires}\n{{\n  g({function}(x, {second}))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({args})}}\")\n}}\n",
+        "fn g(y: {t}) -> {t}\n  requires y <= {needs}\n{{\n  y\n}}\n\nfn f({params}) -> {t}\n  requires {requires}\n{{\n  g({function}(x, {second}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n",
         needs = r.needs,
         args = if params.contains("z") {
             format!("{}, {}", r.least, r.least)
@@ -721,7 +721,7 @@ fn a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type() 
                     ty.bits
                 };
                 let source = with_header(format!(
-                    "fn f(x: {0}) -> {0} {{ {function}(x, {by}) }}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1)}}\")\n}}\n",
+                    "fn f(x: {0}) -> {0} {{ {function}(x, {by}) }}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1)}}\")\n}}\n",
                     ty.name
                 ));
                 let result = check(source.as_bytes());
@@ -749,7 +749,7 @@ fn a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type() 
 fn a_mask_of_a_number_keeps_a_sum_with_it_inside_the_type() {
     let source = |mask: u32| {
         with_header(format!(
-            "fn f(x: Byte) -> Byte {{ bit_and(x, {mask}) + 200 }}\n\nfn main() ! console, alloc {{\n  print(\"{{f(255)}}\")\n}}\n"
+            "fn f(x: Byte) -> Byte {{ bit_and(x, {mask}) + 200 }}\n\nfn main() <console, alloc> {{\n  print(\"{{f(255)}}\")\n}}\n"
         ))
     };
     let program = lower(source(31).as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
@@ -829,7 +829,7 @@ fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small() {
 fn holds_least(l: &Least) {
     let t = l.ty.name;
     let source = with_header(format!(
-        "fn g(y: {t}) -> {t}\n  requires y >= {needs}\n{{\n  y\n}}\n\nfn f(x: {t}) -> {t}\n  requires x >= {least} and x <= {most}\n{{\n  g(shift_right(x, {by}))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({least})}}\")\n}}\n",
+        "fn g(y: {t}) -> {t}\n  requires y >= {needs}\n{{\n  y\n}}\n\nfn f(x: {t}) -> {t}\n  requires x >= {least} and x <= {most}\n{{\n  g(shift_right(x, {by}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({least})}}\")\n}}\n",
         needs = l.needs,
         least = l.least,
         most = l.most,

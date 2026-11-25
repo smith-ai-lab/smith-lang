@@ -36,13 +36,13 @@ pub const MACHINE: &[Test] = &[(
 )];
 
 /// `squares` and `sum_of_squares` of `arenas.md`.
-const SQUARES: &str = "fn squares(n: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 ! alloc {\n  xs = squares(n)\n  var total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
+const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  var total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
 
 /// A server that answers `calls` requests with `handle`, as `arenas.md` writes
 /// it, and prints what the answers add up to.
 fn serving(calls: u64, n: u64) -> String {
     with_imports(&format!(
-        "{SQUARES}struct Request {{\n  n: u64\n}}\n\nstruct Response {{\n  total: u64\n  label: str\n}}\n\nfn respond(req: Request, total: u64) -> Response ! alloc {{\n  Response(total: total, label: \"n{{req.n}}\")\n}}\n\nfn handle(req: Request) -> Response {{\n  with arena()\n  respond(req, sum_of_squares(req.n))\n}}\n\nfn main() ! console, alloc {{\n  var sum = 0\n  loop i in 0..{calls} {{\n    r = handle(Request(n: {n}))\n    sum = wrapping_add(sum, r.total)\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{SQUARES}struct Request {{\n  n: u64\n}}\n\nstruct Response {{\n  total: u64\n  label: str\n}}\n\nfn respond(req: Request, total: u64) -> Response <alloc> {{\n  Response(total: total, label: \"n{{req.n}}\")\n}}\n\nfn handle(req: Request) -> Response {{\n  with arena()\n  respond(req, sum_of_squares(req.n))\n}}\n\nfn main() <console, alloc> {{\n  var sum = 0\n  loop i in 0..{calls} {{\n    r = handle(Request(n: {n}))\n    sum = wrapping_add(sum, r.total)\n  }}\n  print(\"{{sum}}\")\n}}\n"
     ))
 }
 
@@ -104,7 +104,7 @@ struct Case {
     stdout: Vec<u8>,
 }
 
-const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  var s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
+const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  var s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
 
 fn built(n: u64, seed: u64) -> Vec<u64> {
     (0..n)
@@ -155,7 +155,7 @@ fn carries(l: &Level) -> bool {
 }
 
 fn function(k: usize, l: &Level, arenas: bool) -> String {
-    let alloc = if !arenas || carries(l) { " ! alloc" } else { "" };
+    let alloc = if !arenas || carries(l) { " <alloc>" } else { "" };
     let head = format!("fn f{k}(a: u64) -> List[u64]{alloc} {{\n");
     let inside = match (arenas, l.placed) {
         (true, Placed::Top) => format!("  with arena()\n{}", body(k, l, "  ")),
@@ -186,12 +186,12 @@ fn program(g: &mut Gen) -> Case {
     let make = |arenas: bool| {
         let mut source = ITEMS.to_string();
         source += &format!(
-            "fn f0(a: u64) -> List[u64] ! alloc {{\n  build({base}, a)\n}}\n\n"
+            "fn f0(a: u64) -> List[u64] <alloc> {{\n  build({base}, a)\n}}\n\n"
         );
         for (k, l) in levels.iter().enumerate() {
             source += &function(k + 1, l, arenas);
         }
-        source += "fn main() ! console, alloc {\n";
+        source += "fn main() <console, alloc> {\n";
         for (j, seed) in calls.iter().enumerate() {
             source += &format!("  r{j} = f{depth}({seed})\n");
         }
@@ -269,7 +269,7 @@ fn a_function_that_allocates_only_in_an_arena_needs_no_alloc_and_removing_the_li
         for k in 1..=depth {
             source += &format!("fn f{k}() -> u64 {{ f{}() }}\n\n", k - 1);
         }
-        source += &format!("fn main() ! console, alloc {{\n  print(\"{{f{depth}()}}\")\n}}\n");
+        source += &format!("fn main() <console, alloc> {{\n  print(\"{{f{depth}()}}\")\n}}\n");
         let program = lower(with_imports(&source).as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected: u64 = (0..n as u64).map(|i| i * i).sum();
         assert_eq!(
@@ -294,10 +294,10 @@ fn entering_and_leaving_an_arena_costs_the_same_whatever_was_allocated_in_it() {
         let (line, alloc) = if arena {
             ("  with arena()\n", "")
         } else {
-            ("", " ! alloc")
+            ("", " <alloc>")
         };
         let source = with_imports(&format!(
-            "{SQUARES}fn run(n: u64) -> u64{alloc} {{\n{line}  sum_of_squares(n)\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{run({n})}}\")\n}}\n"
+            "{SQUARES}fn run(n: u64) -> u64{alloc} {{\n{line}  sum_of_squares(n)\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{run({n})}}\")\n}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let (outcome, count) = scalar::run_measured(&program);

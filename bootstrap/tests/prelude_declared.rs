@@ -30,21 +30,21 @@ fn read(source: &str) -> Vec<String> {
 }
 
 fn a_program_that_names_no_trait_of_numbers_reads_none() {
-    let source = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"hello\")\n}\n";
+    let source = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"hello\")\n}\n";
     assert_eq!(read(source), Vec::<String>::new());
-    let source = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  x = 3 + 4 * 2\n  print(\"{x}\")\n}\n";
+    let source = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  x = 3 + 4 * 2\n  print(\"{x}\")\n}\n";
     assert_eq!(read(source), Vec::<String>::new());
 }
 
 fn a_program_reads_the_trait_of_numbers_it_names_or_one_of_its_functions_and_no_other() {
-    let wrapping = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"{Wrapping.wrapping_mul(200, 2)}\")\n}\n";
+    let wrapping = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"{Wrapping.wrapping_mul(200, 2)}\")\n}\n";
     assert_eq!(read(wrapping), ["Wrapping"]);
-    let checked = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  a: Byte = 200\n  print(\"{Checked.checked_add(a, 1)}\")\n}\n";
+    let checked = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  a: Byte = 200\n  print(\"{Checked.checked_add(a, 1)}\")\n}\n";
     assert_eq!(read(checked), ["Checked"]);
 }
 
 fn a_program_reads_the_traits_of_numbers_that_a_module_it_imports_calls_for() {
-    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() ! console, alloc {\n  a: Byte = 200\n  print(\"{wrapping_add(a, 100)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() <console, alloc> {\n  a: Byte = 200\n  print(\"{wrapping_add(a, 100)}\")\n}\n";
     let found = read(source);
     assert!(!found.is_empty(), "{found:?}");
 }

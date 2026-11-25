@@ -29,7 +29,7 @@ A body is a block, and the last expression of a block is its value, so `area` gi
 ```
 use std.console (console, print)
 
-fn echo(text: str) -> str ! console {
+fn echo(text: str) -> str <console> {
   print(text)
   text
 }
@@ -37,7 +37,7 @@ fn echo(text: str) -> str ! console {
 
 `echo("hi")` prints `hi` and gives `"hi"`.
 
-A function that does something outside itself says so after its type, as `! console` does here. That is an [effect](effects.md).
+A function that does something outside itself says so after its type, as `<console>` does here. That is an [effect](effects.md).
 
 ## A function that gives nothing
 
@@ -46,7 +46,7 @@ A function with nothing to give leaves out `->` and the type. Its body gives not
 ```
 use std.console (console, print)
 
-fn say(text: str) ! console {
+fn say(text: str) <console> {
   print(text)
   print(text)
 }
@@ -87,12 +87,12 @@ Arguments are evaluated from left to right, in the order they are written.
 ```
 use std.console (console, print)
 
-fn noisy(text: str) -> str ! console {
+fn noisy(text: str) -> str <console> {
   print(text)
   text
 }
 
-fn main() ! console {
+fn main() <console> {
   print(first(noisy("one"), noisy("two")))
 }
 ```
@@ -106,7 +106,7 @@ An argument may be named, as in `area(w: 2.0, h: 3.0)`. A call that names its ar
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(first(b: "y", a: "x"))
 }
 ```
@@ -134,13 +134,13 @@ A call that names an argument may skip one before it. Here `m` is set, and `n` k
 ```
 use std.console (console, print)
 
-fn show(label: str, n: str = "x", m: str = "y") ! console {
+fn show(label: str, n: str = "x", m: str = "y") <console> {
   print(label)
   print(n)
   print(m)
 }
 
-fn main() ! console {
+fn main() <console> {
   show("a", m: "Z")
 }
 ```
@@ -156,7 +156,7 @@ Two rules keep defaults simple.
 The default of a parameter that takes a function is a lambda. It uses no parameter, as any default, and it carries the effects that the type of the parameter lists and no other, since the function that is given it calls it under them.
 
 ```
-fn p(inside: str = "", class: str = "", body: fn() ! markup = { }) ! markup { ... }
+fn p(inside: str = "", class: str = "", body: fn() <markup> = { }) <markup> { ... }
 ```
 
 `p("x")` and `p() { ... }` both call it, and a call that leaves `body` out gets `{ }` where the call is written. A function that takes a function cannot be passed as a value yet, with a default or without one.
@@ -170,7 +170,7 @@ A function may be called above the place where it is written.
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(before())
 }
 
@@ -211,7 +211,7 @@ fn first(
 | --- | --- |
 | `fn f(a: T, b: U) -> V { e }` | A function that gives a `V` |
 | `fn f(a: T) { e }` | A function that gives nothing |
-| `fn f(a: T) -> V ! console { e }` | A function with an effect |
+| `fn f(a: T) -> V <console> { e }` | A function with an effect |
 | `f(x, y)` | A call with arguments by position |
 | `f(x, b: y)` and `f(b: y, a: x)` | A call with named arguments, after any by position |
 | `fn f(a: T, b: U = e) -> V { e }` | A function whose `b` defaults to `e` |

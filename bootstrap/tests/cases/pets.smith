@@ -18,7 +18,7 @@ fn name_of(p: Pet) -> str {
   }
 }
 
-fn main() ! console {
+fn main() <console> {
   print(name_of(.cat(Cat(name: "Tom"))))
   print(name_of(.stray("Rex")))
   print(name_of(Pet.none))

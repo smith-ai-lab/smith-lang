@@ -2,7 +2,7 @@ use std.console (console)
 
 fn byte(n: Byte) -> Byte { n }
 
-fn main() ! console {
+fn main() <console> {
   x = 300
   byte(x)
 }

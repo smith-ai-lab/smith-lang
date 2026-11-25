@@ -18,7 +18,7 @@ built:
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   xs: List[Byte] = [10, 20, 30]
   print("{xs[0]}")
   print("{xs[2]}")
@@ -34,7 +34,7 @@ An index is a whole number, and it must be at least 0 and below the size of what
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   xs: List[Byte] = [10, 20, 30]
   print("{xs[3]}")
 }

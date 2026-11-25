@@ -11,11 +11,11 @@ effect gate {
   fn pass(t: take Token)
 }
 
-fn closed[T](body: fn() -> T ! gate) -> T {
+fn closed[T](body: fn() -> T <gate>) -> T {
   gate(pass: fn(t) { }, body: body)
 }
 
-fn main() ! console {
+fn main() <console> {
   with closed()
   pass(Token(n: 1))
   print("x")

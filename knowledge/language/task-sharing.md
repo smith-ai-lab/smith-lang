@@ -19,7 +19,7 @@ An ordinary value is immutable, and the child finishes before the group's block 
 ```
 use std.task (join, spawn, tasks)
 
-fn fetch_twice(url: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
+fn fetch_twice(url: str) -> Result[(List[Byte], List[Byte]), NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(url) }
   tb = spawn { fetch(url) }
@@ -70,7 +70,7 @@ A single-use value moves into the child, and the parent cannot use it afterwards
 ```
 use std.task (spawn, tasks)
 
-fn serve(listener: Listener) ! net, alloc, diverge {
+fn serve(listener: Listener) <net, alloc, diverge> {
   with tasks()
   loop {
     conn = accept(listener)

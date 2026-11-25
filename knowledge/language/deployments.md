@@ -22,7 +22,7 @@ use std.store (files)
 
 package: Package = Package(name: "notes")
 
-pub fn serve(port: Nat = 8080) ! net, fs, alloc, diverge {
+pub fn serve(port: Nat = 8080) <net, fs, alloc, diverge> {
   with listen(port: port)
   with files(folder: "data")
   main()
@@ -54,12 +54,12 @@ use std.project (Package, build)
 
 package: Package = Package(name: "notes")
 
-pub fn cloud() ! http, alloc {
+pub fn cloud() <http, alloc> {
   with durable()
   main()
 }
 
-pub fn deploy() -> Result[(), DeployError] ! fs, alloc {
+pub fn deploy() -> Result[(), DeployError] <fs, alloc> {
   module = try build(package, start: cloud, target: .wasm)
   try worker(module, to: "dist")
 }
@@ -75,7 +75,7 @@ An executable is built only when everything its start carries has an answer on i
 - On WebAssembly, each effect the start carries is an import of the module, as [The host of a WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) says.
 
 ```
-pub fn forgot(port: Nat = 8080) ! net, alloc, diverge {
+pub fn forgot(port: Nat = 8080) <net, alloc, diverge> {
   with listen(port: port)
   main()
 }

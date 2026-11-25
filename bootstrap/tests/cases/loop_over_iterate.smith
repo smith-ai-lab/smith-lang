@@ -60,7 +60,7 @@ fn count_bytes(s: str) -> u64 {
   n
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop v in Pair(a: 1, b: 2) { print("{v}") }
   print("{largest(Countdown(from: 3))}")
   print("{first_small(Countdown(from: 5))}")

@@ -66,7 +66,7 @@ A [`List`](../library/list.md) has `Discard` and not `Copy`. Copying a list cost
 ```
 use std.list (push)
 
-fn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) ! alloc {
+fn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) <alloc> {
   ys = push(copy(xs), 1)
   (xs, ys)
 }
@@ -81,7 +81,7 @@ Reading a list lends it and copies nothing: its `size`, an element, and passing 
 A value that is never used is dropped, and that is an error when its type lacks `Discard`.
 
 ```
-fn forget(path: str) -> Result[(), FsError] ! fs {
+fn forget(path: str) -> Result[(), FsError] <fs> {
   f = try open_file(path)
   .ok(())
 }

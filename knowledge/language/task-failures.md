@@ -12,7 +12,7 @@ built:
 A child that ended by a [failure](task-ending.md) was not given a value, so `join(t)` has none to give. A task that joins it ends by the same failure.
 
 ```
-fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
+fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
@@ -31,7 +31,7 @@ If `tb` runs out of memory, the `join(tb)` of `fetch_both` ends the task that ru
 ```
 use std.console (console, print)
 
-fn main() ! net, alloc, console {
+fn main() <net, alloc, console> {
   match fetch_both("a.example", "b.example") {
     .ok(pages) { print("fetched") }
     .err(e) { print("failed") }
@@ -46,7 +46,7 @@ If either child of `fetch_both` runs out of memory, `main` ends the same way and
 `outcome(t)` waits as `join` does and returns a `Result[T, Failure]`, so the task that calls it can recover. `Failure` is an enum of [`std.task`](../library/task.md), with a case for each failure that [ends a task](task-ending.md): `pub enum Failure { out_of_memory, refused_write }`, which a program matches as any enum.
 
 ```
-fn fetch_or_empty(url: str) -> List[Byte] ! net, alloc {
+fn fetch_or_empty(url: str) -> List[Byte] <net, alloc> {
   with tasks()
   t = spawn { fetch(url) }
   match outcome(t) {
@@ -65,7 +65,7 @@ The `.ok` of `outcome` holds what `fetch` gave, a `Result` of its own. The `.err
 A child that is never joined ends alone. This is why one connection of `serve` that runs out of memory does not end the server.
 
 ```
-fn serve(listener: Listener) ! net, alloc, diverge {
+fn serve(listener: Listener) <net, alloc, diverge> {
   with tasks()
   loop {
     conn = accept(listener)

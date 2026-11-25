@@ -10,9 +10,9 @@ status: built
 `x |> f(a, b)` is `f(x, a, b)`. The value on the left becomes the first argument of the call on the right. A value that is handed to one call after another is then written in the order the calls run.
 
 ```
-fn put(w: take Out, b: Byte) -> Out ! alloc
+fn put(w: take Out, b: Byte) -> Out <alloc>
 
-fn newline(w: take Out) -> Out ! alloc {
+fn newline(w: take Out) -> Out <alloc> {
   w |> put('\\') |> put('n')
 }
 ```

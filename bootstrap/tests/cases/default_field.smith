@@ -5,7 +5,7 @@ struct Border {
   colour: str = "black"
 }
 
-fn main() ! console {
+fn main() <console> {
   print(Border().style)
   print(Border(colour: "red").colour)
 }

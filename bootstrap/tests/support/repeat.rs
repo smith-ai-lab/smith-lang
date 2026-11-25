@@ -157,10 +157,10 @@ pub fn repeated(lexer: &str, copies: usize, root: &str, count: &str) -> String {
         }
         let body = renamed(count, &names, copy);
         out.push_str(&format!(
-            "\nfn count_{copy}() -> Nat ! alloc {{\n  {body}\n}}\n"
+            "\nfn count_{copy}() -> Nat <alloc> {{\n  {body}\n}}\n"
         ));
     }
-    out.push_str("\nfn main() ! console, alloc {\n");
+    out.push_str("\nfn main() <console, alloc> {\n");
     for copy in 0..copies {
         out.push_str(&format!("  print(\"{{count_{copy}()}}\")\n"));
     }

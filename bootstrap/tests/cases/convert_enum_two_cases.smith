@@ -5,7 +5,7 @@ enum Pair {
   right: Byte
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   n: Byte = 4
   p: Pair = convert(n)
   print("{p}")

@@ -83,8 +83,8 @@ fn names_source(fs: &[Named]) -> String {
         }
         source += &format!("fn f{k}(x: i32) -> i32 {{ x }}\n\n");
     }
-    source += "fn told[F: Function](f: F) -> str ! alloc {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n\n";
-    source += "fn main() ! console, alloc {\n";
+    source += "fn told[F: Function](f: F) -> str <alloc> {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n\n";
+    source += "fn main() <console, alloc> {\n";
     for k in 0..fs.len() {
         source += &format!("  print(told(f{k}))\n");
     }
@@ -156,12 +156,12 @@ impl Callee {
             "use std.bits (i32)\nuse std.console (console, print)\n\
              use std.deserialize (ReadError)\nuse std.json (FromJson, from_json)\n\n\
              fn pick({}) -> i32 {{ a{} }}\n\n\
-             fn run[F, A, R](f: F, text: str) -> Option[R] ! alloc\n  \
+             fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
              requires Function[F, A, R]\n  requires FromJson[A]\n  requires Discard[A]\n{{\n  \
              r: Result[A, ReadError] = from_json(text)\n  match r {{\n    \
              .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
-             fn show(o: Option[i32]) -> str ! alloc {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
-             fn main() ! console, alloc {{\n  text = \"{text}\"\n  print(show(run(pick, text)))\n}}\n",
+             fn show(o: Option[i32]) -> str <alloc> {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
+             fn main() <console, alloc> {{\n  text = \"{text}\"\n  print(show(run(pick, text)))\n}}\n",
             params.join(", "),
             self.gives
         )
@@ -211,7 +211,7 @@ fn a_lambda_a_generic_function_and_one_that_takes_a_function_have_no_function_an
              fn keep(f: fn(i32) -> i32) -> i32 {{ f(1) }}\n\
              fn plain(x: i32) -> i32 {{ x }}\n\n\
              fn told[F: Function](f: F) -> str {{ Function.name(f) }}\n\n\
-             fn main() ! console {{\n  print(told({arg}))\n}}\n"
+             fn main() <console> {{\n  print(told({arg}))\n}}\n"
         )
     };
     assert!(errors(&program("plain")).is_empty());
@@ -240,10 +240,10 @@ fn a_lambda_a_generic_function_and_one_that_takes_a_function_have_no_function_an
 fn a_program_that_does_not_write_function_builds_no_struct_of_arguments() {
     let plain = "use std.bits (i32)\nuse std.console (console, print)\n\n\
         fn pick(x: i32, y: i32) -> i32 { y }\n\n\
-        fn main() ! console, alloc {\n  print(\"{pick(1, 2)}\")\n}\n";
+        fn main() <console, alloc> {\n  print(\"{pick(1, 2)}\")\n}\n";
     let asking = format!(
         "{plain}\nfn told[F: Function](f: F) -> str {{ Function.name(f) }}\n\
-         fn also() ! console {{\n  print(told(pick))\n}}\n"
+         fn also() <console> {{\n  print(told(pick))\n}}\n"
     );
     let count = |source: &str| lower(source.as_bytes()).expect("a program").functions.len();
     // The program that asks is the one that grows, by the functions it asks for.

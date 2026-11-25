@@ -92,12 +92,12 @@ impl Program {
                 Answer::Asked => "a",
             };
             text += &format!(
-                "fn handler{k}[T](k: i32, body: fn() -> T ! fx) -> T {{\n  fx(ask: fn(a) {{ {gives} }}, body: body)\n}}\n\n"
+                "fn handler{k}[T](k: i32, body: fn() -> T <fx>) -> T {{\n  fx(ask: fn(a) {{ {gives} }}, body: body)\n}}\n\n"
             );
         }
-        text += "fn run0(a: i32) -> i32 ! fx {\n  ask(a)\n}\n\n";
+        text += "fn run0(a: i32) -> i32 <fx> {\n  ask(a)\n}\n\n";
         for d in 1..=self.depth {
-            text += &format!("fn run{d}(a: i32) -> i32 ! fx {{\n  run{}(a)\n}}\n\n", d - 1);
+            text += &format!("fn run{d}(a: i32) -> i32 <fx> {{\n  run{}(a)\n}}\n\n", d - 1);
         }
         for (i, site) in self.sites.iter().enumerate() {
             text += &format!(
@@ -105,7 +105,7 @@ impl Program {
                 site.handler, site.given, self.depth, site.asked
             );
         }
-        text += "fn main() ! console, alloc {\n";
+        text += "fn main() <console, alloc> {\n";
         for i in 0..self.sites.len() {
             text += &format!("  print(\"{{site{i}()}}\")\n");
         }
@@ -175,11 +175,11 @@ fn a_function_runs_under_a_handler_inside_another_that_answers_by_asking_the_one
         let source = format!(
             "use std.bits (i32)\nuse std.console (console, print)\n\n\
              effect fx {{\n  fn ask(a: i32) -> i32\n}}\n\n\
-             fn fixed[T](k: i32, body: fn() -> T ! fx) -> T {{\n  fx(ask: fn(a) {{ k }}, body: body)\n}}\n\n\
-             fn through[T](body: fn() -> T ! fx) -> T ! fx {{\n  fx(ask: fn(a) {{ ask(a) }}, body: body)\n}}\n\n\
-             fn run(a: i32) -> i32 ! fx {{\n  ask(a)\n}}\n\n\
+             fn fixed[T](k: i32, body: fn() -> T <fx>) -> T {{\n  fx(ask: fn(a) {{ k }}, body: body)\n}}\n\n\
+             fn through[T](body: fn() -> T <fx>) -> T <fx> {{\n  fx(ask: fn(a) {{ ask(a) }}, body: body)\n}}\n\n\
+             fn run(a: i32) -> i32 <fx> {{\n  ask(a)\n}}\n\n\
              fn nested() -> i32 {{\n  with fixed({outer})\n  with through()\n  run({asked})\n}}\n\n\
-             fn main() ! console, alloc {{\n  print(\"{{nested()}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  print(\"{{nested()}}\")\n}}\n"
         );
         assert_eq!(outcome(&source).stdout, format!("{outer}\n").into_bytes(), "for\n{source}");
     });

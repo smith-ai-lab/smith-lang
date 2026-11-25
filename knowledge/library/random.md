@@ -24,7 +24,7 @@ A `Key` made from a seed gives the same bits each run, so a program that starts 
 
 ```
 fn seeded(seed: u64) -> Key
-fn fresh() -> Key ! entropy, alloc
+fn fresh() -> Key <entropy, alloc>
 fn split(key: take Key) -> (Key, Key)
 ```
 

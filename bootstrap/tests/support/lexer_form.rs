@@ -17,7 +17,7 @@ fn lexer() -> &'static str {
 /// What a program that lexes each input prints for it. Each input starts with
 /// a line `input`.
 const DRIVER: &str = r#"
-fn show(s: str) -> str ! alloc {
+fn show(s: str) -> str <alloc> {
   var joined: str = ""
   loop i in 0..s.size {
     if i == 0 { joined = "{s[i]}" } else { joined = "{joined},{s[i]}" }
@@ -96,7 +96,7 @@ fn punct_place(p: Punct) -> Nat {
   }
 }
 
-fn show_token(t: Token, fuel: u64) ! console, alloc
+fn show_token(t: Token, fuel: u64) <console, alloc>
   decreases fuel
 {
   l = t.pos.line
@@ -122,7 +122,7 @@ fn show_token(t: Token, fuel: u64) ! console, alloc
   }
 }
 
-fn show_tokens(tokens: List[Token], fuel: u64) ! console, alloc
+fn show_tokens(tokens: List[Token], fuel: u64) <console, alloc>
   decreases fuel
 {
   loop i in 0..tokens.size {
@@ -130,11 +130,11 @@ fn show_tokens(tokens: List[Token], fuel: u64) ! console, alloc
   }
 }
 
-fn show_error(e: LexError) ! console, alloc {
+fn show_error(e: LexError) <console, alloc> {
   print("error {e.pos.line} {e.pos.col} {e.message}")
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   texts = inputs()
   loop k in 0..texts.size {
     print("input")
@@ -152,8 +152,8 @@ fn main() ! console, alloc {
 pub fn program(texts: &[&[u8]]) -> String {
     let mut out = String::from(lexer());
     out.push_str(DRIVER);
-    out.push_str("\nfn nothing() -> List[Byte] ! alloc {\n  []\n}\n");
-    out.push_str("\nfn inputs() -> List[List[Byte]] ! alloc {\n  [");
+    out.push_str("\nfn nothing() -> List[Byte] <alloc> {\n  []\n}\n");
+    out.push_str("\nfn inputs() -> List[List[Byte]] <alloc> {\n  [");
     for (i, text) in texts.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");

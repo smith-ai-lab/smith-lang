@@ -41,7 +41,7 @@ struct Item {{
   on: bool
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   var last: Nat = 0
   loop k in 0..{reps} {{
     var xs: List[Item] = []
@@ -236,7 +236,7 @@ struct Item {{
   on: bool
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   var last: Nat = 0
   loop k in 0..{reps} {{
     var xs: List[Item] = []

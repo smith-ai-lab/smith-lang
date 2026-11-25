@@ -43,7 +43,7 @@ fn printed(source: &str) -> String {
 const USES: &str = "use std.console (console, print)\nuse std.http (Part, query_parts, route_match)\n\n";
 
 /// Prints each part of a list as `name=value`.
-const SHOW: &str = "fn show(parts: List[Part]) ! console, alloc {\n  loop i in 0..parts.size {\n    print(\"{parts[i].name}={parts[i].value}\")\n  }\n}\n\n";
+const SHOW: &str = "fn show(parts: List[Part]) <console, alloc> {\n  loop i in 0..parts.size {\n    print(\"{parts[i].name}={parts[i].value}\")\n  }\n}\n\n";
 
 const WORDS: &[&str] = &["users", "notes", "a", "x1", "items", "7", "42", "ana"];
 const NAMES: &[&str] = &["id", "name", "n", "slug"];
@@ -118,7 +118,7 @@ fn matched(r: &Route) -> Option<Vec<(String, String)>> {
 fn a_pattern_fits_the_path_with_the_same_parts_and_gives_each_name_its_part() {
     let routes = |g: &mut Gen| (0..6).map(|_| route(g)).collect::<Vec<Route>>();
     generate::check(8201, 10, routes, |all| {
-        let mut source = format!("{USES}{SHOW}fn main() ! console, alloc {{\n");
+        let mut source = format!("{USES}{SHOW}fn main() <console, alloc> {{\n");
         let mut said = String::new();
         for r in all {
             source += &format!(
@@ -169,7 +169,7 @@ fn members(query: &str) -> Vec<(String, String)> {
 fn a_query_is_its_members_between_ampersands_with_the_value_after_the_first_equals() {
     let queries = |g: &mut Gen| (0..6).map(|_| query(g)).collect::<Vec<String>>();
     generate::check(8202, 10, queries, |all| {
-        let mut source = format!("{USES}{SHOW}fn main() ! console, alloc {{\n");
+        let mut source = format!("{USES}{SHOW}fn main() <console, alloc> {{\n");
         let mut said = String::new();
         for q in all {
             source += &format!("  print(\"--\")\n  show(query_parts(\"{q}\"))\n");
@@ -185,7 +185,7 @@ fn a_query_is_its_members_between_ampersands_with_the_value_after_the_first_equa
 
 fn an_error_of_the_library_has_the_status_its_name_says() {
     let source = "use std.console (console, print)\nuse std.http (BadRequest, NotFound, Unauthorized, status)\n\n\
-fn main() ! console, alloc {\n  print(\"{status(NotFound(message: \"a\"))}\")\n  \
+fn main() <console, alloc> {\n  print(\"{status(NotFound(message: \"a\"))}\")\n  \
 print(\"{status(BadRequest(message: \"b\"))}\")\n  print(\"{status(Unauthorized(message: \"c\"))}\")\n}\n";
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
     assert_eq!(printed(source), "404\n400\n401\n");
@@ -193,7 +193,7 @@ print(\"{status(BadRequest(message: \"b\"))}\")\n  print(\"{status(Unauthorized(
 
 fn every_executable_reads_the_parts_of_a_request_as_the_evaluator_does() {
     let source = format!(
-        "{USES}{SHOW}fn main() ! console, alloc {{\n  \
+        "{USES}{SHOW}fn main() <console, alloc> {{\n  \
          match route_match(\"/users/:id/notes/:n\", \"/users/7/notes/x\") {{\n    .some(parts) {{ show(parts) }}\n    .none {{ print(\"no\") }}\n  }}\n  \
          show(query_parts(\"a=1&b=&c&&d=x=y\"))\n}}\n"
     );

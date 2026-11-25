@@ -57,7 +57,7 @@ fn refused(source: &str) -> Vec<smith::diag::Error> {
 }
 
 fn the_example_of_the_issue_reads_the_arguments() {
-    let source = "use std.console (console, print)\n\nfn show(args: List[str]) ! console, alloc {\n  match args {\n    [] { print(\"none\") }\n    [\"build\", path] { print(\"build {path}\") }\n    other { print(\"other\") }\n  }\n}\n\nfn main() ! console, alloc {\n  a: List[str] = [\"build\", \"a.smith\"]\n  show(a)\n  b: List[str] = []\n  show(b)\n  c: List[str] = [\"x\"]\n  show(c)\n  d: List[str] = [\"build\"]\n  show(d)\n}\n";
+    let source = "use std.console (console, print)\n\nfn show(args: List[str]) <console, alloc> {\n  match args {\n    [] { print(\"none\") }\n    [\"build\", path] { print(\"build {path}\") }\n    other { print(\"other\") }\n  }\n}\n\nfn main() <console, alloc> {\n  a: List[str] = [\"build\", \"a.smith\"]\n  show(a)\n  b: List[str] = []\n  show(b)\n  c: List[str] = [\"x\"]\n  show(c)\n  d: List[str] = [\"build\"]\n  show(d)\n}\n";
     assert_eq!(
         run(source),
         Outcome {
@@ -371,7 +371,7 @@ fn program(c: &Case, lines: &[String]) -> (String, usize) {
         out.push_str(line);
         out.push('\n');
     }
-    out.push_str("  }\n}\n\nfn main() ! console, alloc {\n");
+    out.push_str("  }\n}\n\nfn main() <console, alloc> {\n");
     for (k, list) in c.given.iter().enumerate() {
         let parts: Vec<String> = list.iter().map(written_value).collect();
         out.push_str(&format!(
@@ -430,14 +430,14 @@ fn a_pattern_that_the_ones_before_it_cover_is_one_error_at_that_arm() {
 }
 
 fn a_pattern_in_brackets_on_what_is_no_list_is_refused() {
-    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn pick(n: i32) -> i32 {\n  match n {\n    [] { 0 }\n    _ { 1 }\n  }\n}\n\nfn main() ! console, alloc {\n  print(\"{pick(1)}\")\n}\n";
+    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn pick(n: i32) -> i32 {\n  match n {\n    [] { 0 }\n    _ { 1 }\n  }\n}\n\nfn main() <console, alloc> {\n  print(\"{pick(1)}\")\n}\n";
     let errors = refused(source);
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert_eq!(errors[0].pos, Pos { line: 6, col: 5 });
 }
 
 fn a_name_in_a_pattern_in_brackets_is_refused_for_an_element_that_cannot_be_copied() {
-    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn pick(xs: List[List[i32]]) -> i32 {\n  match xs {\n    [a] { 1 }\n    _ { 0 }\n  }\n}\n\nfn main() ! console, alloc {\n  xs: List[List[i32]] = []\n  print(\"{pick(xs)}\")\n}\n";
+    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn pick(xs: List[List[i32]]) -> i32 {\n  match xs {\n    [a] { 1 }\n    _ { 0 }\n  }\n}\n\nfn main() <console, alloc> {\n  xs: List[List[i32]] = []\n  print(\"{pick(xs)}\")\n}\n";
     let errors = refused(source);
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert_eq!(errors[0].pos.line, 6);

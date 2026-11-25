@@ -21,7 +21,7 @@ fn first_over(xs: List[u64], limit: u64) -> u64 {
   0
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   xs: List[u64] = [1, 2, 3]
   print("{sum(xs)}")
   print("{first_over(xs, 1)} {first_over(xs, 5)}")

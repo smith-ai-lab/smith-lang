@@ -9,7 +9,7 @@ pub effect time {
 }
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
-fn put(bytes: take List[Byte], n: u64) -> List[Byte] ! alloc {
+fn put(bytes: take List[Byte], n: u64) -> List[Byte] <alloc> {
   var made = bytes
   loop i in 0..8 {
     made = push(made, bit_and(shift_right(n, 8 * i), 255))
@@ -36,14 +36,14 @@ fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
   wrapping_add(wrapping_mul(seconds, 1000), part)
 }
 
-fn system_now() -> u64 ! alloc {
+fn system_now() -> u64 <alloc> {
   var stamp: List[Byte] = __reserve(16)
   stamp = put(put(stamp, 0), 0)
   __system(10, 0, stamp)
   milliseconds(word(stamp, 0), word(stamp, 8))
 }
 
-fn system_sleep(ms: u64) ! alloc, task {
+fn system_sleep(ms: u64) <alloc, task> {
   // A task that a scheduler runs waits for the time and lets the others run, and
   // any other call waits on the thread.
   if __scheduled() {

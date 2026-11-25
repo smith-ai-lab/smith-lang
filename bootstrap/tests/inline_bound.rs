@@ -34,7 +34,7 @@ fn source(lines: usize) -> String {
     for _ in 0..lines {
         s.push_str("  r = wrapping_add(r, a)\n");
     }
-    s.push_str("  r\n}\n\nfn main() ! console, alloc {\n  var t: Int = 0\n");
+    s.push_str("  r\n}\n\nfn main() <console, alloc> {\n  var t: Int = 0\n");
     s.push_str("  loop i in 0..3 {\n    t = wrapping_add(t, grow(i))\n    t = wrapping_add(t, grow(t))\n  }\n");
     s.push_str("  print(\"{t}\")\n  print(\"{grow(5)}\")\n}\n");
     s

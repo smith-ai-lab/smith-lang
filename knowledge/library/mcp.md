@@ -36,7 +36,7 @@ fn divide(
   }
 }
 
-pub fn main() ! messages, alloc {
+pub fn main() <messages, alloc> {
   with mcp(name: "calc", version: "1")
   tool(divide)
 }
@@ -57,7 +57,7 @@ A tool is a function with a name. Each parameter is a member of the object a cli
 `mcp` is written with [`with`](../language/with.md), so the lines after it are what the server offers, and they are run for one message, the one `messages` gives, which they answer, and then `main` ends. A server does not loop: whatever carries the messages runs `main` again for the next. `tool(f)` answers a message that calls `f`, adds `f` to the answer of one that lists the tools, and does nothing for any other.
 
 ```
-fn main() ! messages, net, alloc {
+fn main() <messages, net, alloc> {
   with mcp(name: "pages", version: "1")
   tool(add)
   tool(divide)
@@ -83,12 +83,12 @@ A resource is something a client reads by its address. It is a plain function to
 use std.mcp (mcp, resource, tool)
 
 // One note, by its number.
-fn note(id: Nat) -> Result[Note, NotFound] ! store
+fn note(id: Nat) -> Result[Note, NotFound] <store>
 
 // Every note there is.
-fn notes() -> List[Note] ! store
+fn notes() -> List[Note] <store>
 
-fn main() ! messages, store, alloc {
+fn main() <messages, store, alloc> {
   with mcp(name: "notes", version: "1")
   resource("notes://all", notes)
   resource("notes://note/:id", note)
@@ -113,12 +113,12 @@ fn summarise(
   id: Nat,
   // How many sentences the summary may have.
   sentences: Nat = 3,
-) -> Result[str, NotFound] ! store {
+) -> Result[str, NotFound] <store> {
   n = try note(id)
   .ok("Summarise this note in {sentences} sentences:\n{n.text}")
 }
 
-fn main() ! messages, store, alloc {
+fn main() <messages, store, alloc> {
   with mcp(name: "notes", version: "1")
   prompt(summarise)
 }
@@ -184,7 +184,7 @@ use std.project (Package)
 
 package: Package = Package(name: "calc")
 
-pub fn local() ! console, alloc {
+pub fn local() <console, alloc> {
   with stdio()
   main()
 }

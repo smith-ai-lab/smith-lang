@@ -253,7 +253,7 @@ impl Task {
         }
         t.push_str("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n\n");
         t.push_str(&format!(
-            "fn main(args: List[str]) -> Result[(), str] ! {} {{\n",
+            "fn main(args: List[str]) -> Result[(), str] <{}> {{\n",
             effects.join(", ")
         ));
         for k in 0..self.flags.len() {

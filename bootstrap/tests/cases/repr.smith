@@ -9,7 +9,7 @@ enum Pet {
   none
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   tom = Cat(name: "tom")
   print("{tom.name}")
   print("{repr(tom.name)}")

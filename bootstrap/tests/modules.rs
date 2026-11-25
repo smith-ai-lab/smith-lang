@@ -162,7 +162,7 @@ fn main_text(t: &Tree, with_uses: bool) -> String {
         text += &uses(&lines);
     }
     let [a, b, c] = t.args;
-    text += "fn helper(n: i32) -> i32 { wrapping_add(n, 7) }\n\nfn main() ! console, alloc {\n";
+    text += "fn helper(n: i32) -> i32 { wrapping_add(n, 7) }\n\nfn main() <console, alloc> {\n";
     for i in 0..t.modules.len() {
         text += &format!(
             "  print(\"{{f{i}({a})}} {{sum{i}(make{i}({b}))}} {{make{i}({c}).a}} {{val{i}(.two({a}))}} {{val{i}(.one)}} {{t{i}(make{i}({b}))}} {{mix{i}({c})}} {{helper({a})}}\")\n"
@@ -234,7 +234,7 @@ fn placed(m: &Mistake) -> Placed {
     let head = "use geo (S0, make0)\nuse std.console (console, print)\nuse util.math (T1, t1)\n\n";
     let head_with_bits =
         "use geo (S0, make0)\nuse std.bits (i32)\nuse std.console (console, print)\nuse util.math (T1, t1)\n\n";
-    let body = |code: &str| format!("fn main() ! console {{\n{code}  print(\"x\")\n}}\n");
+    let body = |code: &str| format!("fn main() <console> {{\n{code}  print(\"x\")\n}}\n");
     let plain = |main: String, at: Pos, mentions: &'static str| Placed {
         main,
         modules: vec![("geo", GEO.to_string()), ("util.math", MATH.to_string())],
@@ -274,17 +274,17 @@ fn placed(m: &Mistake) -> Placed {
             }
         }
         4 => {
-            let before = format!("{pad}{head}{}", "fn main() ! console {\n  n = make0(1).");
+            let before = format!("{pad}{head}{}", "fn main() <console> {\n  n = make0(1).");
             let main = format!("{before}b\n  print(\"x\")\n}}\n");
             plain(main, pos_after(&before), "`b`")
         }
         5 => {
-            let before = format!("{pad}{head}fn main() ! console {{\n  s = ");
+            let before = format!("{pad}{head}fn main() <console> {{\n  s = ");
             let main = format!("{before}S0(a: 1, b: 2)\n  print(\"x\")\n}}\n");
             plain(main, pos_after(&before), "S0")
         }
         6 => {
-            let before = format!("{pad}{head}fn main() ! console {{\n  var s = make0(1)\n  s.");
+            let before = format!("{pad}{head}fn main() <console> {{\n  var s = make0(1)\n  s.");
             let main = format!("{before}b = 3\n  print(\"x\")\n}}\n");
             plain(main, pos_after(&before), "`b`")
         }
@@ -345,7 +345,7 @@ fn project_a_file_nothing_reaches_is_never_read_by_a_build_and_is_checked() {
                 "use geo (f0)\nuse geo (f0)\n",
             ][kind];
             let wrong = format!("{}{bad}", "\n".repeat(pad));
-            let main = "use geo (f0)\nuse std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"{f0(1)}\")\n}\n";
+            let main = "use geo (f0)\nuse std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"{f0(1)}\")\n}\n";
             let reached = [("geo", GEO)];
             let with = [("geo", GEO), ("extra.stray", wrong.as_str())];
             assert_eq!(
@@ -385,7 +385,7 @@ fn write_project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
 }
 
 const MAIN_ENTRY: &str = "use db.transaction (Transaction, begin, commit)\nuse std.console (console, print)\n\n\
-    fn main() ! console {\n  t = begin(41)\n  if commit(t) == 42 { print(\"committed\") } else { print(\"lost\") }\n}\n";
+    fn main() <console> {\n  t = begin(41)\n  if commit(t) == 42 { print(\"committed\") } else { print(\"lost\") }\n}\n";
 
 const TRANSACTION: &str = "use std.bits (i32)\nuse std.int (wrapping_add)\n\n\
     pub struct Transaction {\n  id: i32\n}\n\n\

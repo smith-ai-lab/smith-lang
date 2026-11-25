@@ -225,7 +225,7 @@ fn lines_of(p: Sum, q: Sum) -> (String, String) {
 /// The program of two sums, and what it prints.
 fn program_of(p: Sum, q: Sum) -> (String, String) {
     let (body, expected) = lines_of(p, q);
-    let source = with_header(format!("fn main() ! console, alloc {{\n{body}}}\n"));
+    let source = with_header(format!("fn main() <console, alloc> {{\n{body}}}\n"));
     (source, expected)
 }
 
@@ -235,11 +235,11 @@ fn program_of_pairs(pairs: &[(Sum, Sum)]) -> (String, String) {
     let (mut functions, mut calls, mut expected) = (String::new(), String::new(), String::new());
     for (n, (p, q)) in pairs.iter().enumerate() {
         let (body, said) = lines_of(*p, *q);
-        functions += &format!("fn case{n}() ! console, alloc {{\n{body}}}\n\n");
+        functions += &format!("fn case{n}() <console, alloc> {{\n{body}}}\n\n");
         calls += &format!("  case{n}()\n");
         expected += &said;
     }
-    let source = with_header(format!("{functions}fn main() ! console, alloc {{\n{calls}}}\n"));
+    let source = with_header(format!("{functions}fn main() <console, alloc> {{\n{calls}}}\n"));
     (source, expected)
 }
 
@@ -271,7 +271,7 @@ fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list() {
         },
         |p| {
             let source = with_header(format!(
-                "struct Holder {{\n  n: {R}\n  tag: Byte\n}}\n\nfn pass(n: {R}) -> {R} {{ n }}\n\nfn first(h: Holder) -> {R} {{ h.n }}\n\nfn main() ! console, alloc {{\n{}  h = Holder(n: p, tag: 7)\n  t = (p, 7)\n  (m, k) = t\n  xs: List[{R}] = [p]\n  print(\"{{pass(p)}} {{first(h)}} {{m}} {{xs[0]}} {{h.tag}} {{k}}\")\n}}\n",
+                "struct Holder {{\n  n: {R}\n  tag: Byte\n}}\n\nfn pass(n: {R}) -> {R} {{ n }}\n\nfn first(h: Holder) -> {R} {{ h.n }}\n\nfn main() <console, alloc> {{\n{}  h = Holder(n: p, tag: 7)\n  t = (p, 7)\n  (m, k) = t\n  xs: List[{R}] = [p]\n  print(\"{{pass(p)}} {{first(h)}} {{m}} {{xs[0]}} {{h.tag}} {{k}}\")\n}}\n",
                 p.source("p")
             ));
             let n = p.result().written();
@@ -288,7 +288,7 @@ fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list() {
 /// With no fact it is refused, and the error says what could not be proven.
 fn a_proof_is_refused_for_a_range_whose_greatest_number_is_above_what_an_i128_holds() {
     let source = with_header(
-        "fn into(a: Nat, b: Nat) -> Nat {\n  p = a * b\n  if p > 170141183460469231731687303715884105727 {\n    x: 0..2 = p\n    x\n  } else {\n    1\n  }\n}\n\nfn main() ! console, alloc {\n  print(\"{into(3, 4)}\")\n}\n".to_string(),
+        "fn into(a: Nat, b: Nat) -> Nat {\n  p = a * b\n  if p > 170141183460469231731687303715884105727 {\n    x: 0..2 = p\n    x\n  } else {\n    1\n  }\n}\n\nfn main() <console, alloc> {\n  print(\"{into(3, 4)}\")\n}\n".to_string(),
     );
     let errors = check(source.as_bytes()).expect_err("the product may not fit");
     assert!(
@@ -301,7 +301,7 @@ fn a_proof_is_refused_for_a_range_whose_greatest_number_is_above_what_an_i128_ho
 /// holds none of the functions that work on two words.
 fn a_program_with_no_wide_range_has_no_instruction_for_one() {
     let source = with_header(
-        "fn main() ! console, alloc {\n  a: u32 = 4000000000\n  b: u32 = 3\n  c: u64 = 1\n  print(\"{a + b} {a * b} {c + c}\")\n}\n".to_string(),
+        "fn main() <console, alloc> {\n  a: u32 = 4000000000\n  b: u32 = 3\n  c: u64 = 1\n  print(\"{a + b} {a * b} {c + c}\")\n}\n".to_string(),
     );
     let program = lowered(&source);
     assert!(
@@ -352,7 +352,7 @@ impl Division {
 
     fn source(self) -> String {
         with_header(format!(
-            "fn main() ! console, alloc {{\n{}  print(\"{{p / {d}}} {{p % {d}}}\")\n}}\n",
+            "fn main() <console, alloc> {{\n{}  print(\"{{p / {d}}} {{p % {d}}}\")\n}}\n",
             self.product.source("p"),
             d = self.divisor.written()
         ))
@@ -411,7 +411,7 @@ fn a_wide_number_divided_by_a_number_gives_the_quotient_and_the_remainder_exactl
 /// program that takes them holds no function of the runtime that divides.
 fn a_wide_number_divided_by_two_to_the_64_is_its_two_halves_and_needs_no_division() {
     let source = with_header(
-        "fn times(a: Nat, b: Nat) -> (Nat, Nat) {\n  p = a * b\n  (p / 18446744073709551616, p % 18446744073709551616)\n}\n\nfn main() ! console, alloc {\n  (high, low) = times(18446744073709551615, 2)\n  print(\"{high} {low}\")\n}\n".to_string(),
+        "fn times(a: Nat, b: Nat) -> (Nat, Nat) {\n  p = a * b\n  (p / 18446744073709551616, p % 18446744073709551616)\n}\n\nfn main() <console, alloc> {\n  (high, low) = times(18446744073709551615, 2)\n  print(\"{high} {low}\")\n}\n".to_string(),
     );
     assert_eq!(stdout(&source), "1 18446744073709551614\n", "for\n{source}");
     let program = lowered(&source);
@@ -441,7 +441,7 @@ fn every_executable_gives_what_the_evaluator_gives_for_a_wide_quotient_and_remai
 /// then by the words.
 fn a_number_above_the_greatest_i128_is_above_every_negative_number_and_every_number_below_it() {
     let source = with_header(
-        "fn main() ! console, alloc {\n  pa: u64 = 18446744073709551615\n  pb: u64 = 18446744073709551615\n  p = pa * pb\n  qa: i32 = -2147483648\n  qb: i32 = -2147483648\n  q = qa + qb\n  print(\"{p < q} {p <= q} {p == q} {p > q} {p >= q} {p != q}\")\n  print(\"{q < p} {q <= p} {q == p} {q > p} {q >= p} {q != p}\")\n  print(\"{Ord.compare(p, q)} {Ord.compare(q, p)}\")\n}\n".to_string(),
+        "fn main() <console, alloc> {\n  pa: u64 = 18446744073709551615\n  pb: u64 = 18446744073709551615\n  p = pa * pb\n  qa: i32 = -2147483648\n  qb: i32 = -2147483648\n  q = qa + qb\n  print(\"{p < q} {p <= q} {p == q} {p > q} {p >= q} {p != q}\")\n  print(\"{q < p} {q <= p} {q == p} {q > p} {q >= p} {q != p}\")\n  print(\"{Ord.compare(p, q)} {Ord.compare(q, p)}\")\n}\n".to_string(),
     );
     assert_eq!(
         stdout(&source),
@@ -492,7 +492,7 @@ impl Narrowing {
     fn source(self) -> String {
         let t = self.to.name;
         with_header(format!(
-            "use std.int (clamp, narrow)\n\nfn main() ! console, alloc {{\n{}  c: {t} = clamp(p)\n  n: Option[{t}] = narrow(p)\n  print(\"{{c}} {{n}}\")\n}}\n",
+            "use std.int (clamp, narrow)\n\nfn main() <console, alloc> {{\n{}  c: {t} = clamp(p)\n  n: Option[{t}] = narrow(p)\n  print(\"{{c}} {{n}}\")\n}}\n",
             self.product.source("p")
         ))
     }
@@ -590,7 +590,7 @@ fn opaque(signed: bool, op: char) -> String {
         ("n", "Nat")
     };
     format!(
-        "use std.console (console, print)\n\nfn main(args: List[str]) ! console, alloc {{\n  n = args.size\n  if n < 9000000000000000000 {{\n    x: {ty} = {x}\n    p = x {op} (x + 1)\n    print(\"{{p}}\")\n  }}\n}}\n"
+        "use std.console (console, print)\n\nfn main(args: List[str]) <console, alloc> {{\n  n = args.size\n  if n < 9000000000000000000 {{\n    x: {ty} = {x}\n    p = x {op} (x + 1)\n    print(\"{{p}}\")\n  }}\n}}\n"
     )
 }
 
@@ -655,11 +655,11 @@ impl Runtime {
     fn source(self) -> String {
         let read = |name: &str, ty: &str| {
             format!(
-                "fn read_{name}(text: str) -> {ty} ! alloc {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
+                "fn read_{name}(text: str) -> {ty} <alloc> {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
             )
         };
         with_header(format!(
-            "use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n{}{}fn main(args: List[str]) ! console, alloc {{\n  if args.size == 2 {{\n    a = read_a(args[0])\n    b = read_b(args[1])\n    print(\"{{a * b}}\")\n  }}\n}}\n",
+            "use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n{}{}fn main(args: List[str]) <console, alloc> {{\n  if args.size == 2 {{\n    a = read_a(args[0])\n    b = read_b(args[1])\n    print(\"{{a * b}}\")\n  }}\n}}\n",
             read("a", self.types.0.name),
             read("b", self.types.1.name)
         ))

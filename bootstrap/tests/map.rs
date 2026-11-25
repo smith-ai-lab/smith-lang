@@ -88,7 +88,7 @@ pub const ONCE: &[Test] = &[
     ),
 ];
 
-const HELLO: &str = "use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &str = "use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 /// What a line of a map says: the address, the size, the frame, and the name.
 fn parse(line: &str) -> (u64, u64, u32, &str) {
@@ -280,7 +280,7 @@ fn every_line_of_a_machine_code_executable_begins_and_ends_at_an_instruction() {
 
 fn a_function_made_for_a_type_has_the_type_in_its_name_and_the_runtime_has_names_in_angle_brackets()
 {
-    let source = "use std.console (console, print)\n\nfn same[T](x: take T) -> T { x }\n\nfn main() ! console, alloc {\n  print(same(\"a\"))\n  print(\"{same(7)}\")\n}\n";
+    let source = "use std.console (console, print)\n\nfn same[T](x: take T) -> T { x }\n\nfn main() <console, alloc> {\n  print(same(\"a\"))\n  print(\"{same(7)}\")\n}\n";
     let program = smith::lower(source.as_bytes()).expect("builds");
     let names: Vec<&str> = program.functions.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"main.main"), "{names:?}");
@@ -338,7 +338,7 @@ fn functions(map: &str) -> Vec<(&str, Vec<&str>)> {
     found
 }
 
-const SPREAD: &str = "use std.console (console, print)\n\nfn main() ! console {\n  print(\"one\")\n  print(\"two\")\n}\n";
+const SPREAD: &str = "use std.console (console, print)\n\nfn main() <console> {\n  print(\"one\")\n  print(\"two\")\n}\n";
 
 fn the_at_lines_of_hello_name_its_file_and_the_line_of_the_print_call() {
     let dir = folder("map_at_hello");
@@ -404,7 +404,7 @@ fn the_at_lines_of_a_function_follow_its_line_in_order_and_cover_it_for_every_ta
 }
 
 fn a_function_built_in_place_keeps_its_own_name_on_the_at_lines_of_its_code() {
-    let source = "use std.console (console, print)\n\nfn greet() ! console {\n  print(\"hi\")\n}\n\nfn main() ! console {\n  greet()\n}\n";
+    let source = "use std.console (console, print)\n\nfn greet() <console> {\n  print(\"hi\")\n}\n\nfn main() <console> {\n  greet()\n}\n";
     let program = passed(source.as_bytes());
     let names: Vec<String> = program.functions.iter().map(|f| f.name.clone()).collect();
     for target in buildable() {
@@ -526,7 +526,7 @@ fn total(xs: List[Nat]) -> Nat {
 
 fn wrapping(a: Nat, b: Nat) -> Nat { if a > 1000 { b } else { wrapping_add(a, b) } }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var xs: List[Nat] = []
   loop i in 0..50 { xs = push(xs, i) }
   print("hello {same(total(xs))} {same("s")}")
@@ -655,7 +655,7 @@ fn assert_written_functions_are_named(maps: &[(&'static str, String)], written: 
 /// passes fold to the constant `f3` gives, so that no instruction of it holds a
 /// line of the file, and its code is all its own: it has a `fn` line and no `at`
 /// line, as a function all of whose code is its own has none.
-const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() ! console {\n  print(f1(\"\"))\n  var x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str ! console {\n  print(first)\n  var x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
+const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() <console> {\n  print(f1(\"\"))\n  var x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str <console> {\n  print(first)\n  var x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
 
 fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
     let (maps, written) = map_and_written(FOLDED.as_bytes());
@@ -674,7 +674,7 @@ fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
 /// cannot be left without its name.
 /// A text that is appended to in a function of its own, which holds the code
 /// of `<append>`.
-const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text ! alloc {\n  append(to, s)\n}\n\nfn main() ! alloc, console {\n  var w = text()\n  w = put_text(w, \"hi\")\n  w = put_text(w, \"there\")\n  w = put_text(w, \"you\")\n  w = put_text(w, \"all\")\n  print(finish(w))\n}\n";
+const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text <alloc> {\n  append(to, s)\n}\n\nfn main() <alloc, console> {\n  var w = text()\n  w = put_text(w, \"hi\")\n  w = put_text(w, \"there\")\n  w = put_text(w, \"you\")\n  w = put_text(w, \"all\")\n  print(finish(w))\n}\n";
 
 fn a_function_with_no_at_line_holds_no_place_but_its_own() {
     // A text that is appended to, in a function of its own, which holds the
@@ -734,7 +734,7 @@ fn holds_only_its_own(source: &[u8]) {
 }
 
 fn the_bytes_of_a_function_built_in_place_in_a_loop_are_no_more_than_it_compiled_alone() {
-    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn step(a: Nat, b: Nat) -> Nat { wrapping_add(a, b) }\n\nfn main() ! console, alloc {\n  var t: Nat = 0\n  loop i in 0..40 { t = step(t, i) }\n  print(\"{t}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn step(a: Nat, b: Nat) -> Nat { wrapping_add(a, b) }\n\nfn main() <console, alloc> {\n  var t: Nat = 0\n  loop i in 0..40 { t = step(t, i) }\n  print(\"{t}\")\n}\n";
     let alone = {
         let mut program = smith::lower(source.as_bytes()).expect("builds");
         // A function that is cold is never built in place of its call.

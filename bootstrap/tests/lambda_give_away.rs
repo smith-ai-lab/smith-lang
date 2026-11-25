@@ -95,7 +95,7 @@ fn printed(source: &str) -> String {
 
 /// What `main` of a program prints for a function `user` of three keys.
 const MAIN: &str = "
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{user(Key(secret: 3), Key(secret: 5), Key(secret: 11))}\")
 }
 ";
@@ -568,7 +568,7 @@ fn a_function_that_may_not_call_its_function_is_given_a_lambda_that_gives_away_o
         src.push("run(false, z) ");
         let at = src.mark();
         src.push("fn(y) { keep(x) }\n}\n\n");
-        src.push("fn main() ! console, alloc {\n  print(\"{sink(user(Key(secret: 3), Key(secret: 4)))}\")\n}\n");
+        src.push("fn main() <console, alloc> {\n  print(\"{sink(user(Key(secret: 3), Key(secret: 4)))}\")\n}\n");
         (src.text, at)
     };
     let (discarding, _) = program(": Discard");

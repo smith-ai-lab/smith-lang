@@ -38,7 +38,7 @@ fn a_handler_makes_a_listener_a_connection_and_a_socket_from_numbers_and_reads_t
             "use std.console (console, print)
 use std.net (Address, accept, bind_to, close, connection, handle, listen_on, listener, net, release, send, socket, stop, unbind, write)
 
-fn faked[T](body: fn() -> T ! net) -> T ! console, alloc {{
+fn faked[T](body: fn() -> T <net>) -> T <console, alloc> {{
   net(
     listen_on: fn(host, port) {{ .ok(listener({l})) }},
     accept: fn(l) {{
@@ -64,7 +64,7 @@ fn faked[T](body: fn() -> T ! net) -> T ! console, alloc {{
   )
 }}
 
-fn use_all() ! net, alloc {{
+fn use_all() <net, alloc> {{
   match listen_on(\"h\", 1) {{
     .ok(l) {{
       match accept(l) {{
@@ -93,7 +93,7 @@ fn use_all() ! net, alloc {{
   }}
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   with faked()
   use_all()
 }}
@@ -118,7 +118,7 @@ use std.net (NetError, connect, connection, handle, net, read, release, write)
 use std.utf8 (utf8)
 
 // Asks the peer a word, and gives what it answers.
-fn ask(word: str) -> Result[str, NetError] ! net, alloc {{
+fn ask(word: str) -> Result[str, NetError] <net, alloc> {{
   with c = connect(\"peer.test\", 7)
   try write(c, word.bytes)
   bytes = try read(c, 64)
@@ -128,12 +128,12 @@ fn ask(word: str) -> Result[str, NetError] ! net, alloc {{
   }}
 }}
 
-fn serve() ! messages, net, alloc {{
+fn serve() <messages, net, alloc> {{
   with mcp(name: \"peer\", version: \"1\")
   tool(ask)
 }}
 
-fn peer[T](body: fn() -> T ! net) -> T ! alloc {{
+fn peer[T](body: fn() -> T <net>) -> T <alloc> {{
   net(
     listen_on: fn(host, port) {{ .err(.refused) }},
     accept: fn(l) {{ .err(.refused) }},
@@ -150,7 +150,7 @@ fn peer[T](body: fn() -> T ! net) -> T ! alloc {{
   )
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   with peer()
   with stdio()
   serve()
@@ -179,7 +179,7 @@ fn a_server_of_messages_whose_tool_asks_the_network_is_answered_over_a_handler_o
 const MADE_UP: &str = "use std.console (console, print)
 use std.net (Address, NetError, accept, close, connection, listener, net, read, send, receive, socket, stop, unbind, write)
 
-fn said(e: NetError) -> str ! alloc {
+fn said(e: NetError) -> str <alloc> {
   match e {
     .failed(m) { m }
     .unknown_host(h) { \"unknown host\" }
@@ -189,7 +189,7 @@ fn said(e: NetError) -> str ! alloc {
   }
 }
 
-fn main() ! console, net, alloc {
+fn main() <console, net, alloc> {
   c = connection(1)
   match write(c, \"SHOULD NOT APPEAR\\n\".bytes) {
     .ok(u) { print(\"wrote\") }

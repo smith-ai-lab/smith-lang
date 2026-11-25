@@ -12,7 +12,7 @@ The module `std.jwt` reads a JSON Web Token, the signed text of RFC 7519 that sa
 ```
 use std.jwt (Claims, JwtError, Key, verify)
 
-fn who(token: str, key: Key) -> Result[Claims, JwtError] ! time, alloc {
+fn who(token: str, key: Key) -> Result[Claims, JwtError] <time, alloc> {
   verify(token, key, issuer: "https://login.example.com", audience: "https://notes.example.com")
 }
 ```
@@ -20,7 +20,7 @@ fn who(token: str, key: Key) -> Result[Claims, JwtError] ! time, alloc {
 `who` gives `.ok` of the claims when the token was signed with the key, names that issuer and that audience, and is inside its time. It gives `.err` otherwise, and the error says which of these failed.
 
 ```
-fn verify(token: str, key: Key, issuer: str, audience: str) -> Result[Claims, JwtError] ! time, alloc
+fn verify(token: str, key: Key, issuer: str, audience: str) -> Result[Claims, JwtError] <time, alloc>
 
 struct Claims {
   subject: str

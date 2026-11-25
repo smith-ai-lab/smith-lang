@@ -51,12 +51,12 @@ fn divide(
   }
 }
 
-fn serve() ! messages, alloc {
+fn serve() <messages, alloc> {
   with mcp(name: \"calc\", version: \"1\")
   tool(divide)
 }
 
-fn scripted[T](lines: List[str], body: fn() -> T ! console) -> (T, List[str]) ! alloc {
+fn scripted[T](lines: List[str], body: fn() -> T <console>) -> (T, List[str]) <alloc> {
   var next: u64 = 0
   var printed: List[str] = []
   result = console(
@@ -76,7 +76,7 @@ fn scripted[T](lines: List[str], body: fn() -> T ! console) -> (T, List[str]) ! 
   (result, printed)
 }
 
-fn run(lines: List[str]) -> ((), List[str]) ! alloc {
+fn run(lines: List[str]) -> ((), List[str]) <alloc> {
   with scripted(lines)
   with stdio()
   serve()
@@ -93,7 +93,7 @@ fn a_scripted_handler_of_console_that_keeps_what_the_server_printed_is_read_afte
     ];
     let lines: Vec<String> = messages.iter().map(|m| lit(m)).collect();
     let source = format!(
-        "{SERVER}fn main() ! console, alloc {{\n  (done, printed) = run([{}])\n  print(\"{{printed.size}}\")\n  loop i in 0..printed.size {{\n    line = printed[i]\n    print(line)\n  }}\n}}\n",
+        "{SERVER}fn main() <console, alloc> {{\n  (done, printed) = run([{}])\n  print(\"{{printed.size}}\")\n  loop i in 0..printed.size {{\n    line = printed[i]\n    print(line)\n  }}\n}}\n",
         lines.join(", ")
     );
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));

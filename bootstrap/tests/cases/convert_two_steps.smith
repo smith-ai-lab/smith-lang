@@ -3,6 +3,6 @@ use std.console (console, print)
 
 fn far(n: Byte) -> u64 { convert(convert(n)) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{far(7)}")
 }

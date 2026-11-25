@@ -125,7 +125,7 @@ impl Program {
                 .collect();
             text += &format!("  fn op{k}({}) -> i32\n", params.join(", "));
         }
-        text += "}\n\nfn handler[T](body: fn() -> T ! fx) -> T {\n  fx(\n";
+        text += "}\n\nfn handler[T](body: fn() -> T <fx>) -> T {\n  fx(\n";
         for (k, op) in self.operations.iter().enumerate() {
             let names: Vec<String> = (0..op.params.len()).map(|i| format!("a{i}")).collect();
             let gives = match op.gives {
@@ -140,7 +140,7 @@ impl Program {
             };
             text += &format!("    op{k}: {head}{{ {gives} }},\n");
         }
-        text += "    body: body,\n  )\n}\n\nfn main() ! console, alloc {\n  with handler()\n";
+        text += "    body: body,\n  )\n}\n\nfn main() <console, alloc> {\n  with handler()\n";
         for call in &self.calls {
             let args: Vec<String> = (self.operations[call.op].params.iter().enumerate())
                 .zip(&call.args)
@@ -174,7 +174,7 @@ impl Program {
     /// it gives.
     fn direct(&self) -> String {
         let mut text = String::from("use std.bits (i32)\nuse std.console (console, print)\n\n");
-        text += "fn main() ! console, alloc {\n";
+        text += "fn main() <console, alloc> {\n";
         for line in String::from_utf8(self.prints()).unwrap().lines() {
             text += &format!("  print(\"{{{line}}}\")\n");
         }
@@ -197,7 +197,7 @@ fn a_handler_that_gives_a_value_answers_each_call_of_its_operation_and_the_code_
     });
 }
 
-/// A body given where the parameter says `! fx` may carry `fx`, and the
+/// A body given where the parameter says `<fx>` may carry `fx`, and the
 /// function that gives it does not list it; what else the body does is
 /// required of that function, where it is written.
 fn a_body_given_to_a_handler_carries_its_effect_and_every_other_effect_is_required_where_it_is_written()
@@ -207,7 +207,7 @@ fn a_body_given_to_a_handler_carries_its_effect_and_every_other_effect_is_requir
         let listed = if *lists {
             source.clone()
         } else {
-            source.replace("fn main() ! console, alloc {", "fn main() ! alloc {")
+            source.replace("fn main() <console, alloc> {", "fn main() <alloc> {")
         };
         let found = check(listed.as_bytes()).err().unwrap_or_default();
         if *lists {

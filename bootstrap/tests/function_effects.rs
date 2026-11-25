@@ -44,10 +44,10 @@ fn program(c: &Case) -> (String, String) {
         "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Args {\n  id: u64\n}\n\neffect near {\n  fn find(id: u64) -> u64\n}\n\neffect far {\n  fn base() -> u64\n}\n\n",
     );
     s += &format!(
-        "fn answer_near[T](body: fn() -> T ! near) -> T {{\n  near(find: fn(id) {{ {} }}, body: body)\n}}\n\nfn answer_far[T](body: fn() -> T ! far) -> T {{\n  far(base: {{ {} }}, body: body)\n}}\n\n",
+        "fn answer_near[T](body: fn() -> T <near>) -> T {{\n  near(find: fn(id) {{ {} }}, body: body)\n}}\n\nfn answer_far[T](body: fn() -> T <far>) -> T {{\n  far(base: {{ {} }}, body: body)\n}}\n\n",
         c.inner, c.outer
     );
-    s += "fn asks(id: u64) -> (u64, u64) ! near, far {\n  (find(id), base())\n}\n\n";
+    s += "fn asks(id: u64) -> (u64, u64) <near, far> {\n  (find(id), base())\n}\n\n";
     s += "fn call_it0[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{\n  Function.call(f, a)\n}\n\n";
     let mut inner = "call_it0".to_string();
     for level in 1..=c.through {
@@ -58,7 +58,7 @@ fn program(c: &Case) -> (String, String) {
         inner = name;
     }
     s += &format!(
-        "fn main() ! console, alloc {{\n  with answer_far()\n  with answer_near()\n  (a, b) = {inner}(asks, Args(id: {}))\n  print(\"{{a}} {{b}}\")\n}}\n",
+        "fn main() <console, alloc> {{\n  with answer_far()\n  with answer_near()\n  (a, b) = {inner}(asks, Args(id: {}))\n  print(\"{{a}} {{b}}\")\n}}\n",
         c.asked
     );
     let said = format!("{} {}\n", c.inner, c.outer);

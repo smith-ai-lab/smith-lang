@@ -1,0 +1,9 @@
+use std.console (console, print)
+
+fn show(body: fn() <alloc, console>) <console, alloc> {
+  body()
+}
+
+fn main() <alloc, console> {
+  show({ print("{1 + 1}") })
+}

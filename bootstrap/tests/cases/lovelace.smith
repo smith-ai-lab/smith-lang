@@ -7,6 +7,6 @@ struct Name {
 
 fn last_of(n: Name) -> str { n.last }
 
-fn main() ! console {
+fn main() <console> {
   print(last_of(Name(first: "Ada", last: "Lovelace")))
 }

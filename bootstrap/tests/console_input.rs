@@ -48,13 +48,13 @@ pub const MACHINE: &[Test] = &[(
     every_executable_reads_lines_as_the_evaluator_does,
 )];
 
-const GREET: &str = "use std.console (console, input, print)\n\nfn greet() ! console, alloc {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n}\n\nfn main() ! console, alloc {\n  greet()\n}\n";
+const GREET: &str = "use std.console (console, input, print)\n\nfn greet() <console, alloc> {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n}\n\nfn main() <console, alloc> {\n  greet()\n}\n";
 
 /// Prints each line it reads, and the mark `|` and a line break after it,
 /// until there are no more.
-const EVERY_LINE: &str = "use std.console (console, input, print)\n\nfn main() ! console, alloc, diverge {\n  loop {\n    match input() {\n      .some(line) { print(line, end: \"|\\n\") }\n      .none { break }\n    }\n  }\n}\n";
+const EVERY_LINE: &str = "use std.console (console, input, print)\n\nfn main() <console, alloc, diverge> {\n  loop {\n    match input() {\n      .some(line) { print(line, end: \"|\\n\") }\n      .none { break }\n    }\n  }\n}\n";
 
-const CAPTURE: &str = "use std.console (console, input, print)\nuse std.list (push)\n\nfn capture[T](body: fn() -> T ! console) -> (T, List[str]) ! console, alloc {\n  var seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {\n      match to {\n        .stdout { seen = push(seen, \"{text}{end}\") }\n        .stderr { print(text, end: end, to: .stderr) }\n      }\n    },\n    input: fn(prompt) { input(prompt) },\n    body: body,\n  )\n  (r, seen)\n}\n\nfn greet() ! console, alloc {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n}\n\nfn main() ! console, alloc {\n  (u, lines) = capture(greet)\n  loop i in 0..lines.size {\n    print(lines[i], end: \"#\")\n  }\n}\n";
+const CAPTURE: &str = "use std.console (console, input, print)\nuse std.list (push)\n\nfn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {\n  var seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {\n      match to {\n        .stdout { seen = push(seen, \"{text}{end}\") }\n        .stderr { print(text, end: end, to: .stderr) }\n      }\n    },\n    input: fn(prompt) { input(prompt) },\n    body: body,\n  )\n  (r, seen)\n}\n\nfn greet() <console, alloc> {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n}\n\nfn main() <console, alloc> {\n  (u, lines) = capture(greet)\n  loop i in 0..lines.size {\n    print(lines[i], end: \"#\")\n  }\n}\n";
 
 fn run(source: &str, input: &[u8]) -> scalar::Outcome {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
@@ -237,7 +237,7 @@ fn an_arm64_executable_reads_lines_as_the_evaluator_does() {
 
 /// Reads the first line as `GREET` does, and then every line after it as
 /// `EVERY_LINE` does, so that one run of an executable covers both.
-const GREET_THEN_EVERY_LINE: &str = "use std.console (console, input, print)\n\nfn main() ! console, alloc, diverge {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n  loop {\n    match input() {\n      .some(line) { print(line, end: \"|\\n\") }\n      .none { break }\n    }\n  }\n}\n";
+const GREET_THEN_EVERY_LINE: &str = "use std.console (console, input, print)\n\nfn main() <console, alloc, diverge> {\n  match input(\"name: \") {\n    .some(name) { print(\"hello {name}\") }\n    .none { print(\"hello\") }\n  }\n  loop {\n    match input() {\n      .some(line) { print(line, end: \"|\\n\") }\n      .none { break }\n    }\n  }\n}\n";
 
 /// What is run on every target this machine runs. A run of an executable
 /// costs a process, which is most of what this test spends on a machine where

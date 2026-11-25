@@ -976,9 +976,9 @@ const ITEMS: &[(&str, &str)] = &[
 pub const UNREACHED: &[&str] = &[
     "fn unused() { print(\"a\") }",
     "fn unused() -> str { nope() }",
-    "fn unused() ! console { unused() }",
+    "fn unused() <console> { unused() }",
     "fn unused(a: f16) {}",
-    "fn unused() ! console {\n  x = \"a\"\n  x = \"b\"\n  print(x, \"c\")\n}",
+    "fn unused() <console> {\n  x = \"a\"\n  x = \"b\"\n  print(x, \"c\")\n}",
     "fn unused() -> str {}",
     "fn unused(n: Nope) -> str { n.x }",
     "struct Unused {\n  a: Nope\n}",
@@ -1269,7 +1269,7 @@ fn signature_with_console(m: &Model, f: &Func) -> String {
         Some(ty) => format!(" -> {}", m.type_name(ty)),
         None => String::new(),
     };
-    format!("fn {}({}){result} ! console", f.name, params.join(", "))
+    format!("fn {}({}){result} <console>", f.name, params.join(", "))
 }
 
 /// Writes function `f`, which holds the mistake if `site`. Gives whether
@@ -1658,7 +1658,7 @@ fn main_statement(
     }
 }
 
-/// The `!` and the list of effects of a function. The list of `main`
+/// The angle brackets and the list of effects of a function. The list of `main`
 /// holds the mistake, if it is in a list.
 fn effects(b: &mut Builder, func: &Func, no_console: bool, main: bool) {
     // Each effect, with what its error must mention if it is the mistake.
@@ -1694,7 +1694,7 @@ fn effects(b: &mut Builder, func: &Func, no_console: bool, main: bool) {
         return;
     }
     b.pick(&[" ", "", "  "]);
-    b.push("!");
+    b.push("<");
     b.pick(&[" ", "", "\t"]);
     for (i, (name, mistake)) in list.into_iter().enumerate() {
         if i > 0 {
@@ -1702,10 +1702,14 @@ fn effects(b: &mut Builder, func: &Func, no_console: bool, main: bool) {
             b.pick(&[" ", "", "\n  ", "\n// and\n"]);
         }
         if let Some(mentions) = mistake {
-            b.mark(mentions, None);
+            // A name listed twice is fixed by writing it once.
+            let fix = (mentions == "already listed").then(|| "write `<console>`".to_string());
+            b.mark(mentions, fix);
         }
         b.push(name);
     }
+    b.pick(&[" ", ""]);
+    b.push(">");
 }
 
 /// Writes an expression. `console_site` is the advice to expect, when the
@@ -2066,7 +2070,7 @@ pub fn shared_and_copied(g: &mut Gen) -> (String, String) {
     for field in fields {
         program.push_str(&format!("  {field}: str\n"));
     }
-    program.push_str("}\n\nfn same(n: Name) -> Name { n }\n\nfn main() ! console {\n");
+    program.push_str("}\n\nfn same(n: Name) -> Name { n }\n\nfn main() <console> {\n");
     let mut order: Vec<usize> = (0..count).collect();
     let mut given = Vec::new();
     while !order.is_empty() {

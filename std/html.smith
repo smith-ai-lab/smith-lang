@@ -5,7 +5,7 @@ use std.utf8 (utf8)
 // they are. The piece lies between two escaped bytes, which are ASCII, or at an
 // end of `s`, so `utf8` never refuses it. It is written with `utf8` until
 // `s[from..end]` is built (#778), which makes the piece with nothing read again.
-fn run(to: take Text, s: str, from: Nat, end: Nat) -> Text ! alloc {
+fn run(to: take Text, s: str, from: Nat, end: Nat) -> Text <alloc> {
   var t = to
   if from == 0 and end == s.size {
     t = append(t, s)
@@ -60,7 +60,7 @@ pub effect markup {
 // The text as HTML holds it as text and nothing else: `<`, `>`, `&`, `"`, and
 // `'` are written as entities, and every other byte as it is. The bytes between
 // two that are escaped are written together.
-pub fn escape(s: str) -> str ! alloc {
+pub fn escape(s: str) -> str <alloc> {
   var t = new_text()
   var from: Nat = 0
   loop i in 0..s.size {
@@ -74,17 +74,17 @@ pub fn escape(s: str) -> str ! alloc {
 }
 
 // A text among other elements, written so that it is text and nothing else.
-pub fn text(s: str) ! markup, alloc {
+pub fn text(s: str) <markup, alloc> {
   emit(escape(s))
 }
 
 // A page put inside the one that is being written.
-pub fn insert(page: Html) ! markup {
+pub fn insert(page: Html) <markup> {
   include(page)
 }
 
 // The page so far, with the `>` of the tag that is open written.
-fn closed(t: take Text, open: bool) -> Text ! alloc {
+fn closed(t: take Text, open: bool) -> Text <alloc> {
   if open {
     append(t, ">")
   } else {
@@ -97,7 +97,7 @@ fn closed(t: take Text, open: bool) -> Text ! alloc {
 // the name of an element: a name is found among the module's functions before
 // the function's own bindings, so `body: body` below is the element in a file
 // that does not import it (#642).
-pub fn render(writes: fn() ! markup) -> Html ! alloc {
+pub fn render(writes: fn() <markup>) -> Html <alloc> {
   var acc = new_text()
   var open = false
   markup(
@@ -131,7 +131,7 @@ pub fn render(writes: fn() ! markup) -> Html ! alloc {
 }
 
 // An attribute written only when it is given, with its value escaped.
-fn given(name: str, value: str) ! markup, alloc {
+fn given(name: str, value: str) <markup, alloc> {
   if value.size > 0 {
     attribute(name, escape(value))
   }
@@ -139,7 +139,7 @@ fn given(name: str, value: str) ! markup, alloc {
 
 // What every element holds after its attributes: the attributes every element
 // may have, the text, what the block writes, and the end of the tag.
-fn finish_element(tag: str, inside: str, class: str, id: str, block: fn() ! markup) ! markup, alloc {
+fn finish_element(tag: str, inside: str, class: str, id: str, block: fn() <markup>) <markup, alloc> {
   given("class", class)
   given("id", id)
   if inside.size > 0 {
@@ -150,78 +150,78 @@ fn finish_element(tag: str, inside: str, class: str, id: str, block: fn() ! mark
 }
 
 // An element with no attributes of its own.
-fn element(tag: str, inside: str, class: str, id: str, block: fn() ! markup) ! markup, alloc {
+fn element(tag: str, inside: str, class: str, id: str, block: fn() <markup>) <markup, alloc> {
   start(tag)
   finish_element(tag, inside, class, id, block)
 }
 
 // An element that holds nothing, which is a tag with its attributes.
-fn empty_element(tag: str, class: str, id: str) ! markup, alloc {
+fn empty_element(tag: str, class: str, id: str) <markup, alloc> {
   start(tag)
   given("class", class)
   given("id", id)
   void()
 }
 
-pub fn html(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn html(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("html", inside, class, id, block)
 }
 
-pub fn head(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn head(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("head", inside, class, id, block)
 }
 
-pub fn title(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn title(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("title", inside, class, id, block)
 }
 
-pub fn body(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn body(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("body", inside, class, id, block)
 }
 
-pub fn h1(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn h1(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("h1", inside, class, id, block)
 }
 
-pub fn h2(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn h2(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("h2", inside, class, id, block)
 }
 
-pub fn p(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn p(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("p", inside, class, id, block)
 }
 
-pub fn b(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn b(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("b", inside, class, id, block)
 }
 
-pub fn span(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn span(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("span", inside, class, id, block)
 }
 
-pub fn ul(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn ul(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("ul", inside, class, id, block)
 }
 
-pub fn li(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn li(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("li", inside, class, id, block)
 }
 
-pub fn article(inside: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn article(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   element("article", inside, class, id, block)
 }
 
-pub fn a(inside: str = "", href: str = "", class: str = "", id: str = "", block: fn() ! markup = { }) ! markup, alloc {
+pub fn a(inside: str = "", href: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
   start("a")
   given("href", href)
   finish_element("a", inside, class, id, block)
 }
 
-pub fn br(class: str = "", id: str = "") ! markup, alloc {
+pub fn br(class: str = "", id: str = "") <markup, alloc> {
   empty_element("br", class, id)
 }
 
-pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") ! markup, alloc {
+pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") <markup, alloc> {
   start("input")
   given("name", name)
   given("placeholder", placeholder)
@@ -234,5 +234,5 @@ pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str =
 
 // A page is written as its text, so that a program can print it and hand it on.
 impl Fmt[Html] {
-  fn fmt(value: Html) -> str ! alloc { value.page }
+  fn fmt(value: Html) -> str <alloc> { value.page }
 }

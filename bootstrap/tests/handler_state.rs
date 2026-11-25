@@ -102,11 +102,11 @@ impl Program {
         let mut text = String::from(
             "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\n\
              effect fx {\n  fn tick() -> i32\n}\n\n\
-             fn counter[T](start: i32, step: i32, body: fn() -> T ! fx) -> T {\n  var n: i32 = start\n  \
+             fn counter[T](start: i32, step: i32, body: fn() -> T <fx>) -> T {\n  var n: i32 = start\n  \
              fx(\n    tick: {\n      n = wrapping_add(n, step)\n      n\n    },\n    body: body,\n  )\n}\n\n",
         );
         for (k, items) in self.functions.iter().enumerate() {
-            text += &format!("fn run{k}() -> i32 ! fx {{\n{}}}\n\n", body(items));
+            text += &format!("fn run{k}() -> i32 <fx> {{\n{}}}\n\n", body(items));
         }
         for (s, (items, start, step)) in self.sites.iter().enumerate() {
             text += &format!(
@@ -114,7 +114,7 @@ impl Program {
                 body(items)
             );
         }
-        text += "fn main() ! console, alloc {\n";
+        text += "fn main() <console, alloc> {\n";
         for s in 0..self.sites.len() {
             text += &format!("  print(\"{{site{s}()}}\")\n");
         }

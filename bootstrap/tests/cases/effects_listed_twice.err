@@ -1,0 +1,4 @@
+effects_listed_twice.smith:3:21: the `console` effect is already listed
+  3 | fn main() <console, console> {
+    |                     ^
+  fix: write `<console>`

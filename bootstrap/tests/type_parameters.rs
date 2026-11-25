@@ -508,7 +508,7 @@ fn write(c: &Case) -> Written {
     ));
     write_items(&c.items, &mut out, &mut w, 1, &mut 0);
     let (list, value) = c.shape.named("v", c.given.name());
-    let effect = if list.is_empty() { "" } else { " ! alloc" };
+    let effect = if list.is_empty() { "" } else { " <alloc>" };
     out.push_str(&format!(
         "  0\n}}\n\nfn main(){effect} {{\n  {}\n{list}  r = ",
         c.given.define()
@@ -627,7 +627,7 @@ fn a_generic_function_that_only_hands_on_or_reads_needs_no_bound_and_takes_a_key
 
 fn size_of[T](xs: List[T]) -> Nat {{ xs.size }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   k = keep(Key(secret: 4))
   ks: List[Key] = [Key(secret: 1), Key(secret: 2)]
   n = size_of(ks)
@@ -647,13 +647,13 @@ fn a_call_that_gives_a_type_without_what_a_bound_asks_is_one_error_at_the_call()
         let mut source = format!(
             "{TYPES}fn use_it[T: {bound}](a: T) -> u64 {{ 1 }}
 
-fn end[T](x: take T) ! diverge {{
+fn end[T](x: take T) <diverge> {{
   loop {{
     n = 1
   }}
 }}
 
-fn main() ! diverge {{
+fn main() <diverge> {{
   {}
   n = ",
             given.define()
@@ -676,7 +676,7 @@ fn a_value_of_a_type_parameter_is_returned_or_stored_when_taken_and_when_lent_on
     generate::check(2602, 60, generate, |(shape, take, asks)| {
         let (generics, lines) = asks.written();
         let taking = if *take { "take " } else { "" };
-        let effect = if *shape == Shape::List { " ! alloc" } else { "" };
+        let effect = if *shape == Shape::List { " <alloc>" } else { "" };
         let mut source = format!(
             "{TYPES}fn g{generics}(a: {taking}T) -> {}{effect}{lines}\n{{\n  ",
             shape.ty("T")
@@ -719,13 +719,13 @@ impl{head} Named[Box[T]] {{
   fn name_of(x: Box[T]) -> u64 {{ 1 }}
 }}
 
-fn end[T](x: take T) ! diverge {{
+fn end[T](x: take T) <diverge> {{
   loop {{
     n = 1
   }}
 }}
 
-fn main() ! diverge {{
+fn main() <diverge> {{
   {}
   b = Box(item: v)
   n = name_of(b)

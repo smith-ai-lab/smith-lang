@@ -1,7 +1,7 @@
 use std.bits (u64)
 use std.console (console, print)
 
-fn twice(n: u64) -> r: u64 ! alloc
+fn twice(n: u64) -> r: u64 <alloc>
   requires n >= 0 and n <= 255
   ensures r == 2 * n
   decreases n
@@ -22,7 +22,7 @@ fn twice_is_sum(n: u64) -> twice(n) == n + n
   }
 }
 
-fn sum_to(n: u64) -> r: u64 ! alloc
+fn sum_to(n: u64) -> r: u64 <alloc>
   requires n >= 0 and n <= 255
   ensures r >= 0 and r <= 255 * n
   decreases n
@@ -43,4 +43,4 @@ fn gauss(n: u64) -> 2 * sum_to(n) == n * (n + 1)
   }
 }
 
-fn main() ! console, alloc { print("{sum_to(4)} {twice(3)}") }
+fn main() <console, alloc> { print("{sum_to(4)} {twice(3)}") }

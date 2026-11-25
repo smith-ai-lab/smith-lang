@@ -81,7 +81,7 @@ fn a_text_built_from_texts_and_ascii_bytes_finishes_as_their_bytes_in_order() {
             }
         }
         let source = format!(
-            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str ! alloc {{\n  {chain} |> finish()\n}}\n\nfn main() ! console, alloc {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
+            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str <alloc> {{\n  {chain} |> finish()\n}}\n\nfn main() <console, alloc> {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         let lines: String = model
@@ -96,7 +96,7 @@ fn a_text_built_from_texts_and_ascii_bytes_finishes_as_their_bytes_in_order() {
 /// `text()` holds no memory, so a program that makes one and reads its size
 /// asks for none.
 fn an_empty_text_asks_for_no_memory() {
-    let source = "use std.console (console, print)\nuse std.text (finish, text)\n\nfn main() ! console, alloc {\n  s = finish(text())\n  if s.size == 0 { print(\"empty\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.text (finish, text)\n\nfn main() <console, alloc> {\n  s = finish(text())\n  if s.size == 0 { print(\"empty\") }\n}\n";
     let program = lower(source.as_bytes()).unwrap();
     let (outcome, taken) = scalar::run_taking(&program, usize::MAX);
     assert_eq!(outcome.stdout, b"empty\n");
@@ -104,9 +104,9 @@ fn an_empty_text_asks_for_no_memory() {
 }
 
 fn a_byte_that_may_be_128_or_more_is_refused_by_append_ascii() {
-    let source = "use std.text (Text, append_ascii, finish, text)\n\nfn wrong(b: Byte) -> Text ! alloc { append_ascii(text(), b) }\n\nfn main() ! alloc { s = finish(wrong(65)) }\n";
+    let source = "use std.text (Text, append_ascii, finish, text)\n\nfn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }\n\nfn main() <alloc> { s = finish(wrong(65)) }\n";
     assert!(!refused(source).is_empty(), "{source}");
-    let fine = "use std.text (Text, append_ascii, finish, text)\n\nfn right(b: 0..128) -> Text ! alloc { append_ascii(text(), b) }\n\nfn main() ! alloc { s = finish(right(65)) }\n";
+    let fine = "use std.text (Text, append_ascii, finish, text)\n\nfn right(b: 0..128) -> Text <alloc> { append_ascii(text(), b) }\n\nfn main() <alloc> { s = finish(right(65)) }\n";
     assert_eq!(refused(fine), Vec::<String>::new(), "{fine}");
 }
 

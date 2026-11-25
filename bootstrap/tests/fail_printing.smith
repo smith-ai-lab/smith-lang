@@ -7,20 +7,20 @@ use std.time (sleep, time)
 
 // Says a line, which the system refuses once the reader of standard output has
 // gone, and that ends the task. It is small, so that its call is replaced.
-fn say() ! console {
+fn say() <console> {
   print("a line the reader has gone from")
 }
 
 // Holds the connection and writes before it has closed it, so that the only way
 // the peer sees the end of the file is the task's ending it as it goes up.
-fn spoil(c: take Connection) ! net, console {
+fn spoil(c: take Connection) <net, console> {
   say()
   close(c)
 }
 
 // Takes one connection and gives it to a task that fails in the same poll that
 // started the child, in a group of its own, which ends after a while.
-fn one(l: Listener) -> Result[(), NetError] ! net, time, console {
+fn one(l: Listener) -> Result[(), NetError] <net, time, console> {
   with tasks()
   c = try accept(l)
   spawn { spoil(c) }
@@ -28,13 +28,13 @@ fn one(l: Listener) -> Result[(), NetError] ! net, time, console {
   .ok(())
 }
 
-fn session(port: 0..65536) -> Result[(), NetError] ! net, time, console {
+fn session(port: 0..65536) -> Result[(), NetError] <net, time, console> {
   listen("127.0.0.1", port, fn(l) { one(l) })
 }
 
 // The program goes on for a while after the group ends, so that a connection
 // that is closed then is closed by the group's end and not by the program's.
-fn main(args: List[str]) -> Result[(), NetError] ! net, time, console {
+fn main(args: List[str]) -> Result[(), NetError] <net, time, console> {
   if args.size < 1 { return .ok(()) }
   port: Result[0..65536, ReadError] = from_text("port", args[0])
   match port {

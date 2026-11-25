@@ -77,7 +77,7 @@ fn wrapping_type(ty: &str) -> &str {
 /// A program that prints what `body` writes of two values of `ty` that the
 /// compiler cannot know.
 fn with_values(ty: &str, body: &str) -> String {
-    with_header(format!("fn main() ! console, alloc {{\n  xs: List[{ty}] = [3, 4]\n  x = xs[0]\n  y = xs[1]\n{body}}}\n"))
+    with_header(format!("fn main() <console, alloc> {{\n  xs: List[{ty}] = [3, 4]\n  x = xs[0]\n  y = xs[1]\n{body}}}\n"))
 }
 
 /// For each target whose executable the tests read, how many instructions it
@@ -217,7 +217,7 @@ fn answers(name: &str, ty: Int, g: &mut Gen) -> (String, String) {
     let values = tried(ty, g);
     let list: Vec<String> = values.iter().map(|v| v.to_string()).collect();
     let mut source = format!(
-        "fn main() ! console, alloc, diverge {{\n  xs: List[{name}] = [{}]\n  loop i in 0..xs.size {{\n    loop j in 0..xs.size {{\n      x = xs[i]\n      y = xs[j]\n",
+        "fn main() <console, alloc, diverge> {{\n  xs: List[{name}] = [{}]\n  loop i in 0..xs.size {{\n    loop j in 0..xs.size {{\n      x = xs[i]\n      y = xs[j]\n",
         list.join(", ")
     );
     for (_, _, f) in FUNCTIONS {

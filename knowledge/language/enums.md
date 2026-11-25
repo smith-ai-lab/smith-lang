@@ -57,7 +57,7 @@ Where the expected type is not known, the case is written in full, with the name
 ```
 use std.console (console)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   s = Shape.rect(Rect(w: 7, h: 1))
   e = Shape.empty
 }
@@ -68,7 +68,7 @@ The dot form where the type is not known is refused.
 ```
 use std.console (console)
 
-fn main() ! console {
+fn main() <console> {
   s = .empty
 }
 ```

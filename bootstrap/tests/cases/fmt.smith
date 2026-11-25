@@ -5,9 +5,9 @@ struct Cat {
 }
 
 impl Fmt[Cat] {
-  fn fmt(value: Cat) -> str ! alloc { "a cat named {value.name}" }
+  fn fmt(value: Cat) -> str <alloc> { "a cat named {value.name}" }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{Cat(name: "tom")}")
 }

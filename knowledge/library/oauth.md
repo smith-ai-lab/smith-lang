@@ -15,7 +15,7 @@ use std.jwt (Key)
 use std.mcp (mcp, tool)
 use std.oauth (oauth)
 
-fn main(key: Key) ! http, time, store, alloc {
+fn main(key: Key) <http, time, store, alloc> {
   with routes()
   get("/health", health)
   with oauth(
@@ -49,7 +49,7 @@ The server of messages at `/mcp` is reached only with a token that `https://logi
 ```
 use std.oauth (needs, oauth)
 
-fn main(key: Key) ! http, time, store, alloc {
+fn main(key: Key) <http, time, store, alloc> {
   with routes()
   with oauth(issuer: "https://login.example.com", audience: "https://notes.example.com", key: key)
   get("/notes", my_notes)

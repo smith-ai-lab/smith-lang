@@ -65,7 +65,7 @@ fn wrapped(ty: Int, a: i128, b: i128, rem: bool) -> i128 {
 /// divisor of `wrapping_` is a constant that is not zero.
 fn program(ty: Int, pairs: &[(i128, i128)]) -> String {
     let t = ty.name;
-    let mut text = "use std.console (console, print)\nuse std.int (checked_div, checked_rem, wrapping_div, wrapping_rem)\n\nfn main() ! console, alloc {\n".to_string();
+    let mut text = "use std.console (console, print)\nuse std.int (checked_div, checked_rem, wrapping_div, wrapping_rem)\n\nfn main() <console, alloc> {\n".to_string();
     for (i, (a, b)) in pairs.iter().enumerate() {
         text.push_str(&format!("  a{i}: {t} = {a}\n  b{i}: {t} = {b}\n"));
         text.push_str(&format!(
@@ -151,7 +151,7 @@ fn wrapping_div_and_wrapping_rem_keep_the_low_bits_of_the_quotient() {
 /// What the checker says of a function `f` of two numbers that is called.
 fn refused(function: &str) -> Result<(), String> {
     let source = with_header(format!(
-        "use std.bits (i8)\nuse std.console (console, print)\nuse std.int (wrapping_div, wrapping_rem)\n\n{function}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
+        "use std.bits (i8)\nuse std.console (console, print)\nuse std.int (wrapping_div, wrapping_rem)\n\n{function}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
     ));
     lower(source.as_bytes()).map(|_| ()).map_err(|e| format!("{e:?}"))
 }
@@ -193,7 +193,7 @@ fn arith_knows_what_a_quotient_and_what_is_left_over_cannot_be() {
     ];
     for function in proven {
         let source = with_header(format!(
-            "use std.console (console, print)\n\n{function}\n\nfn main() ! console, alloc {{\n  print(\"{{f(25, 7)}}\")\n}}\n"
+            "use std.console (console, print)\n\n{function}\n\nfn main() <console, alloc> {{\n  print(\"{{f(25, 7)}}\")\n}}\n"
         ));
         lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
     }
@@ -206,7 +206,7 @@ fn arith_knows_what_a_quotient_and_what_is_left_over_cannot_be() {
     ];
     for function in refused {
         let source = with_header(format!(
-            "use std.console (console, print)\n\n{function}\n\nfn main() ! console, alloc {{\n  print(\"{{f(25, 7)}}\")\n}}\n"
+            "use std.console (console, print)\n\n{function}\n\nfn main() <console, alloc> {{\n  print(\"{{f(25, 7)}}\")\n}}\n"
         ));
         assert!(lower(source.as_bytes()).is_err(), "{function}");
     }

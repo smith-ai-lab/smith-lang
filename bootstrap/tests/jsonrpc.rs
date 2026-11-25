@@ -219,7 +219,7 @@ fn show_match(subject: &str, indent: &str) -> String {
 /// header of every program.
 fn header() -> String {
     format!(
-        "use std.console (console, print)\nuse std.json (raw_json, raw_text)\nuse std.jsonrpc\nuse std.text as texts\n\nfn show(s: str) ! console, alloc {{\n  match jsonrpc.read(s) {{\n    .ok(.one(m)) {{\n      {}\n    }}\n    .ok(.many(ms)) {{\n      print(\"batch {{ms.size}}\")\n      loop x in ms {{\n        match x {{\n          .ok(m) {{\n            {}\n          }}\n          .err(f) {{ print(\"member failure {{f.code}}\") }}\n        }}\n      }}\n    }}\n    .err(f) {{ print(\"failure {{f.code}} {{f.message}}\") }}\n  }}\n}}\n\n",
+        "use std.console (console, print)\nuse std.json (raw_json, raw_text)\nuse std.jsonrpc\nuse std.text as texts\n\nfn show(s: str) <console, alloc> {{\n  match jsonrpc.read(s) {{\n    .ok(.one(m)) {{\n      {}\n    }}\n    .ok(.many(ms)) {{\n      print(\"batch {{ms.size}}\")\n      loop x in ms {{\n        match x {{\n          .ok(m) {{\n            {}\n          }}\n          .err(f) {{ print(\"member failure {{f.code}}\") }}\n        }}\n      }}\n    }}\n    .err(f) {{ print(\"failure {{f.code}} {{f.message}}\") }}\n  }}\n}}\n\n",
         show_match("m", "      "),
         show_match("m", "            ")
     )
@@ -239,7 +239,7 @@ fn printed(source: &str) -> Vec<String> {
 /// A program that runs `show` on each text.
 fn reads(texts: &[String]) -> Vec<String> {
     let calls: String = texts.iter().map(|t| format!("  show({})\n", lit(t))).collect();
-    printed(&format!("{}fn main() ! console, alloc {{\n{calls}}}\n", header()))
+    printed(&format!("{}fn main() <console, alloc> {{\n{calls}}}\n", header()))
 }
 
 fn failure_line(code: i64) -> String {
@@ -257,7 +257,7 @@ fn the_example_of_the_issue_is_read_and_written_as_it_says() {
     let text = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}";
     assert_eq!(reads(&[text.to_string()]), ["request ping number 1", "no params"]);
     let source = format!(
-        "{}fn main() ! console, alloc {{\n  t = jsonrpc.write(texts.text(), .request(jsonrpc.Request(id: .number(1), method: \"ping\", params: .none)))\n  print(texts.finish(t))\n}}\n",
+        "{}fn main() <console, alloc> {{\n  t = jsonrpc.write(texts.text(), .request(jsonrpc.Request(id: .number(1), method: \"ping\", params: .none)))\n  print(texts.finish(t))\n}}\n",
         header()
     );
     assert_eq!(printed(&source), [text]);
@@ -381,7 +381,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch() {
                 let body = format!(
                     "t = jsonrpc.write(texts.text(), {e})\ns = texts.finish(t)\nprint(s)\nshow(s)\n"
                 );
-                functions += &format!("fn single{i}() ! console, alloc {{\n{}}}\n\n", with_raw(&raw, "v", &body));
+                functions += &format!("fn single{i}() <console, alloc> {{\n{}}}\n\n", with_raw(&raw, "v", &body));
                 calls += &format!("  single{i}()\n");
                 lines.push(written(m));
                 lines.extend(shown(m));
@@ -398,7 +398,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch() {
                 for (k, (_, raw)) in made.iter().enumerate().rev() {
                     body = with_raw(raw, &format!("v{k}"), &body);
                 }
-                functions += &format!("fn batch{i}() ! console, alloc {{\n{body}}}\n\n");
+                functions += &format!("fn batch{i}() <console, alloc> {{\n{body}}}\n\n");
                 calls += &format!("  batch{i}()\n");
                 let text: Vec<String> = ms.iter().map(written).collect();
                 lines.push(format!("[{}]", text.join(",")));
@@ -407,7 +407,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch() {
                     lines.extend(shown(m));
                 }
             }
-            let source = format!("{}{functions}fn main() ! console, alloc {{\n{calls}}}\n", header());
+            let source = format!("{}{functions}fn main() <console, alloc> {{\n{calls}}}\n", header());
             assert_eq!(printed(&source), lines);
         },
     );
@@ -613,7 +613,7 @@ fn brief_header() -> String {
         )
     };
     format!(
-        "use std.console (console, print)\nuse std.jsonrpc\n\nfn brief(s: str) ! console, alloc {{\n  match jsonrpc.read(s) {{\n    .ok(.one(m)) {{\n{}}}\n    .ok(.many(ms)) {{\n      print(\"batch {{ms.size}}\")\n      loop x in ms {{\n        match x {{\n          .ok(m) {{\n{}}}\n          .err(f) {{ print(\"member failure {{f.code}}\") }}\n        }}\n      }}\n    }}\n    .err(f) {{ print(\"failure {{f.code}}\") }}\n  }}\n}}\n\n",
+        "use std.console (console, print)\nuse std.jsonrpc\n\nfn brief(s: str) <console, alloc> {{\n  match jsonrpc.read(s) {{\n    .ok(.one(m)) {{\n{}}}\n    .ok(.many(ms)) {{\n      print(\"batch {{ms.size}}\")\n      loop x in ms {{\n        match x {{\n          .ok(m) {{\n{}}}\n          .err(f) {{ print(\"member failure {{f.code}}\") }}\n        }}\n      }}\n    }}\n    .err(f) {{ print(\"failure {{f.code}}\") }}\n  }}\n}}\n\n",
         member("m"),
         member("m")
     )
@@ -731,7 +731,7 @@ fn every_example_of_section_7_of_the_specification_is_read_as_it_says() {
     assert!(found.len() >= 15, "the examples of section 7: {}", found.len());
     let texts: Vec<String> = found.iter().map(|e| e.sent.clone()).collect();
     let calls: String = texts.iter().map(|t| format!("  print(\"--\")\n  brief({})\n", lit(t))).collect();
-    let source = format!("{}fn main() ! console, alloc {{\n{calls}}}\n", brief_header());
+    let source = format!("{}fn main() <console, alloc> {{\n{calls}}}\n", brief_header());
     let output = printed(&source);
     let mut got: Vec<Vec<String>> = Vec::new();
     for line in output {
@@ -790,11 +790,11 @@ fn every_example_of_section_7_of_the_specification_is_read_as_it_says() {
 
 fn the_failures_the_standard_names_have_its_codes() {
     let source = format!(
-        "{}fn line(f: jsonrpc.Failure) ! console, alloc {{\n}}\n",
+        "{}fn line(f: jsonrpc.Failure) <console, alloc> {{\n}}\n",
         "use std.console (console, print)\nuse std.jsonrpc\n\n"
     );
     let _ = source;
-    let source = "use std.console (console, print)\nuse std.jsonrpc\n\nfn main() ! console, alloc {\n  a = jsonrpc.parse_error()\n  print(\"{a.code} {a.message}\")\n  b = jsonrpc.invalid_request()\n  print(\"{b.code} {b.message}\")\n  c = jsonrpc.method_not_found(\"nothing\")\n  print(\"{c.code} {c.message}\")\n  d = jsonrpc.invalid_params(\"x must be a number\")\n  print(\"{d.code} {d.message}\")\n  e = jsonrpc.internal_error()\n  print(\"{e.code} {e.message}\")\n  match e.data {\n    .some(v) { print(\"data\") }\n    .none { print(\"no data\") }\n  }\n}\n";
+    let source = "use std.console (console, print)\nuse std.jsonrpc\n\nfn main() <console, alloc> {\n  a = jsonrpc.parse_error()\n  print(\"{a.code} {a.message}\")\n  b = jsonrpc.invalid_request()\n  print(\"{b.code} {b.message}\")\n  c = jsonrpc.method_not_found(\"nothing\")\n  print(\"{c.code} {c.message}\")\n  d = jsonrpc.invalid_params(\"x must be a number\")\n  print(\"{d.code} {d.message}\")\n  e = jsonrpc.internal_error()\n  print(\"{e.code} {e.message}\")\n  match e.data {\n    .some(v) { print(\"data\") }\n    .none { print(\"no data\") }\n  }\n}\n";
     assert_eq!(
         printed(source),
         [

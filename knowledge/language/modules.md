@@ -19,7 +19,7 @@ struct Transaction {
   id: u64
 }
 
-fn begin(db: Db) -> Transaction ! net
+fn begin(db: Db) -> Transaction <net>
 ```
 
 These lines, written in `db/transaction.smith`, are the module `db.transaction`. It holds a struct and a function. Another module reaches them by that name, as [Importing with use](use.md) describes.

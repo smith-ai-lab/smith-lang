@@ -119,7 +119,7 @@ fn escaped(texts: &[String]) -> Vec<String> {
         body += &format!("  print(escape({}))\n", literal(text));
     }
     let source = format!(
-        "use std.console (console, print)\nuse std.html (escape)\n\nfn main() ! console, alloc {{\n{body}}}\n"
+        "use std.console (console, print)\nuse std.html (escape)\n\nfn main() <console, alloc> {{\n{body}}}\n"
     );
     let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&lowered);
@@ -231,7 +231,7 @@ fn shown(functions: &str, calls: &[String]) -> Vec<String> {
     for (i, call) in calls.iter().enumerate() {
         body += &format!("  page{i} = render() {{\n    {call}\n  }}\n  print(\"{{page{i}}}\")\n");
     }
-    let source = format!("{IMPORTS}\n{functions}\nfn main() ! console, alloc {{\n{body}}}\n");
+    let source = format!("{IMPORTS}\n{functions}\nfn main() <console, alloc> {{\n{body}}}\n");
     let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&lowered);
     assert_eq!(outcome.status, 0, "for {source}");
@@ -249,7 +249,7 @@ const EXAMPLES: &str = "struct Note {
   pinned: bool
 }
 
-fn hello(name: str) ! markup, alloc {
+fn hello(name: str) <markup, alloc> {
   html() {
     head() {
       title(\"Hello\")
@@ -261,7 +261,7 @@ fn hello(name: str) ! markup, alloc {
   }
 }
 
-fn mixed(name: str) ! markup, alloc {
+fn mixed(name: str) <markup, alloc> {
   p() {
     text(\"Hello, \")
     b(name)
@@ -269,13 +269,13 @@ fn mixed(name: str) ! markup, alloc {
   }
 }
 
-fn links() ! markup, alloc {
+fn links() <markup, alloc> {
   a(\"Open\", href: \"/notes/7\", class: \"button\")
   input(name: \"title\", placeholder: \"Title\")
   br()
 }
 
-fn note_card(note: Note) ! markup, alloc {
+fn note_card(note: Note) <markup, alloc> {
   article(class: \"card\") {
     h2(note.title)
     p(note.body)
@@ -285,7 +285,7 @@ fn note_card(note: Note) ! markup, alloc {
   }
 }
 
-fn notes(all: List[Note]) ! markup, alloc {
+fn notes(all: List[Note]) <markup, alloc> {
   ul() {
     loop note in all {
       li() {
@@ -295,7 +295,7 @@ fn notes(all: List[Note]) ! markup, alloc {
   }
 }
 
-fn layout(heading: str, inside: fn() ! markup) ! markup, alloc {
+fn layout(heading: str, inside: fn() <markup>) <markup, alloc> {
   html() {
     head() {
       title(heading)
@@ -307,19 +307,19 @@ fn layout(heading: str, inside: fn() ! markup) ! markup, alloc {
   }
 }
 
-fn about() ! markup, alloc {
+fn about() <markup, alloc> {
   layout(\"About\") {
     p(\"Smith is a programming language.\")
   }
 }
 
-fn frame(inside: Html) ! markup, alloc {
+fn frame(inside: Html) <markup, alloc> {
   span(class: \"frame\") {
     insert(inside)
   }
 }
 
-fn framed() ! markup, alloc {
+fn framed() <markup, alloc> {
   inside = render() {
     about()
   }
@@ -389,7 +389,7 @@ struct Note {
   pinned: bool
 }
 
-fn hello(name: str) -> Html ! alloc {
+fn hello(name: str) -> Html <alloc> {
   render() {
     html() {
       head() {
@@ -403,7 +403,7 @@ fn hello(name: str) -> Html ! alloc {
   }
 }
 
-fn links() -> Html ! alloc {
+fn links() -> Html <alloc> {
   render() {
     p() {
       text(\"Hello, \")
@@ -415,7 +415,7 @@ fn links() -> Html ! alloc {
   }
 }
 
-fn note_card(note: Note) ! markup, alloc {
+fn note_card(note: Note) <markup, alloc> {
   article(class: \"card\") {
     h2(note.title)
     p(note.body)
@@ -425,7 +425,7 @@ fn note_card(note: Note) ! markup, alloc {
   }
 }
 
-fn notes(all: List[Note]) -> Html ! alloc {
+fn notes(all: List[Note]) -> Html <alloc> {
   render() {
     ul() {
       loop note in all {
@@ -437,7 +437,7 @@ fn notes(all: List[Note]) -> Html ! alloc {
   }
 }
 
-fn layout(heading: str, inside: fn() ! markup) -> Html ! alloc {
+fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
   render() {
     html() {
       head() {
@@ -451,13 +451,13 @@ fn layout(heading: str, inside: fn() ! markup) -> Html ! alloc {
   }
 }
 
-fn about() -> Html ! alloc {
+fn about() -> Html <alloc> {
   layout(\"About\") {
     p(\"Smith is a programming language.\")
   }
 }
 
-fn frame(inside: Html) -> Html ! alloc {
+fn frame(inside: Html) -> Html <alloc> {
   render() {
     span(class: \"frame\") {
       insert(inside)
@@ -465,7 +465,7 @@ fn frame(inside: Html) -> Html ! alloc {
   }
 }
 
-fn main() ! alloc {
+fn main() <alloc> {
   one = hello(\"Ana\")
   two = links()
   three = notes([])

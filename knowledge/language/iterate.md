@@ -66,7 +66,7 @@ impl[T, U, R] Try[Flow[T, R], Flow[U, R], T] {
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   each(Countdown(from: 3)) fn(v) {
     print("{v}")
     if v == 2 { .stop } else { .go }
@@ -99,7 +99,7 @@ Its effects are checked where it is written, in the function that has the loop. 
 ```
 use std.console (print)
 
-fn show(c: Countdown) ! alloc {
+fn show(c: Countdown) <alloc> {
   loop v in c { print("{v}") }
 }
 ```

@@ -6,6 +6,6 @@ fn widen(n: Byte) -> Option[u32] {
   narrow(n)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{widen(7)}")
 }

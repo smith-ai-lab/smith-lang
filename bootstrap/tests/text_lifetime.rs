@@ -117,12 +117,12 @@ fn program(c: &Case) -> (String, String) {
         Shape::Tuple => "(n, tag, body)".to_string(),
         Shape::Enum => "Held.one((n, tag, body))".to_string(),
     };
-    s += &format!("fn store({}) -> {ty} ! alloc {{\n  {store}\n}}\n\n", params(""));
+    s += &format!("fn store({}) -> {ty} <alloc> {{\n  {store}\n}}\n\n", params(""));
     let mut inner = "store".to_string();
     for level in 0..c.through {
         let name = format!("pass{level}");
         let args = c.order.iter().map(|&i| PARAMS[i].0).collect::<Vec<_>>().join(", ");
-        s += &format!("fn {name}({}) -> {ty} ! alloc {{\n  {inner}({args})\n}}\n\n", params(""));
+        s += &format!("fn {name}({}) -> {ty} <alloc> {{\n  {inner}({args})\n}}\n\n", params(""));
         inner = name;
     }
     let arg = |i: usize| match i {
@@ -131,7 +131,7 @@ fn program(c: &Case) -> (String, String) {
         _ => text_of(c.body, "v{k}-{k}", "body"),
     };
     let args = c.order.iter().map(|&i| arg(i)).collect::<Vec<_>>().join(", ");
-    s += &format!("fn make(k: u64) -> {ty} ! alloc {{\n  {inner}({args})\n}}\n\n");
+    s += &format!("fn make(k: u64) -> {ty} <alloc> {{\n  {inner}({args})\n}}\n\n");
     let read = match c.shape {
         Shape::Struct => "print(\"{h.n} {h.tag} {h.body}\")".to_string(),
         Shape::List => "if h.size == 2 {\n    print(\"{h[0]} {h[1]}\")\n  }".to_string(),
@@ -139,15 +139,15 @@ fn program(c: &Case) -> (String, String) {
         Shape::Enum => "match h {\n    .one(t) {\n      (n, tag, body) = t\n      print(\"{n} {tag} {body}\")\n    }\n    .none { }\n  }".to_string(),
     };
     let reads = if c.apart {
-        s += &format!("fn show(h: {ty}) ! console, alloc {{\n  junk = \"zz{{9}}zz\"\n  print(junk)\n  {read}\n}}\n\n");
+        s += &format!("fn show(h: {ty}) <console, alloc> {{\n  junk = \"zz{{9}}zz\"\n  print(junk)\n  {read}\n}}\n\n");
         "show(h)".to_string()
     } else {
         format!("junk = \"zz{{9}}zz\"\n  print(junk)\n  {read}")
     };
     s += &format!(
-        "fn step(k: u64) ! console, alloc {{\n  h = make(k)\n  other = \"o{{k}}\"\n  print(other)\n  {reads}\n}}\n\n"
+        "fn step(k: u64) <console, alloc> {{\n  h = make(k)\n  other = \"o{{k}}\"\n  print(other)\n  {reads}\n}}\n\n"
     );
-    s += "fn main() ! console, alloc {\n";
+    s += "fn main() <console, alloc> {\n";
     let mut said = String::new();
     for n in &c.numbers {
         s += &format!("  step({n})\n");

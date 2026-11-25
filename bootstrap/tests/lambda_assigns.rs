@@ -61,8 +61,8 @@ const BOTH: &str = "fn both(f: fn(str)) {\n  f(\"a\")\n  f(\"b\")\n}\n\n";
 fn a_lambda_that_appends_to_a_var_it_gives_away_is_accepted_and_the_var_is_whole_after_the_call() {
     let source = format!(
         "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-         fn gather() -> str ! alloc {{\n  var page = text()\n  both() fn(part) {{ page = append(page, part) }}\n  finish(page)\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(gather())\n}}\n"
+         fn gather() -> str <alloc> {{\n  var page = text()\n  both() fn(part) {{ page = append(page, part) }}\n  finish(page)\n}}\n\n\
+         fn main() <console, alloc> {{\n  print(gather())\n}}\n"
     );
     assert_eq!(outcome(&source).stdout, b"ab\n");
 }
@@ -208,8 +208,8 @@ impl Lambda {
     fn source(&self, c: bool) -> String {
         format!(
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-             fn gather(c: bool) -> str ! alloc {{\n  var page = text()\n  both() fn(part) {{\n{}  }}\n  finish(page)\n}}\n\n\
-             fn main() ! console, alloc {{\n  print(gather({c}))\n}}\n",
+             fn gather(c: bool) -> str <alloc> {{\n  var page = text()\n  both() fn(part) {{\n{}  }}\n  finish(page)\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(gather({c}))\n}}\n",
             self.body()
         )
     }
@@ -251,8 +251,8 @@ fn a_try_between_the_give_away_and_the_assignment_is_a_path_that_leaves_with_the
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n\
              fn both(f: fn(str) -> Result[(), str]) -> Result[(), str] {{\n  try f(\"a\")\n  f(\"b\")\n}}\n\n\
              fn ok(s: str) -> Result[(), str] {{ .ok(()) }}\n\n\
-             fn gather() -> Result[str, str] ! alloc {{\n  var page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(page))\n}}\n\n\
-             fn main() ! console, alloc {{\n  r = gather()\n  print(\"x\")\n}}\n"
+             fn gather() -> Result[str, str] <alloc> {{\n  var page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(page))\n}}\n\n\
+             fn main() <console, alloc> {{\n  r = gather()\n  print(\"x\")\n}}\n"
         )
     };
     let between = program("    t = append(page, part)\n    try ok(part)\n    page = t\n");
@@ -321,7 +321,7 @@ impl Puts {
             // Everything written where it is asked, with no handler.
             let mut all = String::new();
             let var = if self.text { "var held = text()" } else { "var held: List[Byte] = []" };
-            all += &format!("fn run() -> {result} ! alloc {{\n  {var}\n");
+            all += &format!("fn run() -> {result} <alloc> {{\n  {var}\n");
             for part in &self.parts {
                 for b in part {
                     let value = if self.text { format!("\"{}\"", *b as char) } else { b.to_string() };
@@ -338,17 +338,17 @@ impl Puts {
         } else {
             text += &format!(
                 "effect sink {{\n  fn put({param})\n}}\n\n\
-                 fn gather[T](body: fn() -> T ! sink) -> (T, {result}) ! alloc {{\n  var held{} = {start}\n  \
+                 fn gather[T](body: fn() -> T <sink>) -> (T, {result}) <alloc> {{\n  var held{} = {start}\n  \
                  r = sink(put: fn({arg}) {{ held = {add} }}, body: body)\n  (r, {end})\n}}\n\n\
-                 fn middle() ! sink {{\n{}}}\n\n\
-                 fn run() -> {result} ! alloc {{\n  (n, kept) = gather() {{\n{}    middle()\n{}  }}\n  kept\n}}\n\n",
+                 fn middle() <sink> {{\n{}}}\n\n\
+                 fn run() -> {result} <alloc> {{\n  (n, kept) = gather() {{\n{}    middle()\n{}  }}\n  kept\n}}\n\n",
                 if self.text { String::new() } else { format!(": List[{ty}]") },
                 self.put(&self.parts[1]),
                 self.put(&self.parts[0]),
                 self.put(&self.parts[2]),
             );
         }
-        text + "fn main() ! console, alloc {\n  print(\"{run()}\")\n}\n"
+        text + "fn main() <console, alloc> {\n  print(\"{run()}\")\n}\n"
     }
 
     fn prints(&self) -> Vec<u8> {

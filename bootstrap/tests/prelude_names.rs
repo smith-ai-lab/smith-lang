@@ -146,7 +146,7 @@ fn program(kind: usize, name: &str, mistake: bool) -> String {
     // The sizes are imported by the kinds that write one.
     let uses = if kind < 4 { "use std.bits (i32)\n" } else { "" };
     format!(
-        "{uses}use std.console (console, print)\n\n{items}\nfn main() ! console, alloc {{\n  {shown}{last}\n}}\n"
+        "{uses}use std.console (console, print)\n\n{items}\nfn main() <console, alloc> {{\n  {shown}{last}\n}}\n"
     )
 }
 

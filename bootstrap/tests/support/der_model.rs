@@ -267,7 +267,7 @@ pub fn values_program(inputs: &[Vec<u8>]) -> String {
         "use std.console (console, print)
 use std.der (Tag, Value, children, value)
 
-fn name(t: Tag) -> str ! alloc {
+fn name(t: Tag) -> str <alloc> {
   match t {
     .boolean { \"boolean\" }
     .integer { \"integer\" }
@@ -296,14 +296,14 @@ fn holds(t: Tag) -> bool {
   }
 }
 
-fn count(v: Value) -> str ! alloc {
+fn count(v: Value) -> str <alloc> {
   match children(v) {
     .ok(cs) { \"{cs.size}\" }
     .err(e) { \"x\" }
   }
 }
 
-fn show(b: Slice[Byte]) ! console, alloc {
+fn show(b: Slice[Byte]) <console, alloc> {
   match value(b) {
     .err(e) { print(\"err\") }
     .ok((v, rest)) {
@@ -334,7 +334,7 @@ fn show(b: Slice[Byte]) ! console, alloc {
     for (i, input) in inputs.iter().enumerate() {
         source += &format!("fn input{i}() -> Slice[Byte] {{ {} }}\n\n", literal(input));
     }
-    source += "fn main() ! console, alloc {\n";
+    source += "fn main() <console, alloc> {\n";
     for i in 0..inputs.len() {
         source += &format!("  show(input{i}())\n");
     }

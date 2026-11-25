@@ -82,7 +82,7 @@ fn has(named: List[(str, RawJson)], name: str) -> bool {
 }
 
 impl Deserialize[Members] {
-  fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) ! alloc {
+  fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) <alloc> {
     (opened, began) = Reader.structure(from, "Members")
     match began {
       .err(e) { return (opened, Result.err(e)) }
@@ -137,7 +137,7 @@ fn find(named: List[(str, RawJson)], name: str) -> Option[RawJson] {
 }
 
 // The text a value is, when it is one.
-fn text_value(raw: RawJson) -> Option[str] ! alloc {
+fn text_value(raw: RawJson) -> Option[str] <alloc> {
   got: Result[str, ReadError] = from_json(raw_text(raw))
   match got {
     .ok(s) { .some(s) }
@@ -157,7 +157,7 @@ fn structured(raw: RawJson) -> bool {
 }
 
 // A whole number of `Int`: `std.json` refuses a fraction and an exponent.
-fn whole(raw: RawJson) -> Option[Int] ! alloc {
+fn whole(raw: RawJson) -> Option[Int] <alloc> {
   got: Result[Int, ReadError] = from_json(raw_text(raw))
   match got {
     .ok(n) { .some(n) }
@@ -165,7 +165,7 @@ fn whole(raw: RawJson) -> Option[Int] ! alloc {
   }
 }
 
-fn id_of(raw: RawJson) -> Option[Id] ! alloc {
+fn id_of(raw: RawJson) -> Option[Id] <alloc> {
   k = kind(raw)
   if k == 110 {
     .some(.null)
@@ -184,7 +184,7 @@ fn id_of(raw: RawJson) -> Option[Id] ! alloc {
   }
 }
 
-fn version_ok(named: List[(str, RawJson)]) -> bool ! alloc {
+fn version_ok(named: List[(str, RawJson)]) -> bool <alloc> {
   match find(named, "jsonrpc") {
     .some(v) {
       match text_value(v) {
@@ -197,7 +197,7 @@ fn version_ok(named: List[(str, RawJson)]) -> bool ! alloc {
 }
 
 // The failure that an `error` member holds, or none when it is not one.
-fn failure_of(raw: RawJson) -> Option[Failure] ! alloc {
+fn failure_of(raw: RawJson) -> Option[Failure] <alloc> {
   if kind(raw) != 123 { return .none }
   got: Result[Members, ReadError] = from_json(raw_text(raw))
   match got {
@@ -216,7 +216,7 @@ fn failure_of(raw: RawJson) -> Option[Failure] ! alloc {
   }
 }
 
-fn message_of(members: Members) -> Result[Message, Failure] ! alloc {
+fn message_of(members: Members) -> Result[Message, Failure] <alloc> {
   named = members.named
   if not version_ok(named) { return .err(invalid_request()) }
   method = find(named, "method")
@@ -269,7 +269,7 @@ fn message_of(members: Members) -> Result[Message, Failure] ! alloc {
 }
 
 // One object, read into a message or the failure to send back.
-fn read_object(text: str) -> Result[Message, Failure] ! alloc {
+fn read_object(text: str) -> Result[Message, Failure] <alloc> {
   got: Result[Members, ReadError] = from_json(text)
   match got {
     .ok(m) { message_of(m) }
@@ -290,7 +290,7 @@ fn first(text: str) -> Byte {
   0
 }
 
-pub fn read(text: str) -> Result[Received, Failure] ! alloc {
+pub fn read(text: str) -> Result[Received, Failure] <alloc> {
   k = first(text)
   if k == 123 {
     match read_object(text) {
@@ -324,7 +324,7 @@ pub fn read(text: str) -> Result[Received, Failure] ! alloc {
   }
 }
 
-fn id_text(id: Id) -> str ! alloc {
+fn id_text(id: Id) -> str <alloc> {
   match id {
     .number(n) { to_json(n) }
     .text(t) { to_json(t) }
@@ -332,14 +332,14 @@ fn id_text(id: Id) -> str ! alloc {
   }
 }
 
-fn params_of(to: take Text, params: Option[RawJson]) -> Text ! alloc {
+fn params_of(to: take Text, params: Option[RawJson]) -> Text <alloc> {
   match params {
     .some(p) { append(append(to, ",\"params\":"), raw_text(p)) }
     .none { to }
   }
 }
 
-pub fn write(to: take Text, message: Message) -> Text ! alloc {
+pub fn write(to: take Text, message: Message) -> Text <alloc> {
   start = append(to, "\{\"jsonrpc\":\"2.0\"")
   match message {
     .request(r) {
@@ -369,7 +369,7 @@ pub fn write(to: take Text, message: Message) -> Text ! alloc {
   }
 }
 
-pub fn write_batch(to: take Text, messages: List[Message]) -> Text ! alloc {
+pub fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc> {
   var written = append(to, "[")
   var first = true
   loop m in messages {

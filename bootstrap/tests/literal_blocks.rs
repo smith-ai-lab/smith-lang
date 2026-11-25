@@ -264,7 +264,7 @@ impl Blocks {
             &[("std.console", &["console", "print"]), ("std.int", &int[..])],
             ty,
         );
-        format!("{uses}{items}fn main() ! console, alloc {{\n{main}}}\n")
+        format!("{uses}{items}fn main() <console, alloc> {{\n{main}}}\n")
     }
 
     /// Whether the place may refuse a program for a result it cannot prove
@@ -276,7 +276,7 @@ impl Blocks {
 
 fn a_literal_in_a_block_takes_the_type_of_the_other_blocks_and_of_its_place() {
     // The program of the issue.
-    let issue = "use std.console (console, print)\nuse std.list (push)\n\nfn main() ! console, alloc {\n  e: Byte = 110\n  var value: List[Byte] = []\n  \
+    let issue = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  e: Byte = 110\n  var value: List[Byte] = []\n  \
         decoded = if e == 'n' { '\\n' } else { e }\n  value = push(value, decoded)\n  \
         print(\"{value.size}\")\n}\n";
     let program = lower(issue.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
@@ -376,7 +376,7 @@ fn blocks_of_two_known_types_give_the_smallest_range_that_holds_both() {
         }
         let uses = header(&[("std.console", &["console", "print"])], &format!("{first} {second}"));
         let source = format!(
-            "{uses}fn main() ! console, alloc {{\n  s: Byte = 0\n  a: {first} = 1\n  b: {second} = 1\n  r = {text}\n  print(\"{{r}}\")\n}}\n"
+            "{uses}fn main() <console, alloc> {{\n  s: Byte = 0\n  a: {first} = 1\n  b: {second} = 1\n  r = {text}\n  print(\"{{r}}\")\n}}\n"
         );
         // The smallest range that holds both is a type, in two words when it
         // has more than 64 bits, and two types of 64 bits have one of at most
@@ -424,7 +424,7 @@ fn anything(g: &mut Gen) -> String {
     let uses = header(&[("std.console", &["console"]), ("std.int", int)], "");
     format!(
         "{uses}fn same(n: Byte) -> Byte {{ n }}\n\nfn takes(n: Byte) -> Byte {{ n }}\n\n\
-         fn main() ! console, alloc {{\n  s: Byte = 1\n  x: Byte = 1\n  k: Byte = 2\n  {place}\n}}\n"
+         fn main() <console, alloc> {{\n  s: Byte = 1\n  x: Byte = 1\n  k: Byte = 2\n  {place}\n}}\n"
     )
 }
 

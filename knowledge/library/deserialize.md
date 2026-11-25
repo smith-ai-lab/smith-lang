@@ -24,7 +24,7 @@ struct Point {
   y: Int
 }
 
-fn parse(text: str) -> Result[Point, ReadError] ! alloc {
+fn parse(text: str) -> Result[Point, ReadError] <alloc> {
   from_json(text)
 }
 ```
@@ -37,7 +37,7 @@ fn parse(text: str) -> Result[Point, ReadError] ! alloc {
 
 ```
 trait Deserialize[T] {
-  fn read[R: Reader](from: take R) -> (R, Result[T, ReadError]) ! alloc
+  fn read[R: Reader](from: take R) -> (R, Result[T, ReadError]) <alloc>
 }
 ```
 
@@ -49,23 +49,23 @@ A reader gives the shapes a [writer](serialize.md#the-shapes) takes, one at a ti
 
 ```
 trait Reader[R] {
-  fn boolean(r: take R) -> (R, Result[bool, ReadError]) ! alloc
-  fn signed(r: take R) -> (R, Result[Int, ReadError]) ! alloc
-  fn unsigned(r: take R) -> (R, Result[u64, ReadError]) ! alloc
-  fn text(r: take R) -> (R, Result[str, ReadError]) ! alloc
-  fn nothing(r: take R) -> (R, Result[(), ReadError]) ! alloc
-  fn present(r: take R) -> (R, Result[bool, ReadError]) ! alloc
-  fn sequence(r: take R) -> (R, Result[(), ReadError]) ! alloc
-  fn more(r: take R) -> (R, Result[bool, ReadError]) ! alloc
-  fn tuple(r: take R, size: Nat) -> (R, Result[(), ReadError]) ! alloc
-  fn end_tuple(r: take R) -> (R, Result[(), ReadError]) ! alloc
-  fn structure(r: take R, name: str) -> (R, Result[(), ReadError]) ! alloc
-  fn field(r: take R) -> (R, Result[Option[str], ReadError]) ! alloc
-  fn unknown(r: take R, name: str) -> (R, Result[(), ReadError]) ! alloc
-  fn case(r: take R, of: str) -> (R, Result[str, ReadError]) ! alloc
-  fn end_case(r: take R) -> (R, Result[(), ReadError]) ! alloc
-  fn raw(r: take R, of: str) -> (R, Result[Slice[Byte], ReadError]) ! alloc
-  fn fail(r: take R, problem: Problem) -> (R, ReadError) ! alloc
+  fn boolean(r: take R) -> (R, Result[bool, ReadError]) <alloc>
+  fn signed(r: take R) -> (R, Result[Int, ReadError]) <alloc>
+  fn unsigned(r: take R) -> (R, Result[u64, ReadError]) <alloc>
+  fn text(r: take R) -> (R, Result[str, ReadError]) <alloc>
+  fn nothing(r: take R) -> (R, Result[(), ReadError]) <alloc>
+  fn present(r: take R) -> (R, Result[bool, ReadError]) <alloc>
+  fn sequence(r: take R) -> (R, Result[(), ReadError]) <alloc>
+  fn more(r: take R) -> (R, Result[bool, ReadError]) <alloc>
+  fn tuple(r: take R, size: Nat) -> (R, Result[(), ReadError]) <alloc>
+  fn end_tuple(r: take R) -> (R, Result[(), ReadError]) <alloc>
+  fn structure(r: take R, name: str) -> (R, Result[(), ReadError]) <alloc>
+  fn field(r: take R) -> (R, Result[Option[str], ReadError]) <alloc>
+  fn unknown(r: take R, name: str) -> (R, Result[(), ReadError]) <alloc>
+  fn case(r: take R, of: str) -> (R, Result[str, ReadError]) <alloc>
+  fn end_case(r: take R) -> (R, Result[(), ReadError]) <alloc>
+  fn raw(r: take R, of: str) -> (R, Result[Slice[Byte], ReadError]) <alloc>
+  fn fail(r: take R, problem: Problem) -> (R, ReadError) <alloc>
 }
 ```
 

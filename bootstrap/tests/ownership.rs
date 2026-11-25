@@ -987,13 +987,13 @@ struct Key {
 without Copy for Key
 without Discard for Key
 
-fn end[T](x: take T) ! diverge {
+fn end[T](x: take T) <diverge> {
   loop {
     n = 1
   }
 }
 
-fn main() ! diverge {
+fn main() <diverge> {
   k = Key(secret: 1)
   end(k)
 }
@@ -1022,7 +1022,7 @@ fn the_element_a_loop_over_a_list_gives_is_lent_and_is_refused_where_it_is_retur
   n + 0
 }}
 
-fn main() ! alloc {{
+fn main() <alloc> {{
   ks: List[Key] = [Key(secret: 1)]
   a = total(ks)
   b = total(ks)
@@ -1036,7 +1036,7 @@ fn main() ! alloc {{
   Key(secret: 0)
 }}
 
-fn main() ! alloc {{
+fn main() <alloc> {{
   ks: List[Key] = [Key(secret: 1)]
   k = first(ks)
 }}
@@ -1055,7 +1055,7 @@ fn main() ! alloc {{
 /// loop. It gives the program and the two places.
 fn broken_out(body: &str) -> (String, Pos, Option<Pos>) {
     // A loop with no range ends only by a `break`, and says so in the effects.
-    let effects = if body.contains("loop {") { " ! diverge" } else { "" };
+    let effects = if body.contains("loop {") { " <diverge>" } else { "" };
     let head = format!("{PRELUDE}\nfn f(v: take Holder, c: bool, d: Dir) -> u64{effects} {{\n");
     let source = format!("{head}{body}}}\n\nfn main(){effects} {{\n  r = f(Holder(key: Key(secret: 1), count: 2), true, Dir.north)\n}}\n");
     let mut given = None;

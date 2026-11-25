@@ -218,7 +218,7 @@ fn calls_of_functions_with_effects(g: &mut Gen) -> File {
         let mut first = true;
         file.push(&format!("fn f{i}()"));
         for _ in 0..1 + g.below(3) {
-            file.push(if first { " ! " } else { ", " });
+            file.push(if first { " <" } else { ", " });
             first = false;
             let effect = match g.below(4) {
                 0 | 1 if built != "none" => built,
@@ -237,6 +237,9 @@ fn calls_of_functions_with_effects(g: &mut Gen) -> File {
                 file.push(effect);
             }
             listed.push(effect);
+        }
+        if !listed.is_empty() {
+            file.push(">");
         }
         file.push(" {}\n");
         calls.push((i, listed.iter().find(|e| ["console", "alloc"].contains(e)).copied()));
@@ -297,8 +300,8 @@ fn file_with_a_default_text(g: &mut Gen) -> File {
     }
     file.push(") {\n  ");
     file.mistake("print", "needs the `console` effect");
-    file.push("(\"x\")\n}\n\nfn main() ! console {\n  greet()\n}\n");
-    file.fix = Some(format!("write `fn greet(who: str = {default}) ! console`"));
+    file.push("(\"x\")\n}\n\nfn main() <console> {\n  greet()\n}\n");
+    file.fix = Some(format!("write `fn greet(who: str = {default}) <console>`"));
     file
 }
 
@@ -516,11 +519,11 @@ fn file_with_a_trait_of_a_type_that_holds_itself(g: &mut Gen) -> (File, &'static
     let (head, tail) = use_of.split_once('a').expect("a use names a");
     file.push("fn f(a: Ta, b: Ta) -> ");
     file.push(if trait_name == "Eq" { "bool" } else { "str" });
-    file.push(if trait_name == "Eq" { " {\n  " } else { " ! alloc {\n  " });
+    file.push(if trait_name == "Eq" { " {\n  " } else { " <alloc> {\n  " });
     file.push(head);
     file.mistake("a", "Ta` contains itself");
     file.push(tail);
-    file.push("\n}\nfn main() ! alloc {\n  v: Ta = .b(\"x\")\n  w: Ta = .b(\"y\")\n  r = f(v, w)\n}\n");
+    file.push("\n}\nfn main() <alloc> {\n  v: Ta = .b(\"x\")\n  w: Ta = .b(\"y\")\n  r = f(v, w)\n}\n");
     (file, trait_name)
 }
 
@@ -562,7 +565,7 @@ fn file_with_an_implementation_with_a_type_parameter(g: &mut Gen) -> File {
     file.push(&format!(
         "] Named[{types}] {{\n  fn name_of(x: {types}) -> str {{ \"a\" }}\n}}\n\n"
     ));
-    file.push("fn main() ! console {\n  print(");
+    file.push("fn main() <console> {\n  print(");
     if !named {
         file.mistake("name_of", "no implementation of `Named`");
     } else {
@@ -770,7 +773,7 @@ fn write_pattern(
 fn file_with_patterns_that_assign_twice(g: &mut Gen) -> File {
     let mut file = File::default();
     let vars = 1 + g.below(3);
-    file.push("fn main() ! console, alloc {\n");
+    file.push("fn main() <console, alloc> {\n");
     for i in 0..vars {
         file.push(&format!("  var v{i} = {i}\n"));
     }

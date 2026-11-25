@@ -21,7 +21,7 @@ hello/
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello world")
 }
 ```
@@ -48,7 +48,7 @@ The entry is `main.smith` at the root, and its `main` is where the program start
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello")
 }
 ```
@@ -98,7 +98,7 @@ use std.console (console, print)
 
 pub fn greeting() -> str { "hello world" }
 
-fn main() ! console {
+fn main() <console> {
   print(greeting())
 }
 ```

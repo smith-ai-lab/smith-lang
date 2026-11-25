@@ -76,7 +76,7 @@ fn a_use_that_leaves_a_parameter_out_is_the_program_that_writes_its_default() {
                  impl Make[str{last}] {{\n  fn make(a: str) -> {ty} {{ 7 }}\n}}\n\n\
                  fn count(m: Maybe{maybe}) -> {ty} {{\n  match m {{\n    .some(x) {{ x }}\n    \
                  .none {{ 0 }}\n  }}\n}}\n\n\
-                 fn main() ! console, alloc {{\n  b: Box[str{last}] = Box(first: \"a\", second: 3)\n  \
+                 fn main() <console, alloc> {{\n  b: Box[str{last}] = Box(first: \"a\", second: 3)\n  \
                  n = count(.some(4))\n  m: {ty} = Make.make(\"x\")\n  print(\"{{b.second}} {{n}} {{m}}\")\n}}\n"
             ))
         };
@@ -93,7 +93,7 @@ fn a_default_may_name_a_parameter_before_it() {
             with_imports(&format!(
                 "struct Pair[A, B = A] {{\n  first: A\n  second: B\n}}\n\n\
                  fn sum(p: Pair[{ty}{args}]) -> {ty} {{ wrapping_add(p.first, p.second) }}\n\n\
-                 fn main() ! console, alloc {{\n  p: Pair[{ty}{args}] = Pair(first: 1, second: 2)\n  \
+                 fn main() <console, alloc> {{\n  p: Pair[{ty}{args}] = Pair(first: 1, second: 2)\n  \
                  print(\"{{sum(p)}}\")\n}}\n"
             ))
         };
@@ -109,7 +109,7 @@ fn a_lambda_whose_parameter_nothing_decides_takes_the_default_of_a_function() {
         let program = |lambda: &str| {
             with_imports(&format!(
                 "fn pick[T = {ty}](f: fn(T) -> u64) -> u64 {{ 1 }}\n\n\
-                 fn main() ! console, alloc {{\n  r = pick {lambda}\n  print(\"{{r}}\")\n}}\n"
+                 fn main() <console, alloc> {{\n  r = pick {lambda}\n  print(\"{{r}}\")\n}}\n"
             ))
         };
         same(&program("fn(v) { 2 }"), &program(&format!("fn(v: {ty}) {{ 2 }}")));
@@ -128,7 +128,7 @@ fn a_call_finds_the_impl_by_its_arguments_whether_the_trait_has_defaults_or_not(
                 "trait Mix{trait_head} {{\n  fn mix(a: A, b: B) -> C\n}}\n\n\
                  impl Mix{first} {{\n  fn mix(a: {ty}, b: {ty}) -> {ty} {{ b }}\n}}\n\n\
                  impl Mix{second} {{\n  fn mix(a: str, b: {other}) -> {other} {{ b }}\n}}\n\n\
-                 fn main() ! console, alloc {{\n  x: {ty} = 1\n  y: {other} = 2\n  \
+                 fn main() <console, alloc> {{\n  x: {ty} = 1\n  y: {other} = 2\n  \
                  print(\"{{mix(x, x)}} {{mix(\"t\", y)}}\")\n}}\n"
             ))
         };

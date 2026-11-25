@@ -295,7 +295,7 @@ fn program_with(name: &str, at: Option<usize>, bound: Option<&str>) -> String {
             }
         }
     }
-    source += "fn main(args: List[str]) ! console, alloc {\n";
+    source += "fn main(args: List[str]) <console, alloc> {\n";
     source += COUNT;
     source += &format!("  x: {name} = {}\n", unknown(name, 0));
     source += &format!("  y: {name} = {}\n", unknown(name, 1));
@@ -363,12 +363,12 @@ fn answers(name: &str, min: i128, max: i128, signed: bool, g: &mut Gen) -> (Stri
     source += "  r\n}\n";
     if name != "bool" {
         source += &format!(
-            "fn count(a: {name}, b: {name}) -> Nat ! diverge {{\n  var n: Nat = 0\n  loop k in a..b {{ n = saturating_add(n, 1) }}\n  var i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
+            "fn count(a: {name}, b: {name}) -> Nat <diverge> {{\n  var n: Nat = 0\n  loop k in a..b {{ n = saturating_add(n, 1) }}\n  var i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
         );
     }
     let list: Vec<String> = values.iter().map(|&v| literal(name, v)).collect();
     source += &format!(
-        "fn main() ! console, alloc, diverge {{\n  xs: List[{name}] = [{}]\n  loop i in 0..xs.size {{\n    loop j in 0..xs.size {{\n      a = xs[i]\n      b = xs[j]\n      print(\"{{a < b}} {{a <= b}} {{a > b}} {{a >= b}} {{a == b}} {{a != b}} {{code(a, b)}}\")\n    }}\n  }}\n",
+        "fn main() <console, alloc, diverge> {{\n  xs: List[{name}] = [{}]\n  loop i in 0..xs.size {{\n    loop j in 0..xs.size {{\n      a = xs[i]\n      b = xs[j]\n      print(\"{{a < b}} {{a <= b}} {{a > b}} {{a >= b}} {{a == b}} {{a != b}} {{code(a, b)}}\")\n    }}\n  }}\n",
         list.join(", ")
     );
     let mut said = String::new();
@@ -454,7 +454,7 @@ fn comparisons(program: &scalar::Program) -> (usize, usize) {
 /// that it cannot know, so that no two comparisons are one. With `ops` false
 /// each condition is `true` instead, and with `equal` each operator is `==`.
 fn branching(name: &str, ops: bool, equal: bool) -> String {
-    let mut source = format!("fn main(args: List[str]) ! console, alloc {{\n{COUNT}");
+    let mut source = format!("fn main(args: List[str]) <console, alloc> {{\n{COUNT}");
     for (k, (op, _)) in OPS.iter().enumerate() {
         let condition = if ops {
             source += &format!("  x{k}: {name} = {}\n", unknown(name, 2 * k as u64));

@@ -82,12 +82,12 @@ fn the_examples_of_bits_md_give_what_the_page_says() {
         fn low(x: Nat) -> Byte { bit_and(x, 255) }\n\n\
         fn lead(code: 0..2048) -> Byte { bit_or(192, shift_right(code, 6)) }\n\n\
         fn rest(code: 0..2048) -> Byte { bit_or(128, bit_and(code, 63)) }\n\n\
-        fn main() ! console, alloc {\n  print(\"{low(1000)} {lead(1000)} {rest(1000)}\")\n}\n";
+        fn main() <console, alloc> {\n  print(\"{low(1000)} {lead(1000)} {rest(1000)}\")\n}\n";
     assert_eq!(prints(utf8), "232 207 168\n");
     let shifts = "use std.bits (bit_and, i8, shift_left, shift_right, u32)\nuse std.console (console, print)\n\
         use std.int (wrapping_shift_left)\n\n\
         fn second_byte(x: u32) -> u32 { bit_and(shift_right(x, 8), 0xff) }\n\n\
-        fn main() ! console, alloc {\n  a: Byte = 0b1100\n  u: Byte = 0b1111_0000\n  s: i8 = -8\n\
+        fn main() <console, alloc> {\n  a: Byte = 0b1100\n  u: Byte = 0b1111_0000\n  s: i8 = -8\n\
         \x20 print(\"{second_byte(0x12345678)}\")\n  print(\"{shift_left(a, 2)} {shift_right(a, 2)}\")\n\
         \x20 print(\"{wrapping_shift_left(u, 1)} {shift_left(u, 1)} {shift_right(u, 1)}\")\n\
         \x20 print(\"{shift_left(s, 1)} {shift_right(s, 1)}\")\n}\n";
@@ -117,7 +117,7 @@ fn program(call: &str, first: (i128, i128), second: (i128, i128), gives: (i128, 
         "use std.bits (bit_and, bit_or, bit_xor, shift_left, shift_right)\n\
          use std.console (console, print)\n\n\
          fn f(a: {}..{}, b: {}..{}) -> {}..{} {{ {call} }}\n\n\
-         fn main() ! console, alloc {{\n  print(\"{{f({}, {})}}\")\n}}\n",
+         fn main() <console, alloc> {{\n  print(\"{{f({}, {})}}\")\n}}\n",
         first.0, first.1, second.0, second.1, gives.0, gives.1, first.0, second.0
     )
 }

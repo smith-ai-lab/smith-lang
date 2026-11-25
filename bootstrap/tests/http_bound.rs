@@ -70,9 +70,9 @@ fn source(all: &[Kind]) -> String {
         "use std.bits (u8, u64)\nuse std.deserialize (Deserialize)\nuse std.http (Request, Response, get, http, routes)\n\n\
 struct Note {{\n  text: str\n}}\n\nstruct Nope {{\n  n: u8\n}}\n\nwithout Deserialize for Nope\n\n\
 fn f({}) -> u64 {{ 1 }}\n\n\
-fn app() ! http, alloc {{\n  with routes()\n  get(\"/f\", f)\n}}\n\n\
-fn once[T](body: fn() -> T ! http) -> T ! alloc {{\n  http(request: {{ Request(method: \"GET\", path: \"/f\", query: \"\", headers: [], body: \"\") }}, send: fn(r) {{ }}, body: body)\n}}\n\n\
-fn main() ! alloc {{\n  with once()\n  app()\n}}\n",
+fn app() <http, alloc> {{\n  with routes()\n  get(\"/f\", f)\n}}\n\n\
+fn once[T](body: fn() -> T <http>) -> T <alloc> {{\n  http(request: {{ Request(method: \"GET\", path: \"/f\", query: \"\", headers: [], body: \"\") }}, send: fn(r) {{ }}, body: body)\n}}\n\n\
+fn main() <alloc> {{\n  with once()\n  app()\n}}\n",
         params.join(", ")
     )
 }
@@ -120,9 +120,9 @@ fn a_parameter_of_a_type_with_its_own_from_text_is_refused_as_not_read_by_a_rout
     let source = "use std.bits (u64)\nuse std.fromtext (FromText)\nuse std.http (Request, Response, get, http, routes)\n\n\
 struct Day {\n  n: u64\n}\n\nimpl FromText[Day] {\n  fn parse(text: str) -> Option[Day] { Option.some(Day(n: 1)) }\n  fn expects() -> str { \"a day\" }\n}\n\n\
 fn f(day: Day) -> u64 { day.n }\n\n\
-fn app() ! http, alloc {\n  with routes()\n  get(\"/f\", f)\n}\n\n\
-fn once[T](body: fn() -> T ! http) -> T ! alloc {\n  http(request: { Request(method: \"GET\", path: \"/f\", query: \"\", headers: [], body: \"\") }, send: fn(r) { }, body: body)\n}\n\n\
-fn main() ! alloc {\n  with once()\n  app()\n}\n";
+fn app() <http, alloc> {\n  with routes()\n  get(\"/f\", f)\n}\n\n\
+fn once[T](body: fn() -> T <http>) -> T <alloc> {\n  http(request: { Request(method: \"GET\", path: \"/f\", query: \"\", headers: [], body: \"\") }, send: fn(r) { }, body: body)\n}\n\n\
+fn main() <alloc> {\n  with once()\n  app()\n}\n";
     let errors = check(source.as_bytes()).err().unwrap_or_default();
     assert!(
         errors.iter().any(|e| e.message.contains("`day` is read from a text by its own `FromText`")),

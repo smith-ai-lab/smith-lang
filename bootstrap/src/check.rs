@@ -397,7 +397,7 @@ fn start_function(file: &File) -> String {
         ("args: List[str]", "args")
     };
     format!(
-        "\nfn {START}({params}) ! {} {{\n  __end(Exit.exit(main({args})))\n}}\n",
+        "\nfn {START}({params}) <{}> {{\n  __end(Exit.exit(main({args})))\n}}\n",
         effects.join(", ")
     )
 }
@@ -1702,7 +1702,7 @@ fn written(f: &Function, effects: &[&str]) -> String {
             let mut text = format!("{}: {}", p.name, written_type(&p.ty));
             if !p.effects.is_empty() {
                 let effects: Vec<&str> = p.effects.iter().map(|(e, _)| e.as_str()).collect();
-                text.push_str(&format!(" ! {}", effects.join(", ")));
+                text.push_str(&format!(" <{}>", effects.join(", ")));
             }
             if let Some(value) = &p.default {
                 text.push_str(&format!(" = {}", written_expr(value)));
@@ -1719,7 +1719,7 @@ fn written(f: &Function, effects: &[&str]) -> String {
         text.push_str(&format!(" -> {}", written_type(t)));
     }
     if !effects.is_empty() {
-        text.push_str(&format!(" ! {}", effects.join(", ")));
+        text.push_str(&format!(" <{}>", effects.join(", ")));
     }
     text
 }

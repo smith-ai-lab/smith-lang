@@ -11,7 +11,7 @@ struct Door {
   name: str
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   door = Door(key: Key(secret: "k"), name: "front")
   print("{repr(door)}")
   print("{door}")

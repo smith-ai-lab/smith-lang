@@ -6,7 +6,7 @@ struct Key {
 
 without Fmt for Key
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   keys = [Key(secret: "a"), Key(secret: "b")]
   print("{repr(keys)}")
   print("{keys}")

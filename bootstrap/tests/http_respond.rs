@@ -41,7 +41,7 @@ fn printed(source: &str) -> String {
 }
 
 /// Prints each response as its status, its headers, and its body.
-const SHOW: &str = "fn show(r: Response) ! console, alloc {\n  print(\"{r.status}\")\n  loop i in 0..r.headers.size {\n    (name, value) = r.headers[i]\n    print(\"{name}: {value}\")\n  }\n  print(r.body)\n}\n\n";
+const SHOW: &str = "fn show(r: Response) <console, alloc> {\n  print(\"{r.status}\")\n  loop i in 0..r.headers.size {\n    (name, value) = r.headers[i]\n    print(\"{name}: {value}\")\n  }\n  print(r.body)\n}\n\n";
 
 const NAMES: &[&str] = &["Ana", "a\\\"b", "x y", "", "caf\u{e9}", "back\\\\slash"];
 
@@ -73,7 +73,7 @@ fn a_value_with_serialize_is_answered_as_json_with_status_200() {
     };
     generate::check(8501, 3, users, |all| {
         let mut source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (Respond, Response)\n\nstruct User {{\n  id: u64\n  name: str\n}}\n\n{SHOW}fn main() ! console, alloc {{\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (Respond, Response)\n\nstruct User {{\n  id: u64\n  name: str\n}}\n\n{SHOW}fn main() <console, alloc> {{\n"
         );
         let mut expected = String::new();
         for (id, name) in all {
@@ -93,7 +93,7 @@ fn a_value_with_serialize_is_answered_as_json_with_status_200() {
 fn a_result_is_answered_as_its_value_or_as_its_error_with_the_status_of_the_error() {
     let source = format!(
         "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (BadRequest, NotFound, Respond, Response, Unauthorized)\n\nstruct User {{\n  id: u64\n}}\n\n{SHOW}\
-fn main() ! console, alloc {{\n  \
+fn main() <console, alloc> {{\n  \
 ok: Result[User, NotFound] = Result.ok(User(id: 7))\n  show(Respond[Result[User, NotFound]].respond(ok))\n  \
 a: Result[User, NotFound] = Result.err(NotFound(message: \"no\"))\n  show(Respond[Result[User, NotFound]].respond(a))\n  \
 b: Result[User, BadRequest] = Result.err(BadRequest(message: \"bad\"))\n  show(Respond[Result[User, BadRequest]].respond(b))\n  \
@@ -111,9 +111,9 @@ c: Result[User, Unauthorized] = Result.err(Unauthorized(message: \"who\"))\n  sh
 fn a_type_that_writes_its_own_respond_is_answered_as_it_says_and_not_as_json() {
     let source = format!(
         "use std.bits (u16)\nuse std.console (console, print)\nuse std.http (Respond, Response, Status)\n\nstruct Taken {{\n  name: str\n}}\n\nimpl Status[Taken] {{\n  fn status(e: Taken) -> u16 {{ 409 }}\n}}\n\n\
-struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response ! alloc {{\n    Response(status: 200, headers: [(\"content-type\", \"image/png\")], body: value.name)\n  }}\n}}\n\n{SHOW}\
-fn send[T](x: T) -> Response ! alloc\n  requires Respond[T]\n{{\n  Respond[T].respond(x)\n}}\n\n\
-fn main() ! console, alloc {{\n  show(send(Picture(name: \"cat\")))\n  \
+struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response <alloc> {{\n    Response(status: 200, headers: [(\"content-type\", \"image/png\")], body: value.name)\n  }}\n}}\n\n{SHOW}\
+fn send[T](x: T) -> Response <alloc>\n  requires Respond[T]\n{{\n  Respond[T].respond(x)\n}}\n\n\
+fn main() <console, alloc> {{\n  show(send(Picture(name: \"cat\")))\n  \
 t: Result[Picture, Taken] = Result.err(Taken(name: \"ana\"))\n  show(send(t))\n}}\n"
     );
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
@@ -127,7 +127,7 @@ const EACH: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse st
 
 fn every_executable_answers_each_kind_of_value_as_the_evaluator_does() {
     let source = format!(
-        "{EACH}{SHOW}fn main() ! console, alloc {{\n  \
+        "{EACH}{SHOW}fn main() <console, alloc> {{\n  \
 show(Respond[User].respond(User(id: 7)))\n  \
 show(Respond[Text].respond(Text(text: \"hi\")))\n  \
 show(Respond[Redirect].respond(Redirect(to: \"/login\")))\n  \

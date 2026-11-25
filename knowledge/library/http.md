@@ -30,11 +30,11 @@ struct NewUser {
   name: str
 }
 
-fn user(id: u64) -> Result[User, NotFound] ! store
+fn user(id: u64) -> Result[User, NotFound] <store>
 
-fn create_user(new: NewUser) -> User ! store
+fn create_user(new: NewUser) -> User <store>
 
-fn main() ! http, store, alloc {
+fn main() <http, store, alloc> {
   with routes()
   get("/users/:id", user)
   post("/users", create_user)
@@ -59,7 +59,7 @@ What a function gives says what the response is, through the trait `Respond`.
 
 ```
 trait Respond[T] {
-  fn respond(value: T) -> Response ! alloc
+  fn respond(value: T) -> Response <alloc>
 }
 ```
 
@@ -74,11 +74,11 @@ trait Respond[T] {
 `Respond` is given to every type that has `Serialize`, as JSON, in the way `Serialize` is given to a type whose parts have it. A type's own `impl` takes the place of the one it is given, which is how `Html`, `Text`, `Redirect`, and `()` answer as they do, and how a type of a program's own answers as it likes: a type that holds a picture writes an `impl` that gives its bytes and says what they are. Nothing of the library's types is special.
 
 ```
-fn user(id: Nat) -> Result[User, NotFound] ! store
+fn user(id: Nat) -> Result[User, NotFound] <store>
 
-fn notes_page(user: User) -> Html ! store
+fn notes_page(user: User) -> Html <store>
 
-fn logout() -> Redirect ! store
+fn logout() -> Redirect <store>
 ```
 
 A function that can fail gives a `Result[T, E]`, and the type of the error says its status, through the trait `Status`.
@@ -110,7 +110,7 @@ A function of a route is a plain function. It names nothing of HTTP unless it gi
 `at` puts what follows it at a path. The block it is given asks for messages through the effect `messages`, as an [MCP](mcp.md) server does, and `at` answers that effect from the requests to its path: [`message`](mcp.md#where-the-messages-come-from) is the body of the request with its headers, and what `answer` is given is the response, with the status it says. `at` reads nothing of the message and checks nothing of the protocol. A request to the path that is not a POST is answered 405.
 
 ```
-fn main() ! http, store, alloc {
+fn main() <http, store, alloc> {
   with routes()
   get("/health", health)
   at("/mcp") {
@@ -130,15 +130,15 @@ A guard decides, before a route runs, whether the request may reach it. It is wr
 ```
 use std.http (Caller, bearer, caller, get, identity, routes)
 
-fn check(token: str) -> Option[Caller] ! store
+fn check(token: str) -> Option[Caller] <store>
 
 fn health() -> str { "ok" }
 
-fn my_notes() -> List[Note] ! identity, store {
+fn my_notes() -> List[Note] <identity, store> {
   notes_of(caller().subject)
 }
 
-fn main() ! http, store, alloc {
+fn main() <http, store, alloc> {
   with routes()
   get("/health", health)
   with bearer(check)
@@ -158,7 +158,7 @@ struct Caller {
   scopes: List[str]
 }
 
-fn bearer[T](check: fn(token: str) -> Option[Caller], body: fn() -> T ! identity) -> T
+fn bearer[T](check: fn(token: str) -> Option[Caller], body: fn() -> T <identity>) -> T
 ```
 
 - **Who is calling is an effect.** `bearer` answers `identity` for the routes it guards, with the `Caller` that `check` gave. A function that needs to know who is calling carries `identity` and calls `caller()`.
@@ -170,7 +170,7 @@ fn bearer[T](check: fn(token: str) -> Option[Caller], body: fn() -> T ! identity
 `routes` asks for each request and gives each response through the effect `http`, and does not know where they come from. What answers `http` is the deployment and not the program. A native executable, for every system Smith builds for, listens on a socket. In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) the operations of `http` are imports, which a host that is called for each request supplies. A test answers `http` with a handler of its own that gives the requests it wants, so a server is tested with no network. The source is the same for all of them, and what a deployment needs told, as the port a socket listens on, is said in `project.smith` and not in the program, as [Deployments](../language/deployments.md) says.
 
 ```
-fn listen[T](port: Nat, body: fn() -> T ! http) -> T ! net, alloc, diverge
+fn listen[T](port: Nat, body: fn() -> T <http>) -> T <net, alloc, diverge>
   requires Discard[T]
 ```
 

@@ -109,10 +109,10 @@ fn refused(source: &str) -> String {
 
 /// `fetch`, declared as an effect that the test handles, and the two functions
 /// of `tasks.md`.
-const FETCH: &str = "effect web {\n  fn fetch(url: str) -> Result[List[Byte], NetError]\n}\n\nfn fetch_one(url: str) -> Result[List[Byte], NetError] ! web, alloc {\n  with tasks()\n  t = spawn { fetch(url) }\n  join(t)\n}\n\nfn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! web, alloc {\n  with tasks()\n  ta = spawn { fetch(a) }\n  tb = spawn { fetch(b) }\n  pa = try join(ta)\n  pb = try join(tb)\n  .ok((pa, pb))\n}\n\nfn served[T](body: fn() -> T ! web) -> T ! alloc {\n  web(fetch: fn(url) -> Result[List[Byte], NetError] { if url.size == 0 { .err(.refused) } else { .ok([7, 8]) } }, body: body)\n}\n\n";
+const FETCH: &str = "effect web {\n  fn fetch(url: str) -> Result[List[Byte], NetError]\n}\n\nfn fetch_one(url: str) -> Result[List[Byte], NetError] <web, alloc> {\n  with tasks()\n  t = spawn { fetch(url) }\n  join(t)\n}\n\nfn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <web, alloc> {\n  with tasks()\n  ta = spawn { fetch(a) }\n  tb = spawn { fetch(b) }\n  pa = try join(ta)\n  pb = try join(tb)\n  .ok((pa, pb))\n}\n\nfn served[T](body: fn() -> T <web>) -> T <alloc> {\n  web(fetch: fn(url) -> Result[List[Byte], NetError] { if url.size == 0 { .err(.refused) } else { .ok([7, 8]) } }, body: body)\n}\n\n";
 
 fn fetch_one_and_fetch_both_give_what_the_page_says_under_a_handler_of_fetch() {
-    let main = "fn main() ! console, alloc {\n  with served()\n  one = fetch_one(\"a\")\n  match one {\n    .ok(page) { print(\"one {page.size}\") }\n    .err(e) { print(\"one failed\") }\n  }\n  both = fetch_both(\"a\", \"bb\")\n  match both {\n    .ok(pages) {\n      (x, y) = pages\n      print(\"both {x.size} {y.size}\")\n    }\n    .err(e) { print(\"both failed\") }\n  }\n  failed = fetch_both(\"a\", \"\")\n  match failed {\n    .ok(pages) { print(\"no\") }\n    .err(e) { print(\"second failed\") }\n  }\n}\n";
+    let main = "fn main() <console, alloc> {\n  with served()\n  one = fetch_one(\"a\")\n  match one {\n    .ok(page) { print(\"one {page.size}\") }\n    .err(e) { print(\"one failed\") }\n  }\n  both = fetch_both(\"a\", \"bb\")\n  match both {\n    .ok(pages) {\n      (x, y) = pages\n      print(\"both {x.size} {y.size}\")\n    }\n    .err(e) { print(\"both failed\") }\n  }\n  failed = fetch_both(\"a\", \"\")\n  match failed {\n    .ok(pages) { print(\"no\") }\n    .err(e) { print(\"second failed\") }\n  }\n}\n";
     let said = run(&program(&format!("{FETCH}{main}")));
     assert_eq!(said, "one 2\nboth 2 2\nsecond failed\n");
 }
@@ -121,7 +121,7 @@ fn fetch_one_and_fetch_both_give_what_the_page_says_under_a_handler_of_fetch() {
 /// gives a different value, joins the first `joined` of them, and says that the
 /// block ended and what the joined ones gave.
 fn counting(spawned: usize, joined: usize) -> String {
-    let mut s = String::from("fn group() -> u64 ! console, alloc {\n  with tasks()\n");
+    let mut s = String::from("fn group() -> u64 <console, alloc> {\n  with tasks()\n");
     for k in 0..spawned {
         s += &format!("  t{k} = spawn {{\n    print(\"c{k}\")\n    v: u64 = {}\n    v\n  }}\n", k + 1);
     }
@@ -129,7 +129,7 @@ fn counting(spawned: usize, joined: usize) -> String {
     for k in 0..joined {
         s += &format!("  total = wrapping_add(total, wrapping_mul(join(t{k}), {}))\n", 1000u64.pow(k as u32 % 3));
     }
-    s += "  total\n}\n\nfn main() ! console, alloc {\n  total = group()\n  print(\"end {total}\")\n}\n";
+    s += "  total\n}\n\nfn main() <console, alloc> {\n  total = group()\n  print(\"end {total}\")\n}\n";
     program(&s)
 }
 
@@ -162,7 +162,7 @@ fn each_child_runs_once_if_it_is_joined_and_none_runs_after_the_block_ends() {
 fn an_ordinary_value_is_shared_and_a_var_is_read_as_it_was_at_the_spawn() {
     generate::check(331, 20, |g| (g.below(1000) as u64, 1 + g.below(1000) as u64), |&(a, b)| {
         let source = program(&format!(
-            "fn snapshot() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\nfn twice(x: str) -> (u64, u64) {{\n  with tasks()\n  ta = spawn {{ wrapping_add(x.size, 1) }}\n  tb = spawn {{ wrapping_mul(x.size, 2) }}\n  (join(ta), join(tb))\n}}\n\nfn main() ! console, alloc {{\n  (p, q) = twice(\"abc\")\n  print(\"{{snapshot()}} {{p}} {{q}}\")\n}}\n"
+            "fn snapshot() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\nfn twice(x: str) -> (u64, u64) {{\n  with tasks()\n  ta = spawn {{ wrapping_add(x.size, 1) }}\n  tb = spawn {{ wrapping_mul(x.size, 2) }}\n  (join(ta), join(tb))\n}}\n\nfn main() <console, alloc> {{\n  (p, q) = twice(\"abc\")\n  print(\"{{snapshot()}} {{p}} {{q}}\")\n}}\n"
         ));
         assert_eq!(run(&source), format!("{} 4 6\n", b + a + 1));
     });
@@ -189,19 +189,19 @@ fn page_block(page: &str, needle: &str) -> String {
 fn the_programs_of_the_pages_build_as_the_pages_write_them_and_give_what_they_say() {
     let snapshot = page_block("task-sharing.md", "fn snapshot()");
     let said = run(&format!(
-        "use std.console (console, print)\n{snapshot}\nfn main() ! console, alloc {{\n  print(\"{{snapshot()}}\")\n}}\n"
+        "use std.console (console, print)\n{snapshot}\nfn main() <console, alloc> {{\n  print(\"{{snapshot()}}\")\n}}\n"
     ));
     assert_eq!(said, "7\n");
     let start = page_block("tasks.md", "fn start_two()");
     let said = run(&format!(
-        "use std.console (console, print)\n{start}\nfn main() ! console, alloc {{\n  start_two()\n  print(\"done\")\n}}\n"
+        "use std.console (console, print)\n{start}\nfn main() <console, alloc> {{\n  start_two()\n  print(\"done\")\n}}\n"
     ));
     assert_eq!(said, "done\n");
 }
 
 /// A program cannot read the value of a child without joining it.
 fn a_task_holds_its_value_where_only_join_reads_it() {
-    let source = program("fn peek() -> u64 {\n  with tasks()\n  t = spawn { 1 }\n  t.number\n}\n\nfn main() ! console, alloc {\n  print(\"{peek()}\")\n}\n");
+    let source = program("fn peek() -> u64 {\n  with tasks()\n  t = spawn { 1 }\n  t.number\n}\n\nfn main() <console, alloc> {\n  print(\"{peek()}\")\n}\n");
     let errors = refused(&source);
     assert!(errors.contains("private"), "{errors}");
 }
@@ -211,7 +211,7 @@ fn two_children_of_different_result_types_joined_in_either_order_give_their_own_
     generate::check(334, 16, |g| (g.below(1000) as u64, g.below(2) == 0), |&(n, first)| {
         let (a, b) = if first { ("ta", "tb") } else { ("tb", "ta") };
         let source = program(&format!(
-            "fn both(n: u64) -> str ! alloc {{\n  with tasks()\n  ta = spawn {{ wrapping_add(n, 1) }}\n  tb = spawn {{ \"word\" }}\n  x = join({a})\n  y = join({b})\n  \"{{x}} {{y}}\"\n}}\n\nfn main() ! console, alloc {{\n  print(both({n}))\n}}\n"
+            "fn both(n: u64) -> str <alloc> {{\n  with tasks()\n  ta = spawn {{ wrapping_add(n, 1) }}\n  tb = spawn {{ \"word\" }}\n  x = join({a})\n  y = join({b})\n  \"{{x}} {{y}}\"\n}}\n\nfn main() <console, alloc> {{\n  print(both({n}))\n}}\n"
         ));
         let said = run(&source);
         let (number, word) = (n + 1, "word");
@@ -223,7 +223,7 @@ fn two_children_of_different_result_types_joined_in_either_order_give_their_own_
 /// A program that opens no group has `main` carry `task`, and the system's
 /// scheduler runs each child to its end where it starts.
 fn a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_starts() {
-    let source = program("fn main() ! console, alloc, task {\n  a = spawn {\n    print(\"a\")\n    v: u64 = 1\n    v\n  }\n  b = spawn {\n    print(\"b\")\n    v: u64 = 2\n    v\n  }\n  y: u64 = join(b)\n  x: u64 = join(a)\n  print(\"{x} {y}\")\n}\n")
+    let source = program("fn main() <console, alloc, task> {\n  a = spawn {\n    print(\"a\")\n    v: u64 = 1\n    v\n  }\n  b = spawn {\n    print(\"b\")\n    v: u64 = 2\n    v\n  }\n  y: u64 = join(b)\n  x: u64 = join(a)\n  print(\"{x} {y}\")\n}\n")
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task)");
     assert_eq!(run(&source), "a\nb\n1 2\n");
 }
@@ -232,14 +232,14 @@ fn a_program_with_no_group_has_the_system_run_each_child_to_its_end_where_it_sta
 /// no `start` gave, so that `join` reads memory that holds no frame: this program
 /// built and ended with status 1 and nothing printed before it was refused.
 fn a_handler_of_task_written_in_a_program_is_refused() {
-    let source = program("fn shift[T](body: fn() -> T ! task) -> T ! task {\n  task(\n    start: fn(work: Frame) -> u64 { 4096 },\n    finish: fn(child: u64) -> Frame { finish(child) },\n    body: body,\n  )\n}\n\nfn main() ! console, alloc {\n  with tasks()\n  with shift()\n  b = spawn { \"seven\" }\n  s: str = join(b)\n  print(s)\n}\n")
+    let source = program("fn shift[T](body: fn() -> T <task>) -> T <task> {\n  task(\n    start: fn(work: Frame) -> u64 { 4096 },\n    finish: fn(child: u64) -> Frame { finish(child) },\n    body: body,\n  )\n}\n\nfn main() <console, alloc> {\n  with tasks()\n  with shift()\n  b = spawn { \"seven\" }\n  s: str = join(b)\n  print(s)\n}\n")
         .replace("use std.task (join, spawn, tasks)", "use std.task (Frame, finish, join, spawn, task, tasks)");
     let errors = refused(&source);
     assert!(errors.contains("`task` is handled only by the schedulers of `std.task`"), "{errors}");
 }
 
 fn a_child_that_assigns_a_var_is_refused() {
-    let source = program("fn counted() -> u64 {\n  var n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  join(t)\n  n\n}\n\nfn main() ! console, alloc {\n  print(\"{counted()}\")\n}\n");
+    let source = program("fn counted() -> u64 {\n  var n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  join(t)\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{counted()}\")\n}\n");
     let errors = refused(&source);
     assert!(errors.contains("this child assigns `n`"), "{errors}");
 }
@@ -247,7 +247,7 @@ fn a_child_that_assigns_a_var_is_refused() {
 fn a_value_used_once_moves_into_the_child_and_a_second_use_is_refused() {
     let items = |first: &str, second: &str| {
         program(&format!(
-            "fn two_draws(key: take Key) -> u64 {{\n  (k1, k2) = split(key)\n  with tasks()\n  ta = spawn {{ bits({first}) }}\n  tb = spawn {{ bits({second}) }}\n  wrapping_add(join(ta), join(tb))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{two_draws(seeded(1))}}\")\n}}\n"
+            "fn two_draws(key: take Key) -> u64 {{\n  (k1, k2) = split(key)\n  with tasks()\n  ta = spawn {{ bits({first}) }}\n  tb = spawn {{ bits({second}) }}\n  wrapping_add(join(ta), join(tb))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{two_draws(seeded(1))}}\")\n}}\n"
         ))
     };
     let said = run(&items("k1", "k2"));
@@ -255,7 +255,7 @@ fn a_value_used_once_moves_into_the_child_and_a_second_use_is_refused() {
     let errors = refused(&items("k1", "k1"));
     assert!(errors.contains("`k1` is used here, after it was given away"), "{errors}");
     // The parent that spawned with the key has none left.
-    let after = program("fn after(key: take Key) -> u64 {\n  with tasks()\n  ta = spawn { bits(key) }\n  wrapping_add(join(ta), bits(key))\n}\n\nfn main() ! console, alloc {\n  print(\"{after(seeded(1))}\")\n}\n");
+    let after = program("fn after(key: take Key) -> u64 {\n  with tasks()\n  ta = spawn { bits(key) }\n  wrapping_add(join(ta), bits(key))\n}\n\nfn main() <console, alloc> {\n  print(\"{after(seeded(1))}\")\n}\n");
     let errors = refused(&after);
     assert!(errors.contains("`key` is used here, after it was given away"), "{errors}");
 }
@@ -263,27 +263,27 @@ fn a_value_used_once_moves_into_the_child_and_a_second_use_is_refused() {
 fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not() {
     let source = |effect: &str| {
         program(&format!(
-            "fn start(n: u64){effect} {{\n  spawn {{ wrapping_mul(n, 2) }}\n  ()\n}}\n\nfn start_two() {{\n  with tasks()\n  start(1)\n  start(2)\n}}\n\nfn main() ! console, alloc {{\n  start_two()\n  print(\"done\")\n}}\n"
+            "fn start(n: u64){effect} {{\n  spawn {{ wrapping_mul(n, 2) }}\n  ()\n}}\n\nfn start_two() {{\n  with tasks()\n  start(1)\n  start(2)\n}}\n\nfn main() <console, alloc> {{\n  start_two()\n  print(\"done\")\n}}\n"
         ))
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)")
     };
-    assert_eq!(run(&source(" ! task")), "done\n");
+    assert_eq!(run(&source(" <task>")), "done\n");
     let errors = refused(&source(""));
     assert!(errors.contains("`spawn` needs the `task` effect, which `start` does not declare"), "{errors}");
     // A caller with no group of its own carries it too.
-    let caller = program("fn start(n: u64) ! task {\n  spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() ! console, alloc {\n  start_two()\n}\n")
+    let caller = program("fn start(n: u64) <task> {\n  spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() <console, alloc> {\n  start_two()\n}\n")
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)");
     let errors = refused(&caller);
     assert!(errors.contains("`start` needs the `task` effect"), "{errors}");
 }
 
-const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T ! clock) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T ! clock) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
+const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T <clock>) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
 
 /// A child reads the clock that was in force where it was spawned, which a
 /// handler that holds no state gives it.
 fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
     generate::check(332, 20, |g| (1 + g.below(4), g.below(1000) as u64), |&(children, tick)| {
-        let mut s = format!("{CLOCK}fn readings() -> List[u64] ! alloc {{\n  with fixed({tick})\n  with tasks()\n");
+        let mut s = format!("{CLOCK}fn readings() -> List[u64] <alloc> {{\n  with fixed({tick})\n  with tasks()\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ now() }}\n");
         }
@@ -291,7 +291,7 @@ fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
         for k in 0..children {
             s += &format!("  all = push(all, join(t{k}))\n");
         }
-        s += "  all\n}\n\nfn main() ! console, alloc {\n  xs = readings()\n  loop i in 0..xs.size { print(\"{xs[i]}\") }\n}\n";
+        s += "  all\n}\n\nfn main() <console, alloc> {\n  xs = readings()\n  loop i in 0..xs.size { print(\"{xs[i]}\") }\n}\n";
         let said = run(&program(&s));
         let ticks: Vec<u64> = said.lines().map(|l| l.parse().unwrap()).collect();
         assert_eq!(ticks, vec![tick; children], "for {children} children");
@@ -302,7 +302,7 @@ fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
 /// asks: the state goes through the poll, and is never copied into the child.
 fn a_child_under_a_handler_that_holds_state_reads_and_changes_it() {
     let source = program(&format!(
-        "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  u = spawn {{ now() }}\n  wrapping_add(wrapping_mul(join(t), 10), join(u))\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{readings()}}\")\n}}\n"
+        "{CLOCK}fn readings() -> u64 {{\n  with fake_clock()\n  with tasks()\n  t = spawn {{ now() }}\n  u = spawn {{ now() }}\n  wrapping_add(wrapping_mul(join(t), 10), join(u))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{readings()}}\")\n}}\n"
     ));
     assert_eq!(run(&source), "12\n");
 }
@@ -313,7 +313,7 @@ fn a_child_under_a_handler_that_holds_state_reads_and_changes_it() {
 fn a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents() {
     let asked = |rounds: u64| {
         let source = program(&format!(
-            "fn build(n: u64) -> List[u64] ! alloc {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, i)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child_sum(n: u64) -> u64 ! alloc {{\n  with tasks()\n  t = spawn {{ total(build(n)) }}\n  join(t)\n}}\n\nfn child_list(n: u64) -> List[u64] ! alloc {{\n  with tasks()\n  t = spawn {{ build(n) }}\n  join(t)\n}}\n\nfn main() ! console, alloc {{\n  var sum: u64 = 0\n  loop j in 0..{rounds} {{\n    sum = wrapping_add(sum, child_sum(50))\n  }}\n  xs = child_list(10)\n  pad = build(300)\n  print(\"{{sum}} {{total(xs)}} {{xs.size}} {{total(pad)}}\")\n}}\n"
+            "fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, i)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child_sum(n: u64) -> u64 <alloc> {{\n  with tasks()\n  t = spawn {{ total(build(n)) }}\n  join(t)\n}}\n\nfn child_list(n: u64) -> List[u64] <alloc> {{\n  with tasks()\n  t = spawn {{ build(n) }}\n  join(t)\n}}\n\nfn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop j in 0..{rounds} {{\n    sum = wrapping_add(sum, child_sum(50))\n  }}\n  xs = child_list(10)\n  pad = build(300)\n  print(\"{{sum}} {{total(xs)}} {{xs.size}} {{total(pad)}}\")\n}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
@@ -335,14 +335,14 @@ fn a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_par
 fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
     let targets = runnable();
     generate::check(333, 6, |g: &mut Gen| (1 + g.below(5), 1 + g.below(5)), |&(children, reads)| {
-        let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] ! alloc {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn readings() -> u64 ! alloc {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
+        let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn readings() -> u64 <alloc> {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ wrapping_add(now(), total(build({}))) }}\n", reads + k);
         }
         for k in 0..children {
             s += &format!("  sum = wrapping_add(sum, wrapping_mul(join(t{k}), {}))\n", k + 1);
         }
-        s += "  sum\n}\n\nfn main() ! console, alloc {\n  print(\"{readings()}\")\n}\n";
+        s += "  sum\n}\n\nfn main() <console, alloc> {\n  print(\"{readings()}\")\n}\n";
         let source = program(&s);
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let said = scalar::run(&scalar::passes(&program));
@@ -358,12 +358,12 @@ fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
 /// a child that had ended. A function that lends the handle may not join it,
 /// and one that takes it may.
 fn a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken() {
-    let twice = program("fn main() ! console, alloc {\n  with tasks()\n  t = spawn { \"seven\" }\n  a = join(t)\n  b = join(t)\n  print(\"{a} {b}\")\n}\n");
+    let twice = program("fn main() <console, alloc> {\n  with tasks()\n  t = spawn { \"seven\" }\n  a = join(t)\n  b = join(t)\n  print(\"{a} {b}\")\n}\n");
     let errors = refused(&twice);
     assert!(errors.contains("`t` is used here, after it was given away"), "{errors}");
     let once = |param: &str| {
         program(&format!(
-            "fn wait(t: {param}Task[str]) -> str ! task {{\n  join(t)\n}}\n\nfn main() ! console, alloc {{\n  with tasks()\n  t = spawn {{ \"seven\" }}\n  print(wait(t))\n}}\n"
+            "fn wait(t: {param}Task[str]) -> str <task> {{\n  join(t)\n}}\n\nfn main() <console, alloc> {{\n  with tasks()\n  t = spawn {{ \"seven\" }}\n  print(wait(t))\n}}\n"
         ))
         .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks)")
     };
@@ -382,15 +382,15 @@ fn a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_
     generate::check(1030, 3, |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64), |&(a, b, seed)| {
         let sum = a + b;
         let shapes = [
-            ("fn pair(x: take Task[u64], y: take Task[u64]) -> u64 ! task {{\n  wrapping_add(join(x), join(y))\n}}\n\n", format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
+            ("fn pair(x: take Task[u64], y: take Task[u64]) -> u64 <task> {{\n  wrapping_add(join(x), join(y))\n}}\n\n", format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
             ("", format!("wrapping_add(join(spawn {{ num({a}) }}), join(spawn {{ num({b}) }}))"), sum),
             ("", format!("join(spawn {{ num({a}) }})"), a),
-            ("fn twice(x: take Task[u64]) -> u64 ! task {{\n  wrapping_add(join(x), 1)\n}}\n\n", format!("twice(spawn {{ join(spawn {{ num({b}) }}) }})"), b + 1),
+            ("fn twice(x: take Task[u64]) -> u64 <task> {{\n  wrapping_add(join(x), 1)\n}}\n\n", format!("twice(spawn {{ join(spawn {{ num({b}) }}) }})"), b + 1),
         ];
         for (items, call, expected) in shapes {
             for opening in ["with tasks()".to_string(), format!("with test_scheduler({seed})")] {
                 let source = program(&format!(
-                    "fn num(n: u64) -> u64 {{\n  n\n}}\n\n{}fn run() -> u64 ! alloc, diverge {{\n  {opening}\n  v: u64 = {call}\n  v\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{run()}}\")\n}}\n",
+                    "fn num(n: u64) -> u64 {{\n  n\n}}\n\n{}fn run() -> u64 <alloc, diverge> {{\n  {opening}\n  v: u64 = {call}\n  v\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n",
                     items.replace("{{", "{").replace("}}", "}")
                 ))
                 .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks, test_scheduler)");

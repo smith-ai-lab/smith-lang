@@ -8,7 +8,7 @@ fn sh(x: u64, by: Byte) -> u64
   wrapping_shift_left(x, by)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var n: u64 = 0
   loop i in 0..64 {
     j: Byte = i

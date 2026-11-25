@@ -42,7 +42,7 @@ In a function that gives nothing, `return` is written alone.
 ```
 use std.console (console, print)
 
-fn log_if(verbose: bool, text: str) ! console {
+fn log_if(verbose: bool, text: str) <console> {
   if not verbose { return }
   print(text)
 }
@@ -85,7 +85,7 @@ fn index_of(xs: List[Byte], target: Byte) -> Option[u64] {
 `return` leaves the nearest function or [lambda](lambdas.md) around it. Inside a lambda that is passed to a function, it gives the lambda's value and goes no further.
 
 ```
-fn clamp_all(xs: List[Int]) -> List[Int] ! alloc {
+fn clamp_all(xs: List[Int]) -> List[Int] <alloc> {
   map(xs) fn(x) {
     if x < 0 { return 0 }
     x
@@ -100,7 +100,7 @@ fn clamp_all(xs: List[Int]) -> List[Int] ! alloc {
 Nothing unwinds. A `return` gives a value to whatever called the function or lambda it is in, and that caller goes on with its next line, as after any call. So after a [`with`](with.md), where the rest of the block is a lambda, the function that was given the lambda still finishes its work.
 
 ```
-fn header(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
+fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   with f = open(path)
   n = try size(f)
   if n < 64 { return .err(.failed("too short")) }
@@ -131,7 +131,7 @@ A value that must be used exactly once, as [Values used exactly once](resources.
 ```
 use std.bits (u64)
 
-fn peek(path: str) -> Result[u64, FsError] ! fs {
+fn peek(path: str) -> Result[u64, FsError] <fs> {
   f = try open_file(path)
   n = try size(f)
   close_file(f)

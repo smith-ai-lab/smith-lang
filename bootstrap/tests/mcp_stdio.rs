@@ -53,7 +53,7 @@ const META: &str = "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"202
 
 /// The server of the page, with the entry that installs `stdio`, and `divide`
 /// written so that the quotient is proven to fit.
-const DIVIDE: &str = "use std.console (console)\nuse std.int (checked_div)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Divides one whole number by another.\nfn divide(\n  // The number that is divided.\n  a: Int,\n  // The number it is divided by.\n  b: Int,\n) -> Result[Int, str] {\n  if b == 0 {\n    .err(\"b is zero\")\n  } else {\n    match checked_div(a, b) {\n      .some(q) { .ok(q) }\n      .none { .err(\"the quotient does not fit\") }\n    }\n  }\n}\n\nfn serve() ! messages, alloc {\n  with mcp(name: \"calc\", version: \"1\")\n  tool(divide)\n}\n\nfn main() ! console, alloc {\n  with stdio()\n  serve()\n}\n";
+const DIVIDE: &str = "use std.console (console)\nuse std.int (checked_div)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Divides one whole number by another.\nfn divide(\n  // The number that is divided.\n  a: Int,\n  // The number it is divided by.\n  b: Int,\n) -> Result[Int, str] {\n  if b == 0 {\n    .err(\"b is zero\")\n  } else {\n    match checked_div(a, b) {\n      .some(q) { .ok(q) }\n      .none { .err(\"the quotient does not fit\") }\n    }\n  }\n}\n\nfn serve() <messages, alloc> {\n  with mcp(name: \"calc\", version: \"1\")\n  tool(divide)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
 
 fn request(id: u32, method: &str, params: &str) -> String {
     let sep = if params.is_empty() { "" } else { "," };
@@ -155,7 +155,7 @@ fn a_tool_that_fails_is_a_result_marked_as_an_error_and_a_tool_the_server_has_no
 /// one of them, give one that is of another kind, or give a number outside the
 /// range: the parameter is named by the failure.
 fn arguments_that_do_not_fit_are_invalid_params_with_the_parameter_named() {
-    const SOURCE: &str = "use std.console (console)\nuse std.mcp (mcp, messages, stdio, tool)\n\nfn place(\n  // How many.\n  count: 1..6,\n  // What they are called.\n  label: str,\n) -> str {\n  label\n}\n\nfn serve() ! messages, alloc {\n  with mcp(name: \"p\", version: \"1\")\n  tool(place)\n}\n\nfn main() ! console, alloc {\n  with stdio()\n  serve()\n}\n";
+    const SOURCE: &str = "use std.console (console)\nuse std.mcp (mcp, messages, stdio, tool)\n\nfn place(\n  // How many.\n  count: 1..6,\n  // What they are called.\n  label: str,\n) -> str {\n  label\n}\n\nfn serve() <messages, alloc> {\n  with mcp(name: \"p\", version: \"1\")\n  tool(place)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
     let program = lower(SOURCE.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     generate::check(
         7710,
@@ -281,7 +281,7 @@ fn server_source(t: &Tool) -> String {
     }
     let fields: Vec<String> = (0..t.params.len()).map(|i| format!("p{i}: p{i}")).collect();
     s += &format!(") -> Echo {{\n  Echo({})\n}}\n\n", fields.join(", "));
-    s += "fn serve() ! messages, alloc {\n  with mcp(name: \"echo\", version: \"1\")\n  tool(echo)\n}\n\nfn main() ! console, alloc {\n  with stdio()\n  serve()\n}\n";
+    s += "fn serve() <messages, alloc> {\n  with mcp(name: \"echo\", version: \"1\")\n  tool(echo)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
     s
 }
 
@@ -294,7 +294,7 @@ fn schema_source(t: &Tool) -> String {
         s += &comment_lines(c, "  ");
         s += &format!("  p{i}: {}\n", ty(k));
     }
-    s += "}\n\nfn main() ! console, alloc {\n  print(schema_text(Describe[Args].describe(json_schema(Json(cases: .key, names: .written)))))\n}\n";
+    s += "}\n\nfn main() <console, alloc> {\n  print(schema_text(Describe[Args].describe(json_schema(Json(cases: .key, names: .written)))))\n}\n";
     s
 }
 
@@ -320,7 +320,7 @@ fn a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_th
 }
 
 fn what_a_tool_prints_goes_to_the_standard_error_and_the_server_ends_with_the_input() {
-    let source = "use std.console (console, print)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Says hello.\nfn hello(\n  // Who.\n  name: str,\n) -> str ! console, alloc {\n  print(\"loud {name}\")\n  \"hello {name}\"\n}\n\nfn serve() ! messages, console, alloc {\n  with mcp(name: \"h\", version: \"1\")\n  tool(hello)\n}\n\nfn main() ! console, alloc {\n  with stdio()\n  serve()\n}\n";
+    let source = "use std.console (console, print)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Says hello.\nfn hello(\n  // Who.\n  name: str,\n) -> str <console, alloc> {\n  print(\"loud {name}\")\n  \"hello {name}\"\n}\n\nfn serve() <messages, console, alloc> {\n  with mcp(name: \"h\", version: \"1\")\n  tool(hello)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
     let lines = serve(source, &[call(1, "hello", "{\"name\":\"ada\"}"), call(2, "hello", "{\"name\":\"bo\"}")]);
     assert_eq!(lines.len(), 2, "only messages are written to the standard output: {lines:?}");
     assert_eq!(result_of(&lines[1]).get("structuredContent").and_then(Json::text), Some("hello bo"));
@@ -331,7 +331,7 @@ fn what_a_tool_prints_goes_to_the_standard_error_and_the_server_ends_with_the_in
 /// A comment of a function that is not a tool, or of a type it does not take
 /// or give, is not in the executable, and the ones of the tool are.
 fn a_comment_is_in_the_executable_only_for_a_function_given_to_tool_and_the_types_it_takes() {
-    let source = "use std.console (console)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// A shape that nothing takes: the-comment-of-an-unused-struct.\nstruct Unused {\n  // the-comment-of-an-unused-field\n  a: Int\n}\n\n// A shape that the tool takes: the-comment-of-a-used-struct.\nstruct Used {\n  // the-comment-of-a-used-field\n  a: Int\n}\n\n// the-comment-of-a-plain-function\nfn plain(a: Int) -> Int { a }\n\n// the-comment-of-the-tool\nfn tell(used: Used) -> Int { used.a }\n\nfn serve() ! messages, alloc {\n  with mcp(name: \"s\", version: \"1\")\n  tool(tell)\n}\n\nfn main() ! console, alloc {\n  with stdio()\n  serve()\n}\n";
+    let source = "use std.console (console)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// A shape that nothing takes: the-comment-of-an-unused-struct.\nstruct Unused {\n  // the-comment-of-an-unused-field\n  a: Int\n}\n\n// A shape that the tool takes: the-comment-of-a-used-struct.\nstruct Used {\n  // the-comment-of-a-used-field\n  a: Int\n}\n\n// the-comment-of-a-plain-function\nfn plain(a: Int) -> Int { a }\n\n// the-comment-of-the-tool\nfn tell(used: Used) -> Int { used.a }\n\nfn serve() <messages, alloc> {\n  with mcp(name: \"s\", version: \"1\")\n  tool(tell)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
     let bytes = targets::build(source.as_bytes(), targets::any()).unwrap_or_else(|e| panic!("{e:?}"));
     let has = |needle: &str| bytes.windows(needle.len()).any(|w| w == needle.as_bytes());
     for held in ["the-comment-of-the-tool", "the-comment-of-a-used-struct", "the-comment-of-a-used-field"] {

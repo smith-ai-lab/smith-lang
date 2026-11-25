@@ -61,7 +61,7 @@ A test is an ordinary function. It lists its effects as any function does, and t
 use std.http (get, listen, routes)
 use std.test (Failed, expect)
 
-fn test_a_request_is_answered() -> Result[(), Failed] ! alloc {
+fn test_a_request_is_answered() -> Result[(), Failed] <alloc> {
   with other_side()
   with listen(port: 80)
   with routes()
@@ -92,7 +92,7 @@ Test files are left out of normal builds, so `smith build` never compiles `x_tes
 | `fn test_name() -> Result[(), Failed]` | A test: a single example that runs once |
 | `expect { e }` | The check, which reports both sides of a comparison when it fails |
 | `try expect { e }` | A check that ends the test when it fails |
-| `fn test_name() -> Result[(), Failed] ! e` | A test that carries the effect `e`, which the system answers unless the test installs a handler of it |
+| `fn test_name() -> Result[(), Failed] <e>` | A test that carries the effect `e`, which the system answers unless the test installs a handler of it |
 | `fn test_name(key: take Key)` or `fn test_name(x: T)` | A property, as [Properties](properties.md) describes |
 
 Next: [Random values for tests](random.md)

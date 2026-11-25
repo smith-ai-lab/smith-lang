@@ -19,7 +19,7 @@ package: Package = Package(
   ],
 )
 
-fn route_table(dir: Dir) -> Source ! fs, alloc {
+fn route_table(dir: Dir) -> Source <fs, alloc> {
   render_router(files(dir))
 }
 ```
@@ -35,7 +35,7 @@ The build runs the step before compiling, on every build, so generated source ca
 A step may read the project's files and nothing else, with no network and no clock. Its effects say so, so `route_table` lists `fs` and `alloc`. A step that lists `net` or `time` is refused.
 
 ```
-fn stamped_routes(dir: Dir) -> Source ! fs, time, alloc {
+fn stamped_routes(dir: Dir) -> Source <fs, time, alloc> {
   render_router(files(dir))
 }
 ```
@@ -61,6 +61,6 @@ There are no macros that rewrite code in place.
 | Written | Means |
 | --- | --- |
 | `Generate(run: f, inputs: dir, output: file)` | Before every build, runs `f` on `dir` and writes its source to `file` |
-| `fn f(dir: Dir) -> Source ! fs, alloc` | A step: it reads the project's files and has no network and no clock |
+| `fn f(dir: Dir) -> Source <fs, alloc>` | A step: it reads the project's files and has no network and no clock |
 
 Next: [Project tasks](project-tasks.md)

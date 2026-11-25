@@ -140,7 +140,7 @@ pub fn writer(name: &str, body: impl Fn(&str, &[&str]) -> String) -> String {
             format!(", {params}")
         };
         out.push_str(&format!(
-            "  fn {function}(w: take {name}{params}) -> {name} ! alloc {{ {} }}\n",
+            "  fn {function}(w: take {name}{params}) -> {name} <alloc> {{ {} }}\n",
             body(function, &names)
         ));
     }
@@ -185,7 +185,7 @@ fn a_struct_writes_its_name_and_each_field_in_order() {
   y: Int
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   l = write(Point(x: 3, y: 4), Log(lines: \"\"))
   print(l.lines)
 }}
@@ -207,7 +207,7 @@ fn a_rawjson_written_to_a_writer_of_another_format_is_a_text() {
     let source = with_import(
         &[("std.json", &["RawJson", "raw_json"])],
         &format!(
-            "{}struct Call {{\n  args: RawJson\n}}\n\nfn main() ! console, alloc {{\n  match raw_json(\"[1.50, 1e400]\") {{\n    .ok(r) {{\n      l = write(Call(args: r), Log(lines: \"\"))\n      print(l.lines)\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n",
+            "{}struct Call {{\n  args: RawJson\n}}\n\nfn main() <console, alloc> {{\n  match raw_json(\"[1.50, 1e400]\") {{\n    .ok(r) {{\n      l = write(Call(args: r), Log(lines: \"\"))\n      print(l.lines)\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n",
             log()
         ),
     );
@@ -471,7 +471,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
     if own_impl {
         out.push_str(
             "impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W ! alloc { Writer.signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(to, value.degrees) }
 }
 
 ",
@@ -507,7 +507,7 @@ fn case(g: &mut Gen, parts: Parts, own_impl: bool, writer: &str, to: &str) -> Ca
     let head = with_import(
         &[("std.serialize", &["write"])],
         &format!(
-            "{writer}{}fn main() ! console, alloc {{\n  v: {} = {value}\n  l = ",
+            "{writer}{}fn main() <console, alloc> {{\n  v: {} = {value}\n  l = ",
             definitions(&defs, own_impl),
             defs.name(&top)
         ),
@@ -637,7 +637,7 @@ fn writing_a_list_asks_for_no_memory_but_the_writers() {
         with_import(
             &[],
             &format!(
-                "{}fn main() ! console, alloc {{\n  xs: List[u32] = [{}]\n{tail}}}\n",
+                "{}fn main() <console, alloc> {{\n  xs: List[u32] = [{}]\n{tail}}}\n",
                 count(),
                 items.join(", ")
             ),
@@ -660,14 +660,14 @@ fn writing_a_list_asks_for_no_memory_but_the_writers() {
 // Where `Serialize` and `Writer` are.
 
 fn serialize_and_writer_are_imported_with_use_and_are_not_in_the_prelude() {
-    let writes = "use std.console (console)\n\nstruct Point {\n  x: Int\n}\n\nfn main() ! console, alloc {\n  l = write(Point(x: 1), 0)\n}\n";
+    let writes = "use std.console (console)\n\nstruct Point {\n  x: Int\n}\n\nfn main() <console, alloc> {\n  l = write(Point(x: 1), 0)\n}\n";
     // No name of the module is known to a program that does not import it.
     let found = errors(writes);
     assert!(
         found.iter().any(|e| e.message.contains("`write`")),
         "{found:?}"
     );
-    let body = "struct Count {\n  n: u64\n}\n\nfn show[W: Writer](w: take W) -> W ! alloc { w }\n\nfn main() ! alloc {\n  c = show(Count(n: 0))\n}\n";
+    let body = "struct Count {\n  n: u64\n}\n\nfn show[W: Writer](w: take W) -> W <alloc> { w }\n\nfn main() <alloc> {\n  c = show(Count(n: 0))\n}\n";
     let bound = format!("use std.bits (u64)\n\n{body}");
     let bound = bound.as_str();
     let found = errors(bound);
@@ -688,14 +688,14 @@ fn serialize_and_writer_are_imported_with_use_and_are_not_in_the_prelude() {
 }
 
 fn a_program_that_never_writes_a_value_is_the_program_it_was() {
-    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() ! console, alloc {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
+    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() <console, alloc> {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
     let base = format!("use std.console (console, print)\n\n{items}");
     // The same program, with the module imported and everything that writes
     // a value defined, and a function that writes that nothing calls.
     let extended = with_import(
         &[],
         &format!(
-            "{}fn unused(p: Point) -> Log ! alloc {{ write(p, Log(lines: \"\")) }}\n\n{items}",
+            "{}fn unused(p: Point) -> Log <alloc> {{ write(p, Log(lines: \"\")) }}\n\n{items}",
             log()
         ),
     );

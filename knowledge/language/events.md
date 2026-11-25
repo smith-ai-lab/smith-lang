@@ -10,7 +10,7 @@ status: planned
 Events are handled the same way as other I/O. A native application is a task that waits for the next event, so user code has no callbacks.
 
 ```
-fn main() ! ui, diverge {
+fn main() <ui, diverge> {
   with app = application()
   with win = window(app, "Smith", 800, 600)
   loop {

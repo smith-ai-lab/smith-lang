@@ -22,14 +22,14 @@ fn create(new: NewUser) -> User {
 }
 
 // The program of the page's deployment: two routes.
-fn app() ! http, alloc {
+fn app() <http, alloc> {
   with routes()
   get("/users/:id", user)
   post("/users", create)
 }
 
 // What `serve` of `project.smith` does, at the port a test gives.
-fn main(args: List[str]) ! net, alloc, diverge {
+fn main(args: List[str]) <net, alloc, diverge> {
   if args.size == 0 { return }
   number: Result[Nat, ReadError] = from_text("port", args[0])
   match number {

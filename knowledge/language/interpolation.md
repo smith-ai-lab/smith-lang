@@ -17,7 +17,7 @@ Every string literal may hold expressions in braces, and there is no other kind 
 use std.bits (i32)
 use std.console (console, print)
 
-fn greet(name: str, age: i32) ! console, alloc {
+fn greet(name: str, age: i32) <console, alloc> {
   print("hello {name}, you are {age}")
 }
 ```
@@ -36,7 +36,7 @@ fn greet(name: str, age: i32) ! console, alloc {
 
 ```
 trait Fmt[T] {
-  fn fmt(value: T) -> str ! alloc
+  fn fmt(value: T) -> str <alloc>
 }
 ```
 
@@ -53,10 +53,10 @@ struct Money {
 }
 
 impl Fmt[Money] {
-  fn fmt(value: Money) -> str ! alloc { "{value.cents} cents" }
+  fn fmt(value: Money) -> str <alloc> { "{value.cents} cents" }
 }
 
-fn price(m: Money) ! console, alloc {
+fn price(m: Money) <console, alloc> {
   print("{m}")
 }
 ```
@@ -83,7 +83,7 @@ A backslash writes a character that would otherwise mean something else. These e
 use std.bits (i32)
 use std.console (console, print)
 
-fn show(x: i32, y: i32) ! console, alloc {
+fn show(x: i32, y: i32) <console, alloc> {
   print("point \{{x}, {y}\}")
 }
 ```

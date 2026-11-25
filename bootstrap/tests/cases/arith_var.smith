@@ -5,6 +5,6 @@ fn next(i: Byte) -> Byte {
   if v < 255 { v + 1 } else { v }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{next(254)}")
 }

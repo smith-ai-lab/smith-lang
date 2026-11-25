@@ -117,29 +117,29 @@ fn shr(x: Nat, by: Byte) -> Nat { if by < 64 { shift_right(x, by) } else { 0 } }
 
 fn low(x: Nat) -> Byte { bit_and(x, 255) }
 
-fn put16(to: take List[Byte], x: Nat) -> List[Byte] ! alloc {
+fn put16(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
   push(push(to, low(shift_right(x, 8))), low(x))
 }
 
-fn put24(to: take List[Byte], x: Nat) -> List[Byte] ! alloc {
+fn put24(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
   push(put16(to, shift_right(x, 8)), low(x))
 }
 
-fn put32(to: take List[Byte], x: Nat) -> List[Byte] ! alloc {
+fn put32(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
   put16(put16(to, shift_right(x, 16)), x)
 }
 
-fn put64(to: take List[Byte], x: Nat) -> List[Byte] ! alloc {
+fn put64(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
   put32(put32(to, shift_right(x, 32)), x)
 }
 
-fn put_all(to: take List[Byte], s: Slice[Byte]) -> List[Byte] ! alloc {
+fn put_all(to: take List[Byte], s: Slice[Byte]) -> List[Byte] <alloc> {
   var w = to
   loop x in s { w = push(w, x) }
   w
 }
 
-fn put_zeros(to: take List[Byte], n: Nat) -> List[Byte] ! alloc {
+fn put_zeros(to: take List[Byte], n: Nat) -> List[Byte] <alloc> {
   var w = to
   loop i in 0..n { w = push(w, 0) }
   w
@@ -164,7 +164,7 @@ fn flag(on: bool, bit: Byte) -> Byte { if on { bit } else { 0 } }
 fn has(flags: Byte, bit: Byte) -> bool { bit_and(flags, bit) != 0 }
 
 // The nine bytes that start a frame.
-fn head(to: take List[Byte], length: Nat, kind: Byte, flags: Byte, stream: Nat) -> List[Byte] ! alloc {
+fn head(to: take List[Byte], length: Nat, kind: Byte, flags: Byte, stream: Nat) -> List[Byte] <alloc> {
   put32(push(push(put24(to, length), kind), flags), stream)
 }
 
@@ -176,27 +176,27 @@ fn padded_by(padding: Option[Byte]) -> Nat {
   }
 }
 
-fn put_pad_length(to: take List[Byte], padding: Option[Byte]) -> List[Byte] ! alloc {
+fn put_pad_length(to: take List[Byte], padding: Option[Byte]) -> List[Byte] <alloc> {
   match padding {
     .some(p) { push(to, p) }
     .none { to }
   }
 }
 
-fn put_padding(to: take List[Byte], padding: Option[Byte]) -> List[Byte] ! alloc {
+fn put_padding(to: take List[Byte], padding: Option[Byte]) -> List[Byte] <alloc> {
   match padding {
     .some(p) { put_zeros(to, nat(p)) }
     .none { to }
   }
 }
 
-fn put_dependency(to: take List[Byte], d: Dependency) -> List[Byte] ! alloc {
+fn put_dependency(to: take List[Byte], d: Dependency) -> List[Byte] <alloc> {
   s: Nat = d.stream
   x = if d.exclusive { wrapping_add(s, 2147483648) } else { s }
   push(put32(to, x), d.weight)
 }
 
-pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] ! alloc {
+pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
   match frame {
     .data(f) {
       length = wrapping_add(f.data.size, padded_by(f.padding))
@@ -278,7 +278,7 @@ fn needs_connection(kind: Byte) -> bool { kind == 4 or kind == 6 or kind == 7 }
 // whole number to 2 to the 34 over 6, exact for any `n` below 2 to the 32.
 fn sixths(n: Nat) -> Nat { shift_right(wrapping_mul(n, 2863311531), 34) }
 
-pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] ! alloc {
+pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc> {
   if bytes.size < 9 { return Read.incomplete }
   n = be24(bytes, 0)
   if n > largest { return refused("a frame longer than the most that is read") }
@@ -377,7 +377,7 @@ fn table_get(t: Table, d: Nat) -> Option[Entry] {
 }
 
 // The table with the entries that are gone taken out of the list.
-fn table_packed(t: take Table) -> Table ! alloc {
+fn table_packed(t: take Table) -> Table <alloc> {
   var w = t
   if w.first >= 32 and wrapping_mul(w.first, 2) >= w.entries.size {
     var kept: List[Entry] = []
@@ -391,7 +391,7 @@ fn table_packed(t: take Table) -> Table ! alloc {
 }
 
 // The table with its oldest entries gone until it holds no more than `room`.
-fn table_evict(t: take Table, room: Nat) -> Table ! alloc {
+fn table_evict(t: take Table, room: Nat) -> Table <alloc> {
   var w = t
   loop k in 0..w.entries.size {
     if w.size <= room or w.first >= w.entries.size { break }
@@ -402,7 +402,7 @@ fn table_evict(t: take Table, room: Nat) -> Table ! alloc {
   table_packed(w)
 }
 
-fn table_resize(t: take Table, to: Nat) -> Table ! alloc {
+fn table_resize(t: take Table, to: Nat) -> Table <alloc> {
   var w = t
   w.working = to
   table_evict(w, to)
@@ -410,7 +410,7 @@ fn table_resize(t: take Table, to: Nat) -> Table ! alloc {
 
 // The table with `e` as its newest entry. An entry that is more than the table
 // may hold leaves it empty.
-fn table_add(t: take Table, e: Entry) -> Table ! alloc {
+fn table_add(t: take Table, e: Entry) -> Table <alloc> {
   size = entry_size(e)
   working = t.working
   var w = table_evict(t, saturating_sub(working, size))
@@ -485,7 +485,7 @@ fn read_num(b: Slice[Byte], start: Nat, mask: Byte) -> Result[Num, str] {
 // the length being read, and `index` is where its symbols start in `order`.
 // What is left after the last symbol must be padding of up to 7 bits, which
 // are the first bits of the end of a text, all of them 1.
-fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] ! alloc {
+fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] <alloc> {
   counts = huffman_counts()
   order = huffman_order()
   var acc: List[Byte] = []
@@ -527,7 +527,7 @@ fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] ! alloc {
 // A text of the block that starts at `start`: its length, and its bytes as
 // they are or in the short code. It gives the text and where it ends, and is
 // refused where it is of more than `room` bytes.
-fn read_text(b: Slice[Byte], start: Nat, room: Nat) -> Result[(str, Nat), str] ! alloc {
+fn read_text(b: Slice[Byte], start: Nat, room: Nat) -> Result[(str, Nat), str] <alloc> {
   if start >= b.size { return Result.err("a block that ends before a text") }
   short = has(at(b, start), 128)
   match read_num(b, start, 127) {
@@ -567,7 +567,7 @@ struct Run {
 }
 
 // The run with a header added and the block read up to `next`, or why not.
-fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Option[str]) ! alloc {
+fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Option[str]) <alloc> {
   var w = r
   used = wrapping_add(w.used, wrapping_add(name.size, value.size))
   if used > largest { return (w, .some("headers of more bytes than are read")) }
@@ -578,7 +578,7 @@ fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Op
 }
 
 // One representation of the block.
-fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) ! alloc {
+fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc> {
   var w = r
   c = at(b, w.at)
   if c >= 128 {
@@ -641,7 +641,7 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) ! alloc
   }
 }
 
-pub fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) ! alloc {
+pub fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc> {
   var r = Run(table: d.table, acc: [], used: 0, at: 0, updates: true)
   loop k in 0..block.size {
     if r.at >= block.size { break }
@@ -656,7 +656,7 @@ pub fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Dec
 }
 // A number as HPACK writes it, in a byte that starts with the bits of `prefix`
 // and has room for `mask`, and more bytes if it is more.
-fn write_num(to: take List[Byte], prefix: Byte, mask: Byte, value: Nat) -> List[Byte] ! alloc {
+fn write_num(to: take List[Byte], prefix: Byte, mask: Byte, value: Nat) -> List[Byte] <alloc> {
   m = nat(mask)
   if value < m { return push(to, bit_or(prefix, low(value))) }
   var w = push(to, bit_or(prefix, mask))
@@ -679,7 +679,7 @@ fn huffman_size(s: str) -> Nat {
 
 // The short code of `s`, with the first bits of the end of a text to fill its
 // last byte.
-fn write_huffman(to: take List[Byte], s: str) -> List[Byte] ! alloc {
+fn write_huffman(to: take List[Byte], s: str) -> List[Byte] <alloc> {
   codes = huffman_codes()
   lengths = huffman_lengths()
   var w = to
@@ -704,7 +704,7 @@ fn write_huffman(to: take List[Byte], s: str) -> List[Byte] ! alloc {
   w
 }
 
-fn write_text(to: take List[Byte], s: str) -> List[Byte] ! alloc {
+fn write_text(to: take List[Byte], s: str) -> List[Byte] <alloc> {
   short = huffman_size(s)
   if short <= s.size { return write_huffman(write_num(to, 128, 127, short), s) }
   var w = write_num(to, 0, 127, s.size)
@@ -713,7 +713,7 @@ fn write_text(to: take List[Byte], s: str) -> List[Byte] ! alloc {
 }
 
 // A header written as a literal, with its name by its index when it has one.
-fn write_literal(to: take List[Byte], prefix: Byte, mask: Byte, name_at: Nat, name: str, value: str) -> List[Byte] ! alloc {
+fn write_literal(to: take List[Byte], prefix: Byte, mask: Byte, name_at: Nat, name: str, value: str) -> List[Byte] <alloc> {
   var w = write_num(to, prefix, mask, name_at)
   if name_at == 0 { w = write_text(w, name) }
   write_text(w, value)
@@ -764,7 +764,7 @@ fn is_secret(name: str) -> bool {
   name == "authorization" or name == "cookie" or name == "set-cookie"
 }
 
-pub fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) ! alloc {
+pub fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) <alloc> {
   var t = e.table
   var w = to
   if e.update {

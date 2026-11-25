@@ -5,6 +5,6 @@ struct Cursor {
   at: 0..size
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{1}")
 }

@@ -19,6 +19,6 @@ fn third(a: i32, b: i32) -> i32 {
   if b < a { t } else { a }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{first(1, 0)} {first(0, 5)} {second(9, 4)} {second(1, 4)} {third(5, 0)} {third(5, 2)}")
 }

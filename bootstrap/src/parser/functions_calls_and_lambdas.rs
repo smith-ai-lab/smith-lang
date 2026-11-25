@@ -276,11 +276,12 @@ impl Parser<'_> {
     /// `{` or the line break that ends what follows, which only a statement
     /// has: no type is written with one.
     fn comparison_ahead(&self) -> bool {
-        for token in &self.tokens[self.at..] {
+        for (i, token) in self.tokens[self.at..].iter().enumerate() {
             match &token.tok {
+                Tok::Punct("<") if self.effects_at(self.at + i) => return false,
                 Tok::Punct("==" | "!=" | "<" | "<=" | ">" | ">=")
                 | Tok::Keyword("and" | "or" | "not") => return true,
-                Tok::Punct("{" | "!")
+                Tok::Punct("{")
                 | Tok::Keyword("requires" | "ensures")
                 | Tok::Newline
                 | Tok::Eof => return false,
@@ -288,6 +289,29 @@ impl Parser<'_> {
             }
         }
         false
+    }
+
+    /// Whether the `<` at token `at` opens a list of effects: names between
+    /// commas, then `>`. A comparison has no such form, as `>` does not
+    /// follow a comparison.
+    fn effects_at(&self, at: usize) -> bool {
+        let mut i = at + 1;
+        loop {
+            match self.tokens.get(i).map(|t| &t.tok) {
+                Some(Tok::Ident(_)) => i += 1,
+                _ => return false,
+            }
+            match self.tokens.get(i).map(|t| &t.tok) {
+                Some(Tok::Punct(">")) => return true,
+                Some(Tok::Punct(",")) => {
+                    i += 1;
+                    if self.tokens.get(i).map(|t| &t.tok) == Some(&Tok::Punct(">")) {
+                        return true;
+                    }
+                }
+                _ => return false,
+            }
+        }
     }
 
     /// Parses `name: type`, and `= default` after it if it has one.
@@ -367,11 +391,11 @@ impl Parser<'_> {
                 length: None,
             });
         }
-        let bang = self.pos();
+        let open = self.pos();
         let mut effects = self.effects()?;
         if !kept && !effects.is_empty() {
             self.unbuilt
-                .push(Error::unsupported(bang, "an effect on a function type"));
+                .push(Error::unsupported(open, "an effect on a function type"));
             effects.clear();
         }
         let function = Type {

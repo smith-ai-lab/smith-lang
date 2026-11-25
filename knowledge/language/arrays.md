@@ -93,7 +93,7 @@ An array that is kept together with its size is a [`List`](../library/list.md). 
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   xs: List[Byte] = [10, 20, 30]
   print("{xs.size}")
 }

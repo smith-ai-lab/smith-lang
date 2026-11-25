@@ -97,7 +97,7 @@ fn kernel_gives(cases: &[Program]) -> bool {
     true
 }
 
-const COUNT: &str = "fn count(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 0 } else { count(n - 1) }\n}\n\nfn main() ! console, alloc {\n  print(\"{count(3)}\")\n}\n";
+const COUNT: &str = "fn count(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 0 } else { count(n - 1) }\n}\n\nfn main() <console, alloc> {\n  print(\"{count(3)}\")\n}\n";
 
 fn steps_of(n: i128, limit: u64) -> Result<u64, Failure> {
     let all = core_terms(with_header(COUNT.to_string()).as_bytes()).expect("checks");
@@ -130,7 +130,7 @@ fn why(source: &str, name: &str, args: Vec<i128>) -> (Value, Option<Why>) {
 }
 
 fn a_false_comparison_is_reported_where_it_is_written_with_the_numbers_it_compared() {
-    let source = "fn inside(i: i32, n: i32) -> bool { i < n }\n\nfn both(i: i32, n: i32) -> bool { inside(i, n) and n < 100 }\n\nfn neither(i: i32, n: i32) -> bool { not (i < n) }\n\nfn main() ! console, alloc {\n  print(\"{inside(1, 2)}{both(1, 2)}{neither(1, 2)}\")\n}\n";
+    let source = "fn inside(i: i32, n: i32) -> bool { i < n }\n\nfn both(i: i32, n: i32) -> bool { inside(i, n) and n < 100 }\n\nfn neither(i: i32, n: i32) -> bool { not (i < n) }\n\nfn main() <console, alloc> {\n  print(\"{inside(1, 2)}{both(1, 2)}{neither(1, 2)}\")\n}\n";
     let (v, w) = why(source, "inside", vec![9, 3]);
     assert_eq!(v, Value::Case(0, vec![]));
     let w = w.expect("a reason");
@@ -185,7 +185,7 @@ fn looped_source(cases: &[Looped]) -> String {
     with_header(format!(
         "fn find(xs: List[i32], k: i32) -> bool {{\n  var found = false\n  var last: i32 = 0\n  loop v in xs {{\n    last = v\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
 fn first_at(n: u64, k: u64) -> u64 {{\n  var hit: u64 = 0\n  loop i in 0..n {{\n    if i == k {{\n      hit = i + 1\n      break\n    }}\n  }}\n  hit\n}}\n\n\
-fn main() ! console, alloc {{\n{main}}}\n"
+fn main() <console, alloc> {{\n{main}}}\n"
     ))
 }
 
@@ -278,7 +278,7 @@ fn needs_source(cases: &[&Need]) -> String {
     with_header(format!(
         "fn has(xs: List[i32], k: i32) -> bool {{\n  var found = false\n  loop v in xs {{\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
 fn pick(xs: List[i32], k: i32) -> i32\n  requires has(xs, k)\n{{\n  k\n}}\n\n\
-fn main() ! console, alloc {{\n{prints}}}\n"
+fn main() <console, alloc> {{\n{prints}}}\n"
     ))
 }
 
@@ -324,7 +324,7 @@ fn a_requires_over_arguments_written_out_is_proven_by_working_it_out() {
 /// and the limit named, and never takes it for proven.
 fn a_predicate_that_does_not_end_within_the_steps_fails_naming_the_call_and_the_limit() {
     let source = with_header(
-        "fn late(n: u64, k: u64) -> bool {\n  var found = false\n  loop i in 0..n {\n    if i == k {\n      found = true\n      break\n    }\n  }\n  found\n}\n\nfn go(n: u64, k: u64) -> u64\n  requires late(n, k)\n{\n  k\n}\n\nfn main() ! console, alloc {\n  print(\"{go(100000000000, 99999999999)}\")\n}\n"
+        "fn late(n: u64, k: u64) -> bool {\n  var found = false\n  loop i in 0..n {\n    if i == k {\n      found = true\n      break\n    }\n  }\n  found\n}\n\nfn go(n: u64, k: u64) -> u64\n  requires late(n, k)\n{\n  k\n}\n\nfn main() <console, alloc> {\n  print(\"{go(100000000000, 99999999999)}\")\n}\n"
             .to_string(),
     );
     let errors = smith::check(source.as_bytes()).expect_err("refused");
@@ -375,7 +375,7 @@ fn texts_source(cases: &[Text]) -> String {
         "fn first_index(xs: List[i32], k: i32) -> u64 {{\n  var hit: u64 = 0\n  loop i in 0..xs.size {{\n    if xs[i] == k {{\n      hit = i\n      break\n    }}\n  }}\n  hit\n}}\n\n\
 fn has_byte(t: str, b: Byte) -> bool {{\n  var found = false\n  loop c in t {{\n    if c == b {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
 fn length(t: str) -> u64 {{ t.size }}\n\n\
-fn main() ! console, alloc {{\n{main}}}\n"
+fn main() <console, alloc> {{\n{main}}}\n"
     ))
 }
 

@@ -49,7 +49,7 @@ fn an_array_is_written_as_a_list_of_the_same_elements_is_by_fmt_and_by_repr() {
         // A tuple or an array element has commas of its own, so the size is counted
         // from the list the elements are written in.
         let program = with_header(format!(
-            "{DECLARATIONS}fn main() ! console, alloc {{\n  \
+            "{DECLARATIONS}fn main() <console, alloc> {{\n  \
              a: [{size}]{ty} = [{items}]\n  \
              l: List[{ty}] = [{items}]\n  \
              print(\"{{a}}\")\n  print(\"{{l}}\")\n  \
@@ -77,7 +77,7 @@ fn size_of(ty: &str, naive: usize) -> usize {
 
 fn an_array_written_with_no_type_prints_and_an_empty_array_prints_nothing_between_brackets() {
     let program = with_header(
-        "fn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n  \
+        "fn main() <console, alloc> {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n  \
          e: [0]Nat = []\n  print(\"{e}\")\n  print(\"{repr(e)}\")\n}\n"
             .to_string(),
     );
@@ -88,7 +88,7 @@ fn an_array_of_what_lacks_fmt_or_repr_is_refused_naming_the_element() {
     for (taken, used) in [("Fmt", "{keys}"), ("Repr", "{repr(keys)}")] {
         let program = with_header(format!(
             "struct Key {{\n  secret: str\n}}\n\nwithout {taken} for Key\n\n\
-             fn main() ! console, alloc {{\n  keys = [Key(secret: \"a\")]\n  print(\"{used}\")\n}}\n"
+             fn main() <console, alloc> {{\n  keys = [Key(secret: \"a\")]\n  print(\"{used}\")\n}}\n"
         ));
         let errors = check(program.as_bytes()).expect_err("a mistake");
         assert!(

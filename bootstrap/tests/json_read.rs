@@ -146,7 +146,7 @@ const TEXT: &str = "fn s(bytes: take List[Byte]) -> str {
   }
 }
 
-fn say(e: ReadError) -> str ! alloc {
+fn say(e: ReadError) -> str <alloc> {
   p = match e.problem {
     .malformed { \"malformed\" }
     .missing(n) { \"missing {n}\" }
@@ -760,7 +760,7 @@ fn reading(defs: &Defs, t: &Ty, v: &Val, settings: Settings, cases: &[Case]) -> 
         defs.source()
     );
     out.push_str(&format!(
-        "fn main() ! console, alloc {{\n  v: {name} = {}\n  keep = {}\n  refuse = {}\n",
+        "fn main() <console, alloc> {{\n  v: {name} = {}\n  keep = {}\n  refuse = {}\n",
         v.source(),
         settings.source(false),
         settings.source(true)
@@ -921,7 +921,7 @@ fn opt(o: Option[str]) -> str {{
   }}
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
 "
     );
     for (i, e) in examples.iter().enumerate() {
@@ -946,7 +946,7 @@ fn a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(part
     generate::check_cases(6001, 3 * part, 3, made_with_defs, |(defs, t, v, _)| {
         let name = defs.name(t);
         let mut source = format!(
-            "{TEXT}{}fn main() ! console, alloc {{\n  v: {name} = {}\n",
+            "{TEXT}{}fn main() <console, alloc> {{\n  v: {name} = {}\n",
             defs.source(),
             v.source()
         );
@@ -1042,7 +1042,7 @@ fn cases_in_the_values_of_cases_are_read_to_any_depth(depths: &[usize]) {
             tag_last.push_str(",\"type\":\"c0\"}");
         }
         let mut source = format!(
-            "{TEXT}{types}fn main() ! console, alloc {{\n  v: E0 = {value}\n  k = Json(cases: .key, names: .written)\n  t = Json(cases: .tag(\"type\"), names: .written)\n"
+            "{TEXT}{types}fn main() <console, alloc> {{\n  v: E0 = {value}\n  k = Json(cases: .key, names: .written)\n  t = Json(cases: .tag(\"type\"), names: .written)\n"
         );
         for (name, text, json) in [("key", &key, "k"), ("first", &tag_first, "t"), ("last", &tag_last, "t")] {
             source.push_str(&format!(
@@ -1607,7 +1607,7 @@ fn drawn_texts(g: &mut Gen) -> Vec<Vec<u8>> {
 fn text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(part: u64) {
     generate::check_cases(6005, 4 * part, 4, drawn_texts, |texts| {
         let mut source = format!(
-            "{TEXT}fn main() ! console, alloc {{\n"
+            "{TEXT}fn main() <console, alloc> {{\n"
         );
         for (i, text) in texts.iter().enumerate() {
             source.push_str(&format!(
@@ -1657,7 +1657,7 @@ fn a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_
         let text = [&b"{\"head\":1,\"body\":"[..], &written.bytes, &b",\"tail\":null}"[..]].concat();
         let name = defs.name(t);
         let source = format!(
-            "{TEXT}{WRAP}{}fn main() ! console, alloc {{\n  v: {name} = {}\n  j = {}\n  r: Result[Wrap, ReadError] = from_json_as({}, j)\n  match r {{\n    .ok(w) {{\n      print(raw_text(w.body))\n      later: Result[{name}, ReadError] = from_json_as(raw_text(w.body), j)\n      match later {{\n        .ok(x) {{ print(\"{{to_json(x) == to_json(v)}}\") }}\n        .err(e) {{ print(say(e)) }}\n      }}\n    }}\n    .err(e) {{ print(say(e)) }}\n  }}\n}}\n",
+            "{TEXT}{WRAP}{}fn main() <console, alloc> {{\n  v: {name} = {}\n  j = {}\n  r: Result[Wrap, ReadError] = from_json_as({}, j)\n  match r {{\n    .ok(w) {{\n      print(raw_text(w.body))\n      later: Result[{name}, ReadError] = from_json_as(raw_text(w.body), j)\n      match later {{\n        .ok(x) {{ print(\"{{to_json(x) == to_json(v)}}\") }}\n        .err(e) {{ print(say(e)) }}\n      }}\n    }}\n    .err(e) {{ print(say(e)) }}\n  }}\n}}\n",
             defs.source(),
             v.source(),
             settings.source(false),
@@ -1680,7 +1680,7 @@ fn asked(source: &str) -> (Vec<u8>, usize, usize) {
 
 /// A function that makes the text of a `Wrap`, whose body is `n` zeros in an
 /// array, from the bytes of a text that is built with `push`.
-const MAKE: &str = "fn make(n: Nat) -> str ! alloc {
+const MAKE: &str = "fn make(n: Nat) -> str <alloc> {
   var l: List[Byte] = []
   loop b in \"\\{\\\"head\\\":1,\\\"body\\\":[\" { l = push(l, b) }
   loop i in 0..n {
@@ -1702,7 +1702,7 @@ fn a_rawjson_shares_the_memory_of_the_input() {
         };
         with_import(
             &["from_json", "raw_text", "RawJson"],
-            format!("{TEXT}{WRAP}{MAKE}fn main() ! console, alloc {{\n  t = make({n})\n{tail}}}\n"),
+            format!("{TEXT}{WRAP}{MAKE}fn main() <console, alloc> {{\n  t = make({n})\n{tail}}}\n"),
         )
     };
     // What the reading asks for, beyond building the text, is the same for a
@@ -1735,7 +1735,7 @@ fn asked_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (usize, 
         };
         with_import(
             &["from_json"],
-            format!("{TEXT}{decls}fn main() ! console, alloc {{\n  var l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
+            format!("{TEXT}{decls}fn main() <console, alloc> {{\n  var l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
         )
     };
     let (stdout, with, copied) = asked(&program(true));
@@ -1814,7 +1814,7 @@ fn a_rawjson_that_is_read_and_written_is_the_bytes_it_was_less_the_space_round_i
         texts
     }, |texts| {
         let mut source = format!(
-            "{TEXT}fn main() ! console, alloc {{\n"
+            "{TEXT}fn main() <console, alloc> {{\n"
         );
         for (i, text) in texts.iter().enumerate() {
             source.push_str(&format!(
@@ -1838,7 +1838,7 @@ fn a_rawjson_that_is_read_and_written_is_the_bytes_it_was_less_the_space_round_i
 fn raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(part: u64) {
     generate::check_cases(6009, 3 * part, 3, drawn_texts, |texts| {
         let mut source = format!(
-            "{TEXT}fn show(t: str) ! console, alloc {{
+            "{TEXT}fn show(t: str) <console, alloc> {{
   a: Result[RawJson, ReadError] = from_json(t)
   b = raw_json(t)
   match a {{
@@ -1861,7 +1861,7 @@ fn raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is
   print(\"--\")
 }}
 
-fn main() ! console, alloc {{\n"
+fn main() <console, alloc> {{\n"
         );
         for text in texts {
             source.push_str(&format!("  show({})\n", text_source(text)));
@@ -1891,7 +1891,7 @@ fn a_rawjson_built_by_hand_from_text_that_is_not_json_is_refused() {
     // written as it is.
     let text = "] not json \", \"admin\": true";
     let source = format!(
-        "{TEXT}struct Call {{\n  name: str\n  arguments: RawJson\n}}\n\nfn main() ! console, alloc {{\n  bad = RawJson(text: {})\n  print(to_json(Call(name: \"f\", arguments: bad)))\n}}\n",
+        "{TEXT}struct Call {{\n  name: str\n  arguments: RawJson\n}}\n\nfn main() <console, alloc> {{\n  bad = RawJson(text: {})\n  print(to_json(Call(name: \"f\", arguments: bad)))\n}}\n",
         text_source(text.as_bytes())
     );
     let source = with_import(&["RawJson", "to_json"], source);

@@ -11,7 +11,7 @@ enum Shape {
   none
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   r: Shape = convert(Rect(w: 1))
   print("{r}")
   n: Byte = 4

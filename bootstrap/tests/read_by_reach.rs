@@ -109,7 +109,7 @@ impl Area[Shape{n}] {{
 const PROGRAM: &str = "use std.console (console, print)
 use std.m (total)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{total(3)}\")
 }
 ";

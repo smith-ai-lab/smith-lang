@@ -75,7 +75,7 @@ fn piece(s: str, a: Nat, b: Nat) -> str {
 
 // The parts of a path between its `/`s, after the first: `/users/7` is `users`
 // and `7`, and `/` has none.
-pub fn segments(path: str) -> List[str] ! alloc {
+pub fn segments(path: str) -> List[str] <alloc> {
   var parts: List[str] = []
   if path.size > 1 and path[0] == '/' {
     var from: Nat = 1
@@ -93,7 +93,7 @@ pub fn segments(path: str) -> List[str] ! alloc {
 // What each part of a path that begins with `:` in the pattern is, by its
 // name, when the path is the pattern: the same number of parts, and each part
 // that does not begin with `:` the same.
-pub fn route_match(pattern: str, path: str) -> Option[List[Part]] ! alloc {
+pub fn route_match(pattern: str, path: str) -> Option[List[Part]] <alloc> {
   ps = segments(pattern)
   qs = segments(path)
   var found: List[Part] = []
@@ -136,7 +136,7 @@ fn member(query: str, from: Nat, end: Nat) -> Option[Part] {
 }
 
 // The members of a query, `a=1&b=2`, which are the pieces between `&`s.
-pub fn query_parts(query: str) -> List[Part] ! alloc {
+pub fn query_parts(query: str) -> List[Part] <alloc> {
   var parts: List[Part] = []
   var from: Nat = 0
   loop i in 0..query.size {
@@ -181,7 +181,7 @@ pub fn no_params() -> Params {
 
 pub fn params_of(p: take Params) -> List[Param] { p.params }
 
-fn kind(d: take Params, body: bool) -> Params ! alloc {
+fn kind(d: take Params, body: bool) -> Params <alloc> {
   var w = d
   if w.depth == 1 and w.asked {
     w.params = push(w.params, Param(name: w.named, body: body))
@@ -190,7 +190,7 @@ fn kind(d: take Params, body: bool) -> Params ! alloc {
   w
 }
 
-fn opened(d: take Params) -> Params ! alloc {
+fn opened(d: take Params) -> Params <alloc> {
   var w = kind(d, true)
   w.depth = saturating_add(w.depth, 1)
   w
@@ -203,19 +203,19 @@ fn closed(d: take Params) -> Params {
 }
 
 impl Describer[Params] {
-  fn boolean(d: take Params) -> Params ! alloc { kind(d, false) }
-  fn signed(d: take Params, least: Int, greatest: Int) -> Params ! alloc { kind(d, false) }
-  fn unsigned(d: take Params, least: u64, greatest: u64) -> Params ! alloc { kind(d, false) }
-  fn text(d: take Params) -> Params ! alloc { kind(d, false) }
-  fn nothing(d: take Params) -> Params ! alloc { kind(d, false) }
-  fn optional(d: take Params) -> Params ! alloc { d }
-  fn end_optional(d: take Params) -> Params ! alloc { d }
-  fn sequence(d: take Params) -> Params ! alloc { opened(d) }
-  fn end_sequence(d: take Params) -> Params ! alloc { closed(d) }
-  fn tuple(d: take Params, size: Nat) -> Params ! alloc { opened(d) }
-  fn end_tuple(d: take Params) -> Params ! alloc { closed(d) }
-  fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params ! alloc { opened(d) }
-  fn field(d: take Params, name: str, about: str, optional: bool) -> Params ! alloc {
+  fn boolean(d: take Params) -> Params <alloc> { kind(d, false) }
+  fn signed(d: take Params, least: Int, greatest: Int) -> Params <alloc> { kind(d, false) }
+  fn unsigned(d: take Params, least: u64, greatest: u64) -> Params <alloc> { kind(d, false) }
+  fn text(d: take Params) -> Params <alloc> { kind(d, false) }
+  fn nothing(d: take Params) -> Params <alloc> { kind(d, false) }
+  fn optional(d: take Params) -> Params <alloc> { d }
+  fn end_optional(d: take Params) -> Params <alloc> { d }
+  fn sequence(d: take Params) -> Params <alloc> { opened(d) }
+  fn end_sequence(d: take Params) -> Params <alloc> { closed(d) }
+  fn tuple(d: take Params, size: Nat) -> Params <alloc> { opened(d) }
+  fn end_tuple(d: take Params) -> Params <alloc> { closed(d) }
+  fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params <alloc> { opened(d) }
+  fn field(d: take Params, name: str, about: str, optional: bool) -> Params <alloc> {
     var w = d
     if w.depth == 1 {
       w.asked = true
@@ -223,12 +223,12 @@ impl Describer[Params] {
     }
     w
   }
-  fn end_structure(d: take Params) -> Params ! alloc { closed(d) }
-  fn enumeration(d: take Params, name: str, about: str, cases: Nat) -> Params ! alloc { opened(d) }
-  fn case(d: take Params, name: str, about: str, holds: bool) -> Params ! alloc { d }
-  fn end_case(d: take Params) -> Params ! alloc { d }
-  fn end_enumeration(d: take Params) -> Params ! alloc { closed(d) }
-  fn map(d: take Params) -> Params ! alloc { kind(d, true) }
+  fn end_structure(d: take Params) -> Params <alloc> { closed(d) }
+  fn enumeration(d: take Params, name: str, about: str, cases: Nat) -> Params <alloc> { opened(d) }
+  fn case(d: take Params, name: str, about: str, holds: bool) -> Params <alloc> { d }
+  fn end_case(d: take Params) -> Params <alloc> { d }
+  fn end_enumeration(d: take Params) -> Params <alloc> { closed(d) }
+  fn map(d: take Params) -> Params <alloc> { kind(d, true) }
 }
 
 // The text of the part with the name, which is the empty text where there is
@@ -350,7 +350,7 @@ fn shallower(r: take Reading) -> Reading {
 }
 
 impl Reader[Reading] {
-  fn boolean(r: take Reading) -> (Reading, Result[bool, ReadError]) ! alloc {
+  fn boolean(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.boolean(w.json)
@@ -361,7 +361,7 @@ impl Reader[Reading] {
       (r, got)
     }
   }
-  fn signed(r: take Reading) -> (Reading, Result[Int, ReadError]) ! alloc {
+  fn signed(r: take Reading) -> (Reading, Result[Int, ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.signed(w.json)
@@ -372,7 +372,7 @@ impl Reader[Reading] {
       (r, got)
     }
   }
-  fn unsigned(r: take Reading) -> (Reading, Result[u64, ReadError]) ! alloc {
+  fn unsigned(r: take Reading) -> (Reading, Result[u64, ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.unsigned(w.json)
@@ -383,7 +383,7 @@ impl Reader[Reading] {
       (r, got)
     }
   }
-  fn text(r: take Reading) -> (Reading, Result[str, ReadError]) ! alloc {
+  fn text(r: take Reading) -> (Reading, Result[str, ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.text(w.json)
@@ -394,7 +394,7 @@ impl Reader[Reading] {
       (r, Result.ok(t))
     }
   }
-  fn nothing(r: take Reading) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn nothing(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.nothing(w.json)
@@ -404,7 +404,7 @@ impl Reader[Reading] {
       (r, Result.ok(()))
     }
   }
-  fn present(r: take Reading) -> (Reading, Result[bool, ReadError]) ! alloc {
+  fn present(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
     if r.body {
       var w = r
       (j, got) = Reader.present(w.json)
@@ -414,13 +414,13 @@ impl Reader[Reading] {
       (r, Result.ok(true))
     }
   }
-  fn sequence(r: take Reading) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn sequence(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
     var w = deeper(r)
     (j, got) = Reader.sequence(w.json)
     w.json = j
     (w, got)
   }
-  fn more(r: take Reading) -> (Reading, Result[bool, ReadError]) ! alloc {
+  fn more(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
     var w = r
     (j, got) = Reader.more(w.json)
     w.json = j
@@ -431,19 +431,19 @@ impl Reader[Reading] {
       .err(e) { (w, got) }
     }
   }
-  fn tuple(r: take Reading, size: Nat) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn tuple(r: take Reading, size: Nat) -> (Reading, Result[(), ReadError]) <alloc> {
     var w = deeper(r)
     (j, got) = Reader.tuple(w.json, size)
     w.json = j
     (w, got)
   }
-  fn end_tuple(r: take Reading) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn end_tuple(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
     var w = shallower(r)
     (j, got) = Reader.end_tuple(w.json)
     w.json = j
     (w, got)
   }
-  fn structure(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn structure(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) <alloc> {
     if r.top {
       var w = deeper(r)
       (j, got) = Reader.structure(w.json, name)
@@ -455,7 +455,7 @@ impl Reader[Reading] {
       (w, Result.ok(()))
     }
   }
-  fn field(r: take Reading) -> (Reading, Result[Option[str], ReadError]) ! alloc {
+  fn field(r: take Reading) -> (Reading, Result[Option[str], ReadError]) <alloc> {
     if r.depth > 0 {
       var w = r
       (j, got) = Reader.field(w.json)
@@ -474,31 +474,31 @@ impl Reader[Reading] {
       (w, Result.ok(named))
     }
   }
-  fn unknown(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn unknown(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) <alloc> {
     var w = r
     (j, got) = Reader.unknown(w.json, name)
     w.json = j
     (w, got)
   }
-  fn case(r: take Reading, of: str) -> (Reading, Result[str, ReadError]) ! alloc {
+  fn case(r: take Reading, of: str) -> (Reading, Result[str, ReadError]) <alloc> {
     var w = deeper(r)
     (j, got) = Reader.case(w.json, of)
     w.json = j
     (w, got)
   }
-  fn end_case(r: take Reading) -> (Reading, Result[(), ReadError]) ! alloc {
+  fn end_case(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
     var w = shallower(r)
     (j, got) = Reader.end_case(w.json)
     w.json = j
     (w, got)
   }
-  fn raw(r: take Reading, of: str) -> (Reading, Result[Slice[Byte], ReadError]) ! alloc {
+  fn raw(r: take Reading, of: str) -> (Reading, Result[Slice[Byte], ReadError]) <alloc> {
     var w = r
     (j, got) = Reader.raw(w.json, of)
     w.json = j
     (w, got)
   }
-  fn fail(r: take Reading, problem: Problem) -> (Reading, ReadError) ! alloc {
+  fn fail(r: take Reading, problem: Problem) -> (Reading, ReadError) <alloc> {
     if r.depth > 0 or r.body {
       var w = r
       (j, e) = Reader.fail(w.json, problem)
@@ -525,14 +525,14 @@ fn takes_body(r: Reading) -> bool {
 // The value of a type that a function takes as its parameters, read from the
 // request, or what is wrong with it. A body that is not all read is wrong.
 pub trait FromRequest[A] {
-  fn from_request(r: take Reading) -> Result[A, ReadError] ! alloc
+  fn from_request(r: take Reading) -> Result[A, ReadError] <alloc>
 }
 
 impl[A] FromRequest[A]
   requires Deserialize[A]
   requires Discard[A]
 {
-  fn from_request(r: take Reading) -> Result[A, ReadError] ! alloc {
+  fn from_request(r: take Reading) -> Result[A, ReadError] <alloc> {
     (w, got): (Reading, Result[A, ReadError]) = Deserialize.read(r)
     match got {
       .err(e) { Result.err(e) }
@@ -562,41 +562,41 @@ pub struct Redirect {
 
 // What a function gives says what the response is.
 pub trait Respond[T] {
-  fn respond(value: T) -> Response ! alloc
+  fn respond(value: T) -> Response <alloc>
 }
 
-fn answer(status: u16, kind: str, body: str) -> Response ! alloc {
+fn answer(status: u16, kind: str, body: str) -> Response <alloc> {
   Response(status: status, headers: [("content-type", kind)], body: body)
 }
 
 impl[T] Respond[T]
   requires Serialize[T]
 {
-  fn respond(value: T) -> Response ! alloc {
+  fn respond(value: T) -> Response <alloc> {
     answer(200, "application/json", to_json(value))
   }
 }
 
 impl Respond[Html] {
-  fn respond(value: Html) -> Response ! alloc {
+  fn respond(value: Html) -> Response <alloc> {
     answer(200, "text/html; charset=utf-8", "{value}")
   }
 }
 
 impl Respond[Text] {
-  fn respond(value: Text) -> Response ! alloc {
+  fn respond(value: Text) -> Response <alloc> {
     answer(200, "text/plain; charset=utf-8", value.text)
   }
 }
 
 impl Respond[Redirect] {
-  fn respond(value: Redirect) -> Response ! alloc {
+  fn respond(value: Redirect) -> Response <alloc> {
     Response(status: 302, headers: [("location", value.to)], body: "")
   }
 }
 
 impl Respond[()] {
-  fn respond(value: ()) -> Response ! alloc {
+  fn respond(value: ()) -> Response <alloc> {
     Response(status: 204, headers: [], body: "")
   }
 }
@@ -606,7 +606,7 @@ impl[T, E] Respond[Result[T, E]]
   requires Status[E]
   requires Serialize[E]
 {
-  fn respond(value: Result[T, E]) -> Response ! alloc {
+  fn respond(value: Result[T, E]) -> Response <alloc> {
     match value {
       .ok(v) { Respond[T].respond(v) }
       .err(e) { answer(Status[E].status(e), "application/json", to_json(e)) }
@@ -638,7 +638,7 @@ struct Rejected {
 
 // The function reads its parameters from the request and answers with what it
 // gives, or answers 400 with what is wrong, and does not run.
-fn add[F, A, R](method: str, path: str, f: F) ! routing, alloc
+fn add[F, A, R](method: str, path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -661,7 +661,7 @@ fn add[F, A, R](method: str, path: str, f: F) ! routing, alloc
 }
 
 // `f` answers `GET` of the path, with its parameters read from the request.
-pub fn get[F, A, R](path: str, f: F) ! routing, alloc
+pub fn get[F, A, R](path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -671,7 +671,7 @@ pub fn get[F, A, R](path: str, f: F) ! routing, alloc
   add("GET", path, f)
 }
 
-pub fn post[F, A, R](path: str, f: F) ! routing, alloc
+pub fn post[F, A, R](path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -681,7 +681,7 @@ pub fn post[F, A, R](path: str, f: F) ! routing, alloc
   add("POST", path, f)
 }
 
-pub fn put[F, A, R](path: str, f: F) ! routing, alloc
+pub fn put[F, A, R](path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -691,7 +691,7 @@ pub fn put[F, A, R](path: str, f: F) ! routing, alloc
   add("PUT", path, f)
 }
 
-pub fn patch[F, A, R](path: str, f: F) ! routing, alloc
+pub fn patch[F, A, R](path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -701,7 +701,7 @@ pub fn patch[F, A, R](path: str, f: F) ! routing, alloc
   add("PATCH", path, f)
 }
 
-pub fn delete[F, A, R](path: str, f: F) ! routing, alloc
+pub fn delete[F, A, R](path: str, f: F) <routing, alloc>
   requires Function[F, A, R]
   requires FromRequest[A]
   requires Describe[A]
@@ -714,7 +714,7 @@ pub fn delete[F, A, R](path: str, f: F) ! routing, alloc
 // A server whose routes are what `body` writes: the request is asked of
 // `http`, the first route that fits its method and its path answers it, a
 // request that fits none is answered 404, and the response is given to `http`.
-pub fn routes[T](body: fn() -> T ! routing) -> T ! http, alloc {
+pub fn routes[T](body: fn() -> T <routing>) -> T <http, alloc> {
   asked = request()
   var done = false
   var response = Response(status: 404, headers: [], body: "")
@@ -738,7 +738,7 @@ pub fn routes[T](body: fn() -> T ! routing) -> T ! http, alloc {
 }
 
 // The request again, with its own list of headers.
-fn copy_of(r: Request) -> Request ! alloc {
+fn copy_of(r: Request) -> Request <alloc> {
   var headers: List[(str, str)] = []
   loop i in 0..r.headers.size {
     headers = push(headers, r.headers[i])
@@ -762,7 +762,7 @@ enum Fault {
 }
 
 // The bytes read so far with what the connection has sent since.
-fn fill(c: Connection, held: Slice[Byte]) -> Result[Slice[Byte], Fault] ! net, alloc {
+fn fill(c: Connection, held: Slice[Byte]) -> Result[Slice[Byte], Fault] <net, alloc> {
   match read(c, most_read()) {
     .ok(bytes) {
       if bytes.size == 0 {
@@ -782,7 +782,7 @@ fn after(bytes: Slice[Byte], used: Nat) -> Slice[Byte] {
 
 // The head of the next request, and the bytes that follow it. A head is at
 // most 16384 bytes, and each round of the loop has one more byte of it.
-fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byte]), Fault] ! net, alloc {
+fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byte]), Fault] <net, alloc> {
   var bytes = held
   loop round in 0..16400 {
     if bytes.size > 0 {
@@ -802,7 +802,7 @@ fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byt
 
 // The bytes of a body that the head says has `size` of them, and the bytes
 // that follow it.
-fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte], Slice[Byte]), Fault] <net, alloc> {
   if size > most_body() { return Result.err(Fault.refused) }
   var bytes = held
   loop round in 0..most_body() {
@@ -820,7 +820,7 @@ fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte
 }
 
 // The bytes of a body in chunks, whole, and the bytes that follow it.
-fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] <net, alloc> {
   var bytes = held
   var body: List[Byte] = []
   loop round in 0..2097154 {
@@ -852,7 +852,7 @@ fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[B
   Result.err(Fault.refused)
 }
 
-fn read_body(c: Connection, head: RequestHead, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] ! net, alloc {
+fn read_body(c: Connection, head: RequestHead, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] <net, alloc> {
   match body_of(head.headers) {
     .ok(framing) {
       match framing {
@@ -949,7 +949,7 @@ fn request_of(head: take RequestHead, body: str) -> Request {
 
 // What the routes answer for the request, which is nothing but 500 for a
 // block that gives no response.
-fn answer_with[T](request: Request, body: fn() -> T ! http) -> Response ! alloc
+fn answer_with[T](request: Request, body: fn() -> T <http>) -> Response <alloc>
   requires Discard[T]
 {
   var response = Response(status: 500, headers: [], body: "")
@@ -962,7 +962,7 @@ fn answer_with[T](request: Request, body: fn() -> T ! http) -> Response ! alloc
 }
 
 // The response again, with its own list of headers.
-fn copy_response(r: Response) -> Response ! alloc {
+fn copy_response(r: Response) -> Response <alloc> {
   var headers: List[(str, str)] = []
   loop i in 0..r.headers.size {
     headers = push(headers, r.headers[i])
@@ -1009,13 +1009,13 @@ fn one_line(s: str) -> bool {
 }
 
 // The line break that ends a line of a head.
-fn ended(line: take List[Byte]) -> List[Byte] ! alloc {
+fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
   push(push(line, 13), 10)
 }
 
 // The bytes of a response: its status line, its headers but those the length
 // and the connection are told by, and the body with its length.
-fn response_bytes(r: Response, keep: bool) -> List[Byte] ! alloc {
+fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   made = ended(append(made, "HTTP/1.1 {r.status} {reason(r.status)}".bytes))
   loop i in 0..r.headers.size {
@@ -1036,7 +1036,7 @@ fn refusal() -> Response {
 }
 
 // Sends the bytes, and whether they all went.
-fn sent(c: Connection, bytes: take List[Byte]) -> bool ! net {
+fn sent(c: Connection, bytes: take List[Byte]) -> bool <net> {
   match write(c, freeze(bytes)) {
     .ok(done) { true }
     .err(e) { false }
@@ -1049,7 +1049,7 @@ fn sent(c: Connection, bytes: take List[Byte]) -> bool ! net {
 // is closed, and the connection is closed, as the client of RFC 9112 is ready
 // for. So nothing read is carried from one request to the next, and the
 // memory of a request is released with it.
-fn serve_one[T](c: Connection, body: fn() -> T ! http) -> bool ! net, alloc
+fn serve_one[T](c: Connection, body: fn() -> T <http>) -> bool <net, alloc>
   requires Discard[T]
 {
   match read_head(c, []) {
@@ -1089,7 +1089,7 @@ fn serve_one[T](c: Connection, body: fn() -> T ! http) -> bool ! net, alloc
 }
 
 // Serves the requests of a connection, one after another, until it is ended.
-fn serve_connection[T](c: Connection, body: fn() -> T ! http) ! net, alloc, diverge
+fn serve_connection[T](c: Connection, body: fn() -> T <http>) <net, alloc, diverge>
   requires Discard[T]
 {
   loop {
@@ -1099,7 +1099,7 @@ fn serve_connection[T](c: Connection, body: fn() -> T ! http) ! net, alloc, dive
 
 // One request of a connection, with the memory it builds freed whole when it is
 // answered, whether or not it waited for the connection to say more.
-fn serve_round[T](c: Connection, body: fn() -> T ! http) -> bool ! net, alloc
+fn serve_round[T](c: Connection, body: fn() -> T <http>) -> bool <net, alloc>
   requires Discard[T]
 {
   with arena()
@@ -1112,7 +1112,7 @@ fn cannot(why: str) {
   __end(1)
 }
 
-fn why(e: NetError) -> str ! alloc {
+fn why(e: NetError) -> str <alloc> {
   match e {
     .unknown_host(host) { "listen: unknown host {host}" }
     .refused { "listen: refused" }
@@ -1123,7 +1123,7 @@ fn why(e: NetError) -> str ! alloc {
 }
 
 // A listener on the port, on every address of this machine.
-fn open(port: 0..65536) -> Result[Listener, NetError] ! net {
+fn open(port: 0..65536) -> Result[Listener, NetError] <net> {
   match listen_on("::", port) {
     .ok(l) { Result.ok(l) }
     .err(e) { listen_on("0.0.0.0", port) }
@@ -1147,13 +1147,13 @@ fn is_closed(e: NetError) -> bool {
 // On Windows every call waits where it is, as the number 12 of `__system` says
 // by being 2, and a task that waits there would hold up the one that accepts, so
 // the connections are served one at a time.
-fn serve_listener[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+fn serve_listener[T](l: Listener, body: fn() -> T <http>) <net, alloc, diverge>
   requires Discard[T]
 {
   if __system(12) == 2 { serve_one_at_a_time(l, body) } else { serve_in_tasks(l, body) }
 }
 
-fn serve_in_tasks[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+fn serve_in_tasks[T](l: Listener, body: fn() -> T <http>) <net, alloc, diverge>
   requires Discard[T]
 {
   with tasks()
@@ -1177,7 +1177,7 @@ fn serve_in_tasks[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
   }
 }
 
-fn serve_one_at_a_time[T](l: Listener, body: fn() -> T ! http) ! net, alloc, diverge
+fn serve_one_at_a_time[T](l: Listener, body: fn() -> T <http>) <net, alloc, diverge>
   requires Discard[T]
 {
   loop {
@@ -1195,7 +1195,7 @@ fn serve_one_at_a_time[T](l: Listener, body: fn() -> T ! http) ! net, alloc, div
 
 // What the routes answer when nothing asks them, which `listen` never needs:
 // it ends only with the program.
-fn unasked[T](body: fn() -> T ! http) -> T {
+fn unasked[T](body: fn() -> T <http>) -> T {
   http(
     request: { Request(method: "GET", path: "/", query: "", headers: [], body: "") },
     send: fn(r) { },
@@ -1208,7 +1208,7 @@ fn unasked[T](body: fn() -> T ! http) -> T {
 // for the system, and one request after another on each. It ends only with the program: a port that cannot be
 // listened on ends the program with a failing status, and the error on
 // standard error.
-pub fn listen[T](port: Nat, body: fn() -> T ! http) -> T ! net, alloc, diverge
+pub fn listen[T](port: Nat, body: fn() -> T <http>) -> T <net, alloc, diverge>
   requires Discard[T]
 {
   number: Option[0..65536] = narrow(port)

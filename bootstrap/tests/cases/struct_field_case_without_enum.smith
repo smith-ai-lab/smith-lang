@@ -4,6 +4,6 @@ struct Box[T] {
   item: T
 }
 
-fn main() ! console {
+fn main() <console> {
   x = Box(item: .left)
 }

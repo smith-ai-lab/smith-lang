@@ -149,7 +149,7 @@ fn a_caller_of_an_operation_carries_its_effect_and_is_refused_naming_the_operati
     };
     // It checks: `main` carries `time` too, and what is said is that nothing
     // answers it, at `main` and not in `stamp`.
-    let source = program(" ! time", " ! time");
+    let source = program(" <time>", " <time>");
     let accepted = errors(&source);
     assert_eq!(accepted.len(), 1, "{accepted:?}");
     assert_eq!(accepted[0].pos.line, place(&source, "fn main").line);
@@ -185,7 +185,7 @@ fn a_function_that_calls_an_operation_or_what_carries_the_effect_checks_exactly_
             source += &declaration(false, ops);
             let mut expected: Vec<Pos> = Vec::new();
             for (i, carried) in carries.iter().enumerate() {
-                let lists = if *carried { " ! fx" } else { "" };
+                let lists = if *carried { " <fx>" } else { "" };
                 source += &format!("\nfn f{i}(){lists} {{\n");
                 let line = match i {
                     0 => call(ops, *k, give),
@@ -207,14 +207,14 @@ fn a_function_that_calls_an_operation_or_what_carries_the_effect_checks_exactly_
                 }
             }
             let top = carries.len() - 1;
-            let main = if carries[top] { " ! fx" } else { "" };
+            let main = if carries[top] { " <fx>" } else { "" };
             source += &format!("\nfn main(){main} {{\n  f{top}()\n}}\n");
             let mut found: Vec<Error> = errors(&source);
             if carries[top] {
                 // `main` carries an effect nothing answers, as the next test
                 // looks at, and nothing else is said of the chain.
-                let listed = place(&source, "fn main() ! fx");
-                let listed = Pos { col: listed.col + 12, ..listed };
+                let listed = place(&source, "fn main() <fx>");
+                let listed = Pos { col: listed.col + 11, ..listed };
                 assert!(found.iter().any(|e| e.pos == listed), "{found:?} for\n{source}");
                 found.retain(|e| e.pos != listed);
             }
@@ -253,7 +253,7 @@ fn an_effect_and_each_operation_of_a_module_are_imported_each_by_its_own_name() 
             };
             let give = [true];
             let source = format!(
-                "{uses}fn f() ! fx {{\n  {}{}\n}}\n\nfn main() ! fx {{\n  f()\n}}\n",
+                "{uses}fn f() <fx> {{\n  {}{}\n}}\n\nfn main() <fx> {{\n  f()\n}}\n",
                 if ops[0].result.is_some() { "r = " } else { "" },
                 call(ops, 0, &give)
             );
@@ -262,7 +262,7 @@ fn an_effect_and_each_operation_of_a_module_are_imported_each_by_its_own_name() 
                 .unwrap_or_default();
             // `main` carries an effect nothing answers, which is the one
             // error a file that imports what it uses is given.
-            let main = place(&source, "fn main() ! fx");
+            let main = place(&source, "fn main() <fx>");
             let alone = found.len() == 1 && found[0].pos.line == main.line;
             assert_eq!(alone, *effect && *operation, "{found:?} for\n{source}");
         },
@@ -280,14 +280,14 @@ fn console_is_declared_by_the_library_and_print_is_its_operation() {
     assert!(!library.contains("__print"));
     assert!(!library.lines().any(|l| l.starts_with("pub fn print")));
     let source = "use std.console (console, print)\n\nfn greet() {\n  print(\"hi\")\n}\n\n\
-                  fn main() ! console {\n  greet()\n}\n";
+                  fn main() <console> {\n  greet()\n}\n";
     let refused = errors(source);
     assert_eq!(refused.len(), 1, "{refused:?}");
     assert_eq!(refused[0].pos, place(source, "print(\"hi\")"));
     for name in ["`print`", "`console`", "`greet`"] {
         assert!(refused[0].message.contains(name), "{name} in {refused:?}");
     }
-    let program = source.replace("fn greet()", "fn greet() ! console");
+    let program = source.replace("fn greet()", "fn greet() <console>");
     assert!(errors(&program).is_empty(), "{:?}", errors(&program));
 }
 
@@ -312,13 +312,13 @@ fn an_effect_that_reaches_main_with_no_answer_is_one_error_naming_it() {
             if *with_alloc {
                 listed.push("alloc".to_string());
             }
-            source += &format!("fn main() ! {} {{\n}}\n", listed.join(", "));
+            source += &format!("fn main() <{}> {{\n}}\n", listed.join(", "));
             let found = errors(&source);
             let mut got: Vec<Pos> = found.iter().map(|e| e.pos).collect();
             got.sort();
-            let head = place(&source, "fn main() ! ");
+            let head = place(&source, "fn main() <");
             let mut want: Vec<Pos> = Vec::new();
-            let mut col = head.col + "fn main() ! ".len();
+            let mut col = head.col + "fn main() <".len();
             for name in &listed {
                 if name.starts_with("fx") {
                     want.push(Pos { col, ..head });
@@ -349,9 +349,9 @@ fn printed(source: &str) -> String {
 /// and the type the handler gives were one, and one that built a struct of the
 /// type panicked.
 fn a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_given() {
-    let pass = "use std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn main() ! console, alloc {\n  r = store(put: fn(x) { same(x) }, body: { put(\"s\") })\n  print(r)\n}\n";
+    let pass = "use std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn main() <console, alloc> {\n  r = store(put: fn(x) { same(x) }, body: { put(\"s\") })\n  print(r)\n}\n";
     assert_eq!(printed(pass), "s\n");
-    let built = "use std.console (console, print)\n\nstruct Tk[T] {\n  value: T\n}\n\neffect jobs {\n  fn run[T](work: take fn() -> T) -> Tk[T]\n}\n\nfn main() ! console, alloc {\n  r = jobs(run: fn(work) { Tk(value: work()) }, body: { run({ \"x\" }) })\n  print(r.value)\n}\n";
+    let built = "use std.console (console, print)\n\nstruct Tk[T] {\n  value: T\n}\n\neffect jobs {\n  fn run[T](work: take fn() -> T) -> Tk[T]\n}\n\nfn main() <console, alloc> {\n  r = jobs(run: fn(work) { Tk(value: work()) }, body: { run({ \"x\" }) })\n  print(r.value)\n}\n";
     assert_eq!(printed(built), "x\n");
 }
 
@@ -360,7 +360,7 @@ fn a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_g
 /// operation is called at.
 fn a_handler_in_a_generic_function_keeps_the_type_parameters_of_the_operation_and_of_the_function_apart()
 {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn through[U](u: take U) -> U ! alloc {\n  store(put: fn(x) { same(x) }, body: { put(u) })\n}\n\nfn main() ! console, alloc {\n  a = through(\"g\")\n  b: u64 = through(5)\n  r = store(put: fn(x) { same(x) }, body: {\n    c = put(\"s\")\n    d: u64 = put(7)\n    \"{c} {d}\"\n  })\n  print(\"{a} {b} {r}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn through[U](u: take U) -> U <alloc> {\n  store(put: fn(x) { same(x) }, body: { put(u) })\n}\n\nfn main() <console, alloc> {\n  a = through(\"g\")\n  b: u64 = through(5)\n  r = store(put: fn(x) { same(x) }, body: {\n    c = put(\"s\")\n    d: u64 = put(7)\n    \"{c} {d}\"\n  })\n  print(\"{a} {b} {r}\")\n}\n";
     assert_eq!(printed(source), "g 5 s 7\n");
 }
 
@@ -427,12 +427,12 @@ fn a_handler_of_an_operation_with_type_parameters_gives_the_value_the_model_give
             let handler = format!("fx(put: {lambda_text}, body: body)");
             let source = if *wrapped {
                 format!(
-                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn run[R](body: fn() -> R ! fx) -> R {{\n  {handler}\n}}\n\nfn main() ! console, alloc {{\n  with run()\n{calls}}}\n"
+                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn run[R](body: fn() -> R <fx>) -> R {{\n  {handler}\n}}\n\nfn main() <console, alloc> {{\n  with run()\n{calls}}}\n"
                 )
             } else {
                 let body = &calls;
                 format!(
-                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn main() ! console, alloc {{\n  fx(put: {lambda_text}, body: {{\n{body}  }})\n}}\n"
+                    "use std.console (console, print)\n\n{prelude}effect fx {{\n  {operation}\n}}\n\nfn main() <console, alloc> {{\n  fx(put: {lambda_text}, body: {{\n{body}  }})\n}}\n"
                 )
             };
             let expected: String = model.iter().map(|m| format!("{m}\n")).collect();
@@ -470,7 +470,7 @@ fn a_handler_lambda_that_treats_a_type_parameter_of_its_operation_as_a_type_is_r
                 )
             };
             let source = format!(
-                "use std.console (console, print)\n\neffect fx {{\n  {operation}\n}}\n\nfn main() ! console, alloc {{\n  r = fx(put: {}, body: {{ {call} }})\n  print(r)\n}}\n",
+                "use std.console (console, print)\n\neffect fx {{\n  {operation}\n}}\n\nfn main() <console, alloc> {{\n  r = fx(put: {}, body: {{ {call} }})\n  print(r)\n}}\n",
                 lambdas[*lambda]
             );
             let found = errors(&source);

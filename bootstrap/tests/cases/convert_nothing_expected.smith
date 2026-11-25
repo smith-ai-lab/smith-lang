@@ -1,6 +1,6 @@
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   small: Byte = 7
   wide = convert(small)
   print("{wide}")

@@ -89,7 +89,7 @@ fn kind(b: Byte) -> str {
   }
 }
 
-fn main() ! console {
+fn main() <console> {
   print(kind('7'))
   print(kind('('))
   print(kind(' '))
@@ -116,7 +116,7 @@ fn a_character_literal_is_its_code_in_every_type_it_fits() {
         |g| (ascii(g), *g.pick(INTS)),
         |((written, code), ty): &((String, i128), Int)| {
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  x: {} = {written}\n  print(\"{{x}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  x: {} = {written}\n  print(\"{{x}}\")\n}}\n",
                 ty.name
             ));
             assert_eq!(prints(&source), [code.to_string()], "for {source}");
@@ -128,7 +128,7 @@ fn the_escapes_of_a_character_are_39_92_10_and_9() {
     for (written, code) in [("'\\''", 39), ("'\\\\'", 92), ("'\\n'", 10), ("'\\t'", 9)] {
         for ty in INTS {
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  x: {} = {written}\n  print(\"{{x}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  x: {} = {written}\n  print(\"{{x}}\")\n}}\n",
                 ty.name
             ));
             assert_eq!(prints(&source), [code.to_string()], "for {source}");
@@ -146,7 +146,7 @@ fn a_character_outside_ascii_is_refused_as_a_u8_and_is_its_code_point_as_a_wider
         },
         |(c, ty): &(char, Int)| {
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  x: {} = '{c}'\n  print(\"{{x}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  x: {} = '{c}'\n  print(\"{{x}}\")\n}}\n",
                 ty.name
             ));
             let code = *c as i128;
@@ -225,7 +225,7 @@ fn a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(part:
         }
         by_match.push_str(&format!("    other {{ {} }}\n  }}\n}}\n", n.rest));
         by_if.push_str(&format!("{{ {} }}\n}}\n", n.rest));
-        let mut main = String::from("\nfn main() ! console, alloc {\n");
+        let mut main = String::from("\nfn main() <console, alloc> {\n");
         for (i, s) in n.subjects.iter().enumerate() {
             main.push_str(&format!("  x{i}: {t} = {s}\n  print(\"{{f(x{i})}}\")\n"));
         }
@@ -264,7 +264,7 @@ fn a_match_on_text_takes_the_block_of_the_literal_that_equals_it() {
             for (w, given) in arms {
                 source.push_str(&format!("    \"{w}\" {{ {given} }}\n"));
             }
-            source.push_str("    other { 100 }\n  }\n}\n\nfn main() ! console, alloc {\n");
+            source.push_str("    other { 100 }\n  }\n}\n\nfn main() <console, alloc> {\n");
             for s in subjects {
                 source.push_str(&format!("  print(\"{{f(\"{s}\")}}\")\n"));
             }
@@ -376,7 +376,7 @@ fn a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_match
                 source.push_str("    .some(n) { 100 }\n");
             }
             source.push_str("    .none { 200 }\n  }\n}\n\n");
-            source.push_str("fn main() ! console, alloc {\n");
+            source.push_str("fn main() <console, alloc> {\n");
             let mut expected = Vec::new();
             for a in 0..4u8 {
                 for b in 0..4u8 {
@@ -403,7 +403,7 @@ fn a_match_on_whole_numbers_or_text_must_end_with_a_bare_name_and_repeat_nothing
         let wrap = |arms: &str| {
             with_header(format!(
                 "fn f(b: {ty}) -> Int {{\n  match b {{\n{arms}  }}\n}}\n\n\
-                 fn main() ! console, alloc {{\n  print(\"{{f({one})}}\")\n}}\n"
+                 fn main() <console, alloc> {{\n  print(\"{{f({one})}}\")\n}}\n"
             ))
         };
         let open = wrap(&format!("    {one} {{ 1 }}\n    {two} {{ 2 }}\n"));
@@ -437,7 +437,7 @@ fn a_match_on_whole_numbers_is_one_switch_however_many_literals_it_has() {
         for i in 0..count {
             source.push_str(&format!("    {} {{ {i} }}\n", i * 3));
         }
-        source.push_str("    other { 1000 }\n  }\n}\n\nfn main() ! console {\n");
+        source.push_str("    other { 1000 }\n  }\n}\n\nfn main() <console> {\n");
         source.push_str("  x: Byte = 3\n  if f(x) == 1 { print(\"yes\") }\n}\n");
         let source = with_header(source);
         let program = lower(source.as_bytes()).expect("compiles");

@@ -85,7 +85,7 @@ fn main_text(p: &Pair) -> String {
          impl Shown[Mine] {{\n  fn show(x: Mine) -> i32 {{ wrapping_add(x.n, {ka}) }}\n}}\n\n\
          impl Drawn[Yours] {{\n  fn show(x: Yours) -> i32 {{ wrapping_mul(x.n, {kb}) }}\n}}\n\n\
          impl Drawn[Mine] {{\n  fn show(x: Mine) -> i32 {{ wrapping_mul(x.n, {kb}) }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  \
+         fn main() <console, alloc> {{\n  \
          print(\"{{Shown.show(Mine(n: {x}))}} {{Drawn.show(Yours(n: {x}))}} {{Drawn.show(Mine(n: {x}))}}\")\n}}\n"
     )
 }
@@ -103,7 +103,7 @@ fn one_file(p: &Pair) -> String {
          impl Shown[Mine] {{\n  fn show_a(x: Mine) -> i32 {{ wrapping_add(x.n, {ka}) }}\n}}\n\n\
          impl Drawn[Yours] {{\n  fn show_b(x: Yours) -> i32 {{ wrapping_mul(x.n, {kb}) }}\n}}\n\n\
          impl Drawn[Mine] {{\n  fn show_b(x: Mine) -> i32 {{ wrapping_mul(x.n, {kb}) }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  \
+         fn main() <console, alloc> {{\n  \
          print(\"{{Shown.show_a(Mine(n: {x}))}} {{Drawn.show_b(Yours(n: {x}))}} {{Drawn.show_b(Mine(n: {x}))}}\")\n}}\n"
     )
 }
@@ -115,7 +115,7 @@ fn impl_imported_a_trait_listed_without_its_function_is_implemented() {
     let main = "use std.bits (i32)\nuse std.console (console, print)\nuse ui.animation (Shown)\n\n\
         struct Mine {\n  n: i32\n}\n\n\
         impl Shown[Mine] {\n  fn show(x: Mine) -> str { \"shown\" }\n}\n\n\
-        fn main() ! console, alloc {\n  print(Shown.show(Mine(n: 1)))\n}\n";
+        fn main() <console, alloc> {\n  print(Shown.show(Mine(n: 1)))\n}\n";
     let program = lower_project(main.as_bytes(), &[("ui.animation", animation)])
         .unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(smith::scalar::run(&program).stdout, b"shown\n");
@@ -169,7 +169,7 @@ fn placed(m: &Mistake) -> (String, Pos, &'static str) {
     let head = format!(
         "{pad}use std.bits (i32)\nuse std.console (console, print)\nuse ui.animation (Shown)\n\nstruct Mine {{\n  n: i32\n}}\n\n"
     );
-    let main = "fn main() ! console, alloc {\n  print(\"{Shown.show(Mine(n: 1))}\")\n}\n";
+    let main = "fn main() <console, alloc> {\n  print(\"{Shown.show(Mine(n: 1))}\")\n}\n";
     if m.lacks {
         let before = head;
         let text = format!("{before}impl Shown[Mine] {{\n}}\n\n{main}");

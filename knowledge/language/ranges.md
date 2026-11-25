@@ -22,7 +22,7 @@ A [`loop`](loop.md) runs over a range.
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in 0..3 { print("{i}") }
 }
 ```

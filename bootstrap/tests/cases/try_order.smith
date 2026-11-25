@@ -5,7 +5,7 @@ enum S {
   two
 }
 
-fn say(s: str) -> str ! console {
+fn say(s: str) -> str <console> {
   print(s)
   s
 }
@@ -19,7 +19,7 @@ fn check(n: str, o: Option[str]) -> Result[str, str] {
 
 fn join3(a: str, b: str, c: str) -> str { a }
 
-fn f(s: S, b: Option[str]) -> Result[str, str] ! console {
+fn f(s: S, b: Option[str]) -> Result[str, str] <console> {
   m = join3(match s {
     .one { say("match one") }
     .two { say("match two") }
@@ -27,7 +27,7 @@ fn f(s: S, b: Option[str]) -> Result[str, str] ! console {
   .ok(m)
 }
 
-fn main() ! console {
+fn main() <console> {
   match f(.one, .none) {
     .ok(t) { print(t) }
     .err(w) { print(w) }

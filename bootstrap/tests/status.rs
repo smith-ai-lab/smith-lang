@@ -62,7 +62,7 @@ pub const MACHINE: &[Test] = &[
 /// The first program of the page.
 const FAILS: &str = "use std.console (console, print)
 
-fn main() -> Result[(), str] ! console, alloc {
+fn main() -> Result[(), str] <console, alloc> {
   print(\"started\")
   .err(\"could not finish\")
 }
@@ -77,7 +77,7 @@ enum Outcome {
 }
 
 impl Exit[Outcome] {
-  fn exit(value: Outcome) -> Byte ! console, alloc {
+  fn exit(value: Outcome) -> Byte <console, alloc> {
     match value {
       .done { 0 }
       .usage { 2 }
@@ -85,7 +85,7 @@ impl Exit[Outcome] {
   }
 }
 
-fn main() -> Outcome ! console, alloc { .usage }
+fn main() -> Outcome <console, alloc> { .usage }
 ";
 
 fn program(source: &str) -> scalar::Program {
@@ -122,7 +122,7 @@ fn the_three_programs_of_the_status_page_do_what_it_says() {
         )
     );
     assert_eq!(
-        said("use std.console (console, print)\n\nfn main() ! console { print(\"hi\") }\n"),
+        said("use std.console (console, print)\n\nfn main() <console> { print(\"hi\") }\n"),
         (
             Outcome {
                 stdout: b"hi\n".to_vec(),
@@ -153,7 +153,7 @@ fn returns_result(failure: &Option<String>) -> String {
         Some(text) => format!(".err(\"{text}\")"),
     };
     format!(
-        "use std.console (console)\n\nfn main() -> Result[(), str] ! console, alloc {{\n  {given}\n}}\n"
+        "use std.console (console)\n\nfn main() -> Result[(), str] <console, alloc> {{\n  {given}\n}}\n"
     )
 }
 
@@ -195,10 +195,10 @@ struct Code {{
 }}
 
 impl Exit[Code] {{
-  fn exit(value: Code) -> Byte ! console, alloc {{ value.number }}
+  fn exit(value: Code) -> Byte <console, alloc> {{ value.number }}
 }}
 
-fn main() -> Code ! console, alloc {{ Code(number: {status}) }}
+fn main() -> Code <console, alloc> {{ Code(number: {status}) }}
 "
     )
 }
@@ -245,7 +245,7 @@ enum Mood {
         ("Option[()]", ".none"),
         ("Result[Plain, str]", ".ok(Plain(n: 1))"),
     ] {
-        let source = format!("{types}fn main() -> {ty} ! console, alloc {{ {value} }}\n");
+        let source = format!("{types}fn main() -> {ty} <console, alloc> {{ {value} }}\n");
         let errors = errors_of(&source);
         assert!(!errors.is_empty(), "{source}");
         let all = errors.join("\n");
@@ -263,7 +263,7 @@ fn half(x: i32) -> Result[i32, str] {
   if x > 0 { .ok(x) } else { .err(\"not above zero\") }
 }
 
-fn main() -> Result[(), str] ! console, alloc {
+fn main() -> Result[(), str] <console, alloc> {
   a = try half(4)
   print(\"{a}\")
   b = try half(0)
@@ -286,7 +286,7 @@ fn main() -> Result[(), str] ! console, alloc {
 fn a_main_that_returns_nothing_is_not_wrapped() {
     // The program starts at `main` itself, which takes nothing and has one
     // call to the system for what it prints, and none for ending.
-    let source = "use std.console (console, print)\n\nfn main() ! console { print(\"hi\") }\n";
+    let source = "use std.console (console, print)\n\nfn main() <console> { print(\"hi\") }\n";
     let program = program(source);
     assert_eq!(program.functions.len(), 1);
     assert_eq!(program.main, 0);
@@ -295,7 +295,7 @@ fn a_main_that_returns_nothing_is_not_wrapped() {
 fn a_main_that_takes_the_words_may_return_a_status_too() {
     let source = "use std.console (console)
 
-fn main(args: List[str]) -> Result[(), str] ! console, alloc {
+fn main(args: List[str]) -> Result[(), str] <console, alloc> {
   if args.size > 1 { .err(\"too many\") } else { .ok(()) }
 }
 ";

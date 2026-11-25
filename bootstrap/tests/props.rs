@@ -579,7 +579,7 @@ fn a_var_a_function_called_in_place_has_the_value_it_had_when_a_loop_around_the_
 use std.console (console, print)
 use std.int (wrapping_add)
 
-fn inner(n: u32, body: fn(u32)) ! diverge {
+fn inner(n: u32, body: fn(u32)) <diverge> {
   var k: u32 = 0
   loop {
     if k == n { break }
@@ -588,7 +588,7 @@ fn inner(n: u32, body: fn(u32)) ! diverge {
   }
 }
 
-fn outer(n: u32, body: fn(u32)) ! diverge {
+fn outer(n: u32, body: fn(u32)) <diverge> {
   var k: u32 = 0
   loop {
     if k == 1 { break }
@@ -599,7 +599,7 @@ fn outer(n: u32, body: fn(u32)) ! diverge {
   }
 }
 
-fn main() ! diverge, console, alloc {
+fn main() <diverge, console, alloc> {
   var a: u32 = 0
   outer(0) fn(x) {
     a = wrapping_add(a, x)
@@ -774,7 +774,7 @@ fn every_placed_mistake_about_numbers_is_one_error_at_its_place(part: u64) {
 /// for them add nothing.
 fn a_program_that_holds_no_number_builds_to_the_same_bytes_whatever_numbers_it_defines() {
     const UNREACHED: &str = "fn spare(a: Byte, b: Byte) -> bool { a < b }\n\
-        fn more(a: Int) -> str ! alloc { \"{wrapping_add(a, 1)}\" }\n";
+        fn more(a: Int) -> str <alloc> { \"{wrapping_add(a, 1)}\" }\n";
     generate::check(72, 100, programs::program, |case| {
         let program = lower(&case.source).unwrap_or_else(|e| panic!("{e:?}"));
         let mut with = with_names(&case.source, &[("std.int", "wrapping_add")]);
@@ -1149,7 +1149,7 @@ const OPEN_BEFORE_STRING: &[&str] = &["{", "{x + "];
 fn file_with_token_errors(g: &mut Gen) -> (String, Vec<(Pos, &'static str)>) {
     let mut source = String::from(USES);
     let mut expected = Vec::new();
-    source.push_str(g.pick(&["fn main() ! console {", "fn main() {"]));
+    source.push_str(g.pick(&["fn main() <console> {", "fn main() {"]));
     source.push_str(g.pick(&[" ", "\n  ", "\n\t"]));
     if g.one_in(3) {
         expected.push((pos_after(&source), "unexpected character"));
@@ -1228,7 +1228,7 @@ fn file_with_syntax_errors(g: &mut Gen) -> (String, Vec<(Pos, &'static str)>) {
         ("fn d(a: str = ", ") {}", Some("an expression")),
         ("", "struct B {\n  x: f32\n}", None),
         ("", ")", Some("definition")),
-        ("", "fn f() ! console { print(\"a\") }", None),
+        ("", "fn f() <console> { print(\"a\") }", None),
         ("fn g()\n{\n  x = (1)", "(2)\n}", Some("not supported yet")),
         ("fn h(a: str ", "b: str) {}", Some("`,` or `)`")),
         // A mistake in the signature of a function in an implementation is
@@ -1295,7 +1295,7 @@ fn file_with_check_errors(g: &mut Gen) -> (String, Vec<(Pos, String)>) {
         let mut listed: Vec<&str> = Vec::new();
         let mut unknown = false;
         for i in 0..g.below(4) {
-            source.push_str(if i == 0 { " ! " } else { ", " });
+            source.push_str(if i == 0 { " <" } else { ", " });
             let effect = *g.pick(&["console", "fs", "alloc", "consol", "ui"]);
             let at = pos_after(&source);
             source.push_str(effect);
@@ -1312,6 +1312,9 @@ fn file_with_check_errors(g: &mut Gen) -> (String, Vec<(Pos, String)>) {
                 }
                 _ => expected.push((at, format!("the `{effect}` effect is not supported yet"))),
             }
+        }
+        if !listed.is_empty() {
+            source.push('>');
         }
         source.push_str(" {\n  ");
         let callee = *g.pick(&["print", "print", "prin", "main"]);
@@ -1384,7 +1387,7 @@ fn every_error_of_the_checker_is_reported_once_in_order() {
 fn file_with_a_mark(g: &mut Gen) -> (String, usize) {
     let blank = *g.pick(&["", "\n", "\n\n\n\n\n\n\n\n\n\n"]);
     let indent = *g.pick(&["", "  ", "\t", " \t "]);
-    let mut source = format!("{USES}fn main() ! console {{{blank}\n{indent}print(\"");
+    let mut source = format!("{USES}fn main() <console> {{{blank}\n{indent}print(\"");
     let mut places = indent.len() + "print(\"".len();
     for _ in 0..g.below(8) {
         let (written, _, width) = g.pick(PIECES);

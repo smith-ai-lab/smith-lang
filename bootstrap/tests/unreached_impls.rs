@@ -52,7 +52,7 @@ impl Area[Square] {{
   }}
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   print(\"{{area(Square(side: 3))}}\")
 }}
 {extra}"
@@ -190,7 +190,7 @@ impl Show[{ty}] {{
   fn show(x: {ty}) -> str {{ {body} }}
 }}
 
-fn main() ! console {{
+fn main() <console> {{
   print(show(A(n: 1))){uses}
 }}
 "

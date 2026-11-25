@@ -18,4 +18,4 @@ fn greet(name: str) -> u64
   name.size
 }
 
-fn main() ! console, alloc { print("{greet("ada")} {greet("grace")}") }
+fn main() <console, alloc> { print("{greet("ada")} {greet("grace")}") }

@@ -201,10 +201,10 @@ fn home(name: &str) -> Option<&'static str> {
 }
 
 /// A `main` that prints, with no `use` of its own.
-const MAIN: &str = "fn main() ! console {\n  print(\"hi\")\n}\n";
+const MAIN: &str = "fn main() <console> {\n  print(\"hi\")\n}\n";
 
 /// A program that prints, with the `use` it needs.
-const HELLO: &str = "use std.console (console, print)\n\nfn main() ! console {\n  print(\"hi\")\n}\n";
+const HELLO: &str = "use std.console (console, print)\n\nfn main() <console> {\n  print(\"hi\")\n}\n";
 
 /// The names of the sizes, which `std.bits` holds and the files of `std/` do
 /// not write with `pub`.
@@ -589,7 +589,7 @@ fn alone(name: &str) -> PathBuf {
     crate::executable::copy(env!("CARGO_BIN_EXE_smith"), &dir.join("smith"));
     std::fs::write(
         dir.join("hello.smith"),
-        "use std.console (console, print)\n\nfn main() ! console {\n  print(\"hello\")\n}\n",
+        "use std.console (console, print)\n\nfn main() <console> {\n  print(\"hello\")\n}\n",
     )
     .unwrap();
     dir
@@ -695,7 +695,7 @@ fn written(g: &mut Gen, own: &str, kind: &str) -> Written {
 /// file in place of its `use`.
 fn a_program_prints_what_it_prints_with_the_items_of_the_module_pasted_into_it() {
     generate::check(40, 20, |g| written(g, "helper", "Pt"), |w| {
-        let program = format!("fn main() ! console, alloc {{\n{}}}\n", w.body);
+        let program = format!("fn main() <console, alloc> {{\n{}}}\n", w.body);
         let uses = numbers::with_header(format!("use std.gen ({})\n\n{program}", w.imports.join(", ")));
         let pasted = numbers::with_header(format!("{}\n{program}", w.pasted));
         let got = built_with(&uses, &[("gen", &w.module)]);
@@ -712,7 +712,7 @@ fn the_names_a_module_does_not_export_are_its_own_and_clash_with_nothing() {
     generate::check(40, 20, |g| written(g, "helper", "Pt"), |w| {
         let own = "fn helper(n: i32) -> i32 { wrapping_mul(n, 1000) }\n\nstruct Pt {\n  z: i32\n}\n\n";
         let mine = "  print(\"{helper(2)} {Pt(z: 3).z}\")\n";
-        let program = |body: &str| format!("fn main() ! console, alloc {{\n{mine}{body}}}\n");
+        let program = |body: &str| format!("fn main() <console, alloc> {{\n{mine}{body}}}\n");
         let with = numbers::with_header(format!(
             "use std.gen ({})\n\n{own}{}",
             w.imports.join(", "),
@@ -735,7 +735,7 @@ fn the_names_a_module_does_not_export_are_its_own_and_clash_with_nothing() {
 /// The example of the issue: `is_digit`, written in Smith, called from a program.
 fn a_function_of_a_module_written_in_smith_is_called_from_a_program() {
     let ascii = "pub fn is_digit(b: Byte) -> bool { b >= '0' and b <= '9' }\n";
-    let source = numbers::with_header("use std.ascii (is_digit)\n\nfn main() ! console, alloc {\n  print(\"{is_digit('7')} {is_digit('x')}\")\n}\n".to_string());
+    let source = numbers::with_header("use std.ascii (is_digit)\n\nfn main() <console, alloc> {\n  print(\"{is_digit('7')} {is_digit('x')}\")\n}\n".to_string());
     assert_eq!(printed(&built_with(&source, &[("ascii", ascii)])), b"true false\n");
 }
 
@@ -746,7 +746,7 @@ fn a_name_that_is_not_pub_and_a_function_the_compiler_builds_are_refused_in_a_pr
     generate::check(20, 10, |g| written(g, "helper", "Pt"), |w| {
         let module = format!("{}\nfn secret(n: i32) -> i32 {{ n }}\n", w.module);
         let library = [("gen", module.as_str())];
-        let main = |body: &str| format!("fn main() ! console, alloc {{\n{body}  print(\"x\")\n}}\n");
+        let main = |body: &str| format!("fn main() <console, alloc> {{\n{body}  print(\"x\")\n}}\n");
         let with = numbers::with_header;
         let refused = |source: String, mention: &str| {
             let errors = smith::lower_in(source.as_bytes(), &with_std(&library))
@@ -764,7 +764,7 @@ fn a_name_that_is_not_pub_and_a_function_the_compiler_builds_are_refused_in_a_pr
 /// functions the compiler builds.
 fn a_function_of_a_module_calls_the_functions_the_compiler_builds() {
     let module = "fn base() -> Byte { 200 }\n\npub fn plus(a: Byte) -> Byte { __wrapping_add(a, base()) }\n";
-    let source = numbers::with_header("use std.gen (plus)\n\nfn main() ! console, alloc {\n  print(\"{plus(100)}\")\n}\n".to_string());
+    let source = numbers::with_header("use std.gen (plus)\n\nfn main() <console, alloc> {\n  print(\"{plus(100)}\")\n}\n".to_string());
     assert_eq!(printed(&built_with(&source, &[("gen", module)])), b"44\n");
 }
 
@@ -774,11 +774,11 @@ fn only_what_a_program_reaches_is_read_checked_and_built() {
     generate::check(20, 10, |g| written(g, "helper", "Pt"), |w| {
         let broken_file = "pub fn x( {{{\n";
         let unreached = format!("{}\npub fn bad(n: i32) -> i32 {{ nothing_here(n) }}\n", w.module);
-        let program = format!("fn main() ! console, alloc {{\n{}}}\n", w.body);
+        let program = format!("fn main() <console, alloc> {{\n{}}}\n", w.body);
         let with = numbers::with_header(format!("use std.gen ({})\n\n{program}", w.imports.join(", ")));
         let library = [("gen", unreached.as_str()), ("broken", broken_file)];
         assert_eq!(built_with(&with, &library), built_with(&with, &[("gen", &w.module)]));
-        let hello = "fn main() ! console, alloc {\n  print(\"hi\")\n}\n";
+        let hello = "fn main() <console, alloc> {\n  print(\"hi\")\n}\n";
         let imported = numbers::with_header(format!("use std.gen (measure, bad)\n\n{hello}"));
         assert_eq!(built_with(&imported, &library), built_with(&numbers::with_header(hello.to_string()), &[]));
     });
@@ -795,7 +795,7 @@ fn an_error_in_a_function_a_program_reaches_is_at_its_place_in_the_module() {
             " ".repeat(indent)
         );
         let module = format!("{head}{name}(n)\n}}\n");
-        let source = numbers::with_header("use std.gen (bad)\n\nfn main() ! console, alloc {\n  print(\"{bad(1)}\")\n}\n".to_string());
+        let source = numbers::with_header("use std.gen (bad)\n\nfn main() <console, alloc> {\n  print(\"{bad(1)}\")\n}\n".to_string());
         let errors = smith::lower_in(source.as_bytes(), &with_std(&[("gen", &module)])).unwrap_err();
         let found: Vec<_> = errors.iter().filter(|e| e.message.contains(name)).collect();
         assert_eq!(found.len(), 1, "{errors:?}");
@@ -808,7 +808,7 @@ fn an_error_in_a_function_a_program_reaches_is_at_its_place_in_the_module() {
 /// as the same function written in the program's file is.
 fn a_function_of_a_module_is_inlined_and_folded_as_one_of_the_file_is() {
     let ascii = "pub fn is_digit(b: Byte) -> bool { b >= '0' and b <= '9' }\n";
-    let main = "fn main() ! console, alloc {\n  print(\"{is_digit('7')} {is_digit('x')}\")\n}\n";
+    let main = "fn main() <console, alloc> {\n  print(\"{is_digit('7')} {is_digit('x')}\")\n}\n";
     let imported = built_with(
         &numbers::with_header(format!("use std.ascii (is_digit)\n\n{main}")),
         &[("ascii", ascii)],

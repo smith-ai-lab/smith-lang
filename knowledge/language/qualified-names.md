@@ -16,7 +16,7 @@ A `use` with no list brings in the module itself, under its last path segment. I
 ```
 use db.transaction
 
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = transaction.begin(db)
   transaction.commit(t)
 }

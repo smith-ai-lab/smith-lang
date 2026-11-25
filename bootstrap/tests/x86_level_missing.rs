@@ -12,7 +12,7 @@ pub const MACHINE: &[Test] = &[(
     an_executable_started_on_a_chip_without_the_level_names_what_is_missing_and_runs_no_main,
 )];
 
-const HELLO: &[u8] = b"use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &[u8] = b"use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 /// Whether `qemu-x86_64`, which can make a chip lack a feature, is installed.
 pub fn emulator() -> bool {

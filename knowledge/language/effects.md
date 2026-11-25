@@ -13,21 +13,21 @@ built:
 
 # Effects
 
-An effect is something a function does outside itself, and a signature lists each one the function may do, after its return type with a `!`.
+An effect is something a function does outside itself, and a signature lists each one the function may do, after its return type in angle brackets.
 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello")
 }
 ```
 
-`! console` says that `main` may use the console, and `print` does. This prints `hello`.
+`<console>` says that `main` may use the console, and `print` does. This prints `hello`.
 
 ## A function with no effect
 
-A function with no `!` clause is pure. It does nothing outside itself, so it can be called anywhere.
+A function that lists no effects is pure. It does nothing outside itself, so it can be called anywhere.
 
 ```
 use std.bits (i32)
@@ -46,12 +46,12 @@ fn greet(name: str) {
   print("hello")
 }
 
-fn main() ! console {
+fn main() <console> {
   greet("Ana")
 }
 ```
 
-This gives "`print` needs the `console` effect, which `greet` does not declare", with the fix "write `fn greet(name: str) ! console`".
+This gives "`print` needs the `console` effect, which `greet` does not declare", with the fix "write `fn greet(name: str) <console>`".
 
 ## Listing more than one
 
@@ -60,23 +60,23 @@ Effects are listed after the return type, separated by commas, in any order.
 ```
 use std.console (console, print)
 
-fn shout(name: str) -> str ! console, alloc {
+fn shout(name: str) -> str <console, alloc> {
   print("hey")
   "hello {name}"
 }
 ```
 
-`! alloc, console` means the same. An effect is named once in a list, so naming it again is refused.
+`<alloc, console>` means the same. An effect is named once in a list, so naming it again is refused.
 
 ```
 use std.console (console, print)
 
-fn main() ! console, console {
+fn main() <console, console> {
   print("hi")
 }
 ```
 
-This gives "the `console` effect is already listed".
+This gives "the `console` effect is already listed", with the fix "write `<console>`". The list is a set, so its order means nothing, and two signatures that differ only in the order of their effects have the same type. `<>` is refused, with the fix "write no effects, and leave out `<>`".
 
 ## What a caller needs
 
@@ -85,7 +85,7 @@ A caller must have every effect its callees use. `main` below calls `shout`, whi
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(shout("Ana"))
 }
 ```
@@ -95,12 +95,12 @@ This prints `hey` and then `hello Ana`. A caller that lacks one of them is refus
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(shout("Ana"))
 }
 ```
 
-This gives "`shout` needs the `alloc` effect, which `main` does not declare", with the fix "write `fn main() ! console, alloc`".
+This gives "`shout` needs the `alloc` effect, which `main` does not declare", with the fix "write `fn main() <console, alloc>`".
 
 A call states no effect. `shout("Ana")` is written as it would be for a pure function, because an effect is a parameter that the compiler passes for you, and it costs nothing at run time. So a signature says everything a function may do, while the code that calls it stays plain.
 
@@ -117,7 +117,7 @@ use std.console (console, print)
 
 fn do[T](body: fn() -> T) -> T { body() }
 
-fn main() ! console {
+fn main() <console> {
   do { print("hi") }
 }
 ```
@@ -131,14 +131,14 @@ A function with a name that is passed is checked the same way, since passing `hi
 ```
 use std.console (console, print)
 
-fn hi() ! console { print("hi") }
+fn hi() <console> { print("hi") }
 
-fn main() ! console {
+fn main() <console> {
   do(hi)
 }
 ```
 
-This prints `hi`. The effects of `hi` are required of `main`, where its name is written, and `do` states none. With `fn main() {` it is refused with "`hi` needs the `console` effect, which `main` does not declare", at the name, with the fix "write `fn main() ! console`". A name inside a lambda asks the function the lambda is written in, at any depth.
+This prints `hi`. The effects of `hi` are required of `main`, where its name is written, and `do` states none. With `fn main() {` it is refused with "`hi` needs the `console` effect, which `main` does not declare", at the name, with the fix "write `fn main() <console>`". A name inside a lambda asks the function the lambda is written in, at any depth.
 
 ## A function stored in a value
 
@@ -147,7 +147,7 @@ A function stored in a value states its effects in its type, after the result as
 ```
 struct Button {
   label: str
-  on_press: fn() ! console
+  on_press: fn() <console>
 }
 ```
 
@@ -160,12 +160,12 @@ An effect in a signature is a permission, and every caller must carry it. So a f
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("hello")
 }
 ```
 
-`smith check` warns: "`main` lists the `alloc` effect, and nothing in it needs it", with the fix "write `fn main() ! console`". It is a warning, as an unused import is, so `smith build` and `smith run` still build the program, and `smith check` fails.
+`smith check` warns: "`main` lists the `alloc` effect, and nothing in it needs it", with the fix "write `fn main() <console>`". It is a warning, as an unused import is, so `smith build` and `smith run` still build the program, and `smith check` fails.
 
 Three functions may list an effect they do not need, and are not warned of. A function of an `impl` has the signature its trait gives, and one implementation may need less than another. A function passed where a parameter's type allows an effect need not use it. And a function whose body holds a [`hole`](hole.md) is not finished. A `pub` function is warned of as any other: an effect is not listed to keep a place for later.
 
@@ -174,9 +174,9 @@ Three functions may list an effect they do not need, and are not warned of. A fu
 | Written | Means |
 | --- | --- |
 | `fn f() { ... }` | `f` is pure |
-| `fn f() ! console { ... }` | `f` may use the console |
-| `fn f() -> T ! console, alloc { ... }` | The effects follow the return type, in any order, each once |
-| `fn(A) -> B ! console` | A stored function that may use the console |
+| `fn f() <console> { ... }` | `f` may use the console |
+| `fn f() -> T <console, alloc> { ... }` | The effects follow the return type, in any order, each once |
+| `fn(A) -> B <console>` | A stored function that may use the console |
 | `fn(A) -> B` | A stored function that is pure |
 
 Next: [Declaring an effect](effect-declarations.md)

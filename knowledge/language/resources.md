@@ -25,11 +25,11 @@ struct Transaction {
 without Copy for Transaction
 without Discard for Transaction
 
-fn begin(db: Db) -> Transaction ! net
-fn debit(t: Transaction, amount: u64) ! net
-fn commit(t: take Transaction) -> Result[(), DbError] ! net
+fn begin(db: Db) -> Transaction <net>
+fn debit(t: Transaction, amount: u64) <net>
+fn commit(t: take Transaction) -> Result[(), DbError] <net>
 
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   debit(t, 100)
   commit(t)
@@ -43,7 +43,7 @@ fn transfer(db: Db) -> Result[(), DbError] ! net {
 Leaving out `commit(t)` does not compile, as `t` is dropped and a `Transaction` has no `Discard`.
 
 ```
-fn forgotten(db: Db) -> Result[(), DbError] ! net {
+fn forgotten(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   debit(t, 100)
   .ok(())
@@ -53,7 +53,7 @@ fn forgotten(db: Db) -> Result[(), DbError] ! net {
 Calling it twice does not compile, as `t` has no `Copy` and the first call took it.
 
 ```
-fn twice(db: Db) -> Result[(), DbError] ! net {
+fn twice(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   try commit(t)
   commit(t)
@@ -65,9 +65,9 @@ fn twice(db: Db) -> Result[(), DbError] ! net {
 On every path means each branch takes `t` once. This is accepted.
 
 ```
-fn rollback(t: take Transaction) -> Result[(), DbError] ! net
+fn rollback(t: take Transaction) -> Result[(), DbError] <net>
 
-fn finish(db: Db, ok: bool) -> Result[(), DbError] ! net {
+fn finish(db: Db, ok: bool) -> Result[(), DbError] <net> {
   t = begin(db)
   if ok { commit(t) } else { rollback(t) }
 }
@@ -76,7 +76,7 @@ fn finish(db: Db, ok: bool) -> Result[(), DbError] ! net {
 Taking it on one branch only is refused, as the other branch drops it.
 
 ```
-fn partial(db: Db, ok: bool) -> Result[(), DbError] ! net {
+fn partial(db: Db, ok: bool) -> Result[(), DbError] <net> {
   t = begin(db)
   if ok { commit(t) } else { .ok(()) }
 }
@@ -89,9 +89,9 @@ A struct, a tuple, an enum, and a list that holds a `Transaction` has neither tr
 A `try` that leaves, a `return`, and a `break` each end a path, and the value must be taken on it as on any other. This is refused, as `try` leaves when `prepare` fails and `t` is dropped there.
 
 ```
-fn prepare(db: Db) -> Result[(), DbError] ! net
+fn prepare(db: Db) -> Result[(), DbError] <net>
 
-fn early(db: Db) -> Result[(), DbError] ! net {
+fn early(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   try prepare(db)
   commit(t)
@@ -101,7 +101,7 @@ fn early(db: Db) -> Result[(), DbError] ! net {
 A `var` that holds such a value is taken before it is assigned again, as the assignment drops the value it held, and before it goes out of scope.
 
 ```
-fn replaced(db: Db) -> Result[(), DbError] ! net {
+fn replaced(db: Db) -> Result[(), DbError] <net> {
   var t = begin(db)
   debit(t, 100)
   t = begin(db)
@@ -116,14 +116,14 @@ This is refused at the first `t`, which the assignment drops.
 `open` below is written for [`with`](with.md): it lends the handle to the rest of the caller's block, and closes it afterwards. Leaving out `close_file`, or putting a step that can fail between opening and closing, does not compile. The body's own effects, here `alloc` from `read`, are allowed because `first_bytes` declares them.
 
 ```
-fn open[T](path: str, body: fn(File) -> Result[T, FsError]) -> Result[T, FsError] ! fs {
+fn open[T](path: str, body: fn(File) -> Result[T, FsError]) -> Result[T, FsError] <fs> {
   handle = try open_file(path)
   r = body(handle)
   close_file(handle)
   r
 }
 
-fn first_bytes(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
+fn first_bytes(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   with f = open(path)
   read(f, 0..16)
 }

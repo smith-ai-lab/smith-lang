@@ -46,31 +46,31 @@ pub effect net {
   pub fn stop(l: take Listener)
 
   pub fn connect_to(host: str, port: 0..65536) -> Result[Connection, NetError]
-  pub fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc
+  pub fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc>
   pub fn write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError]
   pub fn close(c: take Connection)
 
   pub fn bind_to(host: str, port: 0..65536) -> Result[Socket, NetError]
   pub fn send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError]
-  pub fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc
+  pub fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc>
   pub fn unbind(s: take Socket)
 }
 
-pub fn listen[T](host: str, port: 0..65536, body: fn(Listener) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+pub fn listen[T](host: str, port: 0..65536, body: fn(Listener) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   l = try listen_on(host, port)
   result = body(l)
   stop(l)
   result
 }
 
-pub fn connect[T](host: str, port: 0..65536, body: fn(Connection) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+pub fn connect[T](host: str, port: 0..65536, body: fn(Connection) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   c = try connect_to(host, port)
   result = body(c)
   close(c)
   result
 }
 
-pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError]) -> Result[T, NetError] ! net {
+pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   s = try bind_to(host, port)
   result = body(s)
   unbind(s)
@@ -160,12 +160,12 @@ fn on_windows() -> bool {
 
 // What a value the system did not open is answered with: its handle is not one
 // the program owns, so no call is made with it.
-fn not_opened(call: str, h: i64) -> NetError ! alloc {
+fn not_opened(call: str, h: i64) -> NetError <alloc> {
   .failed("{call}: handle {h} is not one the system opened")
 }
 
 // What the kernel gave, when it refused: minus its error number.
-fn failure(call: str, given: i64) -> NetError ! alloc {
+fn failure(call: str, given: i64) -> NetError <alloc> {
   code = 0 - given
   mac = on_macos()
   win = on_windows()
@@ -204,7 +204,7 @@ struct Place {
 
 // The address as the kernel reads it, from the bytes of an address of four or
 // of sixteen.
-fn sockaddr(address: List[Byte], port: 0..65536) -> Place ! alloc {
+fn sockaddr(address: List[Byte], port: 0..65536) -> Place <alloc> {
   high = bit_and(shift_right(port, 8), 255)
   low = bit_and(port, 255)
   var made: List[Byte] = []
@@ -236,7 +236,7 @@ fn sockaddr(address: List[Byte], port: 0..65536) -> Place ! alloc {
   Place(family: family, bytes: made)
 }
 
-fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
+fn place(host: str, port: 0..65536) -> Result[Place, NetError] <alloc> {
   if host == "localhost" {
     return place("127.0.0.1", port)
   }
@@ -251,14 +251,14 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] ! alloc {
 }
 
 // Four bytes that the kernel reads as the number `n`.
-fn number(n: Byte) -> List[Byte] ! alloc {
+fn number(n: Byte) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   made = push(push(made, n), 0)
   made = push(push(made, 0), 0)
   made
 }
 
-fn zeros(n: Nat) -> List[Byte] ! alloc {
+fn zeros(n: Nat) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   loop k in 0..n { made = push(made, 0) }
   made
@@ -270,7 +270,7 @@ fn hex_char(d: 0..16) -> 0..128 {
 }
 
 // The digits of a group, with none that is a zero at the front.
-fn hex(t: take Text, n: Nat) -> Text ! alloc {
+fn hex(t: take Text, n: Nat) -> Text <alloc> {
   var made = t
   if n >= 4096 { made = append_ascii(made, hex_char((n / 4096) % 16)) }
   if n >= 256 { made = append_ascii(made, hex_char((n / 256) % 16)) }
@@ -280,7 +280,7 @@ fn hex(t: take Text, n: Nat) -> Text ! alloc {
 
 // The host a peer's address holds, from the family it says and where the
 // address is in the bytes.
-fn host_text(bytes: List[Byte]) -> str ! alloc {
+fn host_text(bytes: List[Byte]) -> str <alloc> {
   if bytes.size < 24 { return "" }
   var family = bytes[0]
   if on_macos() { family = bytes[1] }
@@ -335,7 +335,7 @@ fn host_text(bytes: List[Byte]) -> str ! alloc {
 
 // Lets a socket of the family of colons take the numbers written with dots
 // too, which Linux does and macOS asks for.
-fn dual_stack(fd: i64) ! alloc {
+fn dual_stack(fd: i64) <alloc> {
   off = number(0)
   var name: i64 = 26
   if on_macos() or on_windows() { name = 27 }
@@ -365,7 +365,7 @@ fn no_signal_wait() -> i64 {
   if on_windows() { 0 } else if on_macos() { 524416 } else { 16448 }
 }
 
-fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! alloc {
+fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <alloc> {
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
@@ -405,17 +405,17 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] ! a
 
 // Waits until the descriptor can be read, as a task that a scheduler runs does,
 // which is known where the copy is built.
-fn wait_to_read(fd: i64) ! task {
+fn wait_to_read(fd: i64) <task> {
   number: u64 = wrapping_narrow(fd)
   __wait(.read(Handle(number: number)))
 }
 
-fn wait_to_write(fd: i64) ! task {
+fn wait_to_write(fd: i64) <task> {
   number: u64 = wrapping_narrow(fd)
   __wait(.write(Handle(number: number)))
 }
 
-fn system_accept(l: Listener) -> Result[Connection, NetError] ! alloc, task {
+fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
   if not l.opened { return .err(not_opened("accept", l.handle)) }
   if __scheduled() {
     var fd: i64 = -1
@@ -454,7 +454,7 @@ fn system_stop(l: take Listener) {
 
 // The bytes of a file, up to 60000 of them, or none when it cannot be opened,
 // which is how a file that is not there is read. Only Linux is asked.
-fn file_text(path: str) -> List[Byte] ! alloc {
+fn file_text(path: str) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   if on_macos() or on_windows() { return made }
   var name: List[Byte] = []
@@ -475,7 +475,7 @@ fn file_text(path: str) -> List[Byte] ! alloc {
 }
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
-fn eight(n: u64) -> List[Byte] ! alloc {
+fn eight(n: u64) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   loop i in 0..8 { made = push(made, bit_and(shift_right(n, 8 * i), 255)) }
   made
@@ -483,14 +483,14 @@ fn eight(n: u64) -> List[Byte] ! alloc {
 
 // Makes a call that waits on the socket give up after the milliseconds: a read
 // of it for 20 and a write of it for 21, which Linux gives to the level 1.
-fn wait_at_most(fd: i64, name: i64, ms: u64) ! alloc {
+fn wait_at_most(fd: i64, name: i64, ms: u64) <alloc> {
   var value: List[Byte] = eight(ms / 1000)
   value = append(value, eight((ms % 1000) * 1000))
   __system(6, fd, 1, name, value, 16, 0)
 }
 
 // The milliseconds the clock of the system says, which only goes forward.
-fn clock() -> u64 ! alloc {
+fn clock() -> u64 <alloc> {
   stamp = append(eight(0), eight(0))
   var which: i64 = 1
   if on_macos() { which = 6 }
@@ -527,7 +527,7 @@ fn from_there(from: List[Byte], to: List[Byte]) -> bool {
 
 // What a nameserver gives over TCP, when it has to, for a question that did not
 // fit in one datagram: the message, which has its length in two bytes before it.
-fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] ! alloc, task {
+fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] <alloc, task> {
   fd = __system(0, server.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .none }
   wait_at_most(fd, 20, ms)
@@ -605,7 +605,7 @@ fn send_to(fd: i64, packet: List[Byte], server: Place) {
 // it when it is believed, as `read_reply` says, with the code of an answer or of
 // a name that does not exist, over TCP when it was cut short; a failure of the
 // server is said, and any other code is ignored.
-fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Place, ms: u64) -> Asked ! alloc, task {
+fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Place, ms: u64) -> Asked <alloc, task> {
   var made = asked
   if made.answered { return made }
   match read_reply(message, made.id, name, made.kind) {
@@ -648,7 +648,7 @@ fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Pla
 // from the place it was asked; a failure of the nameserver is asked again at
 // once, four times at most, and any other code is ignored. A message that was
 // cut short is asked over TCP of the nameserver that sent it.
-fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[Option[List[List[Byte]]], NetError] ! alloc, task {
+fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[Option[List[List[Byte]]], NetError] <alloc, task> {
   ids = random([0, 0, 0, 0])
   if ids.size < 4 { return .err(.failed("lookup of {host}: no random bytes")) }
   first: u16 = ids[0] * 256 + ids[1]
@@ -737,7 +737,7 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], host:
 // nobody can predict: `getrandom` fills at most 256 bytes whole, and when it
 // gives less the lookup has none, and says so, and never goes on with bytes that
 // were not filled.
-fn random_bytes(bytes: take List[Byte]) -> List[Byte] ! alloc {
+fn random_bytes(bytes: take List[Byte]) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   if on_macos() or on_windows() { return made }
   size = bytes.size
@@ -752,7 +752,7 @@ fn random_bytes(bytes: take List[Byte]) -> List[Byte] ! alloc {
 // when it has the name, and otherwise those the nameservers of
 // `/etc/resolv.conf` give for the first name of the list that has one. A name
 // that has none is `unknown_host`.
-pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, random: fn(take List[Byte]) -> List[Byte]) -> Result[List[List[Byte]], NetError] ! alloc, task {
+pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, random: fn(take List[Byte]) -> List[Byte]) -> Result[List[List[Byte]], NetError] <alloc, task> {
   inside = hosts(hosts_text, host)
   if inside.size > 0 { return .ok(inside) }
   conf = config(resolv_text)
@@ -801,7 +801,7 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
 }
 
 // Opens a connection to the place, as a number written with dots or colons is.
-fn connect_place(where: Place) -> Result[Connection, NetError] ! alloc {
+fn connect_place(where: Place) -> Result[Connection, NetError] <alloc> {
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
   if where.family != 2 { dual_stack(fd) }
@@ -813,7 +813,7 @@ fn connect_place(where: Place) -> Result[Connection, NetError] ! alloc {
   .ok(Connection(handle: fd, opened: true))
 }
 
-fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] ! alloc, task {
+fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] <alloc, task> {
   match place(host, port) {
     .ok(where) { return connect_place(where) }
     .err(e) {
@@ -831,7 +831,7 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
   .err(last)
 }
 
-fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc, task {
+fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc, task> {
   if not c.opened { return .err(not_opened("read", c.handle)) }
   if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
@@ -867,7 +867,7 @@ fn count(given: i64) -> Nat {
   }
 }
 
-fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc, task {
+fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] <alloc, task> {
   if not c.opened { return .err(not_opened("write", c.handle)) }
   var sent: Nat = 0
   var flags: i64 = no_signal()
@@ -900,7 +900,7 @@ fn system_close(c: take Connection) {
   if opened { __system(9, h, 0, 0, 0, 0, 0) }
 }
 
-fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc {
+fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] <alloc> {
   where = try place(host, port)
   fd = __system(0, where.family, 2, 0, 0, 0, 0)
   if fd < 0 { return .err(failure("socket", fd)) }
@@ -913,7 +913,7 @@ fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] ! alloc
   .ok(Socket(handle: fd, opened: true))
 }
 
-fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] ! alloc {
+fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError] <alloc> {
   if not s.opened { return .err(not_opened("send", s.handle)) }
   where = try place(to.host, to.port)
   loop attempt in 0..64 {
@@ -924,7 +924,7 @@ fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetErro
   .err(.failed("send: interrupted"))
 }
 
-fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc {
+fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc> {
   if not s.opened { return .err(not_opened("receive", s.handle)) }
   var buffer: List[Byte] = []
   if most > 0 { buffer = __reserve(most) }

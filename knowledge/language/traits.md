@@ -58,7 +58,7 @@ trait Named[T] {
   fn name_of(x: T) -> str
 }
 
-fn main() ! console {
+fn main() <console> {
   print(name_of(Cat(name: "Tom")))
 }
 ```
@@ -88,7 +88,7 @@ impl Named[Cat] {
   fn name_of(x: Cat) -> str { x.name }
 }
 
-fn main() ! console {
+fn main() <console> {
   print(name_of(Cat(name: "Tom")))
   print(name_of("Tom"))
 }
@@ -153,7 +153,7 @@ impl Titled[Cat] {
   fn label(x: Cat) -> str { "Mr" }
 }
 
-fn main() ! console {
+fn main() <console> {
   c = Cat(name: "Tom")
   print(Named.label(c))
   print(Titled.label(c))
@@ -228,7 +228,7 @@ fn scale(
 `Args` is a struct like any other, so it is given what a struct is given: it is read from a format by [`Deserialize`](../library/deserialize.md), with a field that has a default left out, and it describes itself, each field with its comment, by [`Describe`](../library/describe.md). A library that reads its fields from a request is given [`FromRequest`](../library/http.md#where-a-parameter-comes-from) for it only when each field has `FromText` or `Option` of one, except at most one that has `Deserialize`, which the compiler decides, so a function that the request cannot be read for is refused where its name is given, with the parameter named. That is how a library calls a function it was given with arguments it read, and tells whoever asks what the function takes, with no part of the function written twice. A function with a `take` parameter has `Args` with that field, which `call` spends. A function with type parameters, one that takes a function, and one with a pattern for a parameter, as `fn f((a, b): (i32, i32))`, which has no name for a field, are not given `Function`, and naming one where `F: Function` is expected is refused. A function that takes a function with a name bounds it by `Function`.
 
 ```
-fn told[F: Function](f: F) -> str ! alloc { "{Function.name(f)}: {Function.about(f)}" }
+fn told[F: Function](f: F) -> str <alloc> { "{Function.name(f)}: {Function.about(f)}" }
 ```
 
 `told(scale)` is `"scale: Makes a length longer or shorter."`. A lambda has no name and no comment, and no `Function`, so `told(fn(x) { x })` is refused. The compiler does not build `Function`, so no words are quoted.
@@ -282,7 +282,7 @@ impl Emit[u64] {
   fn emit[W: Sink](value: u64, to: take W) -> W { put(to, value) }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   n: u64 = 7
   t = emit(n, Total(sum: 1))
   print("{t.sum}")

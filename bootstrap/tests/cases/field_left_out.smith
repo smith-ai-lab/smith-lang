@@ -5,6 +5,6 @@ struct Name {
   last: str
 }
 
-fn main() ! console {
+fn main() <console> {
   print(Name(first: "Ada").last)
 }

@@ -28,7 +28,7 @@ fn port(text: str) -> Result[u16, PortError] {
   .ok(p)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{port("abc")}")
   print("{port("")}")
   print("{port("0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789")}")

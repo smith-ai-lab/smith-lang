@@ -4,6 +4,6 @@ fn main() {
   greet("world")
 }
 
-fn greet(name: str) ! console {
+fn greet(name: str) <console> {
   print(name)
 }

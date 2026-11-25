@@ -63,7 +63,7 @@ fn program(ty: Int, pairs: &[(i128, i128)]) -> String {
         "b != 0"
     };
     let mut text = format!(
-        "use std.console (console, print)\n\nfn show(a: {t}, b: {t}) ! console, alloc\n  requires {requires}\n{{\n  print(\"{{a / b}} {{a % b}}\")\n}}\n\nfn main() ! console, alloc {{\n",
+        "use std.console (console, print)\n\nfn show(a: {t}, b: {t}) <console, alloc>\n  requires {requires}\n{{\n  print(\"{{a / b}} {{a % b}}\")\n}}\n\nfn main() <console, alloc> {{\n",
         t = ty.name
     );
     for (a, b) in pairs {
@@ -143,7 +143,7 @@ fn every_executable_of_a_quotient_and_what_is_left_over_gives_what_the_evaluator
 fn built(params: &str, requires: &str, body: &str, args: &str) -> Result<String, String> {
     let gives = if params.contains("Nat") { "Nat" } else { "Int" };
     let source = with_header(format!(
-        "use std.console (console, print)\n\nfn f({params}) -> {gives}\n{requires}{{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({args})}}\")\n}}\n"
+        "use std.console (console, print)\n\nfn f({params}) -> {gives}\n{requires}{{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n"
     ));
     match lower(source.as_bytes()) {
         Ok(program) => Ok(String::from_utf8(scalar::run(&program).stdout).unwrap()),
@@ -251,7 +251,7 @@ fn difference(without: &str, with: &str) -> BTreeMap<String, i64> {
 /// A program that calls `f` of `params` with the body, which gives `t`.
 fn calling(params: &str, t: &str, body: &str, args: &str) -> String {
     with_header(format!(
-        "use std.console (console, print)\n\nfn f({params}) -> {t} {{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({args})}}\")\n}}\n"
+        "use std.console (console, print)\n\nfn f({params}) -> {t} {{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n"
     ))
 }
 
@@ -303,7 +303,7 @@ fn an_unsigned_number_divided_by_a_power_of_two_is_a_shift_and_what_is_left_over
 fn division_and_what_is_left_over_bind_as_multiplication_does() {
     let main = |expression: &str| {
         with_header(format!(
-            "use std.console (console, print)\n\nfn main() ! console, alloc {{\n  print(\"{{{expression}}}\")\n}}\n"
+            "use std.console (console, print)\n\nfn main() <console, alloc> {{\n  print(\"{{{expression}}}\")\n}}\n"
         ))
     };
     // They group to the left, as `*` does, and bind tighter than `+` and `-`.
@@ -330,7 +330,7 @@ fn division_and_what_is_left_over_bind_as_multiplication_does() {
 /// What the checker says of a file of one function.
 fn checked(function: &str) -> Result<(), String> {
     let source = with_header(format!(
-        "use std.bits (i8)\nuse std.console (console, print)\n\n{function}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
+        "use std.bits (i8)\nuse std.console (console, print)\n\n{function}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 2)}}\")\n}}\n"
     ));
     lower(source.as_bytes()).map(|_| ()).map_err(|e| format!("{e:?}"))
 }

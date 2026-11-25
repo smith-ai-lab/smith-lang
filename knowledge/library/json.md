@@ -25,7 +25,7 @@ struct Point {
   y: Int
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(to_json(Point(x: 3, y: 4)))
 }
 ```
@@ -113,7 +113,7 @@ struct Clash {
   member: str
 }
 
-fn to_json_as[T: Serialize](value: T, json: Json) -> Result[str, Clash] ! alloc
+fn to_json_as[T: Serialize](value: T, json: Json) -> Result[str, Clash] <alloc>
 ```
 
 ```
@@ -134,7 +134,7 @@ use std.json (Json, to_json_as)
 
 mcp: Json = Json(cases: .tag("type"), names: .camel)
 
-fn reply(c: Content) -> Result[str, Clash] ! alloc { to_json_as(c, mcp) }
+fn reply(c: Content) -> Result[str, Clash] <alloc> { to_json_as(c, mcp) }
 ```
 
 The settings hold for the whole value that is written or read. A type that needs another form writes its own `impl` of `Serialize`, as [Serialize](serialize.md#writing-it-yourself) shows, and no type carries a setting of its own.
@@ -154,7 +154,7 @@ struct Tool {
   timeout: u64 = 30
 }
 
-fn parse(text: str) -> Result[Tool, ReadError] ! alloc {
+fn parse(text: str) -> Result[Tool, ReadError] <alloc> {
   from_json(text)
 }
 ```
@@ -162,8 +162,8 @@ fn parse(text: str) -> Result[Tool, ReadError] ! alloc {
 `parse("{\"name\":\"a\"}")` is `.ok` of a `Tool` with no description and a timeout of 30. The text may have a space, a tab, a line break, or a return between any two of its tokens, and nothing but those after the value.
 
 ```
-fn from_json[T](text: str) -> Result[T, ReadError] ! alloc
-fn from_json_as[T](text: str, json: Json) -> Result[T, ReadError] ! alloc
+fn from_json[T](text: str) -> Result[T, ReadError] <alloc>
+fn from_json_as[T](text: str, json: Json) -> Result[T, ReadError] <alloc>
 ```
 
 ### What each shape is read from
@@ -203,7 +203,7 @@ With `Names.camel`, a member is the field whose written name is exactly the memb
 An error is a `ReadError`, as [Deserialize](deserialize.md#what-was-wrong) gives it. `line` and `column` say where, counted from 1, and the column counts bytes. `path` is the way to the value, as `tools[2].timeout`. Reading stops at the first error, so a read that succeeds works out none of them. `describe` makes the words.
 
 ```
-fn describe(e: ReadError) -> str ! alloc
+fn describe(e: ReadError) -> str <alloc>
 ```
 
 For a text of three tools whose third has a timeout that is a text, `describe` is `1:59: tools[2].timeout: expected a whole number, found a text`. A path that is empty is left out. Where each error is, and what it holds, is in the table.
@@ -238,7 +238,7 @@ struct RawJson {
   text: str
 }
 
-fn raw_json(text: str) -> Result[RawJson, ReadError] ! alloc
+fn raw_json(text: str) -> Result[RawJson, ReadError] <alloc>
 fn raw_text(raw: RawJson) -> str
 ```
 

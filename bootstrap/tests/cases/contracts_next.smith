@@ -7,6 +7,6 @@ fn next(i: Byte) -> r: Byte
   i + 1
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{next(200)}")
 }

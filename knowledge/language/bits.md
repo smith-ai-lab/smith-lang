@@ -78,7 +78,7 @@ This is refused, as `0..101` does not fill a size, and no function can say which
 use std.bits (bit_and, bit_not, bit_or, bit_xor)
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a: Byte = 0b1100
   b: Byte = 0b1010
   print("{bit_and(a, b)} {bit_or(a, b)} {bit_xor(a, b)} {bit_not(a)}")
@@ -95,7 +95,7 @@ use std.console (console, print)
 
 fn low_byte(x: u32) -> u32 { bit_and(x, 0xff) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x: u32 = 0x12345678
   print("{low_byte(x)}")
 }
@@ -116,7 +116,7 @@ use std.int (wrapping_shift_left)
 
 fn second_byte(x: u32) -> u32 { bit_and(shift_right(x, 8), 0xff) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a: Byte = 0b1100
   u: Byte = 0b1111_0000
   s: i8 = -8
@@ -151,7 +151,7 @@ fn down(x: u32, by: Byte) -> u32 {
   if by < 64 { shift_right(x, by) } else { 0 }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{down(256, 4)} {down(256, 70)}")
 }
 ```
@@ -167,7 +167,7 @@ use std.console (console, print)
 
 fn pack(reg: 0..8, rm: 0..8) -> 0..64 { reg * 8 + rm }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{pack(3, 5)}")
 }
 ```

@@ -12,7 +12,7 @@ built:
 All I/O is async and reads as sequential code. A call such as `fetch(a)` carries the `net` effect, and the source is the same whichever handler runs it.
 
 ```
-fn fetch_pair(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
+fn fetch_pair(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net, alloc> {
   pa = try fetch(a)
   pb = try fetch(b)
   .ok((pa, pb))

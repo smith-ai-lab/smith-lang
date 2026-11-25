@@ -333,11 +333,11 @@ fn a_program_that_prints_asks_its_host_for_the_console_and_no_other_does() {
         return;
     }
     let sources = [
-        ("prints", "use std.console (console, print)\n\nfn main() ! console { print(\"hi\") }\n", true),
+        ("prints", "use std.console (console, print)\n\nfn main() <console> { print(\"hi\") }\n", true),
         ("is_empty", "fn main() {\n}\n", false),
         (
             "builds_text",
-            "use std.bits (u64)\nuse std.list (push)\n\nfn main() ! alloc {\n  xs: List[u64] = [1, 2, 3]\n  ys = push(xs, 4)\n}\n",
+            "use std.bits (u64)\nuse std.list (push)\n\nfn main() <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  ys = push(xs, 4)\n}\n",
             false,
         ),
     ];
@@ -363,7 +363,7 @@ fn a_program_that_prints_asks_its_host_for_the_console_and_no_other_does() {
 
 fn a_program_with_an_effect_that_is_not_built_is_one_error_that_names_it() {
     for target in modules() {
-        let (dir, output) = built(target, "waits", b"fn main() ! ui {\n}\n");
+        let (dir, output) = built(target, "waits", b"fn main() <ui> {\n}\n");
         assert!(!output.status.success());
         let errors = stderr(&output);
         let places = errors.lines().filter(|l| l.contains(".smith:")).count();
@@ -858,7 +858,7 @@ const FUNCTIONS_THAT_CALL_ONE_ANOTHER: &[(&str, &str)] = &[
 use std.console (console, print)
 use std.int (wrapping_add)
 
-fn string(n: u64, fuel: u64) -> u64 ! alloc
+fn string(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
   var total: u64 = 0
@@ -870,13 +870,13 @@ fn string(n: u64, fuel: u64) -> u64 ! alloc
   total
 }
 
-fn expression(n: u64, fuel: u64) -> u64 ! alloc
+fn expression(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
   if fuel > 0 { wrapping_add(n, string(n, fuel - 1)) } else { n }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{string(1, 6)}\")
 }
 ",
@@ -889,13 +889,13 @@ fn main() ! console, alloc {
 use std.console (console, print)
 use std.int (wrapping_add)
 
-fn token(n: u64, fuel: u64) -> u64 ! alloc
+fn token(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
   if n % 2 == 0 and fuel > 0 { string(n, fuel - 1) } else { n }
 }
 
-fn string(n: u64, fuel: u64) -> u64 ! alloc
+fn string(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
   var total: u64 = 0
@@ -909,7 +909,7 @@ fn string(n: u64, fuel: u64) -> u64 ! alloc
   total
 }
 
-fn expression(n: u64, fuel: u64) -> (u64, bool) ! alloc
+fn expression(n: u64, fuel: u64) -> (u64, bool) <alloc>
   decreases fuel
 {
   var total: u64 = 0
@@ -926,7 +926,7 @@ fn expression(n: u64, fuel: u64) -> (u64, bool) ! alloc
   (total, closed)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var total: u64 = 0
   loop i in 0..5 {
     total = wrapping_add(total, token(i, 6))
@@ -942,7 +942,7 @@ fn main() ! console, alloc {
 use std.console (console, print)
 use std.int (wrapping_add)
 
-fn walk(n: u64) -> u64 ! alloc
+fn walk(n: u64) -> u64 <alloc>
   decreases n
 {
   if n == 0 {
@@ -958,7 +958,7 @@ fn walk(n: u64) -> u64 ! alloc
   }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{walk(5)}\")
 }
 ",
@@ -970,19 +970,19 @@ fn main() ! console, alloc {
         "use std.bits (u64)
 use std.console (console, print)
 
-fn even(n: u64) -> bool ! alloc
+fn even(n: u64) -> bool <alloc>
   decreases n
 {
   if n == 0 { true } else { not odd(n - 1) }
 }
 
-fn odd(n: u64) -> bool ! alloc
+fn odd(n: u64) -> bool <alloc>
   decreases n
 {
   if n == 0 { false } else { not even(n - 1) }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{even(10)}\")
 }
 ",
@@ -1031,8 +1031,8 @@ fn a_module_of_an_array_of_literals_given_to_a_function_of_the_type_of_its_eleme
         return;
     }
     for source in [
-        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
-        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
+        "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
+        "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
     ] {
         let program = after_the_pass(source.as_bytes());
         assert!(!scalar::run(&program).stdout.is_empty(), "{source}");
@@ -1082,7 +1082,7 @@ fn whole_numbers_of_every_width(g: &mut Gen) -> Widths {
     }
     Widths {
         source: format!(
-            "use std.console (console, print)\n\nfn keep[T](x: take T) -> T {{ x }}\n\nfn second[A, B](a: A, b: take B) -> B {{ b }}\n\nfn main() ! console, alloc {{\n{body}}}\n"
+            "use std.console (console, print)\n\nfn keep[T](x: take T) -> T {{ x }}\n\nfn second[A, B](a: A, b: take B) -> B {{ b }}\n\nfn main() <console, alloc> {{\n{body}}}\n"
         ),
     }
 }

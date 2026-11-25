@@ -65,18 +65,18 @@ fn case(g: &mut Gen) -> Case {
     let bind = format!("  x: {t} = {a}\n  y: {t} = {b}\n");
     let (rest, always) = match g.below(3) {
         0 => (
-            format!("fn main() ! console, alloc {{\n{bind}  print(\"{{Plus.plus(x, y)}}\")\n}}\n"),
+            format!("fn main() <console, alloc> {{\n{bind}  print(\"{{Plus.plus(x, y)}}\")\n}}\n"),
             false,
         ),
         1 => (
             format!(
-                "fn both[T: Plus](x: T, y: T) -> T\n  requires Plus.valid(x, y)\n{{\n  Plus.plus(x, y)\n}}\n\nfn main() ! console, alloc {{\n{bind}  print(\"{{both(x, y)}}\")\n}}\n"
+                "fn both[T: Plus](x: T, y: T) -> T\n  requires Plus.valid(x, y)\n{{\n  Plus.plus(x, y)\n}}\n\nfn main() <console, alloc> {{\n{bind}  print(\"{{both(x, y)}}\")\n}}\n"
             ),
             false,
         ),
         _ => (
             format!(
-                "fn main() ! console, alloc {{\n{bind}  if Plus.valid(x, y) {{\n    print(\"{{Plus.plus(x, y)}}\")\n  }} else {{\n    print(\"no\")\n  }}\n}}\n"
+                "fn main() <console, alloc> {{\n{bind}  if Plus.valid(x, y) {{\n    print(\"{{Plus.plus(x, y)}}\")\n  }} else {{\n    print(\"no\")\n  }}\n}}\n"
             ),
             true,
         ),

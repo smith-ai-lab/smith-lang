@@ -398,9 +398,9 @@ fn opened(ty: &str, open: &str, end: &str, lines: &str) -> String {
     let names = names.join(", ");
     format!(
         "use std.list (freeze)\nuse std.net ({names})\n\n\
-         fn run() -> Result[(), NetError] ! net, alloc {{\n  \
+         fn run() -> Result[(), NetError] <net, alloc> {{\n  \
          value = try {open}(\"127.0.0.1\", 0)\n{lines}  .ok(())\n}}\n\n\
-         fn main() ! net, alloc {{\n  match run() {{\n    .ok(()) {{ }}\n    .err(e) {{ }}\n  }}\n}}\n"
+         fn main() <net, alloc> {{\n  match run() {{\n    .ok(()) {{ }}\n    .err(e) {{ }}\n  }}\n}}\n"
     )
 }
 
@@ -469,13 +469,13 @@ use std.list (freeze)
 use std.net (Connection, NetError, close, connect, net, read, release, write)
 use std.time (now, time)
 
-fn ask(question: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
   with c = connect(\"example.test\", 7)
   try write(c, question.bytes)
   read(c, 16)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused) },
     accept: fn(l) { .err(.refused) },

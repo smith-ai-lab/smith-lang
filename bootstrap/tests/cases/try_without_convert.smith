@@ -15,6 +15,6 @@ fn go() -> Result[str, B] {
   .ok(s)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{go()}")
 }

@@ -1,5 +1,5 @@
 use std.console (console, print)
 
-fn main(args: List[str]) ! console, alloc {
+fn main(args: List[str]) <console, alloc> {
   print("started with {args.size} arguments")
 }

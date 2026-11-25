@@ -589,7 +589,7 @@ fn split_o(c: take Option[str]) -> Flow[str, Option[str]] { Try.split(c) }
 
 fn split_m(c: take Maybe) -> Flow[str, Done] { Try.split(c) }
 
-fn find(name: str, have: Option[str]) -> Result[str, str] ! alloc {
+fn find(name: str, have: Option[str]) -> Result[str, str] <alloc> {
   match have {
     .some(value) { .ok(value) }
     .none { .err(\"no {name}\") }
@@ -608,35 +608,35 @@ struct Trio {
   third: str
 }
 
-fn say(s: str) -> str ! console {
+fn say(s: str) -> str <console> {
   print(s)
   s
 }
 
-fn join3(a: str, b: str, c: str) -> str ! alloc { \"{a}{b}{c}\" }
+fn join3(a: str, b: str, c: str) -> str <alloc> { \"{a}{b}{c}\" }
 
-fn join_t(t: (str, str, str)) -> str ! alloc {
+fn join_t(t: (str, str, str)) -> str <alloc> {
   (a, b, c) = t
   \"{a}{b}{c}\"
 }
 
-fn join_o(a: Option[str], b: str, c: str) -> str ! alloc {
+fn join_o(a: Option[str], b: str, c: str) -> str <alloc> {
   match a {
     .some(v) { \"{v}{b}{c}\" }
     .none { \"{b}{c}\" }
   }
 }
 
-fn join_n(t: (str, str), c: str) -> str ! alloc {
+fn join_n(t: (str, str), c: str) -> str <alloc> {
   (a, b) = t
   \"{a}{b}{c}\"
 }
 
 fn app(body: fn() -> str) -> str { body() }
 
-fn join_s(t: Trio) -> str ! alloc { \"{t.first}{t.second}{t.third}\" }
+fn join_s(t: Trio) -> str <alloc> { \"{t.first}{t.second}{t.third}\" }
 
-fn wrap(label: str, body: fn()) ! console, alloc {
+fn wrap(label: str, body: fn()) <console, alloc> {
   print(\"<{label}\")
   body()
   print(\"{label}>\")
@@ -646,26 +646,26 @@ fn each(value: str, body: fn(str)) {
   body(value)
 }
 
-fn tagged(tag: str = \"t\", body: fn()) ! console, alloc {
+fn tagged(tag: str = \"t\", body: fn()) <console, alloc> {
   print(\"[{tag}]\")
   body()
 }
 
-fn show(r: Result[str, str]) ! console, alloc {
+fn show(r: Result[str, str]) <console, alloc> {
   match r {
     .ok(text) { print(\"ok {text}\") }
     .err(why) { print(\"err {why}\") }
   }
 }
 
-fn show_o(o: Option[str]) ! console, alloc {
+fn show_o(o: Option[str]) <console, alloc> {
   match o {
     .some(text) { print(\"some {text}\") }
     .none { print(\"none\") }
   }
 }
 
-fn show_m(d: Done) ! console, alloc {
+fn show_m(d: Done) <console, alloc> {
   match d {
     .value(text) { print(\"value {text}\") }
     .stop { print(\"stop\") }
@@ -918,7 +918,7 @@ fn function(w: &mut Writer, fam: Fam, f: &Func, i: usize, bad: Option<(Kind, usi
         Fam::M => ("run".to_string(), "Done", "Maybe"),
     };
     w.text.push_str(&format!(
-        "fn {name}(a: {param}, b: {param}) -> {ty} ! console, alloc {{\n"
+        "fn {name}(a: {param}, b: {param}) -> {ty} <console, alloc> {{\n"
     ));
     w.steps(fam, f, 0, 2, 0, bad);
     w.text.push_str("}\n\n");
@@ -1018,7 +1018,7 @@ fn write(m: &Model, style: Style) -> Writer {
         function(&mut w, Fam::O, f, i, None);
     }
     function(&mut w, Fam::M, &m.m, 0, None);
-    w.text.push_str("fn main() ! console, alloc {\n");
+    w.text.push_str("fn main() <console, alloc> {\n");
     for c in &m.calls {
         let (name, show) = match c.fam {
             Fam::R => (format!("r{}", c.f), "show"),

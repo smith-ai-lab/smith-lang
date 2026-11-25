@@ -82,17 +82,12 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: true,
     },
     Unbuilt {
-        declares: "struct S{i} {\n  f: fn(Int) -> Int @! console\n}\n",
-        call: "",
-        parsed: true,
-    },
-    Unbuilt {
         declares: "fn u{i}(a: @(Int)) -> Int { 1 }\n",
         call: "u{i}(1)",
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}() -> Int ! @fs { 1 }\n",
+        declares: "fn u{i}() -> Int <@fs> { 1 }\n",
         call: "u{i}()",
         parsed: false,
     },
@@ -319,7 +314,7 @@ fn program_that_runs_unbuilt(g: &mut Gen) -> (Vec<u8>, Expected, Vec<Pos>) {
     source.push_str("\n}\n\n");
     let (more, mut places, calls, mut uses) = written(g, &source, true);
     source.push_str(&more);
-    source.push_str("\nfn main() ! console, alloc {\n  a = bad(1)\n");
+    source.push_str("\nfn main() <console, alloc> {\n  a = bad(1)\n");
     source.push_str(&calls);
     source.push_str("  print(\"{a}\")\n}\n");
     uses.entry("std.console".to_string())
@@ -353,10 +348,10 @@ fn what_is_not_built_and_is_used_gives_its_error_and_the_mistake_of_another_func
 /// A value that is not built is the value of a binding that is read, of a
 /// field, of a condition, and of an argument, and nothing is said of any.
 fn a_value_that_is_not_built_is_said_nothing_of_where_it_is_used() {
-    let before = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn f() -> Int ! console, alloc {\n  x = ";
+    let before = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn f() -> Int <console, alloc> {\n  x = ";
     let source = format!(
         "{before}(1)(2)\n  y = x\n  a = if y == 2 {{ 1 }} else {{ 2 }}\n  b = wrapping_add(y, a)\n  print(\"{{y}}{{b}}\")\n  b\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(\"{{f()}}\")\n}}\n"
+         fn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n"
     );
     let found = lower(source.as_bytes()).expect_err("an error");
     assert_eq!(found.len(), 1, "{found:?}");

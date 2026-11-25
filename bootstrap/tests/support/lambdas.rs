@@ -784,7 +784,7 @@ fn mistake(g: &mut Gen, kind: Kind) -> (Stmt, Option<Item>) {
                 "fn quiet() {\n  twice { ",
                 "print(\"a\") }\n}",
                 "needs the `console` effect, which `quiet` does not declare",
-                Some("`fn quiet() ! console`"),
+                Some("`fn quiet() <console>`"),
             ),
         ),
     }
@@ -1200,7 +1200,7 @@ impl Writer {
     fn program(&mut self, m: &Model) {
         self.push("use std.console (console, print)\n\n");
         self.push("struct Cat {\n  name: str\n}\n\nenum Pet {\n  cat: Cat\n  none\n}\n");
-        self.push("\nfn say(text: str) ! console { print(text) }\n");
+        self.push("\nfn say(text: str) <console> { print(text) }\n");
         for (name, params, result, body) in PLAIN {
             let params: Vec<String> = (params.iter().enumerate())
                 .map(|(i, t)| format!("a{i}: {}", type_text(t)))
@@ -1213,7 +1213,7 @@ impl Writer {
         }
         self.push("\nfn twice(body: fn()) {\n  body()\n  body()\n}\n");
         self.push("\nfn apply(text: str, f: fn(str) -> str) -> str { f(text) }\n");
-        self.push("\nfn main() ! console {\n");
+        self.push("\nfn main() <console> {\n");
         self.stmts(&m.main, 1);
         self.push("}\n");
         for (h, ho) in m.hos.iter().enumerate() {
@@ -1235,7 +1235,7 @@ impl Writer {
                 self.push(&format!(" -> {}", type_text(&ho.result)));
             }
             if ho.console {
-                self.push(" ! console");
+                self.push(" <console>");
             }
             // Nothing is known of `T` but what its bounds say.
             if ho.generic {
@@ -1609,7 +1609,7 @@ pub fn loop_program(g: &mut Gen) -> LoopCase {
         String::from("struct Pair {\n  a: u32\n  b: u32\n}\n\nenum Mode {\n  one\n  two\n}\n");
     for (at, shape) in shapes.iter().enumerate() {
         let diverge = if diverges(shape, &shapes[..at]) {
-            " ! diverge"
+            " <diverge>"
         } else {
             ""
         };
@@ -1626,7 +1626,7 @@ pub fn loop_program(g: &mut Gen) -> LoopCase {
     };
     let mode = if second { ".two" } else { ".one" };
     text.push_str(&format!(
-        "\nfn main() ! {diverge}console, alloc {{\n  var a: u32 = 0\n  var b: u32 = 0\n  var p = Pair(a: 0, b: 0)\n  f{called}({n}, {mode}) fn(x) {{\n    {}\n  }}\n  print(\"{{a}} {{b}} {{p.a}}\")\n}}\n",
+        "\nfn main() <{diverge}console, alloc> {{\n  var a: u32 = 0\n  var b: u32 = 0\n  var p = Pair(a: 0, b: 0)\n  f{called}({n}, {mode}) fn(x) {{\n    {}\n  }}\n  print(\"{{a}} {{b}} {{p.a}}\")\n}}\n",
         effect.text()
     ));
     // `wrapping_mul` is written by only some of the effects.

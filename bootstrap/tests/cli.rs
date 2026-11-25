@@ -124,7 +124,7 @@ pub const MACHINE: &[Test] = &[
     ),
 ];
 
-const HELLO: &str = "use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &str = "use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 /// A new, empty folder for one test.
 pub fn folder(name: &str) -> PathBuf {

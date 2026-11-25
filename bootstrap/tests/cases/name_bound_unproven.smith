@@ -2,6 +2,6 @@ use std.console (console, print)
 
 fn first_free(n: Nat) -> 0..n { 0 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{first_free(3)}")
 }

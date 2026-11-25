@@ -261,7 +261,7 @@ fn build(g: &mut Gen) -> Build {
 }
 
 fn a_program_builds_a_list_pushes_to_it_and_reads_each_element() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() ! console, alloc {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
     prints(source, ["1", "2", "3", "4"].map(String::from).to_vec());
 }
 
@@ -287,7 +287,7 @@ fn a_list_holds_the_size_and_the_elements_that_were_put_in_in_order(part: u64) {
             format!("l{}", b.pushes.len())
         };
         body += &b.elem.dump(&last);
-        let source = format!("fn main() ! console, alloc {{\n{body}}}\n");
+        let source = format!("fn main() <console, alloc> {{\n{body}}}\n");
         let list: &[&str] = if b.pushes.is_empty() { &[] } else { &["push"] };
         let source = header(&[("std.console", &["console", "print"]), ("std.list", list)], &source) + &source;
         let all: Vec<Val> = b.start.iter().chain(&b.pushes).copied().collect();
@@ -322,13 +322,13 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
         let push: &[&str] = if body.contains("push(") { &["push"] } else { &[] };
         let uses = header(&[("std.console", &["console", "print"]), ("std.list", push)], "");
         format!(
-            "{uses}fn run(f: fn()) {{ f() }}\n\nfn main() ! console, alloc {{\n  var xs: List[Byte] = [1, 2, 3]\n  k: Nat = 1\n  if k < xs.size {{\n{body}\n  }}\n}}\n"
+            "{uses}fn run(f: fn()) {{ f() }}\n\nfn main() <console, alloc> {{\n  var xs: List[Byte] = [1, 2, 3]\n  k: Nat = 1\n  if k < xs.size {{\n{body}\n  }}\n}}\n"
         )
     };
     let field = |body: &str| {
         let uses = header(&[("std.bits", &["u64"]), ("std.console", &["console", "print"])], "");
         format!(
-            "{uses}struct Cursor {{\n  at: u64\n}}\n\nfn main() ! console, alloc {{\n  var c = Cursor(at: 1)\n  n: u64 = 5\n  if c.at < n {{\n{body}\n  }}\n}}\n"
+            "{uses}struct Cursor {{\n  at: u64\n}}\n\nfn main() <console, alloc> {{\n  var c = Cursor(at: 1)\n  n: u64 = 5\n  if c.at < n {{\n{body}\n  }}\n}}\n"
         )
     };
     let read = "    print(\"{xs[k]}\")";
@@ -359,7 +359,7 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
     for source in &lost {
         assert!(!refused(source).is_empty(), "compiles: {source}");
     }
-    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() ! console, alloc {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
+    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
     prints(example, vec!["4".to_string()]);
 }
 
@@ -409,7 +409,7 @@ fn an_index_compiles_exactly_when_arith_proves_it_below_the_size() {
             ),
         };
         let source = format!(
-            "use std.console (console, print)\n\nfn at(xs: List[Byte], k: Nat) -> Byte\n  requires k < xs.size\n{{\n  xs[k]\n}}\n\nfn main() ! console, alloc {{\n{body}}}\n"
+            "use std.console (console, print)\n\nfn at(xs: List[Byte], k: Nat) -> Byte\n  requires k < xs.size\n{{\n  xs[k]\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
         );
         let errors = refused(&source);
         assert_eq!(errors.is_empty(), proven, "{errors:?} for {source}");
@@ -436,7 +436,7 @@ fn an_index_is_never_tested_when_the_program_runs() {
         let t = ty.name;
         let uses = header(&[("std.int", &["wrapping_add"])], t);
         let source = format!(
-            "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() ! alloc {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
+            "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
         );
         // The function that sums, before inlining puts it into `main`, where
         // nothing reads the sum.
@@ -587,7 +587,7 @@ fn names(g: &mut Gen) -> Names {
     let copy: &[&str] = if body.contains("copy(") { &["copy"] } else { &[] };
     let uses = header(&[("std.console", &["console", "print"]), ("std.list", &["push"]), ("std.list", copy)], "");
     let source = format!(
-        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] ! alloc {{\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}}\n\nfn main() ! console, alloc {{\n{body}}}\n"
+        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] <alloc> {{\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
     );
     Names { source, lines }
 }
@@ -613,7 +613,7 @@ fn pushed(elem: Elem, n: usize) -> String {
     };
     let uses = header(&[("std.list", &["push"])], elem.name());
     format!(
-        "{uses}fn main() ! alloc {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {one}) }}\n}}\n",
+        "{uses}fn main() <alloc> {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {one}) }}\n}}\n",
         elem.name()
     )
 }
@@ -676,7 +676,7 @@ fn push_and_a_list_with_elements_need_the_alloc_effect() {
 }
 
 fn a_list_of_people_prints_each_name_and_age() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() ! console, alloc {\n  var people: List[Person] = []\n  people = push(people, Person(name: \"ada\", age: 36))\n  people = push(people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() <console, alloc> {\n  var people: List[Person] = []\n  people = push(people, Person(name: \"ada\", age: 36))\n  people = push(people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
     prints(source, ["ada 36", "alan 41"].map(String::from).to_vec());
 }
 
@@ -1028,7 +1028,7 @@ fn a_list_of_any_type_holds_what_was_put_in_in_order() {
             &format!("{t} {}", Ty::source(&[&h.ty])),
         );
         let source = format!(
-            "{uses}{}struct Held {{\n  items: List[{t}]\n}}\n\nenum Boxed {{\n  empty\n  full: List[{t}]\n}}\n\nfn through(xs: take List[{t}]) -> List[{t}] {{ xs }}\n\nfn untuple(t: take (List[{t}], Byte)) -> List[{t}] {{\n  match t {{\n    (xs, k) {{ xs }}\n  }}\n}}\n\nfn unbox(b: take Boxed) -> List[{t}] {{\n  match b {{\n    .empty {{ [] }}\n    .full(xs) {{ xs }}\n  }}\n}}\n\nfn main() ! console, alloc {{\n{body}}}\n",
+            "{uses}{}struct Held {{\n  items: List[{t}]\n}}\n\nenum Boxed {{\n  empty\n  full: List[{t}]\n}}\n\nfn through(xs: take List[{t}]) -> List[{t}] {{ xs }}\n\nfn untuple(t: take (List[{t}], Byte)) -> List[{t}] {{\n  match t {{\n    (xs, k) {{ xs }}\n  }}\n}}\n\nfn unbox(b: take Boxed) -> List[{t}] {{\n  match b {{\n    .empty {{ [] }}\n    .full(xs) {{ xs }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n",
             Ty::source(&[&h.ty]),
         );
         let all: Vec<V> = h.start.iter().chain(&h.pushes).cloned().collect();
@@ -1045,7 +1045,7 @@ const HOLDERS: &[(&str, &str, &str)] = &[
     ("[{}]", "head({})", "List[List[Byte]]"),
 ];
 
-const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] ! alloc {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] ! alloc {\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}\n\n";
+const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] <alloc> {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> {\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}\n\n";
 
 fn fill(pattern: &str, with: &str) -> String {
     pattern.replace("{}", with)
@@ -1158,7 +1158,7 @@ fn shared(g: &mut Gen) -> Shared {
         ));
     }
     let source = format!(
-        "use std.console (console, print)\nuse std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() ! console, alloc {{\n{body}}}\n"
+        "use std.console (console, print)\nuse std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <console, alloc> {{\n{body}}}\n"
     );
     Shared { source, lines }
 }
@@ -1187,7 +1187,7 @@ fn a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room()
         for n in 1usize..=9 {
             let program = |push: &str| {
                 format!(
-                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() ! alloc {{\n  var a: List[Byte] = []\n  loop i in 0..{n} {{ a = push(a, 1) }}\n  h: {ty} = {}\n  var b = {}\n{push}}}\n",
+                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <alloc> {{\n  var a: List[Byte] = []\n  loop i in 0..{n} {{ a = push(a, 1) }}\n  h: {ty} = {}\n  var b = {}\n{push}}}\n",
                     fill(build, "a"),
                     fill(take, "h"),
                 )
@@ -1207,11 +1207,11 @@ fn a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room()
 /// a list `n` times in the way `loop` says, with `setup` before it.
 fn pushes_by(setup: &str, loop_body: &str, n: usize) -> usize {
     requests(&format!(
-        "{setup}fn main() ! alloc {{\n  var a = Acc(items: [], n: 0)\n  var items: List[u64] = []\n  loop i in 0..{n} {{ {loop_body} }}\n}}\n"
+        "{setup}fn main() <alloc> {{\n  var a = Acc(items: [], n: 0)\n  var items: List[u64] = []\n  loop i in 0..{n} {{ {loop_body} }}\n}}\n"
     ))
 }
 
-const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc ! alloc {\n  var next = a\n  next.items = push(next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] ! alloc { push(items, x) }\n\n";
+const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc <alloc> {\n  var next = a\n  next.items = push(next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] <alloc> { push(items, x) }\n\n";
 
 /// A list grown in the way `form` says asks for memory as many times as one
 /// grown in a plain `var` may, as many as the logarithm of the pushes, however
@@ -1243,7 +1243,7 @@ fn a_list_that_a_function_pushes_to_and_returns_grows_as_a_plain_var_does() {
 /// that a list of `n` of them has room for between `n` and `2n` elements of
 /// the size the types give.
 fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest() {
-    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() ! alloc {\n  var xs: List[M] = []\n  loop i in 0..3 { xs = push(xs, M(a: 1, b: 2, c: 3)) }\n}\n";
+    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() <alloc> {\n  var xs: List[M] = []\n  loop i in 0..3 { xs = push(xs, M(a: 1, b: 2, c: 3)) }\n}\n";
     let program = lower(mixed.as_bytes()).expect("compiles");
     let (_, asked) = scalar::run_taking(&program, usize::MAX);
     let asked = growth::rooms(&asked);
@@ -1266,7 +1266,7 @@ fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest
             let declarations = Ty::source(&[t]);
             let uses = header(&[("std.list", &["push"])], &format!("{} {declarations}", t.name()));
             let source = format!(
-                "{uses}{}fn main() ! alloc {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {}) }}\n}}\n",
+                "{uses}{}fn main() <alloc> {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {}) }}\n}}\n",
                 declarations,
                 t.name(),
                 t.written(v),
@@ -1308,7 +1308,7 @@ fn reading_a_field_of_an_element_reads_only_the_scalars_of_that_field() {
             let declarations = Ty::source(&[&element]);
             let uses = header(&[], &declarations);
             let source = format!(
-                "{uses}{}fn get(xs: List[S0], i: Nat) -> {} requires i < xs.size {{ xs[i].f{at} }}\n\nfn main() ! alloc {{\n  xs: List[S0] = [{}]\n  x = get(xs, 0)\n}}\n",
+                "{uses}{}fn get(xs: List[S0], i: Nat) -> {} requires i < xs.size {{ xs[i].f{at} }}\n\nfn main() <alloc> {{\n  xs: List[S0] = [{}]\n  x = get(xs, 0)\n}}\n",
                 declarations,
                 field.name(),
                 element.written(value),
@@ -1328,7 +1328,7 @@ fn reading_a_field_of_an_element_reads_only_the_scalars_of_that_field() {
 /// The program of the issue: a loop over a list sums it, and needs neither
 /// `diverge` nor anything but the effects of its body.
 fn a_loop_over_a_list_sums_it() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() ! console, alloc {\n  xs: List[u64] = [1, 2, 3]\n  var sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  print(\"{sum}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() <console, alloc> {\n  xs: List[u64] = [1, 2, 3]\n  var sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  print(\"{sum}\")\n}\n";
     prints(source, vec!["6".into()]);
 }
 
@@ -1393,7 +1393,7 @@ fn a_loop_over_a_list_of_any_type_gives_each_element_of_the_list_it_began_with_u
             &format!("{t} {declarations}"),
         );
         let source = format!(
-            "{uses}{}fn main() ! console, alloc {{\nvar ys: List[{t}] = {}\nvar seen: u64 = 0\n{setup}loop v in ys {{\n{block}}}\nprint(\"{{ys.size}}\")\n}}\n",
+            "{uses}{}fn main() <console, alloc> {{\nvar ys: List[{t}] = {}\nvar seen: u64 = 0\n{setup}loop v in ys {{\n{block}}}\nprint(\"{{ys.size}}\")\n}}\n",
             declarations,
             items(&l.ty, &l.items)
         );
@@ -1440,7 +1440,7 @@ fn a_loop_over_a_list_is_one_comparison_and_one_load_of_the_element_each_time_ro
         let uses = header(&[("std.int", &["wrapping_add"])], t);
         let sum = |head: &str, element: &str| {
             format!(
-                "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  {head} {{ sum = wrapping_add(sum, {element}) }}\n  sum\n}}\n\nfn main() ! alloc {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
+                "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  {head} {{ sum = wrapping_add(sum, {element}) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
             )
         };
         let each = sum("loop v in xs", "v");
@@ -1458,7 +1458,7 @@ fn a_loop_runs_over_a_range_or_a_list_and_nothing_else() {
         let t = ty.name;
         let uses = header(&[("std.console", &["console", "print"])], t);
         let source = format!(
-            "{uses}fn main() ! console, alloc {{\n  n: {t} = 3\n  loop v in n {{ print(\"{{v}}\") }}\n}}\n"
+            "{uses}fn main() <console, alloc> {{\n  n: {t} = 3\n  loop v in n {{ print(\"{{v}}\") }}\n}}\n"
         );
         let errors = refused(&source);
         assert!(

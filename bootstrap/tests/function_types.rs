@@ -86,7 +86,7 @@ fn a_lambda_does_the_same_whichever_of_its_types_it_writes() {
         let source = format!(
             "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_mul)\n\n\
              fn twice(x: u64, f: fn(u64) -> u64) -> u64 {{ f(f(x)) }}\n\n\
-             fn main() ! console, alloc {{\n  r = twice(3) {lambda}\n  print(\"{{r}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  r = twice(3) {lambda}\n  print(\"{{r}}\")\n}}\n"
         );
         assert_eq!(printed(&source), b"12\n", "{lambda}");
     }
@@ -201,14 +201,14 @@ fn types_in_parentheses_are_a_tuple_and_fn_with_them_is_a_function_wherever_a_ty
         let source = format!(
             "{uses}struct S {{\n  t: {tuple}\n}}\n\
              fn make(t: {tuple}) -> {tuple} {{ t }}\n\n\
-             fn main() ! alloc {{\n  s = S(t: make((1, 2)))\n  u: {tuple} = s.t\n  \
+             fn main() <alloc> {{\n  s = S(t: make((1, 2)))\n  u: {tuple} = s.t\n  \
              xs: List[{tuple}] = [u]\n}}\n"
         );
         lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in {source}"));
         // The function gives nothing, so it is called for what it does.
         let source = format!(
-            "{}fn run(f: fn({a}, {b})) ! console {{ f(1, 2) }}\n\n\
-             fn main() ! console, alloc {{\n  run fn(x, y) {{ print(\"{{x}}\") }}\n}}\n",
+            "{}fn run(f: fn({a}, {b})) <console> {{ f(1, 2) }}\n\n\
+             fn main() <console, alloc> {{\n  run fn(x, y) {{ print(\"{{x}}\") }}\n}}\n",
             bits_and_console(&[a, b])
         );
         lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in {source}"));
@@ -242,7 +242,7 @@ const REACHED: [(&str, &str, &str); 4] = [
         "\nfn f(a: @A, b: @B) {}\n\nfn main() {\n  s = S(g: f)\n}\n",
     ),
     ("fn h(a: @A, b: @B) {}\n\nfn main() {\n  g: ", " = h\n}\n", ""),
-    ("fn main() ! alloc {\n  g: List[", "] = []\n}\n", ""),
+    ("fn main() <alloc> {\n  g: List[", "] = []\n}\n", ""),
 ];
 
 /// Whether `text` writes a function type as `(T) -> R`: a list of types in

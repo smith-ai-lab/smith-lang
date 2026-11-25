@@ -203,7 +203,7 @@ pub struct Function {
     pub end: Pos,
 }
 
-/// The effects after `!`, each with where it is written.
+/// The effects in angle brackets, each with where it is written.
 type Effects = Vec<(String, Pos)>;
 
 /// A function's name and where it is, its type parameters, its

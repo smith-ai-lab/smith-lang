@@ -1002,9 +1002,9 @@ impl Writer {
             }
             self.push("\n");
         }
-        self.push("}\n\nfn say(text: str) ! console { print(text) }\n");
+        self.push("}\n\nfn say(text: str) <console> { print(text) }\n");
         self.push("\nfn swap[A: Copy, B: Copy](pair: (A, B)) -> (B, A) {\n  (a, b) = pair\n  (b, a)\n}\n");
-        self.push("\nfn main() ! console {\n");
+        self.push("\nfn main() <console> {\n");
         self.stmts(&m.main, 1);
         self.push("}\n");
         for (i, f) in m.fns.iter().enumerate() {
@@ -1012,7 +1012,7 @@ impl Writer {
             if f.written {
                 self.push(&format!(" -> {}", type_text(&f.result)));
             }
-            self.push(" ! console {\n");
+            self.push(" <console> {\n");
             self.stmts(&f.body, 1);
             self.push("}\n");
         }

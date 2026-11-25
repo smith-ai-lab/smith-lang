@@ -12,7 +12,7 @@ System frameworks are reached the same way as any foreign function, with no C or
 - On macOS and iOS, a Smith library wraps AppKit and UIKit by calling the Objective-C runtime's C functions. Windows, menus, and native controls are ordinary Smith values behind [`with`](with.md).
 
 ```
-fn main() ! ui, diverge {
+fn main() <ui, diverge> {
   with app = application()
   with win = window(app, "Smith", 800, 600)
   loop {

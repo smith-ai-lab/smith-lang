@@ -4,7 +4,7 @@ use std.int (saturating_mul)
 
 fn double(n: Byte) -> Byte { saturating_mul(n, 2) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x = 10
   print("{double(x)}")
   y = 10

@@ -197,7 +197,7 @@ fn functions(n: &Node, k: &mut usize, out: &mut String, fails: Option<(usize, us
     }
     body += "  total\n";
     let params = if n.given.is_some() { "c0: take Connection" } else { "" };
-    *out += &format!("fn n{me}({params}) -> u64 ! net, task, console, alloc {{\n{body}}}\n\n");
+    *out += &format!("fn n{me}({params}) -> u64 <net, task, console, alloc> {{\n{body}}}\n\n");
     me
 }
 
@@ -220,7 +220,7 @@ use std.list (push)
 use std.task (join, outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 // Asks for more memory than the system gives, so that the task that calls it ends.
-fn eat() -> u64 ! alloc {{
+fn eat() -> u64 <alloc> {{
   var xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
     xs = push(xs, i)
@@ -228,19 +228,19 @@ fn eat() -> u64 ! alloc {{
   0
 }}
 
-fn opened(id: u64) -> Connection ! console, alloc {{
+fn opened(id: u64) -> Connection <console, alloc> {{
   print(\"opened {{id}}\")
   connection(id)
 }}
 
-{functions_text}fn run() -> u64 ! net, diverge, alloc, console {{
+{functions_text}fn run() -> u64 <net, diverge, alloc, console> {{
   with test_scheduler_with_io({}, [{}])
 {start}
 {wait}  print(\"root done\")
   1
 }}
 
-fn main() ! console, alloc, diverge {{
+fn main() <console, alloc, diverge> {{
   r = net(
     listen_on: fn(host, port) {{ .err(.refused) }},
     accept: fn(l) {{ .err(.closed) }},

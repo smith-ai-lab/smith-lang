@@ -12,7 +12,7 @@ The module `std.fetch` declares the `fetch` [effect](../language/effect-declarat
 ```
 use std.fetch (FetchError, Request, fetch, send)
 
-fn keys_of(issuer: str) -> Result[List[Byte], FetchError] ! fetch, alloc {
+fn keys_of(issuer: str) -> Result[List[Byte], FetchError] <fetch, alloc> {
   response = try send(Request(url: "{issuer}/.well-known/jwks.json"), 65536)
   if response.status == 200 { .ok(response.body.bytes) } else { .err(.failed("status {response.status}")) }
 }

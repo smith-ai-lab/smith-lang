@@ -22,7 +22,7 @@ use std.bits (u64)
 use std.int (wrapping_mul)
 use std.list (freeze, push)
 
-fn evens(n: u64) -> Slice[u64] ! alloc {
+fn evens(n: u64) -> Slice[u64] <alloc> {
   var built: List[u64] = []
   loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }
   freeze(built)

@@ -15,7 +15,7 @@ pub const ONCE: &[Test] = &[(
 fn a_file_of_a_program_cannot_end_the_program_or_write_to_standard_error_with_the_calls_of_the_library()
 {
     for call in ["__end(1)", "__eprint(\"it ended\")"] {
-        let source = format!("fn main() ! console {{\n  {call}\n}}\n");
+        let source = format!("fn main() <console> {{\n  {call}\n}}\n");
         let errors = check(source.as_bytes()).err().unwrap_or_default();
         assert!(!errors.is_empty(), "{call} was accepted");
         let name = call.split('(').next().unwrap();

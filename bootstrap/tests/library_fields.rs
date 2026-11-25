@@ -150,7 +150,7 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
     let (names, takes_main) = match h.name.as_str() {
         "RawJson" => (
             "RawJson, raw_json",
-            "fn main() ! alloc {
+            "fn main() <alloc> {
   match raw_json(\"[]\") {
     .ok(x) { f(x) }
     .err(e) { }
@@ -160,12 +160,12 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
         ),
         "JsonSchema" => (
             "JsonSchema, json_schema",
-            "fn main() ! alloc {
+            "fn main() <alloc> {
   f(json_schema(Json(cases: .key, names: .written)))
 }
 ",
         ),
-        "Html" => ("Html, render", "fn main() ! alloc {
+        "Html" => ("Html, render", "fn main() <alloc> {
   f(render() { })
 }
 "),
@@ -173,11 +173,11 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
   f(text())
 }
 "),
-        "Decoder" => ("Decoder, decoder", "fn main() ! alloc {
+        "Decoder" => ("Decoder, decoder", "fn main() <alloc> {
   f(decoder())
 }
 "),
-        "Encoder" => ("Encoder, encoder", "fn main() ! alloc {
+        "Encoder" => ("Encoder, encoder", "fn main() <alloc> {
   f(encoder())
 }
 "),
@@ -282,7 +282,7 @@ fn library_fields_a_program_that_only_holds_the_struct_is_accepted(part: u64) {
 /// A `Connection` is given by `connect_to` and by nothing else, so a program
 /// neither reads the system's handle it holds nor makes one from a number.
 fn library_fields_the_handle_of_a_connection_is_private_and_no_program_makes_one() {
-    let read = "use std.bits (i64)\nuse std.net (Connection, close, connect_to, net)\n\nfn f(c: take Connection) -> i64 {\n  h = c.handle\n  close(c)\n  h\n}\n\nfn main() ! net {\n  match connect_to(\"127.0.0.1\", 1) {\n    .ok(c) { f(c) }\n    .err(e) { 0 }\n  }\n}\n";
+    let read = "use std.bits (i64)\nuse std.net (Connection, close, connect_to, net)\n\nfn f(c: take Connection) -> i64 {\n  h = c.handle\n  close(c)\n  h\n}\n\nfn main() <net> {\n  match connect_to(\"127.0.0.1\", 1) {\n    .ok(c) { f(c) }\n    .err(e) { 0 }\n  }\n}\n";
     let make = "use std.net (Connection)\n\nfn f() -> Connection {\n  Connection(handle: 3)\n}\n\nfn main() {\n  c = f()\n}\n";
     for source in [read, make] {
         let Err(errors) = check(source.as_bytes()) else {
@@ -311,7 +311,7 @@ fn library_fields_no_program_makes_a_rawjson_from_text_that_is_not_json() {
 
 /// The fix for the field of a `RawJson` names the function that gives it.
 fn library_fields_the_fix_for_a_private_field_names_what_the_module_gives_in_its_place() {
-    let source = "use std.json (RawJson, raw_json)\n\nfn f(s: RawJson) {\n  x = s.text\n}\n\nfn main() ! alloc {\n  match raw_json(\"[]\") {\n    .ok(x) { f(x) }\n    .err(e) { }\n  }\n}\n";
+    let source = "use std.json (RawJson, raw_json)\n\nfn f(s: RawJson) {\n  x = s.text\n}\n\nfn main() <alloc> {\n  match raw_json(\"[]\") {\n    .ok(x) { f(x) }\n    .err(e) { }\n  }\n}\n";
     let Err(errors) = check(source.as_bytes()) else {
         panic!("accepted");
     };

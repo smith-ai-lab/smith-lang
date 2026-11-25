@@ -17,15 +17,15 @@ built:
 Everything in a module is private unless it is marked `pub`. A private definition can be used only inside its own module. A `pub` definition can be used by other modules, which import it as [Importing with use](use.md) describes.
 
 ```
-pub fn commit(t: take Transaction) -> Result[(), DbError] ! net
+pub fn commit(t: take Transaction) -> Result[(), DbError] <net>
 
-fn next_id(db: Db) -> u64 ! net
+fn next_id(db: Db) -> u64 <net>
 ```
 
 Written in `db/transaction.smith`, `commit` can be imported by any module and `next_id` cannot. Code in the same file may use both.
 
 ```
-pub fn begin(db: Db) -> Transaction ! net {
+pub fn begin(db: Db) -> Transaction <net> {
   Transaction(id: next_id(db))
 }
 ```
@@ -38,7 +38,7 @@ Another module that names `next_id` is refused, since `next_id` is private.
 use db.transaction (next_id)
 use std.bits (u64)
 
-fn fresh(db: Db) -> u64 ! net {
+fn fresh(db: Db) -> u64 <net> {
   next_id(db)
 }
 ```
@@ -81,7 +81,7 @@ fn wider(r: Rect) -> Rect {
 `Transaction` has a private field, so another module can hold a `Transaction` and pass it on, but cannot forge one or dispose of one.
 
 ```
-fn transfer(db: Db) -> Result[(), DbError] ! net {
+fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   commit(t)
 }
@@ -98,7 +98,7 @@ fn forged() -> Transaction {
 Assigning its field is refused for the same reason.
 
 ```
-fn renumbered(db: Db) -> Transaction ! net {
+fn renumbered(db: Db) -> Transaction <net> {
   var t = begin(db)
   t.id = 8
   t

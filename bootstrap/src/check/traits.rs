@@ -1765,7 +1765,7 @@ impl<'a> Checker<'a> {
         }
         let effects = set(&trait_fn.effects);
         if !effects.is_empty() {
-            text.push_str(&format!(" ! {}", effects.join(", ")));
+            text.push_str(&format!(" <{}>", effects.join(", ")));
         }
         self.errors.push(
             Error::new(

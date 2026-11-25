@@ -250,21 +250,21 @@ fn program(place: Place, (s, given): (&Shape, &Shape), other: &Shape, written_ou
     match place {
         Place::Function => {
             out.push_str(&format!(
-                "fn f({head}: {mark}{ty}) -> i32 {{\n{first}{}  {sum}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({})}}\")\n}}\n",
+                "fn f({head}: {mark}{ty}) -> i32 {{\n{first}{}  {sum}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({})}}\")\n}}\n",
                 lines("  "),
                 given.value()
             ));
         }
         Place::Lambda => {
             out.push_str(&format!(
-                "fn apply(v: {mark}{ty}, f: fn({mark}{ty}) -> i32) -> i32 {{ f(v) }}\n\nfn main() ! console, alloc {{\n  r = apply({}) fn({head}) {{\n{first}{}    {sum}\n  }}\n  print(\"{{r}}\")\n}}\n",
+                "fn apply(v: {mark}{ty}, f: fn({mark}{ty}) -> i32) -> i32 {{ f(v) }}\n\nfn main() <console, alloc> {{\n  r = apply({}) fn({head}) {{\n{first}{}    {sum}\n  }}\n  print(\"{{r}}\")\n}}\n",
                 given.value(),
                 lines("    ")
             ));
         }
         Place::Loop => {
             out.push_str(&format!(
-                "fn total(xs: List[{ty}]) -> i32 {{\n  var sum = 0\n  loop {head} in xs {{\n{first}{}    sum = wrapping_add(sum, {sum})\n  }}\n  sum\n}}\n\nfn main() ! console, alloc {{\n  xs: List[{ty}] = [{}, {}]\n  print(\"{{total(xs)}}\")\n}}\n",
+                "fn total(xs: List[{ty}]) -> i32 {{\n  var sum = 0\n  loop {head} in xs {{\n{first}{}    sum = wrapping_add(sum, {sum})\n  }}\n  sum\n}}\n\nfn main() <console, alloc> {{\n  xs: List[{ty}] = [{}, {}]\n  print(\"{{total(xs)}}\")\n}}\n",
                 lines("    "),
                 given.value(),
                 other.value()
@@ -322,7 +322,7 @@ fn without_places(messages: Vec<String>) -> Vec<String> {
 }
 
 fn the_examples_of_the_page_on_tuples_for_a_parameter_and_a_loop_give_what_it_says() {
-    let source = "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn first((n, s): (i32, str)) -> i32 { n }\n\nfn total(pairs: List[(str, i32)]) -> i32 {\n  var sum = 0\n  loop (name, count) in pairs { sum = wrapping_add(sum, count) }\n  sum\n}\n\nfn main() ! console, alloc {\n  pairs: List[(str, i32)] = [(\"a\", 4), (\"b\", 5)]\n  print(\"{first((7, \"x\"))}\")\n  print(\"{total(pairs)}\")\n}\n";
+    let source = "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn first((n, s): (i32, str)) -> i32 { n }\n\nfn total(pairs: List[(str, i32)]) -> i32 {\n  var sum = 0\n  loop (name, count) in pairs { sum = wrapping_add(sum, count) }\n  sum\n}\n\nfn main() <console, alloc> {\n  pairs: List[(str, i32)] = [(\"a\", 4), (\"b\", 5)]\n  print(\"{first((7, \"x\"))}\")\n  print(\"{total(pairs)}\")\n}\n";
     assert_eq!(
         run(source),
         Outcome {
@@ -392,13 +392,13 @@ fn a_pattern_that_may_not_match_where_a_name_is_introduced_is_one_error_that_nam
             };
             let source = match place {
                 Place::Function => format!(
-                    "fn f({pattern}: (i32, i32)) -> i32 {{ 1 }}\n\nfn main() ! console, alloc {{\n  print(\"{{f((1, 2))}}\")\n}}\n"
+                    "fn f({pattern}: (i32, i32)) -> i32 {{ 1 }}\n\nfn main() <console, alloc> {{\n  print(\"{{f((1, 2))}}\")\n}}\n"
                 ),
                 Place::Lambda => format!(
-                    "fn apply(v: (i32, i32), f: fn((i32, i32)) -> i32) -> i32 {{ f(v) }}\n\nfn main() ! console, alloc {{\n  r = apply((1, 2)) fn({pattern}) {{ 1 }}\n  print(\"{{r}}\")\n}}\n"
+                    "fn apply(v: (i32, i32), f: fn((i32, i32)) -> i32) -> i32 {{ f(v) }}\n\nfn main() <console, alloc> {{\n  r = apply((1, 2)) fn({pattern}) {{ 1 }}\n  print(\"{{r}}\")\n}}\n"
                 ),
                 Place::Loop => format!(
-                    "fn main() ! console, alloc {{\n  xs: List[(i32, i32)] = [(1, 2)]\n  loop {pattern} in xs {{ print(\"1\") }}\n}}\n"
+                    "fn main() <console, alloc> {{\n  xs: List[(i32, i32)] = [(1, 2)]\n  loop {pattern} in xs {{ print(\"1\") }}\n}}\n"
                 ),
             };
             let source = format!("{}{source}", uses(&source));
@@ -474,7 +474,7 @@ fn a_parameter_written_as_a_pattern_is_given_by_position_and_takes_no_default() 
             let (ty, pattern, value) = (s.ty(), s.pattern(), s.value());
             let header = format!("fn f({pattern}: {ty}");
             let main = |call: &str| {
-                format!("\n\nfn main() ! console, alloc {{\n  print(\"{{{call}}}\")\n}}\n")
+                format!("\n\nfn main() <console, alloc> {{\n  print(\"{{{call}}}\")\n}}\n")
             };
             let built = |header: &str| {
                 let lines: String = (s.all().iter().filter(|l| l.var))
@@ -669,7 +669,7 @@ fn each_mistake_in_a_call_of_a_function_with_pattern_parameters_is_one_error_tha
             .map(|p| format!("{}: {}", p.head(), p.ty()))
             .collect();
         let head = format!(
-            "fn f({}) -> i32 {{ {sum} }}\n\nfn main() ! console, alloc {{\n",
+            "fn f({}) -> i32 {{ {sum} }}\n\nfn main() <console, alloc> {{\n",
             declared.join(", ")
         );
         let head = format!("{}{head}", uses(&head));

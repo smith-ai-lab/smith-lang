@@ -26,7 +26,7 @@ use std.console (console, print)
 use std.entropy (entropy, fill)
 use std.fmt (hex)
 
-fn main() ! console, entropy, alloc {
+fn main() <console, entropy, alloc> {
   bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   var line = ""
   loop b in fill(bytes) { line = "{line}{hex(b, 2, false)}" }
@@ -45,7 +45,7 @@ This prints 64 hex digits, and two runs print different lines.
 use std.entropy (entropy, fill)
 use std.list (push)
 
-fn fixed[T](body: fn() -> T ! entropy) -> T ! alloc {
+fn fixed[T](body: fn() -> T <entropy>) -> T <alloc> {
   entropy(
     fill: fn(bytes) {
       var made: List[Byte] = []

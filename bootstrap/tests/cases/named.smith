@@ -22,7 +22,7 @@ impl Named[Dog] {
 
 fn show[T: Named](x: T) -> str { name_of(x) }
 
-fn main() ! console {
+fn main() <console> {
   print(show(Cat(name: "Tom")))
   print(show(Dog(name: "Rex")))
 }

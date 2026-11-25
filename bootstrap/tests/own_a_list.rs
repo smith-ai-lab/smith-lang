@@ -198,56 +198,56 @@ struct Deep {
   inner: (W, Byte)
 }
 
-fn dump(xs: List[{e}]) ! console, alloc {
+fn dump(xs: List[{e}]) <console, alloc> {
   print(\"{xs.size}\")
   loop v in xs { print(\"{v}\") }
 }
 
-fn read_t(t: (List[{e}], Byte)) ! console, alloc {
+fn read_t(t: (List[{e}], Byte)) <console, alloc> {
   match t {
     (xs, k) { dump(xs) }
   }
 }
 
-fn read_e(e: E) ! console, alloc {
+fn read_e(e: E) <console, alloc> {
   match e {
     .empty { print(\"0\") }
     .full(xs) { dump(xs) }
   }
 }
 
-fn read_d(d: Deep) ! console, alloc {
+fn read_d(d: Deep) <console, alloc> {
   match d.inner {
     (w, k) { dump(w.xs) }
   }
 }
 
-fn read_l(ls: List[List[{e}]]) ! console, alloc {
+fn read_l(ls: List[List[{e}]]) <console, alloc> {
   print(\"{ls.size}\")
   loop i in 0..ls.size { dump(ls[i]) }
 }
 
-fn wpush(w: take W, v: {e}) -> W ! alloc { W(xs: push(w.xs, v)) }
+fn wpush(w: take W, v: {e}) -> W <alloc> { W(xs: push(w.xs, v)) }
 
-fn tpush(t: take (List[{e}], Byte), v: {e}) -> (List[{e}], Byte) ! alloc {
+fn tpush(t: take (List[{e}], Byte), v: {e}) -> (List[{e}], Byte) <alloc> {
   match t {
     (xs, k) { (push(xs, v), k) }
   }
 }
 
-fn epush(e: take E, v: {e}) -> E ! alloc {
+fn epush(e: take E, v: {e}) -> E <alloc> {
   match e {
     .empty { E.full(push([], v)) }
     .full(xs) { E.full(push(xs, v)) }
   }
 }
 
-fn dpush(d: take Deep, v: {e}) -> Deep ! alloc {
+fn dpush(d: take Deep, v: {e}) -> Deep <alloc> {
   (w, k) = d.inner
   Deep(inner: (W(xs: push(w.xs, v)), k))
 }
 
-fn fresh(a: {e}, b: {e}) -> List[{e}] ! alloc {
+fn fresh(a: {e}, b: {e}) -> List[{e}] <alloc> {
   var xs: List[{e}] = []
   xs = push(xs, a)
   push(xs, b)
@@ -314,7 +314,7 @@ fn source(p: &Program, reads: bool) -> String {
         }
     }
     let effects = if reads { "console, alloc" } else { "alloc" };
-    format!("{ITEMS}fn main() ! {effects} {{\n{body}}}\n").replace("{e}", ELEMS[p.elem].0)
+    format!("{ITEMS}fn main() <{effects}> {{\n{body}}}\n").replace("{e}", ELEMS[p.elem].0)
 }
 
 fn lowered(source: &str) -> scalar::Program {
@@ -405,7 +405,7 @@ fn reading_a_list_asks_for_no_memory_and_moves_no_bytes() {
         for n in [0usize, 1, 3, 4, 9] {
             let program = |reads: &str| {
                 format!(
-                    "fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() ! console, alloc {{\n  var xs: List[{t}] = []\n  loop i in 0..{n} {{ xs = push(xs, 1) }}\n{reads}}}\n"
+                    "fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  var xs: List[{t}] = []\n  loop i in 0..{n} {{ xs = push(xs, 1) }}\n{reads}}}\n"
                 )
             };
             let reads = "  a = xs.size\n  b = first(xs)\n  c = total(xs)\n  loop i in 0..xs.size { d = xs[i] }\n  if 0 < a { print(\"read\") }\n  if 0 < wrapping_add(b, c) { print(\"read\") }\n";
@@ -457,7 +457,7 @@ fn a_function_that_gives_a_list_away_and_uses_it_again_is_one_error_whose_fix_is
  {
     let both = |first: &str| {
         format!(
-            "use std.list (copy)\n\nfn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) ! alloc {{\n  ys = push({first}, 1)\n  (xs, ys)\n}}\n\nfn main() ! console, alloc {{\n  zs: List[Byte] = [7, 8]\n  (a, b) = both(zs)\n  print(\"{{a.size}} {{b.size}}\")\n}}\n"
+            "use std.list (copy)\n\nfn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) <alloc> {{\n  ys = push({first}, 1)\n  (xs, ys)\n}}\n\nfn main() <console, alloc> {{\n  zs: List[Byte] = [7, 8]\n  (a, b) = both(zs)\n  print(\"{{a.size}} {{b.size}}\")\n}}\n"
         )
     };
     let kept = both("copy(xs)");
@@ -498,7 +498,7 @@ fn a_list_has_no_copy_and_neither_has_what_holds_one_and_a_text_has_it() {
     for (ty, copies, value) in types {
         // A call that asks for `Copy` of the type, and a value used twice.
         let asks = format!(
-            "{items}fn twin[T: Copy](x: T) -> u64 {{ 1 }}\n\nfn use_it(x: {ty}) -> u64 {{ twin(x) }}\n\nfn main() ! alloc {{\n  x: {ty} = {value}\n  n = use_it(x)\n}}\n"
+            "{items}fn twin[T: Copy](x: T) -> u64 {{ 1 }}\n\nfn use_it(x: {ty}) -> u64 {{ twin(x) }}\n\nfn main() <alloc> {{\n  x: {ty} = {value}\n  n = use_it(x)\n}}\n"
         );
         let errors = check(with_imports(&asks).as_bytes()).err().unwrap_or_default();
         assert_eq!(errors.is_empty(), *copies, "{errors:?} for {ty}");
@@ -509,7 +509,7 @@ fn a_list_has_no_copy_and_neither_has_what_holds_one_and_a_text_has_it() {
             );
         }
         let again = format!(
-            "{items}fn twice(x: take {ty}) -> ({ty}, {ty}) {{ (x, x) }}\n\nfn main() ! alloc {{\n  x: {ty} = {value}\n  r = twice(x)\n}}\n"
+            "{items}fn twice(x: take {ty}) -> ({ty}, {ty}) {{ (x, x) }}\n\nfn main() <alloc> {{\n  x: {ty} = {value}\n  r = twice(x)\n}}\n"
         );
         let errors = check(with_imports(&again).as_bytes()).err().unwrap_or_default();
         assert_eq!(errors.is_empty(), *copies, "{errors:?} for {ty}");
@@ -527,7 +527,7 @@ fn copy_gives_a_new_list_of_the_same_elements_and_asks_for_alloc() {
         let t = ELEMS[*elem].0;
         let written: Vec<String> = items.iter().map(u64::to_string).collect();
         let source = format!(
-            "use std.list (copy)\n\nfn dump(xs: List[{t}]) ! console, alloc {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() ! console, alloc {{\n  var xs: List[{t}] = [{}]\n  var ys = copy(xs)\n  dump(ys)\n  ys = push(ys, {to_copy})\n  xs = push(xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
+            "use std.list (copy)\n\nfn dump(xs: List[{t}]) <console, alloc> {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  var xs: List[{t}] = [{}]\n  var ys = copy(xs)\n  dump(ys)\n  ys = push(ys, {to_copy})\n  xs = push(xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
             written.join(", ")
         );
         let mut lines = Vec::new();

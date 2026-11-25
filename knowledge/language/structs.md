@@ -28,7 +28,7 @@ use std.console (console, print)
 
 fn wider(a: Rect, b: Rect) -> bool { a.w > b.w }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   r = Rect(w: 3, h: 4)
   print("{r.w} {r.h}")
 }
@@ -84,7 +84,7 @@ fn widen(r: Rect, to: i32) -> Rect {
   wide
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   r = Rect(w: 3, h: 4)
   w = widen(r, 9)
   print("{r.w} {w.w} {w.h}")
@@ -100,7 +100,7 @@ Assigning to a field of a name that is not a `var` is refused.
 ```
 use std.console (console)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   r = Rect(w: 3, h: 4)
   r.w = 5
 }
@@ -121,7 +121,7 @@ struct Border {
   inset: i32 = 0
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   thin = Border()
   wide = Border(width: 4)
   print("{thin.width} {thin.inset} {wide.width} {wide.inset}")
@@ -139,7 +139,7 @@ struct Margin {
   inset: i32
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a = Margin(inset: 2)
   b = Margin(width: 4, inset: 3)
   print("{a.width} {a.inset} {b.width} {b.inset}")

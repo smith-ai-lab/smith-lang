@@ -5,7 +5,7 @@ enum Tree {
 
 fn same(a: Tree, b: Tree) -> bool { a == b }
 
-fn main() ! alloc {
+fn main() <alloc> {
   x: Tree = .leaf("x")
   y: Tree = .leaf("y")
   r = same(x, y)

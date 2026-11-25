@@ -43,7 +43,7 @@ fn a_function_the_program_lists_and_a_function_of_a_trait_of_the_library_with_on
 use std.console (console, print)
 use std.jsonrpc (read)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   match read(\"1\") {
     .ok(r) { print(\"read\") }
     .err(e) { print(\"refused\") }
@@ -61,7 +61,7 @@ use std.console (console, print)
 use std.der (text)
 use std.json (raw_json, raw_text)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   match raw_json(\"[1, 2]\") {
     .ok(r) { print(raw_text(r)) }
     .err(e) { print(\"refused\") }
@@ -85,7 +85,7 @@ pub fn render(body: Nat) -> Nat { wrap(body: body) }
 use std.console (console, print)
 use shapes (render)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{render(5)}\")
 }
 ";
@@ -110,7 +110,7 @@ use std.console (console, print)
 use mid (both)
 use other (twice)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{both(1)} {twice(1)}\")
 }
 ";

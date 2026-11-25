@@ -32,7 +32,7 @@ fn sum3[A, B: Discard](x: A, y: B, z: B) -> B
   plus(plus(x, y), z)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(show_both(one(), "pair"))
   print("{sum3(one(), 2, 3)}")
 }

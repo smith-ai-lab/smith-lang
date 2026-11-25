@@ -25,7 +25,7 @@ fn power(x: f64, n: Nat, acc: f64) -> f64 {
 ## A call that is not a tail call
 
 ```
-fn power_slow(x: f64, n: Nat) -> f64 ! alloc {
+fn power_slow(x: f64, n: Nat) -> f64 <alloc> {
   if n == 0 { 1.0 } else { x * power_slow(x, n - 1) }
 }
 ```

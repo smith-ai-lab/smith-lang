@@ -27,7 +27,7 @@ struct Note {
   tags: List[str]
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(schema_text(Describe[Note].describe(json_schema(Json(cases: .key, names: .written)))))
 }
 ```

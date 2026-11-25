@@ -4,7 +4,7 @@ fn draw(bytes: take List[Byte]) -> List[Byte] {
   fill(bytes)
 }
 
-fn main() ! entropy, alloc {
+fn main() <entropy, alloc> {
   bytes: List[Byte] = []
   draw(bytes)
 }
