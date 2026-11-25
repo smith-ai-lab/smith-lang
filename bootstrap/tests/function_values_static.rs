@@ -37,7 +37,7 @@ pub const ONCE: &[Test] = &[
     ),
     (
         "a_function_that_a_struct_a_function_gives_holds_builds_to_the_bytes_of_the_call_written_directly",
-        || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Made]),
+        || builds_to_the_bytes_of_the_call_written_directly(&[Hold::Made, Hold::Wraps]),
     ),
     (
         "a_function_that_is_returned_and_passed_builds_to_the_bytes_of_the_call_written_directly",
@@ -72,6 +72,8 @@ enum Hold {
     Nested,
     /// Made by a function that gives the struct that holds it.
     Made,
+    /// Held by a struct that a function builds from the function it is given.
+    Wraps,
 }
 
 #[derive(Debug)]
@@ -142,6 +144,11 @@ impl Program {
                 text += &Self::main(&format!(
                     "  s = Shop(held: Held(run: f{k}))\n  r = sold(s, {x})\n"
                 ));
+            }
+            Hold::Wraps => {
+                text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
+                text += "fn wrap(f: fn(Int) -> Int) -> Held { Held(run: f) }\n\n";
+                text += &Self::main(&format!("  r = wrap(f{k}).run({x})\n"));
             }
             Hold::Made => {
                 text += "struct Held {\n  run: fn(Int) -> Int\n}\n\n";
@@ -266,6 +273,7 @@ fn generated(g: &mut Gen) -> Generated {
     text += "\nstruct Held {\n  run: fn(Int) -> Int\n}\n\nstruct Shop {\n  held: Held\n}\n\n";
     text += "fn ident(f: fn(Int) -> Int) -> fn(Int) -> Int { f }\n";
     text += "fn same(h: Held) -> Held { h }\n";
+    text += "fn wrap(f: fn(Int) -> Int) -> Held { Held(run: f) }\n";
     text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n";
     text += "fn apply(f: fn(Int) -> Int, x: Int) -> Int { f(x) }\n";
     text += "fn via(h: Held, x: Int) -> Int { apply(h.run, x) }\n";
@@ -280,7 +288,7 @@ fn generated(g: &mut Gen) -> Generated {
     };
     for step in 0..2 + g.below(5) {
         let name = format!("v{step}");
-        let (value, kind, held) = match g.below(9) {
+        let (value, kind, held) = match g.below(10) {
             0 => {
                 let k = g.below(3);
                 (format!("f{k}"), Kind::Function, k)
@@ -312,6 +320,13 @@ fn generated(g: &mut Gen) -> Generated {
             }
             6 => match of(&names, Kind::Held, g) {
                 Some((h, _, k)) => (format!("same({h})"), Kind::Held, k),
+                None => continue,
+            },
+            9 => match of(&names, Kind::Function, g) {
+                Some((f, _, k)) => {
+                    refused |= loud[k];
+                    (format!("wrap({f})"), Kind::Held, k)
+                }
                 None => continue,
             },
             7 => match of(&names, Kind::Held, g) {
@@ -393,13 +408,16 @@ fn a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result
                 struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n\
                 fn quiet(p: Pricing) -> f32 { p.discount(1.0) }\n\n\
                 fn ret() -> fn(f32) -> f32 { loud }\n\n\
-                fn made() -> Pricing { Pricing(discount: loud) }\n\n";
+                fn made() -> Pricing { Pricing(discount: loud) }\n\n\
+                fn wrap(f: fn(f32) -> f32) -> Pricing { Pricing(discount: f) }\n\n\
+                fn half(x: f32) -> f32 { x * 0.5 }\n\n";
     let main = |body: &str| format!("{head}fn main() <console, alloc> {{\n{body}}}\n");
     let refused = [
         "  print(\"{quiet(Pricing(discount: loud))}\")\n",
         "  f = loud\n  print(\"{quiet(Pricing(discount: f))}\")\n",
         "  print(\"{ret()(1.0)}\")\n",
         "  print(\"{quiet(made())}\")\n",
+        "  print(\"{quiet(wrap(loud))}\")\n",
     ];
     for body in refused {
         let source = main(body);
@@ -410,6 +428,17 @@ fn a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result
             "{found:?} for\n{source}"
         );
     }
+    // A function that is given for a parameter and stored takes the function of
+    // the argument, which is half here, and a function that needs an effect is
+    // refused where the argument is, in a function that declares the effect or
+    // not.
+    let kept = main("  print(\"{wrap(half).discount(3.0)}\")\n");
+    assert!(check(kept.as_bytes()).is_ok(), "{:?}", check(kept.as_bytes()));
+    let run = main("  print(\"{wrap(half).discount(3.0)}\")\n");
+    assert_eq!(scalar::run(&lower(run.as_bytes()).expect("builds")).stdout, b"1.5\n");
+    // From a function that does not declare the effect, it stays refused.
+    let without = main("  x = quiet(wrap(loud))\n").replace("fn main() <console, alloc>", "fn main() <alloc>");
+    assert!(check(without.as_bytes()).is_err());
     // Passed to a call, it is the caller's effect, and the caller declares it.
     let passed = main("  print(\"{twice_f(1.0, loud)}\")\n");
     assert!(check(passed.as_bytes()).is_ok(), "{:?}", check(passed.as_bytes()));

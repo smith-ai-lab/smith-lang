@@ -92,6 +92,7 @@ impl<'a> Checker<'a> {
             param_defaults: Vec::new(),
             gives,
             gives_param: None,
+            gives_held: Vec::new(),
             effects: Vec::new(),
             fn_effects: vec![Vec::new()],
         };
@@ -150,6 +151,7 @@ impl<'a> Checker<'a> {
                     param_defaults: Vec::new(),
                     gives: gives.clone(),
                     gives_param: None,
+                    gives_held: Vec::new(),
                     effects: Vec::new(),
                 };
                 self.arguments(body, call, &signature, false, None, None);
