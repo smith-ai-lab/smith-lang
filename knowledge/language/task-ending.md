@@ -7,7 +7,8 @@ built:
   - "a handle of `net` that a task owns when it is asked to end is closed by the handler in force, in a struct, a tuple, an array, an enum, or a list, and a task that is asked to end before it ran ends what its lambda was given, and a function that holds one while it may wait and does not carry `net` is refused where it is compiled"
   - "a task that runs out of memory, or makes a console write the system refuses, ends and the program goes on, on x86-64 and arm64, and a `join` of it ends the task that joins it by the same failure"
   - "a task that fails ends what it owns at each call the failure goes up through, as a task that is asked to end does: a handle of `net` it owns is closed by the handler in force, once, and a child it holds is asked to end, whatever the function was doing, as [the compiler](../compiler.md) says"
-  - "not built: the handles of `fs`, and WebAssembly, where a failure traps"
+  - "a `File` that a task owns when it ends, directly or in a struct, a tuple, an array, an enum, or a list, is closed by the handler of `fs` in force, once, as a handle of `net` is"
+  - "not built: WebAssembly, where a failure traps"
 ---
 
 # How a task ends
@@ -41,7 +42,7 @@ fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
 
 ## A handle held while a task may wait
 
-A task that is cancelled while it waits is ended by the handlers: each handle of `net` that the function it is in owns is closed through the handler in force, a test's handler included, once. So a function that owns a handle, or a value that holds one, while it calls something that may wait must carry `net`, and one that does not is refused where it is compiled.
+A task that is cancelled while it waits is ended by the handlers: each handle of `net` and each `File` that the function it is in owns is closed through the handler in force, a test's handler included, once. So a function that owns a handle, or a value that holds one, while it calls something that may wait must carry `net`, or `fs` for a `File`, and one that does not is refused where it is compiled.
 
 ```
 use std.net (Connection)
