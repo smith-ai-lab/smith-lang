@@ -719,6 +719,28 @@ impl<'a> Checker<'a> {
             }
             Numbers::Decided(decided) => {
                 let (int, by) = decided[&pos];
+                // A number that the type its uses decided cannot hold keeps its
+                // own range, as if that range were written for the name, and
+                // is used as one wherever it goes.
+                if let Expr::Number {
+                    magnitude,
+                    negative,
+                    ..
+                } = value
+                {
+                    let n = match negative {
+                        true => -(*magnitude as i128),
+                        false => *magnitude as i128,
+                    };
+                    if let Some(own) = Int::between(n, n)
+                        && !int.holds(own)
+                        && !expr_is_wide_character(value, *magnitude)
+                    {
+                        body.decided.remove(name);
+                        self.expr(body, value, &Want::Ty(Ty::Int(own)));
+                        return Ty::Int(own);
+                    }
+                }
                 self.deciding = by;
                 let ty = self.expr(body, value, &Want::Ty(Ty::Int(int)));
                 self.deciding = None;
