@@ -448,6 +448,19 @@ pub enum Raw {
     /// asks nothing of a machine that has no network, where it gives minus 38
     /// and is never run.
     CloseQueue,
+    /// `pread64(descriptor, bytes, count, offset)`, which reads a file at a place
+    /// it is given and moves nothing.
+    PRead,
+    /// `pwrite64(descriptor, bytes, count, offset)`.
+    PWrite,
+    /// `write(descriptor, bytes, count)`, for a file that has no places, as a
+    /// pipe has none.
+    Write,
+    /// `lseek(descriptor, offset, whence)`, which the size of a file is asked
+    /// with.
+    LSeek,
+    /// `fchmod(descriptor, mode)`.
+    FChmod,
     /// Not a call: which kernel the program is built for, as the numbers its
     /// calls and its errors are the kernel's own. It gives 0 on Linux and 1 on
     /// macOS.
@@ -1256,6 +1269,23 @@ impl Program {
                             | Raw::OpenAt
                             | Raw::Read
                             | Raw::GetRandom
+                    ),
+                    ..
+                }
+            )
+        })
+    }
+
+    /// Whether the program asks the kernel for a call of the files, which is a
+    /// program that carries `fs` and reaches one of its operations.
+    pub fn asks_the_files(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(
+                        Raw::PRead | Raw::PWrite | Raw::Write | Raw::LSeek | Raw::FChmod
                     ),
                     ..
                 }

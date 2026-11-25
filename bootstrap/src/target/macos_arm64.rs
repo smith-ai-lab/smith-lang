@@ -177,6 +177,11 @@ impl System for Macos {
                 | Raw::EpollWait
                 | Raw::OpenAt
                 | Raw::Read
+                | Raw::Write
+                | Raw::PRead
+                | Raw::PWrite
+                | Raw::LSeek
+                | Raw::FChmod
                 | Raw::GetRandom
         ) {
             asm.mov64(X0, -38i64 as u64);
