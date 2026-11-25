@@ -4,6 +4,7 @@
 //! Every generator knows the values it gives each `var`, so what it expects
 //! comes from there and shares nothing with the compiler.
 
+use smith::scalar::{self, Outcome};
 use smith::target::Target;
 use smith::{check, compile, lower};
 
@@ -23,6 +24,18 @@ pub const ONCE: &[Test] = &[
     (
         "a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state",
         a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state,
+    ),
+    (
+        "a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_fits_is_accepted",
+        a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_fits_is_accepted,
+    ),
+    (
+        "a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state",
+        a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state,
+    ),
+    (
+        "every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give",
+        every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give,
     ),
     (
         "the_time_to_check_a_body_grows_with_its_size_and_no_faster",
@@ -244,7 +257,7 @@ fn a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state() {
              fn main() {{\n  x = sum(3)\n}}\n"
         ));
         let errors = lower(source.as_bytes()).expect_err("a var changed by itself");
-        let at = line_of(&source, "var acc = 0");
+        let at = line_of(&source, step);
         let said = errors
             .iter()
             .find(|e| e.pos.line == at)
@@ -301,4 +314,108 @@ fn the_time_to_check_a_body_grows_with_its_size_and_no_faster() {
         large < small * 9.0,
         "2500 lines took {small}s and 10000 took {large}s, which is more than linear"
     );
+}
+
+fn run(source: &str) -> Outcome {
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
+    scalar::run(&program)
+}
+
+/// `var last = 0` that a `loop` gives the counter, `last = i`, is the `0` and
+/// each `i`, so `small(last)` of a parameter that holds them is accepted and
+/// prints the last counter.
+fn a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_fits_is_accepted() {
+    let source = with_header(
+        "fn small(x: 0..10) -> 0..10 { x }\n\n\
+         fn main() <console, alloc> {\n  var last = 0\n  loop i in 0..5 { last = i }\n  print(\"{small(last)}\")\n}\n"
+            .to_string(),
+    );
+    assert_eq!(
+        run(&source),
+        Outcome {
+            stdout: b"4\n".to_vec(),
+            status: 0
+        },
+        "{source}"
+    );
+}
+
+/// `var sum = 0` that a `loop` gives itself plus the counter has no range
+/// inferred yet, and is refused at the assignment, with the range to state.
+fn a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state() {
+    let source = with_header(
+        "fn main() <console, alloc> {\n  var sum = 0\n  loop i in 0..5 { sum = sum + i }\n  print(\"{sum}\")\n}\n"
+            .to_string(),
+    );
+    let errors = lower(source.as_bytes()).expect_err("a var changed by itself");
+    let at = line_of(&source, "loop i in 0..5 { sum = sum + i }");
+    let said = errors
+        .iter()
+        .find(|e| e.pos.line == at)
+        .unwrap_or_else(|| panic!("{errors:?} for\n{source}"));
+    assert!(
+        said.message.contains("`sum`")
+            && said.message.contains("changed by itself in this loop")
+            && said.message.contains("not inferred"),
+        "{said:?}"
+    );
+    assert!(said.fix.as_deref().is_some_and(|f| f.contains("var sum: ")), "{said:?}");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+}
+
+/// One step of a body that gives the `var` `v` a value and prints it.
+#[derive(Clone, Debug)]
+enum Turn {
+    /// `loop i in 0..k { v = i }`.
+    Count(usize),
+    /// `v = a`.
+    Set(i128),
+    /// `if c < k { v = i }` in a loop of `k` rounds, after which `v` is read.
+    Print,
+}
+
+fn turns(g: &mut Gen) -> Vec<Turn> {
+    let count = 1 + g.below(8);
+    (0..count)
+        .map(|_| match g.below(3) {
+            0 => Turn::Count(1 + g.below(9)),
+            1 => Turn::Set(g.below(40) as i128),
+            _ => Turn::Print,
+        })
+        .collect()
+}
+
+/// A `var` given loop counters and numbers, and never itself, never makes a
+/// program that is refused, and the program prints what the steps give.
+fn every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give() {
+    generate::check(63, 60, turns, |steps| {
+        let mut source = String::from("fn main() <console, alloc> {\n  var v = 0\n");
+        let (mut held, mut expected) = (0i128, String::new());
+        for step in steps {
+            match step {
+                Turn::Count(k) => {
+                    source.push_str(&format!("  loop i in 0..{k} {{ v = i }}\n"));
+                    held = *k as i128 - 1;
+                }
+                Turn::Set(a) => {
+                    source.push_str(&format!("  v = {a}\n"));
+                    held = *a;
+                }
+                Turn::Print => {
+                    source.push_str("  print(\"{v}\")\n");
+                    expected.push_str(&format!("{held}\n"));
+                }
+            }
+        }
+        source.push_str("}\n");
+        let source = with_header(source);
+        assert_eq!(
+            run(&source),
+            Outcome {
+                stdout: expected.into_bytes(),
+                status: 0
+            },
+            "{source}"
+        );
+    });
 }

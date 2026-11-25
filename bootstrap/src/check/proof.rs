@@ -1698,6 +1698,51 @@ impl<'a> Checker<'a> {
     }
 
     /// Whether `arith` proves that the number `by` is at most `most`.
+    /// The range of `value`, a whole number, that what is known of each of its
+    /// parts gives: the range of its type, and each fact that bounds one of
+    /// the variables it is a sum of. None where it is not a sum of variables
+    /// with a range.
+    pub(super) fn known_range(
+        &mut self,
+        body: &mut Body<'a>,
+        value: &Expr,
+    ) -> Option<(i128, i128)> {
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let lin = builder.lin(value).filter(|_| !builder.overflow);
+        let found = lin.and_then(|lin| {
+            let (mut low, mut high) = (lin.constant, lin.constant);
+            for (&id, &k) in &lin.terms {
+                let (mut lo, mut hi) = facts.keys[id].range()?;
+                for f in &facts.known {
+                    let Formula::Ge(l) = f else { continue };
+                    let mut one = l.terms.iter();
+                    let (Some((&at, &c)), None) = (one.next(), one.next()) else {
+                        continue;
+                    };
+                    if at != id || c == 0 {
+                        continue;
+                    }
+                    // `c * x + constant >= 0`.
+                    if c > 0 {
+                        lo = lo.max(
+                            (-l.constant).div_euclid(c)
+                                + i128::from((-l.constant).rem_euclid(c) != 0),
+                        );
+                    } else {
+                        hi = hi.min(l.constant.div_euclid(-c));
+                    }
+                }
+                let (a, b) = (k.checked_mul(lo)?, k.checked_mul(hi)?);
+                low = low.checked_add(a.min(b))?;
+                high = high.checked_add(a.max(b))?;
+            }
+            Some((low, high))
+        });
+        body.facts = facts;
+        found
+    }
+
     pub(super) fn proves_at_most(&mut self, body: &mut Body<'a>, by: &Expr, most: i128) -> bool {
         let mut facts = std::mem::take(&mut body.facts);
         let mut builder = self.builder(body, &mut facts, true);
