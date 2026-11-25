@@ -6,7 +6,8 @@ status: partial
 built:
   - "a `var` with no stated type given the smallest range that holds the value it starts as and every value it is given, solved in the order the body is read, so that `n = n + 1` twice is a `0..3`, and what `arith` knows of the value last given still proves what it proved"
   - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
-  - "a `var` that starts as a number written out and is given a value that depends on it where the range is not known, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
+  - "a `var` that starts as a number written out and is given itself plus a value, or itself less a value, in a loop or after a branch, given the range its linear templates over the count of passes bound, where the passes are those of an array, a range, or a `List`, a `str`, or a `Slice` of a size below 2 to the 48, and refused, with the range, why, and the choices, where that range is not finite within 64 bits"
+  - "a `var` that starts as a number written out and is given a value that depends on it in any other way, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
   - "not the parameters of a lambda bound to a name, inferred from the calls of it, which comes with a lambda bound to a name (#1114)"
@@ -86,19 +87,76 @@ fn last_given() -> 0..6 {
 
 `last_given()` is `5`. `x` is a `0..10`, and it was last given `5`, which a `0..6` holds. After an `if`, a `match`, or a loop, which of the values it was last given is not known, so the range of the `var` is what enters.
 
-## A value that depends on itself in a loop
+## A name a loop changes by itself
 
-A `var` that a [`loop`](loop.md) gives a value that depends on the `var` itself has no range that this page infers yet. Where it starts as a number written out, it is refused, with the range to state.
+A `var` that starts as a number written out, and that a [`loop`](loop.md) gives itself plus a value, or itself less a value, has a range found with linear templates over the count of passes.
 
 ```
-fn sum_to(n: 0..11) -> 0..101 {
+fn sum_of(xs: [3]Byte) -> 0..766 {
   var acc = 0
-  loop i in 0..n { acc = acc + i }
+  loop x in xs { acc = acc + x }
   acc
 }
 ```
 
-This is refused: "`acc` is changed by itself in this loop, so its range is not inferred yet", with the fix "state the range, as `var acc: 0..101 = 0`", the range of the first use that needs less. A value that does not depend on the `var` is no such case, so `loop i in 0..n { last = i }` gives `last` the range of `i`.
+`sum_of([200, 100, 255])` is `555`. One pass adds a `0..256`, so at most `255`, and there are three passes, so `acc` is a `0..766`.
+
+For each such `var` the solver tries one fixed set of templates and searches for nothing else. Where the `var` starts as a `start_lo..start_hi`, and an assignment adds a `lo..hi` and runs at most `passes` times while the `var` lives, the templates are
+
+```
+start_lo + passes * lo <= x
+x <= start_hi + passes * hi
+```
+
+with `passes * lo` taken as `0` where it is above `0`, and `passes * hi` as `0` where it is below. Each holds before the first pass, and holds after each pass, since a pass adds at most `hi` and at least `lo`, so the range of the `var` is what they bound. A value given to the `var` that does not read it, as `acc = 0` is, is another start. An assignment in an `if` runs at most as often as the `if` is reached, and one in a loop inside the loop runs at most the product of the passes of both.
+
+The number of passes is known when the program is built, and is one of these:
+
+- The size of an array, as `[3]Byte` is.
+- The greatest end of a range less its least start, so `loop i in 0..n` with `n` a `0..11` has at most `10`.
+- For a `List`, a `str`, or a `Slice`, the bound on its size, which is below 2 to the 48, as each element has at least a byte and no address of x86-64 or arm64 has more than 48 bits. A `requires` that bounds the size gives a smaller bound. A count and a sum of bytes are then proven.
+
+```
+fn evens(xs: List[Nat]) -> 0..281474976710656 {
+  var n = 0
+  loop x in xs { if x % 2 == 0 { n = n + 1 } }
+  n
+}
+```
+
+This is accepted: `n` is a `0..281474976710656`, which is `0..2^48`, as `xs` has fewer than 2 to the 48 elements and one pass adds at most `1`. A `var` that counts down is solved the same way, from its start by what a pass takes away.
+
+```
+fn down(d: 1..4) -> 70..101 {
+  var n = 100
+  loop i in 0..10 { n = n - d }
+  n
+}
+```
+
+`n` is a `70..101`: at most `10` passes take at most `3` each.
+
+A `var` whose range is not finite within 64 bits is refused, with the range, why, and the choices.
+
+```
+fn total(xs: List[Nat]) -> Nat {
+  var acc = 0
+  loop x in xs { acc = acc + x }
+  acc
+}
+```
+
+This is refused: "`acc` is changed by itself in this loop, and its range is not finite within 64 bits: `acc = acc + x` adds a `Nat`, at most 281474976710655 times", with the fix "write `checked_add`, which gives an `Option` and costs one comparison, where it is seen; or `wrapping_add`; or a `requires` that bounds the size". The compiler adds no check that the program did not write. A loop over a type of a program's own that implements [`Iterate`](iterate.md), or an open-ended loop, has no count of passes, and a `var` it adds to is refused the same way.
+
+A change the templates do not cover, as a product or a value that depends on the `var` in any other way, is refused: "`n` is changed by itself in this loop, so its range is not inferred", with the range of the first use as the range to state.
+
+```
+fn doubled(n: 0..11) -> 0..2049 {
+  var acc = 1
+  loop i in 0..n { acc = acc * 2 }
+  acc
+}
+```
 
 A `var` that starts as a value that has a type keeps that range when it is given itself, and each assignment is proven to fit it.
 
@@ -206,7 +264,8 @@ This is refused at the `try`: "this block gives `u64`, which `try` cannot return
 | --- | --- |
 | `var x = 0`, then `x = 5` and `x = 9` | A `0..10`, the smallest range that holds each value given |
 | `n = n + 1`, twice, with no loop | Solved in order: `0`, `1`, and `2` give a `0..3` |
-| A `var` that a loop gives a value that depends on it | Refused, with the range to state |
+| `acc = acc + x` in a loop, `acc` starting as a number written out | The start, and what the passes add or take away, by a template |
+| A `var` a loop changes in a way no template covers | Refused, with the range to state |
 | `double = fn(v) { v * 2 }` and `double(a)` | `v` has the range of what it is called with |
 | `xs = []` and a later `push` | The element is the range of what is pushed |
 | A value that nothing settles | Refused, with where to state its type |
