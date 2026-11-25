@@ -821,11 +821,16 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
                 "nothing to narrow".into(),
             )
         }
-        _ => (
-            "x = ".into(),
-            format!("{too_far}\n  id_{}(x)", ty.name),
-            format!("does not fit `{}`", ty.name),
-        ),
+        _ => {
+            // A number that is bound keeps its own range, so what it is too far
+            // for is refused where it is used.
+            fix = Some("check the value first".to_string());
+            (
+                format!("x = {too_far}\n  id_{}(", ty.name),
+                "x)".into(),
+                format!("may not fit `{}`", ty.name),
+            )
+        }
     };
     let (source, mistake) = write(
         g,

@@ -8,7 +8,8 @@ built:
   - "a whole number that ends a block of an `if` or a `match` that gives a value, which takes the type of the other blocks, or of the place the value is used when every block ends in one"
   - "an array written in brackets where an array of a size written as a number is expected, which is refused when it has another number of elements"
   - "an array written in brackets where nothing says its type, as long as it is written, of the smallest range that holds its whole numbers, taken where a `List` of a wider whole number is needed, and refused when no one type holds its elements or it has none"
-  - "not a whole number as the range that holds it alone"
+  - "a whole number bound to a name with no type that the type its uses decide cannot hold, which keeps its own range, `n..n+1`, wherever the name is used, and is accepted and refused as the same program with that range written for the name is"
+  - "not a whole number as the range that holds it alone where its uses decide a type that holds it, or where it is written in place"
   - "a float written out, with a point or an exponent, with a `-` before it, which is the `f32` or `f64` its use decides, an `f64` when nothing does, rounded once to the nearest, ties to even, and refused where it is too large for its type; not a whole number where a float is expected, and not an array of floats written in brackets with no type to say what it is"
   - "an array of nothing, `[]`, given to a name whose element type a later use in the same body settles, as [Inference](inference.md#a-list-or-an-option-that-a-later-use-settles) says"
 ---
