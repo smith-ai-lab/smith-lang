@@ -67,6 +67,8 @@ pub(super) struct Solve {
     pub(super) wanted: HashMap<Pos, Ty>,
     /// What each was given: the place, how it is written, and the element.
     pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
+    /// How many rounds each `loop` has, by its place.
+    pub(super) passes: HashMap<Pos, Passes>,
     /// How many `loop`s were around each `var` where it is defined.
     pub(super) depth: HashMap<Pos, usize>,
     /// What each `var` that starts as a number written out is given by
@@ -76,6 +78,10 @@ pub(super) struct Solve {
     /// the one that does not.
     pub(super) unbounded: HashMap<Pos, Unbounded>,
 }
+
+/// How many rounds a `loop` has: at least, and at most where that is known
+/// when the program is built.
+pub(super) type Passes = (u128, Option<u128>);
 
 /// One assignment of a `var` that adds a value to itself, or takes it away.
 #[derive(Clone, Debug)]
@@ -661,32 +667,37 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// How many rounds the `loop` over the range `r` has at most: the greatest
-    /// the end can be, less the least the start can be.
-    pub(super) fn range_rounds(&mut self, body: &mut Body<'a>, r: &Range) -> Option<u128> {
-        let (from, _) = self.known_range(body, &r.from)?;
-        let (_, to) = self.known_range(body, &r.to)?;
-        Some(u128::try_from(to.checked_sub(from)?).unwrap_or(0))
+    /// How many rounds the `loop` over the range `r` has: at most the
+    /// greatest the end can be less the least the start can be, and at least
+    /// the least the end can be less the greatest the start can be.
+    pub(super) fn range_rounds(&mut self, body: &mut Body<'a>, r: &Range) -> Passes {
+        let (Some((from_lo, from_hi)), Some((to_lo, to_hi))) = (
+            self.known_range(body, &r.from),
+            self.known_range(body, &r.to),
+        ) else {
+            return (0, None);
+        };
+        let count = |n: Option<i128>| u128::try_from(n.unwrap_or(0)).unwrap_or(0);
+        (
+            count(to_lo.checked_sub(from_hi)),
+            to_hi.checked_sub(from_lo).map(|n| count(Some(n))),
+        )
     }
 
-    /// How many rounds the `loop` over `o`, of the type `given`, has at most:
-    /// the size of an array, and for a `List`, a `str`, or a `Slice`, the
-    /// bound on its size, which is below 2 to the 48.
-    pub(super) fn over_rounds(
-        &mut self,
-        body: &mut Body<'a>,
-        o: &Over,
-        given: &Ty,
-    ) -> Option<u128> {
+    /// How many rounds the `loop` over `o`, of the type `given`, has: the size
+    /// of an array, and for a `List`, a `str`, or a `Slice`, the bounds on its
+    /// size, which is below 2 to the 48.
+    pub(super) fn over_rounds(&mut self, body: &mut Body<'a>, o: &Over, given: &Ty) -> Passes {
         match given {
-            Ty::Array(_, n) => Some(u128::from(*n)),
+            Ty::Array(_, n) => (u128::from(*n), Some(u128::from(*n))),
             Ty::List(_) | Ty::Slice(_) | Ty::Text => {
-                let most = self
-                    .known_size(body, &o.value)
-                    .map_or(MAX_SIZE, |(_, hi)| hi.min(MAX_SIZE));
-                Some(u128::try_from(most).unwrap_or(0))
+                let (least, most) = self.known_size(body, &o.value).unwrap_or((0, MAX_SIZE));
+                (
+                    u128::try_from(least).unwrap_or(0),
+                    Some(u128::try_from(most.min(MAX_SIZE)).unwrap_or(0)),
+                )
             }
-            _ => None,
+            _ => (0, None),
         }
     }
 
@@ -778,10 +789,27 @@ impl<'a> Checker<'a> {
     /// they come to. This is the linear template `start + passes * low <= x`
     /// and `x <= start + passes * high`, which holds before the first pass and
     /// after each pass, as each pass adds between `low` and `high`.
-    pub(super) fn templates(&self, solve: &mut Solve) {
+    pub(super) fn templates(&self, solve: &mut Solve, body: &[Stmt]) {
         let defs: Vec<Pos> = solve.adds.keys().copied().collect();
         for def in defs {
             let adds = solve.adds[&def].clone();
+            // A `var` that is given nothing but what it starts as, and adds to
+            // itself, is solved from the net change of each pass of each loop
+            // around the adds, in the order the body is read. Otherwise each
+            // add counts for itself, as often as it runs.
+            let only_adds = solve.given.get(&def).is_some_and(|g| g.len() == 1);
+            let net = only_adds
+                .then(|| {
+                    let name = solve.names.get(&def)?;
+                    let rest = after_define(body, def)?;
+                    let walk = Walk {
+                        name,
+                        adds: &adds,
+                        passes: &solve.passes,
+                    };
+                    walk.block(rest).flatten()
+                })
+                .flatten();
             let Some(base) = solve.given.get(&def).and_then(|g| {
                 g.iter()
                     .map(|(_, _, r)| *r)
@@ -793,7 +821,14 @@ impl<'a> Checker<'a> {
                 continue;
             };
             let mut failed = None;
-            for add in &adds {
+            if let Some(effect) = net {
+                // The least and the greatest value any prefix of the changes gives.
+                match (low.checked_add(effect.least), high.checked_add(effect.most)) {
+                    (Some(l), Some(h)) => (low, high) = (l, h),
+                    _ => failed = Some(adds[0].clone()),
+                }
+            }
+            for add in adds.iter().filter(|_| net.is_none()) {
                 let reach = |step: i128| -> Option<i128> {
                     let n = i128::try_from(add.times.or((step == 0).then_some(0))?).ok()?;
                     step.checked_mul(n)
@@ -892,4 +927,184 @@ impl<'a> Checker<'a> {
             "state the range, as `var {name}: {range} = {first}`"
         ))
     }
+}
+
+/// What a block does to a `var` that it adds to and takes from: the least and
+/// the greatest change it can end with, and the least and the greatest that
+/// any part of it, from its start, has made at any point.
+#[derive(Clone, Copy, Debug)]
+struct Effect {
+    low: i128,
+    high: i128,
+    /// At most `0`: the empty part is one.
+    least: i128,
+    /// At least `0`.
+    most: i128,
+    /// Whether a `break` ends it, which a `loop` around it takes.
+    breaks: bool,
+}
+
+impl Effect {
+    const NONE: Effect = Effect {
+        low: 0,
+        high: 0,
+        least: 0,
+        most: 0,
+        breaks: false,
+    };
+
+    /// One assignment that changes the `var` by `low..=high`, which may run
+    /// or not.
+    fn add(low: i128, high: i128) -> Effect {
+        Effect {
+            low,
+            high,
+            least: low.min(0),
+            most: high.max(0),
+            breaks: false,
+        }
+    }
+
+    /// `self` and then `next`.
+    fn then(self, next: Effect) -> Option<Effect> {
+        Some(Effect {
+            low: self.low.checked_add(next.low)?,
+            high: self.high.checked_add(next.high)?,
+            least: self.least.min(self.low.checked_add(next.least)?),
+            most: self.most.max(self.high.checked_add(next.most)?),
+            breaks: self.breaks || next.breaks,
+        })
+    }
+
+    /// `self` or `other`, whichever runs.
+    fn or(self, other: Effect) -> Effect {
+        Effect {
+            low: self.low.min(other.low),
+            high: self.high.max(other.high),
+            least: self.least.min(other.least),
+            most: self.most.max(other.most),
+            breaks: self.breaks || other.breaks,
+        }
+    }
+
+    /// `self` run once in each round of a loop that has `passes`.
+    fn repeated(self, (fewest, most): Passes) -> Option<Effect> {
+        // A `break` ends a round where a part of it was done, and ends the loop.
+        let (each, fewest) = if self.breaks {
+            let widened = Effect {
+                low: self.low.min(self.least),
+                high: self.high.max(self.most),
+                ..self
+            };
+            (widened, 0)
+        } else {
+            (self, fewest)
+        };
+        let times = |n: Option<u128>, step: i128| -> Option<i128> {
+            match n {
+                Some(n) => step.checked_mul(i128::try_from(n).ok()?),
+                None if step == 0 => Some(0),
+                None => None,
+            }
+        };
+        let fewest = Some(fewest);
+        // The rounds that run before the last one, which may be cut short.
+        let before = most.map(|n| n.saturating_sub(1));
+        Some(Effect {
+            low: times(if each.low >= 0 { fewest } else { most }, each.low)?,
+            high: times(if each.high >= 0 { most } else { fewest }, each.high)?,
+            least: each.least.checked_add(times(before, each.low.min(0))?)?,
+            most: each.most.checked_add(times(before, each.high.max(0))?)?,
+            breaks: false,
+        })
+    }
+}
+
+/// Reads what a body does to the `var` `name`, from the statements that come
+/// after the one that defines it.
+struct Walk<'s> {
+    name: &'s str,
+    adds: &'s [Add],
+    passes: &'s HashMap<Pos, Passes>,
+}
+
+impl Walk<'_> {
+    /// What the statements do, one after another, or none where a number grew
+    /// too large or the `var` is given a value other than itself changed.
+    fn block(&self, stmts: &[Stmt]) -> Option<Option<Effect>> {
+        let mut all = Effect::NONE;
+        for stmt in stmts {
+            let next = match stmt {
+                Stmt::Define {
+                    name, pos, value, ..
+                } if name == self.name => {
+                    let add = self.adds.iter().find(|a| a.pos == *pos)?;
+                    self.expr(value)?.then(Effect::add(add.low, add.high))?
+                }
+                Stmt::Define { value, .. }
+                | Stmt::Assign { value, .. }
+                | Stmt::Destructure { value, .. }
+                | Stmt::Expr(value) => self.expr(value)?,
+            };
+            all = all.then(next)?;
+        }
+        Some(Some(all))
+    }
+
+    fn expr(&self, e: &Expr) -> Option<Effect> {
+        match e {
+            Expr::Match(m) => {
+                let mut arms = m.arms.iter().map(|a| self.block(&a.body).flatten());
+                let mut any = arms.next().map_or(Some(Effect::NONE), |a| a)?;
+                for arm in arms {
+                    any = any.or(arm?);
+                }
+                self.expr(&m.of)?.then(any)
+            }
+            Expr::Loop(l) => {
+                let body = self.block(&l.body).flatten()?;
+                let passes = self.passes.get(&l.pos).copied().unwrap_or((0, None));
+                body.repeated(passes)
+            }
+            Expr::Break { .. } => Some(Effect {
+                breaks: true,
+                ..Effect::NONE
+            }),
+            Expr::Call(call) => call
+                .args
+                .iter()
+                .try_fold(Effect::NONE, |all, a| all.then(self.expr(&a.value)?)),
+            Expr::Arith { left, right, .. } => self.expr(left)?.then(self.expr(right)?),
+            Expr::Field { of, .. } => self.expr(of),
+            Expr::Case {
+                payload: Some(p), ..
+            } => self.expr(p),
+            Expr::Tuple { items, .. } | Expr::List { items, .. } => items
+                .iter()
+                .try_fold(Effect::NONE, |all, i| all.then(self.expr(i)?)),
+            Expr::Index { of, index, .. } => self.expr(of)?.then(self.expr(index)?),
+            Expr::Return { value: Some(v), .. } => self.expr(v),
+            _ => Some(Effect::NONE),
+        }
+    }
+}
+
+/// The statements that follow the one at `def`, which defines a `var`, in the
+/// block that holds it.
+fn after_define(body: &[Stmt], def: Pos) -> Option<&[Stmt]> {
+    for (i, stmt) in body.iter().enumerate() {
+        if matches!(stmt, Stmt::Define { pos, .. } if *pos == def) {
+            return Some(&body[i + 1..]);
+        }
+        let (Stmt::Define { value, .. }
+        | Stmt::Assign { value, .. }
+        | Stmt::Destructure { value, .. }
+        | Stmt::Expr(value)) = stmt;
+        let mut inside = Vec::new();
+        super::blocks(value, &mut inside);
+        if let Some(found) = inside.into_iter().find_map(|b| after_define(b, def)) {
+            return Some(found);
+        }
+    }
+    None
 }

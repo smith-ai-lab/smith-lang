@@ -5834,74 +5834,6 @@ fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
 /// Every statement of a body, and those of the blocks of each `match` and
 /// each lambda in them, each before those inside it.
 fn statements(body: &[Stmt]) -> Vec<&Stmt> {
-    /// The blocks of each `match` and each lambda in the expression that is
-    /// not inside another's block.
-    fn blocks<'a>(e: &'a Expr, out: &mut Vec<&'a [Stmt]>) {
-        match e {
-            Expr::Call(call) => {
-                for arg in &call.args {
-                    blocks(&arg.value, out);
-                }
-            }
-            Expr::Field { of, .. } => blocks(of, out),
-            Expr::Arith { left, right, .. } => {
-                blocks(left, out);
-                blocks(right, out);
-            }
-            Expr::Case {
-                payload: Some(p), ..
-            } => blocks(p, out),
-            Expr::Match(m) => {
-                blocks(&m.of, out);
-                out.extend(m.arms.iter().map(|arm| arm.body.as_slice()));
-            }
-            Expr::Tuple { items, .. } | Expr::List { items, .. } => {
-                for item in items {
-                    blocks(item, out);
-                }
-            }
-            Expr::Index { of, index, .. } => {
-                blocks(of, out);
-                blocks(index, out);
-            }
-            Expr::Slice { of, from, to, .. } => {
-                blocks(of, out);
-                for end in [from, to].into_iter().flatten() {
-                    blocks(end, out);
-                }
-            }
-            Expr::Lambda(l) => out.push(&l.body),
-            Expr::Loop(l) => {
-                if let Some(r) = &l.range {
-                    blocks(&r.from, out);
-                    blocks(&r.to, out);
-                }
-                if let Some(o) = &l.over {
-                    blocks(&o.value, out);
-                }
-                if let Some(e) = &l.decreases {
-                    blocks(e, out);
-                }
-                out.push(&l.body);
-            }
-            Expr::Interp { parts, .. } => {
-                for part in parts {
-                    if let Part::Expr(e) = part {
-                        blocks(e, out);
-                    }
-                }
-            }
-            Expr::Return { value: Some(v), .. } => blocks(v, out),
-            Expr::Case { .. }
-            | Expr::Text { .. }
-            | Expr::Number { .. }
-            | Expr::Float { .. }
-            | Expr::Unbuilt { .. }
-            | Expr::Name { .. }
-            | Expr::Break { .. }
-            | Expr::Return { value: None, .. } => {}
-        }
-    }
     fn collect<'a>(body: &'a [Stmt], out: &mut Vec<&'a Stmt>) {
         for (stmt, value) in body.iter().zip(values(body)) {
             out.push(stmt);
@@ -5915,6 +5847,75 @@ fn statements(body: &[Stmt]) -> Vec<&Stmt> {
     let mut out = Vec::with_capacity(16);
     collect(body, &mut out);
     out
+}
+
+/// The blocks of each `match` and each lambda in the expression that is
+/// not inside another's block.
+pub(super) fn blocks<'a>(e: &'a Expr, out: &mut Vec<&'a [Stmt]>) {
+    match e {
+        Expr::Call(call) => {
+            for arg in &call.args {
+                blocks(&arg.value, out);
+            }
+        }
+        Expr::Field { of, .. } => blocks(of, out),
+        Expr::Arith { left, right, .. } => {
+            blocks(left, out);
+            blocks(right, out);
+        }
+        Expr::Case {
+            payload: Some(p), ..
+        } => blocks(p, out),
+        Expr::Match(m) => {
+            blocks(&m.of, out);
+            out.extend(m.arms.iter().map(|arm| arm.body.as_slice()));
+        }
+        Expr::Tuple { items, .. } | Expr::List { items, .. } => {
+            for item in items {
+                blocks(item, out);
+            }
+        }
+        Expr::Index { of, index, .. } => {
+            blocks(of, out);
+            blocks(index, out);
+        }
+        Expr::Slice { of, from, to, .. } => {
+            blocks(of, out);
+            for end in [from, to].into_iter().flatten() {
+                blocks(end, out);
+            }
+        }
+        Expr::Lambda(l) => out.push(&l.body),
+        Expr::Loop(l) => {
+            if let Some(r) = &l.range {
+                blocks(&r.from, out);
+                blocks(&r.to, out);
+            }
+            if let Some(o) = &l.over {
+                blocks(&o.value, out);
+            }
+            if let Some(e) = &l.decreases {
+                blocks(e, out);
+            }
+            out.push(&l.body);
+        }
+        Expr::Interp { parts, .. } => {
+            for part in parts {
+                if let Part::Expr(e) = part {
+                    blocks(e, out);
+                }
+            }
+        }
+        Expr::Return { value: Some(v), .. } => blocks(v, out),
+        Expr::Case { .. }
+        | Expr::Text { .. }
+        | Expr::Number { .. }
+        | Expr::Float { .. }
+        | Expr::Unbuilt { .. }
+        | Expr::Name { .. }
+        | Expr::Break { .. }
+        | Expr::Return { value: None, .. } => {}
+    }
 }
 
 /// Every expression in the expressions, in order, each before the
@@ -7648,7 +7649,8 @@ impl<'a> Checker<'a> {
             self.refusals = refusals;
             self.no_impl = no_impl;
             let mut solve = self.solve.take().expect("solving");
-            self.templates(&mut solve);
+            let defs = self.defs;
+            self.templates(&mut solve, &defs.view(template).f.body);
             looks += 1;
             let grown: Vec<Pos> = solve
                 .totals
@@ -8805,14 +8807,19 @@ impl<'a> Checker<'a> {
                 None
             }
         };
-        let mut rounds = None;
+        let mut passes = (0, None);
         let element = l.over.as_ref().map(|o| {
             let (element, most) = self.element_type(body, o);
-            rounds = most;
+            passes = most;
             (o, element)
         });
         if let Some(r) = &l.range {
-            rounds = self.range_rounds(body, r);
+            passes = self.range_rounds(body, r);
+        }
+        if let Some(solve) = self.solve.as_mut()
+            && !matches!(body.numbers, Numbers::Finding(_))
+        {
+            solve.passes.insert(l.pos, passes);
         }
         let measure = l.decreases.as_ref();
         if let Some(e) = measure {
@@ -8847,7 +8854,7 @@ impl<'a> Checker<'a> {
         self.begin_round(body, &assigned);
         let start = measure.and_then(|e| self.measure_of(body, std::slice::from_ref(e), &[]));
         body.loops += 1;
-        self.rounds.push(rounds);
+        self.rounds.push(passes.1);
         if let End::Value(gives, value) = self.block(body, &l.body, &Want::Unused)
             && self.defs.is_result(&gives)
         {
@@ -8870,10 +8877,10 @@ impl<'a> Checker<'a> {
     /// read as its bytes. The value is worked out once, when the loop starts,
     /// so assigning a `var` it was read from changes nothing about which
     /// elements the loop gives.
-    fn element_type(&mut self, body: &mut Body<'a>, o: &Over) -> (Ty, Option<u128>) {
+    fn element_type(&mut self, body: &mut Body<'a>, o: &Over) -> (Ty, infer::Passes) {
         let given = self.expr(body, &o.value, &Want::Any);
         if given.unknown() {
-            return (Ty::Unknown, None);
+            return (Ty::Unknown, (0, None));
         }
         let rounds = self.over_rounds(body, o, &given);
         (self.element_of(body, o, given), rounds)
