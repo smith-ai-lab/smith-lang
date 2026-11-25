@@ -428,7 +428,12 @@ impl<'a> Checker<'a> {
                 Some((_, ty)) => ty.clone(),
                 None => Ty::Unknown,
             };
-            if !ty.unknown() && !ownership::copies(defs, body.scope, &ty) {
+            // A value that is not copied and that a `var` holds could change or
+            // move after the lambda is bound, so it is refused as one that is lent.
+            if !ty.unknown()
+                && !ownership::copies(defs, body.scope, &ty)
+                && body.vars.contains(&field.name)
+            {
                 lent = true;
             }
             args.push(ty);
