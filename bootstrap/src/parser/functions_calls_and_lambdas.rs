@@ -426,6 +426,7 @@ impl Parser<'_> {
         if let Some(lambda) = self.lambda_after()? {
             let end = lambda.value.pos();
             return Ok(Expr::Call(Call {
+                through: None,
                 pos: qualifier.as_ref().map_or(pos, |(_, at)| *at),
                 qualifier,
                 type_args: Vec::new(),
@@ -547,6 +548,7 @@ impl Parser<'_> {
         self.bump();
         args.extend(self.lambda_after()?);
         Ok(Call {
+            through: None,
             qualifier,
             type_args: Vec::new(),
             callee,

@@ -1,0 +1,37 @@
+use std.console (console, print)
+
+fn half(x: f32) -> f32 { x * 0.5 }
+
+fn twice(x: f32, f: fn(f32) -> f32) -> f32 { f(f(x)) }
+
+struct Pricing {
+  discount: fn(f32) -> f32
+}
+
+fn chosen() -> fn(f32) -> f32 { half }
+
+fn eight() -> f32 {
+  f = half
+  f(8.0)
+}
+
+fn sale_price(x: f32) -> f32 {
+  sale = Pricing(discount: half)
+  sale.discount(x)
+}
+
+fn chosen_half(x: f32) -> f32 { chosen()(x) }
+
+fn chosen_bound(x: f32) -> f32 {
+  f = chosen()
+  f(x)
+}
+
+fn quarter(x: f32) -> f32 {
+  f = half
+  twice(x, f)
+}
+
+fn main() <console, alloc> {
+  print("{eight()} {sale_price(8.0)} {chosen_half(8.0)} {chosen_bound(8.0)} {quarter(8.0)}")
+}

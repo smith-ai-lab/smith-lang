@@ -1843,9 +1843,22 @@ impl<'a> Lowering<'a> {
                     // A `var` that is bound again drops the value it held.
                     self.drop_at(out, Site::Replace(addr(stmt)));
                     let made = self.made_frame.take();
+                    // A name bound to a function with a name holds that function,
+                    // which is called, passed, and returned by its name.
+                    let func = match &ty {
+                        Ty::Named(g) => Some(Func::Named(Instance {
+                            template: Template::Free(*g),
+                            args: Vec::new(),
+                        })),
+                        _ => None,
+                    };
                     match out.find(name) {
                         Some(at) => out.assign(at, value),
                         None => out.define(name, ty, value),
+                    }
+                    if func.is_some() {
+                        let at = out.find(name).expect("defined");
+                        out.names_mut()[at].func = func;
                     }
                     if let Some(k) = made {
                         out.roots.push((name.clone(), k));
@@ -2112,7 +2125,7 @@ impl<'a> Lowering<'a> {
             Expr::Call(call) if self.compares_mixed(call, env) => {
                 self.compare_mixed(out, call, env)
             }
-            Expr::Call(call) => match typed.callee(call, env) {
+            Expr::Call(call) => match self.callee_after_through(out, call, env) {
                 Callee::Construct(s, args) => {
                     let inner = args.clone();
                     let values = self.construction(out, call, s, env, &inner);
@@ -2808,6 +2821,15 @@ impl<'a> Lowering<'a> {
             at_param += size;
         }
         params[..types.len()].to_vec()
+    }
+
+    /// What a call runs, after the call that gives the function it calls, as
+    /// in `chosen()(x)`, is run for what it does, as an argument is.
+    fn callee_after_through(&mut self, out: &mut Out<'a>, call: &'a Call, env: &[Ty]) -> Callee {
+        if let Some(inner) = &call.through {
+            self.expr(out, inner, env);
+        }
+        self.typed.callee(call, env)
     }
 
     /// Lowers a `match` on what the block of a `loop` over a value gives,

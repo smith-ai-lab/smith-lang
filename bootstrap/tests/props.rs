@@ -1218,7 +1218,6 @@ fn file_with_syntax_errors(g: &mut Gen) -> (String, Vec<(Pos, &'static str)>) {
         ("var x = (1)", "(4)", Some("not supported yet")),
         ("x = (1)", "(5)", Some("not supported yet")),
         ("print(\"a\" ", "\"b\")", Some("`,` or `)`")),
-        ("print(\"a\")", "(0)", Some("not supported yet")),
         ("x.y ", "+= \"a\"", Some("not supported yet")),
         ("", ")", Some("statement")),
     ];

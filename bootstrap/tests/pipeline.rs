@@ -267,8 +267,8 @@ fn the_right_side_is_a_call_of_a_name_a_module_a_field_or_one_that_ends_with_a_l
             );
         }
     }
-    // A function stored in a field is not built yet, so a call of one is
-    // refused, and the pipeline is refused as the call it stands for is.
+    // A function stored in a field is called as the function is, so a step
+    // that names the field is the call written out.
     let field = |call: &str| {
         format!(
             "use std.console (console, print)\n\n\
@@ -277,11 +277,12 @@ fn the_right_side_is_a_call_of_a_name_a_module_a_field_or_one_that_ends_with_a_l
              fn main() <console, alloc> {{\n  sale = Pricing(discount: same)\n  print(\"{{{call}}}\")\n}}\n"
         )
     };
-    let said = |call: &str| {
-        let errors = check(field(call).as_bytes()).expect_err("refused");
-        errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>()
-    };
-    assert_eq!(said("65 |> sale.discount()"), said("sale.discount(65)"));
+    for &target in Target::ALL {
+        assert_eq!(
+            bytes(&field("65 |> sale.discount()"), target),
+            bytes(&field("sale.discount(65)"), target)
+        );
+    }
 }
 
 fn try_is_written_on_the_step_it_belongs_to() {

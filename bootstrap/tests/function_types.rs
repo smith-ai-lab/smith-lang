@@ -212,7 +212,8 @@ fn types_in_parentheses_are_a_tuple_and_fn_with_them_is_a_function_wherever_a_ty
             bits_and_console(&[a, b])
         );
         lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in {source}"));
-        // It is a function in every place, though only a parameter's type is built.
+        // It is a function in every place, though only a parameter's type, a result,
+        // and a field are built.
         for (before, after, tail) in REACHED {
             let (before, tail) = (
                 before.replace("@A", a).replace("@B", b),
@@ -228,19 +229,9 @@ fn types_in_parentheses_are_a_tuple_and_fn_with_them_is_a_function_wherever_a_ty
     });
 }
 
-/// The places a type is written that are not a parameter, with a `main` that
-/// reaches each.
-const REACHED: [(&str, &str, &str); 4] = [
-    (
-        "fn f() -> ",
-        " { h }\n",
-        "\nfn h(a: @A, b: @B) {}\n\nfn main() { f() }\n",
-    ),
-    (
-        "struct S {\n  g: ",
-        "\n}\n",
-        "\nfn f(a: @A, b: @B) {}\n\nfn main() {\n  s = S(g: f)\n}\n",
-    ),
+/// The places a type is written that are not a parameter, a result, or a field,
+/// with a `main` that reaches each.
+const REACHED: [(&str, &str, &str); 2] = [
     ("fn h(a: @A, b: @B) {}\n\nfn main() {\n  g: ", " = h\n}\n", ""),
     ("fn main() <alloc> {\n  g: List[", "] = []\n}\n", ""),
 ];

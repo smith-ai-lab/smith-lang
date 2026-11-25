@@ -737,6 +737,9 @@ impl Expr {
 /// as in `Named.name_of(x)`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Call {
+    /// The call whose result this calls, as `chosen()` in `chosen()(x)`, which
+    /// gives a function with a name. Its `callee` is then empty.
+    pub through: Option<Box<Expr>>,
     /// The name before the `.`, and where it is, if one is written.
     pub qualifier: Option<(String, Pos)>,
     /// The types in brackets after the qualifier, as in `Describe[Note].describe(d)`,
@@ -1469,7 +1472,7 @@ impl Parser<'_> {
     fn structure(&mut self) -> Result<Struct, Error> {
         self.bump();
         let (name, pos) = self.defined("the struct's name")?;
-        let generics = self.generics()?;
+        let mut generics = self.generics()?;
         self.expect_punct("{", "`{` to open the struct's fields")?;
         let mut fields = Vec::new();
         loop {
@@ -1488,7 +1491,30 @@ impl Parser<'_> {
             self.no_names = Some(NoNames::Field);
             let ty = self.ty();
             self.no_names = None;
-            let ty = ty?;
+            let mut ty = ty?;
+            // A field of a function type is a field whose type is a type
+            // parameter that no source writes: the struct is a type of its own
+            // for each function it holds, as the function a value of a
+            // function type is must be known when the program is built.
+            if ty.function {
+                let implicit = format!("{name}@function");
+                generics.push(Generic {
+                    name: implicit.clone(),
+                    pos,
+                    out: None,
+                    bound: None,
+                    default: None,
+                });
+                ty = Type {
+                    name: implicit,
+                    pos: ty.pos,
+                    args: Vec::new(),
+                    function: false,
+                    range: None,
+                    statement: None,
+                    length: None,
+                };
+            }
             let mut default = None;
             if self.tok() == &Tok::Punct("=") {
                 self.bump();
@@ -2610,7 +2636,16 @@ impl Parser<'_> {
             }
             tok => return Err(self.expected("an expression", tok)),
         };
-        while matches!(self.tok(), Tok::Punct("." | "[")) {
+        while matches!(self.tok(), Tok::Punct("." | "["))
+            || (self.tok() == &Tok::Punct("(") && matches!(expr, Expr::Call(_)))
+        {
+            if self.tok() == &Tok::Punct("(") {
+                let at = expr.pos();
+                let mut call = self.call_rest(None, String::new(), at)?;
+                call.through = Some(Box::new(expr));
+                expr = Expr::Call(call);
+                continue;
+            }
             if self.tok() == &Tok::Punct("[") {
                 expr = self.index(expr)?;
                 continue;
