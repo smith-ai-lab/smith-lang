@@ -794,6 +794,10 @@ struct Scope {
     /// `Copy`, and the same for `Discard`. Nothing else is known of one.
     copy: Vec<bool>,
     discard: Vec<bool>,
+    /// Where a struct that holds a function is written without the function,
+    /// as `Pricing` is: the place of the first of the type parameters, which no
+    /// source writes, that stand for the functions it holds.
+    implicit_at: Map<Pos, usize>,
 }
 
 /// Whether `expr` is a whole number literal that an `i64` holds.
@@ -901,6 +905,10 @@ impl Signature {
 /// any body is checked.
 struct Defs<'a> {
     file: &'a File,
+    /// For each struct, how many functions it holds that its type does not
+    /// write: those of its own fields of a function type, and those of the
+    /// structs its fields hold.
+    implicit: Vec<usize>,
     /// Whether every item of the library is checked, as a check of the library
     /// does, and not those a program reaches.
     whole: bool,
@@ -923,6 +931,10 @@ struct Defs<'a> {
     struct_scopes: Vec<Scope>,
     /// The type of each field of each struct, among its type parameters.
     fields: Vec<Vec<Ty>>,
+    /// For each field that holds a function, the function type it is written
+    /// with, which is what a call of it is checked against while the function
+    /// it holds is not known.
+    field_items: Vec<Vec<Option<Vec<Ty>>>>,
     enum_scopes: Vec<Scope>,
     /// The type each case of each enum holds, if it holds one, among the
     /// enum's type parameters.
@@ -1286,6 +1298,18 @@ impl<'a> Defs<'a> {
                 let inner = self.quietly(named, &self.scope(&self.file.structs[s].generics, &[]));
                 return inner.subst(&args);
             }
+            let mut args = args;
+            let held = self.implicit[s];
+            if held > 0 {
+                let Some(&first) = scope.implicit_at.get(&t.pos) else {
+                    errors.push(Error::unsupported(
+                        t.pos,
+                        &format!("`{name}`, which holds a function, written anywhere but in a parameter's type or a field's type"),
+                    ));
+                    return Ty::Unknown;
+                };
+                args.extend((first..first + held).map(Ty::Param));
+            }
             return if self.cyclic[s] {
                 Ty::Unknown
             } else {
@@ -1409,21 +1433,14 @@ impl<'a> Defs<'a> {
         t: &Type,
         errors: &mut Vec<Error>,
     ) -> Option<Vec<Ty>> {
+        // The functions a struct holds are not written.
+        let generics = &generics[..generics
+            .iter()
+            .take_while(|g| !g.name.contains('@'))
+            .count()];
         let wanted = generics.len();
         let needed = generics.iter().filter(|g| g.default.is_none()).count();
         if args.len() < needed || args.len() > wanted {
-            // A struct that holds a function is a type for each function.
-            if let Some(held) = generics.iter().find(|g| g.name.contains('@')) {
-                let field = held.name.trim_end_matches("@function");
-                errors.push(Error::new(
-                    t.pos,
-                    format!(
-                        "`{name}` holds a function in `{field}`, and is a type for each function, \
-                         so the function is written in brackets, as in `{name}[half]`"
-                    ),
-                ));
-                return None;
-            }
             let takes = if needed == wanted {
                 count(wanted, "type argument")
             } else {
@@ -1585,6 +1602,10 @@ impl<'a> Defs<'a> {
                     Some(g) => Ty::Named(g),
                     None => Ty::Unknown,
                 },
+                Some(t) if self.implicit_result(t, &scope).is_some() => {
+                    let u = self.implicit_result(t, &scope).expect("checked");
+                    self.returned_struct(f, u, &scope).unwrap_or(Ty::Unknown)
+                }
                 Some(t) => self.quietly(t, &scope),
                 None => Ty::Nothing,
             },
@@ -1614,22 +1635,9 @@ impl<'a> Defs<'a> {
     /// type: the one its last expression names, which is the same in each
     /// block of an `if` or a `match` that ends it. Nothing when that is not one
     /// function, as which function it is would depend on what the program does.
-    fn returned_function(&self, f: &Function) -> Option<usize> {
-        fn tail<'e>(body: &'e [Stmt], found: &mut Vec<&'e Expr>) {
-            match body.last() {
-                Some(Stmt::Expr(Expr::Match(m))) => {
-                    for arm in &m.arms {
-                        tail(&arm.body, found);
-                    }
-                }
-                Some(Stmt::Expr(e)) => found.push(e),
-                _ => {}
-            }
-        }
-        let mut found = Vec::new();
-        tail(&f.body, &mut found);
+    pub(crate) fn returned_function(&self, f: &Function) -> Option<usize> {
         let mut named = None;
-        for e in found {
+        for e in tails(&f.body) {
             let Expr::Name { name, pos } = e else {
                 return None;
             };
@@ -1643,6 +1651,74 @@ impl<'a> Defs<'a> {
             named = Some(g);
         }
         named
+    }
+
+    /// The struct, among those that hold a function, that the type `t` written
+    /// as a result names, when it is written with no more than its own type
+    /// arguments.
+    pub(crate) fn implicit_result(&self, t: &Type, scope: &Scope) -> Option<usize> {
+        match self.type_at(t.pos, &t.name) {
+            Some(Item::Struct(u))
+                if !t.name.is_empty()
+                    && !t.function
+                    && !scope.names.contains(&t.name)
+                    && self.implicit[u] > 0 =>
+            {
+                Some(u)
+            }
+            _ => None,
+        }
+    }
+
+    /// The type of struct `u` that `f` gives, when its result is written as `u`,
+    /// which holds functions: the functions are those that the construction
+    /// that ends the body names, the same in each block that ends it.
+    pub(crate) fn returned_struct(&self, f: &Function, u: usize, scope: &Scope) -> Option<Ty> {
+        let def = &self.file.structs[u];
+        let explicit = def
+            .generics
+            .iter()
+            .take_while(|g| !g.name.contains('@'))
+            .count();
+        let own = def.generics.len() - explicit;
+        if explicit > 0 || self.implicit[u] != own {
+            return None;
+        }
+        let mut held: Option<Vec<Ty>> = None;
+        for e in tails(&f.body) {
+            let Expr::Call(call) = e else {
+                return None;
+            };
+            if call.qualifier.is_some() || call.callee != def.name {
+                return None;
+            }
+            let mut here = Vec::new();
+            for g in &def.generics {
+                let field = g.name.trim_end_matches("@function");
+                let at = def.fields.iter().position(|d| d.name == field)?;
+                let arg = call
+                    .args
+                    .iter()
+                    .enumerate()
+                    .find_map(|(k, a)| match &a.name {
+                        Some((n, _)) => (n == field).then_some(a),
+                        None => (k == at).then_some(a),
+                    })?;
+                let Expr::Name { name, pos } = &arg.value else {
+                    return None;
+                };
+                if f.params.iter().any(|p| &p.name == name) {
+                    return None;
+                }
+                here.push(Ty::Named(self.function(*pos, name)?));
+            }
+            if held.as_ref().is_some_and(|h| *h != here) {
+                return None;
+            }
+            held = Some(here);
+        }
+        let _ = scope;
+        Some(Ty::structure(u, held?))
     }
 
     /// The types of the parameters of function `f`, followed by the type it
@@ -2565,6 +2641,8 @@ fn check_file(
         trait_fns,
         cyclic: vec![false; file.structs.len()],
         cyclic_enums: vec![false; file.enums.len()],
+        implicit: vec![0; file.structs.len()],
+        field_items: Vec::new(),
         struct_scopes: Vec::new(),
         fields: Vec::new(),
         enum_scopes: Vec::new(),
@@ -2630,15 +2708,35 @@ fn check_file(
             cycles(&mut defs, d, &mut Vec::new(), &mut done, &mut errors);
         }
     }
+    defs.implicit = (0..file.structs.len())
+        .map(|s| defs.implicit_arity(s, &mut Vec::new()))
+        .collect();
     defs.struct_scopes = file
         .structs
         .iter()
-        .map(|s| defs.scope(&s.generics, &[]))
+        .map(|s| {
+            let mut scope = defs.scope(&s.generics, &[]);
+            defs.add_implicit(&mut scope, s.fields.iter().map(|f| &f.ty));
+            scope
+        })
         .collect();
     defs.fields = (file.structs.iter().enumerate())
         .map(|(i, s)| {
             (s.fields.iter())
                 .map(|f| defs.quietly(&f.ty, &defs.struct_scopes[i]))
+                .collect()
+        })
+        .collect();
+    defs.field_items = (file.structs.iter().enumerate())
+        .map(|(i, s)| {
+            (s.fields.iter())
+                .map(|f| {
+                    let written = f.function.as_ref()?;
+                    match defs.quietly(written, &defs.struct_scopes[i]) {
+                        Ty::Fn(items) => Some(items),
+                        _ => None,
+                    }
+                })
                 .collect()
         })
         .collect();
@@ -2655,7 +2753,11 @@ fn check_file(
         })
         .collect();
     defs.signatures = (file.functions.iter())
-        .map(|f| defs.signature(f, defs.scope(&f.generics, &f.needs)))
+        .map(|f| {
+            let mut scope = defs.scope(&f.generics, &f.needs);
+            defs.add_implicit(&mut scope, f.params.iter().map(|p| &p.ty));
+            defs.signature(f, scope)
+        })
         .collect();
     defs.trait_sigs = (file.traits.iter())
         .map(|t| {
@@ -2733,6 +2835,7 @@ fn check_file(
         fn_values: Map::default(),
         named: Set::default(),
         named_calls: Map::default(),
+        field_receivers: Map::default(),
         type_args: Map::default(),
         frame_gives: Map::default(),
         seeded: None,
@@ -2819,6 +2922,7 @@ fn check_file(
         fn_values: checker.fn_values,
         named: checker.named,
         named_calls: checker.named_calls,
+        field_receivers: checker.field_receivers,
         type_args: checker.type_args,
         core_vars: RefCell::new(Vec::new()),
         extended: checker
@@ -6381,6 +6485,10 @@ struct Typed<'a> {
     /// The calls of a name that holds a function by its type, by their
     /// addresses, with the function each calls.
     named_calls: Map<usize, usize>,
+    /// For a call of a field that holds a function, the type of the name the
+    /// field is read from, which says the function once the type parameters
+    /// are known.
+    field_receivers: Map<usize, Ty>,
     /// The types a call of a trait's function writes in brackets after the
     /// trait, by the address of the call.
     type_args: Map<usize, Vec<Ty>>,
@@ -6490,6 +6598,16 @@ impl<'a> Typed<'a> {
             let template = Template::Free(f);
             Callee::Run(Instance { template, args }, gives)
         };
+        if let Some(receiver) = self.field_receivers.get(&addr(call))
+            && let Ty::Struct(s, args) = receiver.subst(env)
+            && let Some(i) = defs.file.structs[s]
+                .fields
+                .iter()
+                .position(|f| f.name == call.callee)
+            && let Ty::Named(g) = defs.fields[s][i].subst(&args)
+        {
+            return run(g);
+        }
         if let Some(&f) = self.named_calls.get(&addr(call))
             && (call.qualifier.is_some() || call.through.is_some())
         {
@@ -6856,6 +6974,10 @@ struct Checker<'a> {
     named: Set<usize>,
     /// The calls of a name that holds a function by its type, with the function.
     named_calls: Map<usize, usize>,
+    /// For a call of a field that holds a function, the type of the name the
+    /// field is read from, which says the function once the type parameters
+    /// are known.
+    field_receivers: Map<usize, Ty>,
     /// The types a call writes in brackets after its trait.
     type_args: Map<usize, Vec<Ty>>,
     /// Whether the call of a trait's function being checked has types no
@@ -9592,7 +9714,7 @@ impl<'a> Checker<'a> {
             Want::Ty(Ty::Struct(t, args)) if *t == s => (args.iter())
                 .map(|t| (!t.unknown()).then(|| t.clone()))
                 .collect(),
-            _ => vec![None; def.generics.len()],
+            _ => vec![None; vars.names.len()],
         };
         let mut given = vec![false; def.fields.len()];
         let mut by_position = false;
@@ -9709,7 +9831,8 @@ impl<'a> Checker<'a> {
                 call.pos,
                 format!(
                     "the type `{}` of `{}` is not known here",
-                    def.generics[g].name, def.name
+                    vars.names[g].trim_end_matches("@function"),
+                    def.name
                 ),
             ));
         }
@@ -9810,4 +9933,23 @@ fn sol_types(sol: &[Option<Ty>]) -> Vec<Ty> {
     sol.iter()
         .map(|t| t.clone().unwrap_or(Ty::Unknown))
         .collect()
+}
+
+/// The expressions a body can end with: the last of it, and the last of each
+/// block of an `if` or a `match` that ends it.
+fn tails(body: &[Stmt]) -> Vec<&Expr> {
+    fn tail<'e>(body: &'e [Stmt], found: &mut Vec<&'e Expr>) {
+        match body.last() {
+            Some(Stmt::Expr(Expr::Match(m))) => {
+                for arm in &m.arms {
+                    tail(&arm.body, found);
+                }
+            }
+            Some(Stmt::Expr(e)) => found.push(e),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    tail(body, &mut found);
+    found
 }
