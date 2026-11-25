@@ -98,36 +98,68 @@ pub const ONCE: &[Test] = &[
         a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16,
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16,
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16",
+        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16,
     ),
     (
         "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends",
@@ -958,7 +990,7 @@ impl Held_ {
 /// rounds as for 10: a child that was freed before its join would give another
 /// number, and one that was never freed would ask for more.
 fn generated_children(part: u64) {
-    generate::check_part(9601, 40, part, 8, generated_program, |program| {
+    generate::check_part(9601, 40, part, 16, generated_program, |program| {
         let (few_said, few) = asked(&program.source(10));
         let (many_said, many) = asked(&program.source(100));
         assert_eq!(few_said, format!("{}\n", program.prints(10)), "{}", program.source(10));
@@ -971,36 +1003,68 @@ fn generated_children(part: u64) {
     });
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16() {
     generated_children(0);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16() {
     generated_children(1);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16() {
     generated_children(2);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16() {
     generated_children(3);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16() {
     generated_children(4);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16() {
     generated_children(5);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16() {
     generated_children(6);
 }
 
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_8() {
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16() {
     generated_children(7);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16() {
+    generated_children(8);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16() {
+    generated_children(9);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16() {
+    generated_children(10);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16() {
+    generated_children(11);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16() {
+    generated_children(12);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16() {
+    generated_children(13);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16() {
+    generated_children(14);
+}
+
+fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16() {
+    generated_children(15);
 }
 
 /// Rounds of a block that starts children that wait for a handle that is never
