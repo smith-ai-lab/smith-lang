@@ -7646,7 +7646,19 @@ impl<'a> Checker<'a> {
                 .map(|(p, _)| *p)
                 .collect();
             let settled = solve.elems == before_elems;
-            if (grown.is_empty() && settled) || looks > solve.totals.len() + solve.empties.len() + 1
+            // Where no value that a `var` is given widened it, what was read
+            // as its range in this look is what it has, and no look is needed
+            // to find it.
+            let unchanged = looks == 1
+                && solve.stuck.is_empty()
+                && solve.empties.is_empty()
+                && solve
+                    .totals
+                    .iter()
+                    .all(|(p, t)| solve.first.get(p) == Some(t));
+            if (grown.is_empty() && settled)
+                || unchanged
+                || looks > solve.totals.len() + solve.empties.len() + 1
             {
                 let mut stuck: Vec<Pos> = solve.stuck.iter().copied().collect();
                 stuck.extend(grown);
