@@ -89,6 +89,19 @@ const HANG: Duration = Duration::from_secs(10);
 
 static HANG_MILLISECONDS: AtomicU64 = AtomicU64::new(HANG.as_millis() as u64);
 
+/// How long a step of a test may take before the run says so. A run that
+/// ends over its limit then shows where the time went, which the failure alone
+/// does not: the start of a program, its run, or the writing of its file.
+const SLOW_STEP: Duration = Duration::from_millis(500);
+
+/// Prints what took `since` until now, when it took more than `SLOW_STEP`.
+pub fn say_if_slow(what: &str, since: Instant) {
+    let took = since.elapsed();
+    if took > SLOW_STEP {
+        println!("slow: {what} took {} ms", took.as_millis());
+    }
+}
+
 /// The limit, which the run's own tests make small with `--hang`.
 pub fn hang() -> Duration {
     Duration::from_millis(HANG_MILLISECONDS.load(Ordering::Relaxed))
@@ -157,7 +170,10 @@ fn run(
     } else {
         command.stderr(Stdio::null());
     }
-    let mut child = match command.spawn() {
+    let started = Instant::now();
+    let spawned = command.spawn();
+    say_if_slow(&format!("starting {:?}", command.get_program()), started);
+    let mut child = match spawned {
         Ok(child) => child,
         Err(e) => {
             if input.is_some() {
@@ -182,6 +198,7 @@ fn run(
         std::thread::sleep(Duration::from_millis(1));
     };
     progressed();
+    say_if_slow(&format!("running {:?}", command.get_program()), begin);
     let output = status.map(|status| std::process::Output {
         status,
         stdout: std::fs::read(&out).unwrap(),
