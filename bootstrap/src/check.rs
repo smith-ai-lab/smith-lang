@@ -7954,7 +7954,13 @@ impl<'a> Checker<'a> {
                                 self.infer_assign(body, at, (name, *pos), value);
                             } else if body.vars.contains(name) {
                                 let gives = self.expr(body, value, &Want::Ty(needed.clone()));
-                                self.expect(body, value, &gives, &needed);
+                                // A number that its uses have not decided is decided by
+                                // them, and not by the range of a `var` that is solved.
+                                if !(matches!(gives, Ty::Flex(_))
+                                    && self.inferred.contains_key(&at))
+                                {
+                                    self.expect(body, value, &gives, &needed);
+                                }
                                 self.assign(body, at, value);
                             } else {
                                 self.expr(body, value, &Want::Any);

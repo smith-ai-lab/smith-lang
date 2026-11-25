@@ -43,6 +43,8 @@ pub(super) struct Solve {
     /// How many errors the values of the `var`s in `stuck` gave, which the
     /// refusal of the `var`s says.
     pub(super) stuck_errors: usize,
+    /// The first assignment of each `var` in `stuck` that reads it.
+    pub(super) stuck_at: HashMap<Pos, Pos>,
 }
 
 /// What the last solved look left, which the look that is kept reads.
@@ -173,6 +175,19 @@ impl<'a> Checker<'a> {
             .solve
             .as_ref()
             .is_some_and(|s| s.written.contains(&def));
+        // What is known of the value where it is given, as of a loop's counter,
+        // is the range it has.
+        let gives = match gives {
+            Ty::Int(g) if literal(value).is_none() && counted => {
+                match self.known_range(body, value).and_then(|(lo, hi)| {
+                    Int::between(lo.max(g.min()), hi.min(g.max())).filter(|_| lo <= hi)
+                }) {
+                    Some(tight) => Ty::Int(tight),
+                    None => Ty::Int(g),
+                }
+            }
+            gives => gives,
+        };
         match gives {
             Ty::Int(g) if !read_itself || written => {
                 let text = format!("{name} = {}", written_expr(value));
@@ -190,13 +205,16 @@ impl<'a> Checker<'a> {
                 if read_itself && counted {
                     if let Some(solve) = self.solve.as_mut() {
                         solve.stuck.insert(def);
+                        solve.stuck_at.entry(def).or_insert(pos);
                         solve.stuck_errors += self.errors.len() - errors;
                         if looped {
                             solve.in_loop.insert(def);
                         }
                     }
                     body.facts.unset_step(at);
-                } else {
+                } else if !matches!(gives, Ty::Flex(_)) {
+                    // A number that its uses have not decided is decided by them,
+                    // and not by the range this `var` has so far.
                     let needed = body.names[at].1.clone();
                     self.expect(body, value, &gives, &needed);
                 }
@@ -211,7 +229,10 @@ impl<'a> Checker<'a> {
     pub(super) fn read_inferred(&mut self, body: &Body<'a>, at: usize) -> Option<Ty> {
         self.solve.as_ref()?;
         let def = self.inferred.get(&at)?;
-        if let Some(held) = body.facts.step(at) {
+        // What was last given is known only where the facts are kept, which is
+        // not while the numbers are being found.
+        let kept = !matches!(body.numbers, Numbers::Finding(_));
+        if kept && let Some(held) = body.facts.step(at) {
             return Some(Ty::Int(held));
         }
         // Where the `var` is read to give itself a value, and nothing says
@@ -315,7 +336,7 @@ impl<'a> Checker<'a> {
             .and_then(|g| g.first())
             .map_or(String::new(), |(_, text, _)| text.clone());
         Error::new(
-            def,
+            solve.stuck_at.get(&def).copied().unwrap_or(def),
             format!("`{name}` is changed by itself {place}, so its range is not inferred yet",),
         )
         .with_fix(format!(
