@@ -1837,7 +1837,14 @@ impl<'a> Lowering<'a> {
                     // on, and a name bound to the old ones keeps them.
                     self.defining_frame =
                         matches!(value, Expr::Call(c) if crate::check::frames::is_frame_call(c));
+                    let written = value;
                     let (ty, value) = self.expr(out, value, env);
+                    // What gives a function with a name is that function, whatever
+                    // the call that gives it is lowered to.
+                    let ty = match self.typed.type_of(written, env) {
+                        named @ Ty::Named(_) => named,
+                        _ => ty,
+                    };
                     self.defining_frame = false;
                     self.keep_in_region(out, name, &value);
                     // A `var` that is bound again drops the value it held.

@@ -155,7 +155,9 @@ impl<'a> Checker<'a> {
         match &f.result {
             // A function that gives a function gives the one function it names.
             Some(t) if t.function => {
-                if self.defs.returned_function(f).is_none() {
+                if self.defs.returned_function(f, scope).is_none()
+                    && self.defs.returned_parameter(f).is_none()
+                {
                     self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
                 }
             }
@@ -695,21 +697,55 @@ impl<'a> Checker<'a> {
         Ty::Unknown
     }
 
+    /// The type of a call of a function that gives its parameter `i`, which is a
+    /// function: the type whose one value is the function the argument is.
+    fn argument_function(&mut self, body: &Body<'a>, call: &Call, sig: &Signature, i: usize) -> Ty {
+        let places = params_of(&sig.params, &call.args).unwrap_or_default();
+        let Some(a) = places.iter().position(|&p| p == i) else {
+            return Ty::Unknown;
+        };
+        let value = &call.args[a].value;
+        let known = match value {
+            _ if self.fn_values.contains_key(&addr(value)) => {
+                Some(Ty::Named(self.fn_values[&addr(value)]))
+            }
+            Expr::Name { name, .. } => match body.names.iter().rfind(|(n, _)| n == name) {
+                Some((_, t @ Ty::Named(_))) => Some(t.clone()),
+                _ => None,
+            },
+            _ => match self.types.get(&addr(value)) {
+                Some(t @ Ty::Named(_)) => Some(t.clone()),
+                _ => None,
+            },
+        };
+        known.unwrap_or_else(|| {
+            self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+            Ty::Unknown
+        })
+    }
+
     /// What the field a call is written on holds, when the call is
     /// `name.field(...)` and the type of `name` is a struct whose field holds a
     /// function: the function, once it is known, and otherwise the type of the
     /// function the field is written with. Gives with it the type of `name`.
     fn function_in_field(&self, body: &Body<'a>, call: &Call) -> Option<(Held, Ty)> {
         let (q, _) = call.qualifier.as_ref()?;
-        let (_, receiver @ Ty::Struct(s, args)) = body.names.iter().rfind(|(n, _)| n == q)? else {
+        let (_, receiver) = body.names.iter().rfind(|(n, _)| n == q)?;
+        Some((self.held_in(receiver, &call.callee)?, receiver.clone()))
+    }
+
+    /// What the field `name` of a value of type `receiver` holds, when it
+    /// holds a function.
+    fn held_in(&self, receiver: &Ty, name: &str) -> Option<Held> {
+        let Ty::Struct(s, args) = receiver else {
             return None;
         };
         let defs = self.defs;
         let i = defs.file.structs[*s]
             .fields
             .iter()
-            .position(|f| f.name == call.callee)?;
-        let held = match defs.fields[*s][i].subst(args) {
+            .position(|f| f.name == name)?;
+        Some(match defs.fields[*s][i].subst(args) {
             Ty::Named(g) => Held::Named(g),
             _ => Held::Items(
                 defs.field_items[*s][i]
@@ -718,15 +754,16 @@ impl<'a> Checker<'a> {
                     .map(|t| t.subst(args))
                     .collect(),
             ),
-        };
-        Some((held, receiver.clone()))
+        })
     }
 
     pub(super) fn call(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
         let defs = self.defs;
         let name = call.callee.as_str();
         // A field that holds a function with a name is called as that function.
-        let through = match &call.through {
+        // The call that gives the function, as in `chosen()(x)`.
+        let through = match call.through.as_deref() {
+            Some(Expr::Field { .. }) | None => None,
             Some(inner) => match self.expr(body, inner, &Want::Any) {
                 Ty::Named(g) => Some(g),
                 Ty::Unknown => return self.unknown_call(body, call),
@@ -739,12 +776,26 @@ impl<'a> Checker<'a> {
                     return self.unknown_call(body, call);
                 }
             },
-            None => None,
         };
-        let field = if through.is_some() {
-            None
-        } else {
-            self.function_in_field(body, call)
+        // The field of a name or of what an expression gives, as in
+        // `sale.discount(x)` and `shop.pricing.discount(x)`.
+        let field = match call.through.as_deref() {
+            Some(Expr::Field { of, .. }) => match self.expr(body, of, &Want::Any) {
+                Ty::Unknown => return self.unknown_call(body, call),
+                receiver => {
+                    let held = self.held_in(&receiver, &call.callee);
+                    if held.is_none() {
+                        self.errors.push(Error::unsupported(
+                            call.name_pos,
+                            "calling what a field gives",
+                        ));
+                        return self.unknown_call(body, call);
+                    }
+                    held.map(|h| (h, receiver))
+                }
+            },
+            _ if through.is_some() => None,
+            _ => self.function_in_field(body, call),
         };
         if let Some((held, receiver)) = &field {
             self.field_receivers.insert(addr(call), receiver.clone());
@@ -936,6 +987,9 @@ impl<'a> Checker<'a> {
                 && self.errors.len() == refused_errors
             {
                 self.wrapping_division(body, call, sig);
+            }
+            if let Some(i) = sig.gives_param {
+                return self.argument_function(body, call, sig, i);
             }
             return sig.gives.solved(&sol);
         }

@@ -9,7 +9,7 @@
 //! is the other.
 
 use smith::target::Target;
-use smith::{check, compile};
+use smith::{check, compile, lower, scalar};
 
 use crate::Test;
 use crate::generate::{self, Gen};
@@ -42,6 +42,10 @@ pub const ONCE: &[Test] = &[
     (
         "a_function_that_is_returned_and_passed_builds_to_the_bytes_of_the_call_written_directly",
         || builds_to_the_bytes_of_the_call_written_directly(&[Hold::CallTheReturn]),
+    ),
+    (
+        "every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints",
+        every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints,
     ),
     (
         "a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second",
@@ -209,4 +213,129 @@ fn a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second() {
     let found = check(branch.as_bytes()).expect_err("refused");
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].message.contains("must be known when the program is built"));
+}
+
+/// A variable of a generated program: what it holds, and which of the three
+/// functions that is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Kind {
+    /// A function, as `f = f1`.
+    Function,
+    /// A `Held`, which holds a function in its field `run`.
+    Held,
+    /// A `Shop`, which holds a `Held` in its field `held`.
+    Shop,
+}
+
+/// A program that builds values that hold named functions by each way a
+/// function is held, and calls each, with what the calls print.
+#[derive(Debug)]
+struct Generated {
+    adds: [u8; 3],
+    argument: u8,
+    source: String,
+    printed: Vec<u8>,
+}
+
+fn generated(g: &mut Gen) -> Generated {
+    let adds = [g.below(100) as u8, g.below(100) as u8, g.below(100) as u8];
+    let argument = g.below(50) as u8;
+    let mut text = String::from("use std.console (console, print)\nuse std.int (wrapping_add)\n\n");
+    for (k, add) in adds.iter().enumerate() {
+        text += &format!("fn f{k}(x: Int) -> Int {{ wrapping_add(x, {add}) }}\n");
+        text += &format!("fn chosen{k}() -> fn(Int) -> Int {{ f{k} }}\n");
+        text += &format!("fn made{k}() -> Held {{ Held(run: f{k}) }}\n");
+    }
+    text += "\nstruct Held {\n  run: fn(Int) -> Int\n}\n\nstruct Shop {\n  held: Held\n}\n\n";
+    text += "fn ident(f: fn(Int) -> Int) -> fn(Int) -> Int { f }\n";
+    text += "fn same(h: Held) -> Held { h }\n";
+    text += "fn priced(h: Held, x: Int) -> Int { h.run(x) }\n";
+    text += "fn sold(s: Shop, x: Int) -> Int { s.held.run(x) }\n\n";
+    text += "fn main() <console, alloc> {\n";
+    // What each name holds, by its place among the names of its kind.
+    let mut names: Vec<(String, Kind, usize)> = Vec::new();
+    let mut calls: Vec<(String, usize)> = Vec::new();
+    let of = |names: &[(String, Kind, usize)], kind: Kind, g: &mut Gen| {
+        let some: Vec<&(String, Kind, usize)> = names.iter().filter(|n| n.1 == kind).collect();
+        (!some.is_empty()).then(|| some[g.below(some.len())].clone())
+    };
+    for step in 0..2 + g.below(5) {
+        let name = format!("v{step}");
+        let (value, kind, held) = match g.below(9) {
+            0 => {
+                let k = g.below(3);
+                (format!("f{k}"), Kind::Function, k)
+            }
+            1 => {
+                let k = g.below(3);
+                (format!("chosen{k}()"), Kind::Function, k)
+            }
+            2 => match of(&names, Kind::Function, g) {
+                Some((f, _, k)) => (format!("ident({f})"), Kind::Function, k),
+                None => continue,
+            },
+            3 => match of(&names, Kind::Held, g) {
+                Some((h, _, k)) => (format!("{h}.run"), Kind::Function, k),
+                None => continue,
+            },
+            4 => match of(&names, Kind::Function, g) {
+                Some((f, _, k)) => (format!("Held(run: {f})"), Kind::Held, k),
+                None => continue,
+            },
+            5 => {
+                let k = g.below(3);
+                (format!("made{k}()"), Kind::Held, k)
+            }
+            6 => match of(&names, Kind::Held, g) {
+                Some((h, _, k)) => (format!("same({h})"), Kind::Held, k),
+                None => continue,
+            },
+            7 => match of(&names, Kind::Held, g) {
+                Some((h, _, k)) => (format!("Shop(held: {h})"), Kind::Shop, k),
+                None => continue,
+            },
+            _ => match of(&names, Kind::Shop, g) {
+                Some((s, _, k)) => (format!("{s}.held"), Kind::Held, k),
+                None => continue,
+            },
+        };
+        text += &format!("  {name} = {value}\n");
+        let x = argument;
+        match kind {
+            Kind::Function => calls.push((format!("{name}({x})"), held)),
+            Kind::Held => {
+                calls.push((format!("{name}.run({x})"), held));
+                calls.push((format!("priced({name}, {x})"), held));
+                calls.push((format!("same({name}).run({x})"), held));
+            }
+            Kind::Shop => {
+                calls.push((format!("sold({name}, {x})"), held));
+                calls.push((format!("{name}.held.run({x})"), held));
+            }
+        }
+        names.push((name, kind, held));
+    }
+    let mut printed = Vec::new();
+    for (call, held) in &calls {
+        text += &format!("  print(\"{{{call}}}\")\n");
+        printed.extend(format!("{}\n", argument as u32 + adds[*held] as u32).into_bytes());
+    }
+    text += "}\n";
+    Generated {
+        adds,
+        argument,
+        source: text,
+        printed,
+    }
+}
+
+/// Whatever the generated program holds in each of these ways, it prints what
+/// the call of the function it holds prints when it is written directly, and
+/// the scalar form it is lowered to is the one the evaluator runs.
+fn every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints() {
+    generate::check(4302, 150, generated, |p| {
+        let program = lower(p.source.as_bytes())
+            .unwrap_or_else(|e| panic!("{e:?} for\n{}\n{:?} {}", p.source, p.adds, p.argument));
+        assert_eq!(scalar::run(&program).stdout, p.printed, "for\n{}", p.source);
+    });
 }

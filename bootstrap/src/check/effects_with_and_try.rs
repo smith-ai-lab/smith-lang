@@ -177,6 +177,7 @@ pub(super) fn arena_signature() -> Signature {
         params: vec![("body".to_string(), Ty::Fn(vec![Ty::Param(0)]))],
         param_defaults: vec![None],
         gives: Ty::Param(0),
+        gives_param: None,
         effects: Vec::new(),
         fn_effects: vec![vec!["alloc".to_string()]],
     }
@@ -350,6 +351,7 @@ impl<'a> Defs<'a> {
             params,
             param_defaults: vec![None; count],
             gives: Ty::Param(own),
+            gives_param: None,
             effects: Vec::new(),
             fn_effects,
         }
@@ -387,6 +389,7 @@ impl<'a> Defs<'a> {
             params,
             param_defaults: vec![None],
             gives: Ty::Param(0),
+            gives_param: None,
             effects: Vec::new(),
             fn_effects,
         }

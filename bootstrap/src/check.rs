@@ -863,6 +863,9 @@ struct Signature {
     /// default.
     param_defaults: Vec<Option<Ty>>,
     gives: Ty,
+    /// The parameter of a function type that the function gives, when its
+    /// result is one of its parameters: the function is that of the argument.
+    gives_param: Option<usize>,
     /// The effects it carries that a caller must have, which are those it
     /// lists that the compiler builds.
     effects: Vec<String>,
@@ -882,6 +885,7 @@ impl Signature {
             defaults: vec![false],
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
+            gives_param: None,
             effects: Vec::new(),
             fn_effects: Vec::new(),
         }
@@ -895,6 +899,7 @@ impl Signature {
             defaults: vec![false],
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
+            gives_param: None,
             effects: vec!["console".to_string()],
             fn_effects: Vec::new(),
         }
@@ -1598,8 +1603,10 @@ impl<'a> Defs<'a> {
                 .map(|g| g.default.as_ref().map(|d| self.quietly(d, &scope)))
                 .collect(),
             gives: match &f.result {
-                Some(t) if t.function => match self.returned_function(f) {
+                Some(t) if t.function => match self.returned_function(f, &scope) {
                     Some(g) => Ty::Named(g),
+                    // A function that is a parameter gives the function it is given.
+                    None if self.returned_parameter(f).is_some() => self.quietly(t, &scope),
                     None => Ty::Unknown,
                 },
                 Some(t) if self.implicit_result(t, &scope).is_some() => {
@@ -1608,6 +1615,12 @@ impl<'a> Defs<'a> {
                 }
                 Some(t) => self.quietly(t, &scope),
                 None => Ty::Nothing,
+            },
+            gives_param: match &f.result {
+                Some(t) if t.function && self.returned_function(f, &scope).is_none() => {
+                    self.returned_parameter(f)
+                }
+                _ => None,
             },
             effects: {
                 let mut built: Vec<String> = Vec::new();
@@ -1632,25 +1645,188 @@ impl<'a> Defs<'a> {
     }
 
     /// The function with a name that `f` gives, when its result is a function
-    /// type: the one its last expression names, which is the same in each
+    /// type: the one that each end of its body gives, which is the same in each
     /// block of an `if` or a `match` that ends it. Nothing when that is not one
     /// function, as which function it is would depend on what the program does.
-    pub(crate) fn returned_function(&self, f: &Function) -> Option<usize> {
-        let mut named = None;
-        for e in tails(&f.body) {
-            let Expr::Name { name, pos } = e else {
-                return None;
-            };
-            if f.params.iter().any(|p| &p.name == name) {
-                return None;
+    pub(crate) fn returned_function(&self, f: &Function, scope: &Scope) -> Option<usize> {
+        match self.ends_of(f, scope)?.as_slice() {
+            [Holds::Func(Ty::Named(g)), rest @ ..]
+                if rest.iter().all(|h| *h == Holds::Func(Ty::Named(*g))) =>
+            {
+                Some(*g)
             }
-            let g = self.function(*pos, name)?;
-            if named.is_some_and(|n| n != g) {
-                return None;
-            }
-            named = Some(g);
+            _ => None,
         }
-        named
+    }
+
+    /// The parameter of a function type that `f` gives, when each end of its
+    /// body is that parameter.
+    pub(crate) fn returned_parameter(&self, f: &Function) -> Option<usize> {
+        let at = |e: &Expr| match e {
+            Expr::Name { name, .. } => f
+                .params
+                .iter()
+                .position(|p| &p.name == name && p.ty.function),
+            _ => None,
+        };
+        let ends = tails(&f.body);
+        let first = at(ends.first()?)?;
+        ends.iter().all(|e| at(e) == Some(first)).then_some(first)
+    }
+
+    /// What each end of the body of `f` gives, among what is known of the
+    /// functions it holds.
+    fn ends_of(&self, f: &Function, scope: &Scope) -> Option<Vec<Holds>> {
+        self.ends(&f.body, &mut Vec::new(), Some((f, scope)), 0)
+    }
+
+    /// What each end of a block gives, when each is a function with a name, a
+    /// struct built of them, or a name bound to one of those, in `known`.
+    /// `own` is the function the block is the body of, when its parameters are
+    /// read from their types, and not from `known`.
+    fn ends(
+        &self,
+        body: &[Stmt],
+        known: &mut Vec<(String, Holds)>,
+        own: Option<(&Function, &Scope)>,
+        depth: usize,
+    ) -> Option<Vec<Holds>> {
+        let before = known.len();
+        let mut found = Vec::new();
+        for (i, stmt) in body.iter().enumerate() {
+            let last = i + 1 == body.len();
+            match stmt {
+                Stmt::Define { name, value, .. } if !last => {
+                    if let Some(h) = self.holds(value, known, own, depth) {
+                        known.push((name.clone(), h));
+                    }
+                }
+                Stmt::Expr(Expr::Match(m)) if last => {
+                    for arm in &m.arms {
+                        found.extend(self.ends(&arm.body, known, own, depth)?);
+                    }
+                }
+                Stmt::Expr(e) if last => found.push(self.holds(e, known, own, depth)?),
+                _ => {}
+            }
+        }
+        known.truncate(before);
+        (!found.is_empty()).then_some(found)
+    }
+
+    /// The functions an expression holds, when it is a function with a name, a
+    /// construction of a struct that holds functions from such, a name bound to
+    /// one, a parameter of a struct type, or a call of a function that gives
+    /// one of these.
+    fn holds(
+        &self,
+        e: &Expr,
+        known: &[(String, Holds)],
+        own: Option<(&Function, &Scope)>,
+        depth: usize,
+    ) -> Option<Holds> {
+        match e {
+            Expr::Name { name, pos } => {
+                if let Some((_, h)) = known.iter().rfind(|(n, _)| n == name) {
+                    return Some(h.clone());
+                }
+                if let Some((f, scope)) = own
+                    && let Some(p) = f.params.iter().find(|p| &p.name == name)
+                {
+                    return match self.quietly(&p.ty, scope) {
+                        Ty::Struct(u, args) if self.implicit[u] > 0 => {
+                            let at = args.len() - self.implicit[u];
+                            Some(Holds::Struct(u, args[at..].to_vec()))
+                        }
+                        _ => None,
+                    };
+                }
+                Some(Holds::Func(Ty::Named(self.function(*pos, name)?)))
+            }
+            Expr::Call(call) if call.qualifier.is_none() && call.through.is_none() => {
+                if let Some(u) = self.struct_at(call.name_pos, &call.callee) {
+                    return self.built_holds(call, u, known, own, depth);
+                }
+                let g = self.function(call.name_pos, &call.callee)?;
+                if depth >= 4 {
+                    return None;
+                }
+                let def = &self.file.functions[g];
+                let mut inner = Vec::new();
+                let places = params_of(
+                    &def.params
+                        .iter()
+                        .map(|p| (p.name.clone(), Ty::Unknown))
+                        .collect::<Vec<_>>(),
+                    &call.args,
+                )?;
+                for (a, &p) in places.iter().enumerate() {
+                    if let Some(h) = self.holds(&call.args[a].value, known, own, depth) {
+                        inner.push((def.params[p].name.clone(), h));
+                    }
+                }
+                match self
+                    .ends(&def.body, &mut inner, None, depth + 1)?
+                    .as_slice()
+                {
+                    [first, rest @ ..] if rest.iter().all(|h| h == first) => Some(first.clone()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The functions a construction of struct `u` holds: those of its fields
+    /// of a function type, and then those of the structs its fields hold.
+    fn built_holds(
+        &self,
+        call: &Call,
+        u: usize,
+        known: &[(String, Holds)],
+        own: Option<(&Function, &Scope)>,
+        depth: usize,
+    ) -> Option<Holds> {
+        let def = &self.file.structs[u];
+        if def.generics.iter().any(|g| !g.name.contains('@')) {
+            return None;
+        }
+        let places = params_of(
+            &def.fields
+                .iter()
+                .map(|d| (d.name.clone(), Ty::Unknown))
+                .collect::<Vec<_>>(),
+            &call.args,
+        )?;
+        let value_of = |field: usize| {
+            let a = places.iter().position(|&p| p == field)?;
+            self.holds(&call.args[a].value, known, own, depth)
+        };
+        let mut tail = Vec::new();
+        for g in &def.generics {
+            let field = def
+                .fields
+                .iter()
+                .position(|d| d.name == g.name.trim_end_matches("@function"))?;
+            match value_of(field)? {
+                Holds::Func(t) => tail.push(t),
+                Holds::Struct(..) => return None,
+            }
+        }
+        for (field, d) in def.fields.iter().enumerate() {
+            if d.function.is_some() {
+                continue;
+            }
+            if matches!(self.type_at(d.ty.pos, &d.ty.name), Some(Item::Struct(v)) if self.implicit[v] > 0)
+                && !d.ty.name.is_empty()
+            {
+                match value_of(field)? {
+                    Holds::Struct(_, more) => tail.extend(more),
+                    Holds::Func(_) => return None,
+                }
+            }
+        }
+        Some(Holds::Struct(u, tail))
     }
 
     /// The struct, among those that hold a function, that the type `t` written
@@ -1671,54 +1847,21 @@ impl<'a> Defs<'a> {
     }
 
     /// The type of struct `u` that `f` gives, when its result is written as `u`,
-    /// which holds functions: the functions are those that the construction
-    /// that ends the body names, the same in each block that ends it.
+    /// which holds functions: the functions that each end of the body holds,
+    /// the same at each end.
     pub(crate) fn returned_struct(&self, f: &Function, u: usize, scope: &Scope) -> Option<Ty> {
         let def = &self.file.structs[u];
-        let explicit = def
-            .generics
-            .iter()
-            .take_while(|g| !g.name.contains('@'))
-            .count();
-        let own = def.generics.len() - explicit;
-        if explicit > 0 || self.implicit[u] != own {
+        if def.generics.iter().any(|g| !g.name.contains('@')) {
             return None;
         }
-        let mut held: Option<Vec<Ty>> = None;
-        for e in tails(&f.body) {
-            let Expr::Call(call) = e else {
-                return None;
-            };
-            if call.qualifier.is_some() || call.callee != def.name {
-                return None;
+        match self.ends_of(f, scope)?.as_slice() {
+            [Holds::Struct(v, tail), rest @ ..]
+                if *v == u && rest.iter().all(|h| *h == Holds::Struct(u, tail.clone())) =>
+            {
+                Some(Ty::structure(u, tail.clone()))
             }
-            let mut here = Vec::new();
-            for g in &def.generics {
-                let field = g.name.trim_end_matches("@function");
-                let at = def.fields.iter().position(|d| d.name == field)?;
-                let arg = call
-                    .args
-                    .iter()
-                    .enumerate()
-                    .find_map(|(k, a)| match &a.name {
-                        Some((n, _)) => (n == field).then_some(a),
-                        None => (k == at).then_some(a),
-                    })?;
-                let Expr::Name { name, pos } = &arg.value else {
-                    return None;
-                };
-                if f.params.iter().any(|p| &p.name == name) {
-                    return None;
-                }
-                here.push(Ty::Named(self.function(*pos, name)?));
-            }
-            if held.as_ref().is_some_and(|h| *h != here) {
-                return None;
-            }
-            held = Some(here);
+            _ => None,
         }
-        let _ = scope;
-        Some(Ty::structure(u, held?))
     }
 
     /// The types of the parameters of function `f`, followed by the type it
@@ -9972,4 +10115,13 @@ fn tails(body: &[Stmt]) -> Vec<&Expr> {
     let mut found = Vec::new();
     tail(body, &mut found);
     found
+}
+
+/// The functions an expression holds, when they are known from the source.
+#[derive(Clone, Debug, PartialEq)]
+enum Holds {
+    /// A function, as the type whose one value it is.
+    Func(Ty),
+    /// A struct that holds functions, with the types that stand for them.
+    Struct(usize, Vec<Ty>),
 }
