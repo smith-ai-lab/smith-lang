@@ -645,6 +645,20 @@ impl<'a> Checker<'a> {
             ));
             return;
         }
+        if let Some((bound, at_pos, text)) = self.literal_from.get(&at)
+            && bound == name
+            && let Ty::Int(held) = &body.names[at].1
+        {
+            let spell = |r: Int| self.defs.text(&Ty::Int(r), &super::Scope::default());
+            self.errors[from].message = format!(
+                "`{name}` is a `{}`, inferred from `{text}` at line {}; the use at line {} needs a `{}`",
+                spell(*held),
+                at_pos.line,
+                value.pos().line,
+                spell(needed)
+            );
+            return;
+        }
         let Some(def) = self.inferred.get(&at).copied() else {
             return;
         };

@@ -828,7 +828,7 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
             (
                 format!("x = {too_far}\n  id_{}(", ty.name),
                 "x)".into(),
-                format!("may not fit `{}`", ty.name),
+                format!("inferred from `{too_far}`"),
             )
         }
     };

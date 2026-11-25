@@ -7199,6 +7199,7 @@ impl<'a> Checker<'a> {
             last_args: Vec::new(),
             free_args: false,
             lambda_from: HashMap::new(),
+            literal_from: HashMap::new(),
             from_calls: None,
             using: None,
             probing: false,
@@ -7263,6 +7264,10 @@ struct Checker<'a> {
     /// The parameters of lambdas in scope whose types are those of the calls of
     /// them, by their place among the names, with the call that gave the first.
     lambda_from: HashMap<usize, Vec<(Pos, String)>>,
+    /// The names bound to a whole number that keep its own range, by their
+    /// place among the names, with the name, where it is bound, and the number
+    /// as it is written.
+    literal_from: HashMap<usize, (String, Pos, String)>,
     /// The calls that gave the parameters of the lambda about to be checked.
     from_calls: Option<Vec<(Pos, String)>>,
     /// The function whose arguments are being checked.
@@ -8404,6 +8409,7 @@ impl<'a> Checker<'a> {
         self.seen.clear();
         self.gave.clear();
         self.lambda_from.clear();
+        self.literal_from.clear();
         let mut body = Body {
             f: Some(f),
             default: None,

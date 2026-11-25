@@ -737,6 +737,10 @@ impl<'a> Checker<'a> {
                         && !expr_is_wide_character(value, *magnitude)
                     {
                         body.decided.remove(name);
+                        self.literal_from.insert(
+                            body.names.len(),
+                            (name.to_string(), pos, written_expr(value)),
+                        );
                         self.expr(body, value, &Want::Ty(Ty::Int(own)));
                         return Ty::Int(own);
                     }
