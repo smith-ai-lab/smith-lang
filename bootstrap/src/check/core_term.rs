@@ -817,16 +817,18 @@ impl<'a> Typed<'a> {
                 Ok((crate::kernel::Value::Case(1, _), _)) => continue,
                 Ok((_, why)) => match why {
                     Some(why) => format!(
-                        "`{}` is false: `{}` at {}:{} was {}",
-                        pending.written, why.comparison, why.pos.line, why.pos.col, why.holds
+                        "`{}` is false: `{}` at {} was {}",
+                        pending.written,
+                        why.comparison,
+                        self.defs.resolution.shown(why.pos),
+                        why.holds
                     ),
                     None => match machine.last_comparison() {
                         Some(last) => format!(
-                            "`{}` is false: its last comparison, `{}` at {}:{}, was {}",
+                            "`{}` is false: its last comparison, `{}` at {}, was {}",
                             pending.written,
                             last.comparison,
-                            last.pos.line,
-                            last.pos.col,
+                            self.defs.resolution.shown(last.pos),
                             last.holds
                         ),
                         None => format!("`{}` is false", pending.written),

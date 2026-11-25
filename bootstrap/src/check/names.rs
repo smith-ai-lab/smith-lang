@@ -378,6 +378,23 @@ impl Resolution {
             .map_or(text, String::as_str)
     }
 
+    /// A place as a person reads it: the line and the column in the file, and
+    /// for a place in a module the module's file before them, so that a place
+    /// in the library never shows as the number it is kept by.
+    pub(super) fn shown(&self, pos: crate::diag::Pos) -> String {
+        if pos.line < super::STEP {
+            return format!("{}:{}", pos.line, pos.col);
+        }
+        let line = pos.line % super::STEP;
+        match self.modules.get(&(pos.line / super::STEP)) {
+            Some(m) if m.standard => {
+                format!("{}.smith:{line}:{}", m.name.replace('.', "/"), pos.col)
+            }
+            Some(m) => format!("{}:{line}:{}", m.name, pos.col),
+            None => format!("{line}:{}", pos.col),
+        }
+    }
+
     /// What the name of a struct, an enum, or a trait that is defined at `pos`
     /// is called in the file that holds every module.
     pub(super) fn def_key<'n>(
