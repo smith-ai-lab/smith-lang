@@ -4,7 +4,8 @@
 //! Every generator knows the values it gives each `var`, so what it expects
 //! comes from there and shares nothing with the compiler.
 
-use smith::lower;
+use smith::target::Target;
+use smith::{compile, lower};
 
 use crate::Test;
 use crate::generate::{self, Gen};
@@ -41,7 +42,7 @@ enum Step {
     /// `v = v + d`, which is written only where nothing lies between it and
     /// the line that last gave `v` a value.
     Grow(usize, i128),
-    /// `take(v)`, a call of a function whose parameter is `0..30`.
+    /// `need(v)`, a call of a function whose parameter is `0..30`.
     Use(usize),
 }
 
@@ -119,7 +120,7 @@ fn ranges(p: &Program) -> [(i128, i128); 2] {
 /// The program, with each `var` written as the range `stated` gives it, or
 /// with no range written.
 fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
-    let mut out = String::from("fn take(x: 0..30) -> 0..30 { x }\n\nfn f(c: Byte) {\n");
+    let mut out = String::from("fn need(x: 0..30) -> 0..30 { x }\n\nfn f(c: Byte) {\n");
     for v in 0..2 {
         match stated {
             Some(r) => out.push_str(&format!(
@@ -138,7 +139,7 @@ fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
                 NAMES[*v]
             ),
             Step::Grow(v, d) => format!("{0} = {0} + {d}", NAMES[*v]),
-            Step::Use(v) => format!("take({})", NAMES[*v]),
+            Step::Use(v) => format!("need({})", NAMES[*v]),
         };
         out.push_str(&format!("  {line}\n"));
     }
@@ -152,14 +153,16 @@ fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
 fn a_var_with_no_range_written_is_what_stating_the_range_its_values_need_is() {
     generate::check(61, 80, program, |p| {
         let (open, closed) = (source(p, None), source(p, Some(ranges(p))));
-        let (a, b) = (lower(open.as_bytes()), lower(closed.as_bytes()));
-        assert_eq!(
-            a.is_ok(),
-            b.is_ok(),
-            "{a:?} for\n{open}\nbut {b:?} for\n{closed}"
-        );
-        if let (Ok(a), Ok(b)) = (&a, &b) {
-            assert_eq!(format!("{a:?}"), format!("{b:?}"), "{open}");
+        for target in [Target::ALL[0], Target::ALL[Target::ALL.len() - 1]] {
+            let (a, b) = (compile(open.as_bytes(), target), compile(closed.as_bytes(), target));
+            assert_eq!(
+                a.is_ok(),
+                b.is_ok(),
+                "{a:?} for\n{open}\nbut {b:?} for\n{closed}"
+            );
+            if let (Ok(a), Ok(b)) = (&a, &b) {
+                assert!(a == b, "the executables differ for\n{open}\nand\n{closed}");
+            }
         }
     });
 }
@@ -205,14 +208,14 @@ fn a_use_that_needs_less_than_the_inferred_range_says_what_was_inferred_from_wha
         let top = n.otherwise;
         let limit = n.limit;
         let source = with_header(format!(
-            "fn take(x: 0..{limit}) -> 0..{limit} {{ x }}\n\n\
-             fn f(c: Byte) {{\n  var x = {}\n  if c < 2 {{ x = {} }} else {{ x = {} }}\n  take(x)\n}}\n\n\
+            "fn need(x: 0..{limit}) -> 0..{limit} {{ x }}\n\n\
+             fn f(c: Byte) {{\n  var x = {}\n  if c < 2 {{ x = {} }} else {{ x = {} }}\n  need(x)\n}}\n\n\
              fn main() {{\n  f(1)\n}}\n",
             n.start, n.then, n.otherwise
         ));
         let errors = lower(source.as_bytes()).expect_err("a use that needs less");
         let top_line = line_of(&source, &format!("if c < 2 {{ x = {} }} else {{ x = {} }}", n.then, n.otherwise));
-        let use_line = line_of(&source, "take(x)");
+        let use_line = line_of(&source, "need(x)");
         let start_line = line_of(&source, &format!("var x = {}", n.start));
         let said = errors
             .iter()

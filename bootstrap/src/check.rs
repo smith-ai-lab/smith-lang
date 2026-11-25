@@ -2636,6 +2636,8 @@ fn check_file(
         solve: None,
         solved: infer::Solved::default(),
         inferred: HashMap::new(),
+        patterned: HashSet::new(),
+        assigning: None,
         comparing: false,
         discovering: false,
         found: HashMap::new(),
@@ -6704,6 +6706,11 @@ struct Checker<'a> {
     /// The `var`s of the body whose range is solved, by their place among the
     /// names, with the place of the statement that defines each.
     inferred: HashMap<usize, Pos>,
+    /// The names that a pattern gives a value in the body, which are not
+    /// solved.
+    patterned: HashSet<String>,
+    /// The `var` that is being given a value, and whether the value reads it.
+    assigning: Option<(Pos, bool)>,
     /// Whether the arguments being fitted are those of a comparison, whose
     /// two sides are taken as the smallest range that holds both.
     comparing: bool,
@@ -7546,13 +7553,15 @@ impl<'a> Checker<'a> {
             return;
         }
         let errors = self.errors.len();
-        self.infer_on = infer::has_inferred(&self.defs.view(template).f.body);
+        let stmts = &self.defs.view(template).f.body;
+        self.infer_on = infer::has_inferred(stmts);
+        self.patterned = infer::patterned(stmts);
         self.solved = infer::Solved::default();
         self.solve = None;
-        if self.infer_on {
-            self.solve_ranges(template);
+        let refused = self.infer_on && self.solve_ranges(template);
+        if !refused {
+            self.look_twice(template);
         }
-        self.look_twice(template);
         self.infer_on = false;
         if self.errors.len() == errors {
             let view = self.defs.view(template);
@@ -7609,21 +7618,30 @@ impl<'a> Checker<'a> {
     /// at again, with what it says of each so far, until no range grows. A
     /// `var` that still grows after as many looks as there are `var`s is
     /// changed by itself, and is refused.
-    fn solve_ranges(&mut self, template: Template) {
+    fn solve_ranges(&mut self, template: Template) -> bool {
         let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
         let widened = self.widened.clone();
         let mut before: HashMap<Pos, Int> = HashMap::new();
         let mut looks = 0;
+        let refused;
         let last = loop {
             self.solve = Some(infer::Solve {
                 before: before.clone(),
                 ..infer::Solve::default()
             });
             self.look_twice(template);
+            // Errors that are not about a `var` changed by itself are the
+            // program's own, and are said by the look that is kept.
+            let others = self.solve.as_ref().map_or(0, |s| {
+                (self.errors.len() - errors).saturating_sub(s.stuck_errors * 2)
+            });
             self.errors.truncate(errors);
             self.refusals = refusals;
             self.no_impl = no_impl;
-            let solve = self.solve.take().expect("solving");
+            let mut solve = self.solve.take().expect("solving");
+            if others > 0 {
+                solve.written.clear();
+            }
             looks += 1;
             let grown: Vec<Pos> = solve
                 .totals
@@ -7632,14 +7650,29 @@ impl<'a> Checker<'a> {
                 .map(|(p, _)| *p)
                 .collect();
             if grown.is_empty() || looks > solve.totals.len() + 1 {
-                if !grown.is_empty() {
-                    let mut grown = grown;
-                    grown.sort();
-                    for def in grown {
+                let mut stuck: Vec<Pos> = solve.stuck.iter().copied().collect();
+                stuck.extend(grown);
+                stuck.sort();
+                stuck.dedup();
+                // A `var` first given a value that has a type, and that is given
+                // itself, has the range of that value, as it had before it was
+                // solved from every value. One first given a number written out
+                // has nothing to go on, and is refused.
+                let mut solve = solve;
+                let mut stated = false;
+                for def in stuck {
+                    if solve.written.contains(&def) {
                         let error = self.grows_by_itself(def, &solve);
                         self.errors.push(error);
+                        stated = true;
+                    } else if let Some((_, _, first)) =
+                        solve.given.get(&def).and_then(|g| g.first())
+                    {
+                        let first = *first;
+                        solve.totals.insert(def, first);
                     }
                 }
+                refused = stated;
                 break solve;
             }
             before = solve.totals;
@@ -7647,6 +7680,7 @@ impl<'a> Checker<'a> {
         self.widened = widened;
         self.solved.ranges = last.totals;
         self.solved.given = last.given;
+        refused
     }
 
     /// One look at the body of a function, which gives the places of the
@@ -7971,7 +8005,7 @@ impl<'a> Checker<'a> {
                                     });
                                     needed
                                 }
-                                None if *var && defined.is_none() && self.infers(body) => {
+                                None if *var && defined.is_none() && self.infers(body, name) => {
                                     let (bound, held) = self.infer_var(body, *pos, name, value);
                                     first = held;
                                     bound

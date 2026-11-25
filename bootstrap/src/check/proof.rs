@@ -238,6 +238,11 @@ impl Facts {
             .and_then(|(_, v)| *v)
     }
 
+    /// The `var` at `at` was given a value whose range is not known.
+    pub(super) fn unset_step(&mut self, at: usize) {
+        self.steps.push((at, None));
+    }
+
     /// The `var` at `at` was given a value of the range `held`.
     pub(super) fn set_step(&mut self, at: usize, held: Int) {
         self.steps.push((at, Some(held)));
