@@ -152,8 +152,17 @@ impl<'a> Checker<'a> {
             }
             self.param_ty(&p.ty, scope);
         }
-        if let Some(t) = &f.result {
-            self.ty(t, scope);
+        match &f.result {
+            // A function that gives a function gives the one function it names.
+            Some(t) if t.function => {
+                if self.defs.returned_function(f).is_none() {
+                    self.errors.push(Error::new(t.pos, WHICH_FUNCTION));
+                }
+            }
+            Some(t) => {
+                self.ty(t, scope);
+            }
+            None => {}
         }
     }
 
@@ -679,10 +688,46 @@ impl<'a> Checker<'a> {
         Ty::Unknown
     }
 
+    /// The function with a name that the field a call is written on holds, when
+    /// the call is `name.field(...)` and the type of `name` is a struct whose
+    /// field has the type of that function.
+    fn function_in_field(&self, body: &Body<'a>, call: &Call) -> Option<usize> {
+        let (q, _) = call.qualifier.as_ref()?;
+        let (_, Ty::Struct(s, args)) = body.names.iter().rfind(|(n, _)| n == q)? else {
+            return None;
+        };
+        let defs = self.defs;
+        let i = defs.file.structs[*s]
+            .fields
+            .iter()
+            .position(|f| f.name == call.callee)?;
+        match defs.fields[*s][i].subst(args) {
+            Ty::Named(g) => Some(g),
+            _ => None,
+        }
+    }
+
     pub(super) fn call(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
         let defs = self.defs;
         let name = call.callee.as_str();
-        if let Some((q, at)) = &call.qualifier {
+        // A field that holds a function with a name is called as that function.
+        let through = match &call.through {
+            Some(inner) => match self.expr(body, inner, &Want::Any) {
+                Ty::Named(g) => Some(g),
+                Ty::Unknown => return self.unknown_call(body, call),
+                other => {
+                    let given = defs.describe(&other, body.scope);
+                    self.errors.push(Error::new(
+                        inner.pos(),
+                        format!("this gives {given}, which is not a function that can be called"),
+                    ));
+                    return self.unknown_call(body, call);
+                }
+            },
+            None => None,
+        };
+        let in_field = through.or_else(|| self.function_in_field(body, call));
+        if let (Some((q, at)), None) = (&call.qualifier, in_field) {
             if let Some(e) = defs.enum_at(*at, q)
                 && !body.names.iter().any(|(n, _)| n == q)
             {
@@ -764,14 +809,19 @@ impl<'a> Checker<'a> {
             return self.arena_call(body, call);
         }
         // A name that holds the function `g` by the type `g` is called as `g` is.
-        let named = body
-            .names
-            .iter()
-            .rfind(|(n, _)| n == name)
-            .and_then(|(_, t)| match t {
-                Ty::Named(g) => Some(*g),
-                _ => None,
-            });
+        let name = match through {
+            Some(g) => written_name(&defs.file.functions[g].name),
+            None => name,
+        };
+        let named = in_field.or_else(|| {
+            body.names
+                .iter()
+                .rfind(|(n, _)| n == name)
+                .and_then(|(_, t)| match t {
+                    Ty::Named(g) => Some(*g),
+                    _ => None,
+                })
+        });
         if let Some(f) = named.or_else(|| defs.function(call.name_pos, name)) {
             let sig = &defs.signatures[f];
             // `quiet` waits for tasks that no handle names, which the language
@@ -881,10 +931,16 @@ impl<'a> Checker<'a> {
                 self.unknown_call(body, call)
             }
             _ => {
-                self.errors.push(Error::new(
-                    call.pos,
-                    format!("there is no function named `{name}`"),
-                ));
+                // What is not known was reported where it was bound.
+                if !matches!(
+                    body.names.iter().rfind(|(n, _)| n == name),
+                    Some((_, Ty::Unknown))
+                ) {
+                    self.errors.push(Error::new(
+                        call.pos,
+                        format!("there is no function named `{name}`"),
+                    ));
+                }
                 self.unknown_call(body, call)
             }
         }

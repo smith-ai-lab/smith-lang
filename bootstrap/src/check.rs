@@ -583,6 +583,32 @@ impl Ty {
     }
 
     /// Whether it is a function, or holds one.
+    /// Whether two types are the same but for the function a part of them
+    /// holds, which is what a type of its own for each function makes of
+    /// two values that hold different ones.
+    fn differs_in_function(&self, other: &Ty) -> bool {
+        match (self, other) {
+            (Ty::Named(a), Ty::Named(b)) => a != b,
+            (Ty::Struct(a, x), Ty::Struct(b, y)) | (Ty::Enum(a, x), Ty::Enum(b, y)) => {
+                a == b && x.len() == y.len() && Ty::differ_in_function(x, y)
+            }
+            (Ty::Tuple(x), Ty::Tuple(y))
+            | (Ty::List(x), Ty::List(y))
+            | (Ty::Slice(x), Ty::Slice(y)) => x.len() == y.len() && Ty::differ_in_function(x, y),
+            (Ty::Array(x, n), Ty::Array(y, m)) => n == m && Ty::differ_in_function(x, y),
+            _ => false,
+        }
+    }
+
+    /// Whether the types in `x` and `y` are each the same but for functions,
+    /// and one differs in a function.
+    fn differ_in_function(x: &[Ty], y: &[Ty]) -> bool {
+        x.iter()
+            .zip(y)
+            .all(|(a, b)| a == b || a.differs_in_function(b))
+            && x.iter().zip(y).any(|(a, b)| a != b)
+    }
+
     fn holds_fn(&self) -> bool {
         matches!(self, Ty::Fn(_)) || self.args().iter().any(Ty::holds_fn)
     }
@@ -1386,6 +1412,18 @@ impl<'a> Defs<'a> {
         let wanted = generics.len();
         let needed = generics.iter().filter(|g| g.default.is_none()).count();
         if args.len() < needed || args.len() > wanted {
+            // A struct that holds a function is a type for each function.
+            if let Some(held) = generics.iter().find(|g| g.name.contains('@')) {
+                let field = held.name.trim_end_matches("@function");
+                errors.push(Error::new(
+                    t.pos,
+                    format!(
+                        "`{name}` holds a function in `{field}`, and is a type for each function, \
+                         so the function is written in brackets, as in `{name}[half]`"
+                    ),
+                ));
+                return None;
+            }
             let takes = if needed == wanted {
                 count(wanted, "type argument")
             } else {
@@ -1543,6 +1581,10 @@ impl<'a> Defs<'a> {
                 .map(|g| g.default.as_ref().map(|d| self.quietly(d, &scope)))
                 .collect(),
             gives: match &f.result {
+                Some(t) if t.function => match self.returned_function(f) {
+                    Some(g) => Ty::Named(g),
+                    None => Ty::Unknown,
+                },
                 Some(t) => self.quietly(t, &scope),
                 None => Ty::Nothing,
             },
@@ -1566,6 +1608,50 @@ impl<'a> Defs<'a> {
             },
             scope,
         }
+    }
+
+    /// The function with a name that `f` gives, when its result is a function
+    /// type: the one its last expression names, which is the same in each
+    /// block of an `if` or a `match` that ends it. Nothing when that is not one
+    /// function, as which function it is would depend on what the program does.
+    fn returned_function(&self, f: &Function) -> Option<usize> {
+        fn tail<'e>(body: &'e [Stmt], found: &mut Vec<&'e Expr>) {
+            match body.last() {
+                Some(Stmt::Expr(Expr::Match(m))) => {
+                    for arm in &m.arms {
+                        tail(&arm.body, found);
+                    }
+                }
+                Some(Stmt::Expr(e)) => found.push(e),
+                _ => {}
+            }
+        }
+        let mut found = Vec::new();
+        tail(&f.body, &mut found);
+        let mut named = None;
+        for e in found {
+            let Expr::Name { name, pos } = e else {
+                return None;
+            };
+            if f.params.iter().any(|p| &p.name == name) {
+                return None;
+            }
+            let g = self.function(*pos, name)?;
+            if named.is_some_and(|n| n != g) {
+                return None;
+            }
+            named = Some(g);
+        }
+        named
+    }
+
+    /// The types of the parameters of function `f`, followed by the type it
+    /// gives, as a function type holds them.
+    fn function_items(&self, f: usize) -> Vec<Ty> {
+        let sig = &self.signatures[f];
+        let mut items: Vec<Ty> = sig.params.iter().map(|(_, t)| t.clone()).collect();
+        items.push(sig.gives.clone());
+        items
     }
 
     /// Whether a trait other than `Copy` and `Discard` bounds the type
@@ -5569,6 +5655,11 @@ fn unused_bindings(f: &Function, out: &mut Vec<Error>) {
     let read: Vec<&str> = (exprs(values(&f.body)).into_iter())
         .filter_map(|e| match e {
             Expr::Name { name, .. } => Some(name.as_str()),
+            // `sale.discount(x)` reads `sale`, which holds the function.
+            Expr::Call(Call {
+                qualifier: Some((q, _)),
+                ..
+            }) => Some(q.as_str()),
             _ => None,
         })
         .collect();
@@ -5753,6 +5844,9 @@ fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
     out.push(expr);
     match expr {
         Expr::Call(call) => {
+            if let Some(inner) = &call.through {
+                walk(inner, out);
+            }
             for arg in &call.args {
                 walk(&arg.value, out);
             }
@@ -6383,6 +6477,30 @@ impl<'a> Typed<'a> {
         if numbers_and_operators::bits_function(defs, call).is_some() {
             return Callee::Intrinsic;
         }
+        let run = |f: usize| {
+            let sig = &defs.signatures[f];
+            let args = solve(&sig.params, sig.scope.names.len());
+            let args = defaulted(args, sig.param_defaults.clone());
+            // What only a requirement names is what its implementation says.
+            let args = if sig.scope.requires.is_empty() {
+                args
+            } else {
+                let mut some: Vec<Option<Ty>> = args
+                    .into_iter()
+                    .map(|t| (t != Ty::Unknown).then_some(t))
+                    .collect();
+                defs.complete_outs(&sig.scope.requires, &mut some, &Scope::default());
+                some.into_iter().map(|t| t.unwrap_or(Ty::Unknown)).collect()
+            };
+            let gives = sig.gives.subst(&args);
+            let template = Template::Free(f);
+            Callee::Run(Instance { template, args }, gives)
+        };
+        if let Some(&f) = self.named_calls.get(&addr(call))
+            && (call.qualifier.is_some() || call.through.is_some())
+        {
+            return run(f);
+        }
         let (k, fi) = match &call.qualifier {
             None => {
                 let name = call.callee.as_str();
@@ -6424,24 +6542,7 @@ impl<'a> Typed<'a> {
                 }
                 let by_type = self.named_calls.get(&addr(call)).copied();
                 if let Some(f) = by_type.or_else(|| defs.function(call.name_pos, name)) {
-                    let sig = &defs.signatures[f];
-                    let args = solve(&sig.params, sig.scope.names.len());
-                    let args = defaulted(args, sig.param_defaults.clone());
-                    // What only a requirement names is what its implementation
-                    // says.
-                    let args = if sig.scope.requires.is_empty() {
-                        args
-                    } else {
-                        let mut some: Vec<Option<Ty>> = args
-                            .into_iter()
-                            .map(|t| (t != Ty::Unknown).then_some(t))
-                            .collect();
-                        defs.complete_outs(&sig.scope.requires, &mut some, &Scope::default());
-                        some.into_iter().map(|t| t.unwrap_or(Ty::Unknown)).collect()
-                    };
-                    let gives = sig.gives.subst(&args);
-                    let template = Template::Free(f);
-                    return Callee::Run(Instance { template, args }, gives);
+                    return run(f);
                 }
                 if let Some(effect) = defs.effect_named(name) {
                     return Callee::Handle(effect);
@@ -7393,6 +7494,18 @@ impl<'a> Checker<'a> {
                 self.widened.insert(addr(value), *n);
                 self.enters(body, value, (*g, *n));
             }
+            // A name that holds a function with a name is a function of that
+            // function's type.
+            (Ty::Named(g), Ty::Fn(items)) if defs.function_items(*g) == *items => {}
+            (Ty::Fn(_), Ty::Named(n)) if self.fn_values.contains_key(&addr(value)) => {
+                self.named.insert(addr(value));
+                if self.fn_values[&addr(value)] != *n {
+                    self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+                }
+            }
+            (given, needed) if given.differs_in_function(needed) => {
+                self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+            }
             (given, needed) if given != needed => {
                 let message = self.mismatch(
                     body,
@@ -7469,7 +7582,8 @@ impl<'a> Checker<'a> {
             // The name of a function, given for a type parameter that a trait
             // bounds, is the type whose one value that function is.
             (Ty::Fn(_), Ty::Param(p))
-                if self.fn_values.contains_key(&addr(value)) && defs.bounded(vars, *p) =>
+                if self.fn_values.contains_key(&addr(value))
+                    && (defs.bounded(vars, *p) || vars.names[*p].contains('@')) =>
             {
                 let f = self.fn_values[&addr(value)];
                 let named = Ty::Named(f);
@@ -7490,9 +7604,13 @@ impl<'a> Checker<'a> {
                     );
                     self.errors.push(Error::new(value.pos(), message));
                 } else if !unify(pattern, &named, sol) {
-                    let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
-                    let message =
-                        self.mismatch(body, value, defs.describe(&named, body.scope), needed);
+                    let message = if matches!(pattern, Ty::Param(q) if matches!(sol[*q], Some(Ty::Named(_))))
+                    {
+                        WHICH_FUNCTION.to_string()
+                    } else {
+                        let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
+                        self.mismatch(body, value, defs.describe(&named, body.scope), needed)
+                    };
                     self.errors.push(Error::new(value.pos(), message));
                 }
             }
@@ -7509,6 +7627,20 @@ impl<'a> Checker<'a> {
                     );
                     self.errors.push(Error::new(value.pos(), message));
                 }
+            }
+            // A name that holds a function with a name is a function of that
+            // function's type.
+            (Ty::Named(g), Ty::Fn(_)) if !self.fn_values.contains_key(&addr(value)) => {
+                let items = Ty::func(defs.function_items(*g));
+                if !unify(pattern, &items, sol) {
+                    let needed = defs.describe_pattern(pattern, sol, vars, body.scope);
+                    let message =
+                        self.mismatch(body, value, defs.describe(&items, body.scope), needed);
+                    self.errors.push(Error::new(value.pos(), message));
+                }
+            }
+            (given, pattern) if given.differs_in_function(&pattern.subst(&sol_types(sol))) => {
+                self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
             }
             (given, pattern) => {
                 use_at(value.pos());
@@ -8086,7 +8218,14 @@ impl<'a> Checker<'a> {
                                 }
                                 None => self.expr(body, value, &Want::Any),
                             };
-                            let bound = self.not_stored(value, bound);
+                            let bound = match self.fn_values.get(&addr(value)) {
+                                Some(&f) if want_any_fn(&bound) => {
+                                    self.named.insert(addr(value));
+                                    self.types.insert(addr(value), Ty::Named(f));
+                                    Ty::Named(f)
+                                }
+                                _ => self.not_stored(value, bound),
+                            };
                             if defined.is_some() {
                                 self.errors.push(self.defined_twice(body, name, *pos));
                             } else {
@@ -9673,4 +9812,22 @@ fn alias_cycles(defs: &mut Defs, errors: &mut Vec<Error>) {
             }
         }
     }
+}
+
+/// Whether a type is a function type, which a name bound to a function with a
+/// name takes the type of that function in place of.
+fn want_any_fn(t: &Ty) -> bool {
+    matches!(t, Ty::Fn(_))
+}
+
+/// What is said where two values hold different functions where one type is
+/// needed.
+pub(crate) const WHICH_FUNCTION: &str = "which function this is depends on what the program does when it \
+                              runs, and a function value must be known when the program is built";
+
+/// The types a solution settled, and unknown for the others.
+fn sol_types(sol: &[Option<Ty>]) -> Vec<Ty> {
+    sol.iter()
+        .map(|t| t.clone().unwrap_or(Ty::Unknown))
+        .collect()
 }

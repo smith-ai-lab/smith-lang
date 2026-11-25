@@ -1,0 +1,13 @@
+use std.console (console, print)
+
+fn half(x: f32) -> f32 { x * 0.5 }
+fn dbl(x: f32) -> f32 { x * 2.0 }
+
+struct Pricing {
+  discount: fn(f32) -> f32
+}
+
+fn main() <console, alloc> {
+  sale = if true { Pricing(discount: half) } else { Pricing(discount: dbl) }
+  print("{sale.discount(8.0)}")
+}

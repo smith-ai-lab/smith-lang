@@ -513,6 +513,18 @@ impl<'a> Lowering<'a> {
                         args: Vec::new(),
                     }),
                 },
+                // A call that gives a function with a name, which is run for what
+                // it does, and gives no value.
+                Expr::Call(_) => match self.typed.type_of(value, env) {
+                    Ty::Named(g) => {
+                        self.expr(out, value, env);
+                        Func::Named(Instance {
+                            template: Template::Free(g),
+                            args: Vec::new(),
+                        })
+                    }
+                    _ => unreachable!("checked"),
+                },
                 _ => unreachable!("checked"),
             };
             (Vec::new(), Some(func))

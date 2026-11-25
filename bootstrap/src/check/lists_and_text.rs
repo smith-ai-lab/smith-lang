@@ -447,6 +447,10 @@ impl<'a> Checker<'a> {
                             }
                         },
                         (a, b) if a == b => a.clone(),
+                        (a, b) if a.differs_in_function(b) => {
+                            self.errors.push(Error::new(item.pos(), WHICH_FUNCTION));
+                            return Ty::Unknown;
+                        }
                         (a, b) => {
                             let (a, b) = (defs.text(a, body.scope), defs.text(b, body.scope));
                             self.errors.push(

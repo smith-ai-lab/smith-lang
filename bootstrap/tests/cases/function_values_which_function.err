@@ -1,0 +1,3 @@
+function_values_which_function.smith:11:71: which function this is depends on what the program does when it runs, and a function value must be known when the program is built
+  11 |   sale = if true { Pricing(discount: half) } else { Pricing(discount: dbl) }
+     |                                                                       ^
