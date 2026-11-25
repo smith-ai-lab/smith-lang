@@ -8,6 +8,7 @@ built:
   - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
+  - "not a `var` that a loop assigns given the range that holds every value it is given, so `var last = 0` with `last = i` compiles, as [Inference](inference.md) says; today it has the range of its first value"
 ---
 
 # `loop`

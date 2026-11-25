@@ -10,6 +10,7 @@ built:
   - "an array written in brackets where nothing says its type, as long as it is written, of the smallest range that holds its whole numbers, taken where a `List` of a wider whole number is needed, and refused when no one type holds its elements or it has none"
   - "not a whole number as the range that holds it alone"
   - "a float written out, with a point or an exponent, with a `-` before it, which is the `f32` or `f64` its use decides, an `f64` when nothing does, rounded once to the nearest, ties to even, and refused where it is too large for its type; not a whole number where a float is expected, and not an array of floats written in brackets with no type to say what it is"
+  - "not an array of nothing, `[]`, whose element type a later use in the same body settles, as [Inference](inference.md#a-list-or-an-option-that-a-later-use-settles) says; today it is written where a type is expected"
 ---
 
 # Literals

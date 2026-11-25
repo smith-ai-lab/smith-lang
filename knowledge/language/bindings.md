@@ -5,6 +5,7 @@ description: How x = e defines an immutable name, which is never defined again w
 status: partial
 built:
   - "`x = e` and `x: str = e`, refused where the name can already be used, and a name defined again once the block that defined it has ended"
+  - "not a name given the type that everything the body says about it needs, as [Inference](inference.md) says; today a binding has the type of its value alone"
 ---
 
 # Bindings
