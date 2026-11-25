@@ -149,6 +149,9 @@ pub struct Struct {
     pub pos: Pos,
     pub generics: Vec<Generic>,
     pub fields: Vec<Field>,
+    /// The type it names, when it is a `type` alias and not a struct. An alias
+    /// has no fields, and is the type it names.
+    pub alias: Option<Type>,
 }
 
 /// An enum definition.
@@ -857,6 +860,15 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
                     p.skip_item(start);
                 }
             },
+            Tok::Ident(word) if word == "type" && matches!(p.peek(1), Tok::Ident(_)) => {
+                match p.alias() {
+                    Ok(s) => structs.push(s),
+                    Err(e) => {
+                        p.errors.push(e);
+                        p.skip_item(start);
+                    }
+                }
+            }
             Tok::Keyword("enum") => match p.enumeration() {
                 Ok(e) => enums.push(e),
                 Err(e) => {
@@ -1025,7 +1037,11 @@ fn ident_uses(tokens: &[Token], before: Option<&Tok>, into: &mut Vec<(String, Po
                                 "fn" | "struct" | "enum" | "trait" | "effect" | "effects"
                             )
                     )
-                );
+                ) || (previous == Some(&Tok::Ident("type".to_string()))
+                    && matches!(
+                        tokens.get(i + 1).map(|t| &t.tok),
+                        Some(Tok::Punct("=" | "["))
+                    ));
                 let label = matches!(tokens.get(i + 1).map(|t| &t.tok), Some(Tok::Punct(":")));
                 if !named && !label {
                     into.push((name.clone(), token.pos));
@@ -1497,6 +1513,26 @@ impl Parser<'_> {
                 pos,
                 generics,
                 fields,
+                alias: None,
+            }),
+            tok => Err(self.expected("a line break", tok)),
+        }
+    }
+
+    /// Parses `type NAME[T] = TYPE` and the line break after it.
+    fn alias(&mut self) -> Result<Struct, Error> {
+        self.bump();
+        let (name, pos) = self.defined("the alias's name")?;
+        let generics = self.generics()?;
+        self.expect_punct("=", "`=` and the type the alias names")?;
+        let ty = self.ty()?;
+        match self.tok() {
+            Tok::Newline | Tok::Eof => Ok(Struct {
+                name,
+                pos,
+                generics,
+                fields: Vec::new(),
+                alias: Some(ty),
             }),
             tok => Err(self.expected("a line break", tok)),
         }

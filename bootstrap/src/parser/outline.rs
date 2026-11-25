@@ -105,7 +105,7 @@ fn head(source: &str, at: usize, end: usize, line: usize) -> Option<Piece> {
     let kind = match text(w) {
         "use" => Kind::Use,
         "fn" => Kind::Fn,
-        "struct" => Kind::Struct,
+        "struct" | "type" => Kind::Struct,
         "enum" => Kind::Enum,
         "trait" => Kind::Trait,
         "effect" | "effects" => Kind::Effect,

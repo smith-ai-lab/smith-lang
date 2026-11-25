@@ -141,6 +141,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [prelude.md](prelude.md): the names that are in scope in every file without a `use`, `Int`, `Nat`, and `Byte` among them, and what a file imports for everything else.
 - [qualified-names.md](qualified-names.md): a `use` with no list, which brings in the module itself under its last path segment, `as`, and a name two modules share.
 - [impl-placement.md](impl-placement.md): an `impl`, which is not imported, is visible everywhere, and lives in the module that defines the trait or the type.
+- [type-aliases.md](type-aliases.md): `type NAME = TYPE`, which gives a type a second name that is the same type, with type parameters, `pub`, and `use`, and what an alias does not bring.
 - [projects.md](projects.md): a folder as a project, its root and entry, the names of its modules and its executable, `project.smith`, and what `smith new` creates.
 - [command-line.md](command-line.md): the `smith` commands, how `build`, `run`, and `check` take a file and a target, and what each prints when it fails.
 - [standard-library.md](standard-library.md): what the standard library covers, which is why outside code is rarely needed, and how its modules are imported from `std`.

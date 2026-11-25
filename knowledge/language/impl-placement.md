@@ -44,4 +44,4 @@ impl Area[Rect] {
 
 `Area` and `Rect` come from `shapes`, so this `impl` has no place in the module that wrote it.
 
-Next: [Projects](projects.md)
+Next: [Type aliases](type-aliases.md)

@@ -969,6 +969,9 @@ struct Defs<'a> {
     /// How many defaults of type parameters are being resolved inside one
     /// another, so that a default that names its own type ends.
     default_depth: Cell<u8>,
+    /// The type each alias that a program wrote stands for, with the alias as
+    /// it was written, so that an error names the alias.
+    aliased: RefCell<Vec<(Ty, String)>>,
     /// How the program's own code wrote `i64` and `u8`, so that an error
     /// names a type as the program wrote it.
     spelled: Cell<Spelled>,
@@ -1240,6 +1243,22 @@ impl<'a> Defs<'a> {
             else {
                 return Ty::Unknown;
             };
+            // An alias is the type it names, with its arguments in place of its
+            // type parameters.
+            if let Some(named) = &self.file.structs[s].alias {
+                if self.cyclic[s] {
+                    return Ty::Unknown;
+                }
+                let inner = self.quietly(named, &self.scope(&self.file.structs[s].generics, &[]));
+                let ty = inner.subst(&args);
+                if closed(&ty) {
+                    let mut aliased = self.aliased.borrow_mut();
+                    if !aliased.iter().any(|(t, _)| *t == ty) {
+                        aliased.push((ty.clone(), written_type(t)));
+                    }
+                }
+                return ty;
+            }
             return if self.cyclic[s] {
                 Ty::Unknown
             } else {
@@ -1544,6 +1563,9 @@ impl<'a> Defs<'a> {
 
     /// How a type is written, with the type parameters of `scope`.
     fn text(&self, ty: &Ty, scope: &Scope) -> String {
+        if let Some((_, name)) = self.aliased.borrow().iter().find(|(t, _)| t == ty) {
+            return name.clone();
+        }
         match ty {
             Ty::Text => TEXT.to_string(),
             Ty::Int(int) => self.spelling(*int).to_string(),
@@ -2494,9 +2516,11 @@ fn check_file(
         result: prelude_item(&file, Kind::Enum, "Result"),
         withouts: Vec::new(),
         default_depth: Cell::new(0),
+        aliased: RefCell::new(Vec::new()),
         spelled: Cell::new(Spelled::default()),
         bound_params: RefCell::new(Vec::new()),
     };
+    alias_cycles(&mut defs, &mut errors);
     let mut done = Vec::new();
     for &d in &reached_types {
         if !done.contains(&d) {
@@ -3126,8 +3150,8 @@ fn reach(
             }
             Item::Struct(si) => {
                 let s = &file.structs[si];
-                for field in &s.fields {
-                    type_names_in(&field.ty, &mut |name, pos| type_name(name, pos, &mut found));
+                for ty in s.fields.iter().map(|f| &f.ty).chain(&s.alias) {
+                    type_names_in(ty, &mut |name, pos| type_name(name, pos, &mut found));
                 }
                 bounds_named(&s.generics, &mut |name, pos| {
                     type_name(name, pos, &mut found)
@@ -5136,8 +5160,8 @@ fn names_in_items(file: &File, impls: &[Arc<Impl>], out: &mut dyn FnMut(&str, Po
         names_in_function(f, out);
     }
     for s in file.structs.iter().filter(|s| of_library(s.pos)) {
-        for field in &s.fields {
-            type_names_in(&field.ty, &mut |n, pos| out(n, pos, Ask::Type));
+        for ty in s.fields.iter().map(|f| &f.ty).chain(&s.alias) {
+            type_names_in(ty, &mut |n, pos| out(n, pos, Ask::Type));
         }
         bounds_named(&s.generics, &mut |n, pos| out(n, pos, Ask::Type));
         let defaults = s.fields.iter().filter_map(|f| f.default.as_ref());
@@ -5584,7 +5608,10 @@ fn cycles(
     path.push(d);
     let file = defs.file;
     let types: Vec<&Type> = match d {
-        Def::Struct(s) => file.structs[s].fields.iter().map(|f| &f.ty).collect(),
+        Def::Struct(s) if defs.cyclic[s] => Vec::new(),
+        Def::Struct(s) => (file.structs[s].fields.iter().map(|f| &f.ty))
+            .chain(&file.structs[s].alias)
+            .collect(),
         Def::Enum(e) => file.enums[e]
             .cases
             .iter()
@@ -7224,14 +7251,17 @@ impl<'a> Checker<'a> {
         let scope = &defs.struct_scopes[s];
         self.generics(&def.generics, &format!("`{}`", def.name), Owner::Struct);
         for g in &def.generics {
-            let named =
-                (def.fields.iter()).any(|f| type_names(&f.ty).iter().any(|(n, _)| *n == g.name));
+            let named = (def.fields.iter().map(|f| &f.ty).chain(&def.alias))
+                .any(|t| type_names(t).iter().any(|(n, _)| *n == g.name));
             if !named {
                 self.errors.push(Error::unsupported(
                     g.pos,
                     "a type parameter that no field's type names",
                 ));
             }
+        }
+        if let Some(ty) = &def.alias {
+            self.ty(ty, scope);
         }
         for (i, field) in def.fields.iter().enumerate() {
             if def.fields[..i].iter().any(|f| f.name == field.name) {
@@ -9265,4 +9295,90 @@ impl<'a> Checker<'a> {
 /// Whether a function is a proof: its result is a statement.
 fn is_proof(f: &Function) -> bool {
     f.result.as_ref().is_some_and(|t| t.statement.is_some())
+}
+
+/// Reports each alias that names itself, directly or through
+/// others, with the chain, and marks it, so that a use of it is no type.
+fn alias_cycles(defs: &mut Defs, errors: &mut Vec<Error>) {
+    let file = defs.file;
+    let aliases: Vec<usize> = (file.structs.iter().enumerate())
+        .filter(|(_, s)| s.alias.is_some())
+        .map(|(i, _)| i)
+        .collect();
+    // The aliases that the type of `a` names, in the order it writes them.
+    let named = |defs: &Defs, a: usize| -> Vec<usize> {
+        let mut out = Vec::new();
+        if let Some(ty) = &file.structs[a].alias {
+            for (name, pos) in type_names(ty) {
+                if let Some(Item::Struct(s)) = defs.type_at(pos, name)
+                    && file.structs[s].alias.is_some()
+                {
+                    out.push(s);
+                }
+            }
+        }
+        out
+    };
+    for &a in &aliases {
+        if defs.cyclic[a] {
+            continue;
+        }
+        // A path from `a` back to `a`.
+        let mut path = vec![a];
+        let mut seen = vec![a];
+        let mut stack = vec![named(defs, a)];
+        let mut found = None;
+        while let Some(next) = stack.last_mut() {
+            let Some(n) = next.pop() else {
+                stack.pop();
+                path.pop();
+                continue;
+            };
+            if n == a {
+                found = Some(path.clone());
+                break;
+            }
+            if !seen.contains(&n) {
+                seen.push(n);
+                path.push(n);
+                stack.push(named(defs, n));
+            }
+        }
+        if let Some(mut chain) = found {
+            chain.push(a);
+            let names: Vec<&str> = chain
+                .iter()
+                .map(|&s| file.structs[s].name.as_str())
+                .collect();
+            let mut error = Error::new(
+                file.structs[a].pos,
+                format!(
+                    "the alias `{}` names itself: {}",
+                    file.structs[a].name,
+                    names.join(" -> ")
+                ),
+            );
+            error.fix =
+                Some("write a type that holds itself as a `struct` or an `enum`".to_string());
+            errors.push(error);
+            for &s in &chain {
+                defs.cyclic[s] = true;
+            }
+        }
+    }
+}
+
+/// Whether a type holds no type parameter and no unknown type.
+fn closed(ty: &Ty) -> bool {
+    match ty {
+        Ty::Param(_) | Ty::Unknown | Ty::Flex(_) => false,
+        Ty::Struct(_, items)
+        | Ty::Enum(_, items)
+        | Ty::Tuple(items)
+        | Ty::List(items)
+        | Ty::Slice(items)
+        | Ty::Array(items, _)
+        | Ty::Fn(items) => items.iter().all(closed),
+        _ => true,
+    }
 }
