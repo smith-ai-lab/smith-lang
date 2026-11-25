@@ -110,8 +110,8 @@ c: Result[User, Unauthorized] = Result.err(Unauthorized(message: \"who\"))\n  sh
 
 fn a_type_that_writes_its_own_respond_is_answered_as_it_says_and_not_as_json() {
     let source = format!(
-        "use std.bits (u16)\nuse std.console (console, print)\nuse std.http (Respond, Response, Status)\n\nstruct Taken {{\n  name: str\n}}\n\nimpl Status[Taken] {{\n  fn status(e: Taken) -> u16 {{ 409 }}\n}}\n\n\
-struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response <alloc> {{\n    Response(status: 200, headers: [(\"content-type\", \"image/png\")], body: value.name)\n  }}\n}}\n\n{SHOW}\
+        "use std.console (console, print)\nuse std.http (Respond, Response, Status, header_name, header_value)\n\nstruct Taken {{\n  name: str\n}}\n\nimpl Status[Taken] {{\n  fn status(e: Taken) -> 100..600 {{ 409 }}\n}}\n\n\
+struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response <alloc> {{\n    Response(status: 200, headers: [(header_name(\"content-type\"), header_value(\"image/png\"))], body: value.name)\n  }}\n}}\n\n{SHOW}\
 fn send[T](x: T) -> Response <alloc>\n  requires Respond[T]\n{{\n  Respond[T].respond(x)\n}}\n\n\
 fn main() <console, alloc> {{\n  show(send(Picture(name: \"cat\")))\n  \
 t: Result[Picture, Taken] = Result.err(Taken(name: \"ana\"))\n  show(send(t))\n}}\n"

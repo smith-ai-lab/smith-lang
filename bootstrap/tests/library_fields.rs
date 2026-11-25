@@ -209,6 +209,20 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
 }
 ",
         ),
+        "HeaderName" => (
+            "HeaderName, header_name",
+            "fn main() <alloc> {
+  f(header_name(\"a\"))
+}
+",
+        ),
+        "HeaderValue" => (
+            "HeaderValue, header_value",
+            "fn main() {
+  f(header_value(\"a\"))
+}
+",
+        ),
         other => panic!("the test makes no `{other}`, so it needs a way to"),
     };
     let main = if takes {

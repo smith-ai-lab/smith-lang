@@ -11,6 +11,7 @@ built:
   - "`FromRequest`, which `get` and the other methods require of the struct of the function's parameters, is found for it only when each parameter has `FromText` (or is an `Option` of a type that has it) except at most one that has `Deserialize`, read from the body; a function with a parameter that is neither, or with two for the body, is refused where its name is given, with an error that names the parameters, and a type of a program's own `FromText` is refused as not used by a route yet"
   - "`listen(port: p)` of `std.http` on Linux, macOS, and Windows, on x86-64 and arm64, which answers `http` from a socket as [Where the requests come from](#where-the-requests-come-from) says, with each connection in a task of its own, on Linux and on macOS, so that a connection that says nothing holds up no other and 1,000 connections held open at once are each answered, and one connection at a time on Windows, where every call waits where it is, with `with arena()` around each request so that a connection serving requests asks the system for the same memory after 50 requests as after 2,000, and with the frame and the stack of a connection given back when it ends, so that a second wave of 1,000 connections asks the system for no more than the first, and a head of at most 16384 bytes and a body of at most a megabyte, read by `std.http1` whether it has a length or comes in chunks"
   - "`listen` returns when `accept` gives `.closed`, after the connections it took have been served, which a test handler of `net` that keeps what `write` was given does, and what `write` was given is read after `listen` has returned, for every order that a scheduler of a test of any seed runs the connections in"
+  - "`Response.status` is a `100..600`, as `Status.status` gives; a header of a response is a `HeaderName` and a `HeaderValue`, which only `header_name` and `header_value` make from texts written out, where the program is built, and `check_name` and `check_value` make from texts known when it runs, as a `Result` with a `HeaderError`; a `header_name` of a text that is no token, or is `content-length`, `connection`, or `transfer-encoding` in any case of its letters, and a `header_value` of a text with a line break, are refused where they are written, with the call and its text in the message; `Request.method` is the `Method` of `std.fetch`, and a request whose method is not one of its cases is answered 501 and the connection is closed"
   - "not the check of a path that names a part the function has no parameter for, `at`, a guard, or the reading of a percent sign in a part"
 ---
 
@@ -68,7 +69,7 @@ trait Respond[T] {
 | A struct, an enum, a list, a number, or any type with [`Serialize`](serialize.md) | Status 200, with the value as JSON |
 | An [`Html`](html.md) | Status 200, with the page |
 | `Text(text: "...")` | Status 200, with the text as it is |
-| `Redirect(to: "/login")` | Status 302, with the header `location` set to that place |
+| `Redirect(to: "/login")` | Status 302, with the header `location` set to that place, and status 500 with no header when the place holds a line break |
 | `()` | Status 204, with no body |
 
 `Respond` is given to every type that has `Serialize`, as JSON, in the way `Serialize` is given to a type whose parts have it. A type's own `impl` takes the place of the one it is given, which is how `Html`, `Text`, `Redirect`, and `()` answer as they do, and how a type of a program's own answers as it likes: a type that holds a picture writes an `impl` that gives its bytes and says what they are. Nothing of the library's types is special.
@@ -84,10 +85,8 @@ fn logout() -> Redirect <store>
 A function that can fail gives a `Result[T, E]`, and the type of the error says its status, through the trait `Status`.
 
 ```
-use std.bits (u16)
-
 trait Status[E] {
-  fn status(e: E) -> u16
+  fn status(e: E) -> 100..600
 }
 
 struct Taken {
@@ -95,7 +94,7 @@ struct Taken {
 }
 
 impl Status[Taken] {
-  fn status(e: Taken) -> u16 { 409 }
+  fn status(e: Taken) -> 100..600 { 409 }
 }
 ```
 
@@ -179,7 +178,7 @@ fn listen[T](port: Nat, body: fn() -> T <http>) -> T <net, alloc, diverge>
 - **One connection at a time.** `listen` listens on the port at every address of the machine, takes a connection, serves the requests it sends one after another, and takes the next connection when it ends. For each request it runs the block once, with `request` giving that request and `send` taking its response, so `routes` answers it.
 - **A closed listener ends the serving.** When `accept` gives `.closed`, `listen` takes no more connections, runs each connection it took, in a task of its own on Linux, to its end, and returns what the block gives when nothing asks it. Another error of `accept` is passed over, as before. A test gives `listen` a handler of `net` that makes the connections, reads each a request, and keeps what `write` was given, and reads it after `listen` has returned, with no socket opened.
 - **A request is read by [`std.http1`](http1.md),** its head of at most 16384 bytes and its body of at most a megabyte, whether the body has a length or comes in chunks, and a body that is not UTF-8 is refused. The path and the query of the target are the parts of `Request`.
-- **A response is written whole.** Its status line has the reason of the status, its headers are those the block gave but `content-length`, `connection`, and `transfer-encoding`, and a header that holds a line break is left out. `content-length` is the size of the body, and so every response, with no body or with one, says where it ends.
+- **A response is written whole.** Its status line has the reason of the status, and its headers are those the block gave, none of which is `content-length`, `connection`, or `transfer-encoding`, as [A header](#a-header) says. `content-length` is the size of the body, and so every response, with no body or with one, says where it ends, with the one length.
 - **A request that is refused is answered 400 and the connection is closed.** That is every request `std.http1` refuses, a body that is too long or not UTF-8, and one the connection ends in the middle of, which is closed with nothing said. The next connection is served.
 - **A connection is kept** for the next request of `HTTP/1.1` unless the request says `connection: close`, and of `HTTP/1.0` only if it says `connection: keep-alive`, as [`std.http1`](http1.md#answering-a-request-of-http10) says. A client that sent the next request before it had the response to this one has it answered with `connection: close`, and the connection is closed, which is a response a client of HTTP/1.1 is ready for and sends the rest again.
 - **A port that cannot be listened on ends the program.** The error is written to the standard error and the status is 1, as a write the system refuses ends a program, since nothing can be served. A connection that cannot be taken is passed over.
@@ -190,13 +189,41 @@ A request is the method, the path and the query apart, the headers, and the body
 
 ```
 struct Request {
-  method: str
+  method: Method
   path: str
   query: str
   headers: List[(str, str)]
   body: str
 }
+
+struct Response {
+  status: 100..600
+  headers: List[(HeaderName, HeaderValue)]
+  body: str
+}
 ```
+
+`Method` is the enum of [`std.fetch`](fetch.md#the-effect), and a request whose method is not one of its cases is answered 501.
+
+## A header
+
+A header of a response is a name and a value, and each is a type that holds only what may be written.
+
+```
+use std.http (HeaderName, HeaderValue, header_name, header_value)
+
+fn page_headers() -> List[(HeaderName, HeaderValue)] <alloc> {
+  [(header_name("Content-Type"), header_value("text/html; charset=utf-8"))]
+}
+```
+
+- A `HeaderName` holds a token in small letters: letters, digits, and `!#$%&'*+-.^_`|~`, and at least one. `header_name("Content-Type")` is `content-type`.
+- A `HeaderValue` holds a text with no line break, so that a header never adds a line of its own.
+- `header_name` and `header_value` take a text written out, and refuse any other where the call is written: the call and its text are in the message. `header_name("Content-Length")` is refused, and so is `header_name("a b")` and `header_value` of a text with a line break. The fields are private, so no other function makes either type.
+- `content-length`, `connection`, and `transfer-encoding` cannot be a name at all, in any case of its letters, because `listen` writes them and a response that said two lengths would be a request smuggled. `header_name` and `check_name` refuse them.
+- A text known only when the program runs, as one read from a request, is made by `check_name` or `check_value`, which give a `Result` whose error is a `HeaderError`: `not_a_token`, `written_by_the_library`, or `line_break`, each holding the text, with a `Fmt` that writes the text and what is wrong.
+
+`Response.status` is a `100..600`, so `Response(status: 0, headers: [], body: "")` is refused where it is written, as every number outside its range is.
 
 `route_match(pattern, path)` gives `.some` of each part of the path that a `:name` part of the pattern stands at, as a `Part` of the name and the text, when the pattern and the path have the same number of parts and each part that does not begin with `:` is the same, and `.none` when they do not. `route_match("/users/:id", "/users/7")` is one `Part`, `id` with `7`, and `/users` does not fit it. `query_parts("a=1&b=&c")` gives `a` with `1`, `b` with the empty text, and `c` with the empty text: the members are the pieces between `&`, each cut at its first `=`, and a piece with nothing in it is no member. A part is read as the type of its parameter by [`from_text`](fromtext.md).
 
