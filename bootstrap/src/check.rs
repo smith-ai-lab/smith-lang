@@ -9253,7 +9253,13 @@ impl<'a> Checker<'a> {
                 },
                 None => Want::Ty(Ty::Unknown),
             };
-            let gives = self.expr(body, &arg.value, &wanted);
+            let written =
+                field.map(|i| (defs.fields[s][i].clone(), written_type(&def.fields[i].ty)));
+            let (here, written) = written.unzip();
+            let here: Ty = here.unwrap_or(Ty::Unknown);
+            let gives = defs.writing(&here, written.clone(), || {
+                self.expr(body, &arg.value, &wanted)
+            });
             unknown |= gives.unknown();
             match &arg.name {
                 None => {
@@ -9279,7 +9285,9 @@ impl<'a> Checker<'a> {
                         given[i] = true;
                         let pattern = &defs.fields[s][i];
                         self.settled = true;
-                        self.fit(body, &arg.value, &gives, pattern, &mut sol, vars);
+                        defs.writing(&here, written, || {
+                            self.fit(body, &arg.value, &gives, pattern, &mut sol, vars)
+                        });
                         self.settled = false;
                     }
                     None => self.errors.push(Error::new(
