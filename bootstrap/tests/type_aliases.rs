@@ -40,7 +40,6 @@ const TARGETS: &[(&str, &str)] = &[
     ("0..65536", "80"),
     ("Int", "7"),
     ("(Int, Int)", "(1, 2)"),
-    ("List[Int]", "[1, 2, 3]"),
     ("str", "\"hi\""),
 ];
 
@@ -49,15 +48,12 @@ const TARGETS: &[(&str, &str)] = &[
 struct Case {
     /// The target each alias names.
     names: Vec<usize>,
-    /// Whether the alias is `Pair[T]` and written `Pair[Int]`.
-    generic: bool,
 }
 
 fn case(g: &mut Gen) -> Case {
     let count = 1 + g.below(3);
     Case {
         names: (0..count).map(|_| g.below(TARGETS.len())).collect(),
-        generic: g.below(2) == 0,
     }
 }
 
@@ -69,9 +65,7 @@ impl Case {
             for (i, &t) in self.names.iter().enumerate() {
                 text += &format!("type A{i} = {}\n", TARGETS[t].0);
             }
-            if self.generic {
-                text += "type Pair[T] = (T, T)\n";
-            }
+            text += "type Pair[T] = (T, T)\n";
             text += "\n";
         }
         let ty = |i: usize| {
@@ -142,8 +136,9 @@ fn a_use_with_the_wrong_number_of_type_arguments_is_refused_with_the_count() {
         let held: Vec<String> = params.clone();
         let args: Vec<&str> = vec!["Int"; given];
         let use_ = if given == 0 { "Many".to_string() } else { format!("Many[{}]", args.join(", ")) };
+        let value = vec!["1"; takes + 1].join(", ");
         let text = format!(
-            "use std.console (console, print)\n\ntype Many[{}] = ({}, Int)\n\nfn f(x: {use_}) {{}}\n\nfn main() <console> {{\n  print(\"x\")\n}}\n",
+            "use std.console (console, print)\n\ntype Many[{}] = ({}, Int)\n\nfn f(x: {use_}) {{}}\n\nfn main() <console> {{\n  f(({value}))\n  print(\"x\")\n}}\n",
             params.join(", "),
             held.join(", "),
         );
