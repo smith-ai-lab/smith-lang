@@ -500,12 +500,13 @@ impl<'a> Checker<'a> {
                 Some((_, ty)) => ty.clone(),
                 None => Ty::Unknown,
             };
-            // A value that is not copied is lent to a lambda that is kept, which
-            // outlives it. One that a `var` holds could change or move after a
+            // A lambda that is kept takes the values it reads, which the ownership
+            // check gives away. One that a `var` holds could change or move after a
             // lambda that is bound reads it, so it is refused as one that is lent.
             if !ty.unknown()
                 && !ownership::copies(defs, body.scope, &ty)
-                && (kept || body.vars.contains(&field.name))
+                && !kept
+                && body.vars.contains(&field.name)
             {
                 lent = true;
             }
@@ -516,6 +517,9 @@ impl<'a> Checker<'a> {
                 l.pos,
                 format!("a lambda cannot be {place}, as it is only passed to a call"),
             ));
+        }
+        if !args[own..].iter().any(Ty::unknown) {
+            self.probed.insert(s, args[own..].to_vec());
         }
         let unknown = vec![Ty::Unknown; l.params.len() + 1];
         let listed = kept.then(|| std::mem::take(&mut body.listed));

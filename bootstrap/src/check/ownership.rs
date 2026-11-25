@@ -1032,6 +1032,29 @@ impl<'a> Walk<'a> {
             return None;
         }
         if let Some(path) = self.place(e) {
+            // A lambda that is bound and stored or returned by its name gives away
+            // the values it holds, as one that is stored or returned where it is
+            // written does.
+            if matches!(e, Expr::Name { .. })
+                && !matches!(flow, Flow::Lend | Flow::Bind)
+                && let Some(held) = self.holding.get(&path.0).cloned()
+            {
+                for name in held {
+                    let all: Vec<&Expr> = {
+                        let mut all = Vec::new();
+                        for value in values(&self.f.body) {
+                            super::walk(value, &mut all);
+                        }
+                        all
+                    };
+                    let read = all
+                        .into_iter()
+                        .find(|e| matches!(e, Expr::Name { name: n, .. } if *n == name));
+                    if let Some(read) = read {
+                        self.read(st, read, (name, Vec::new()), flow);
+                    }
+                }
+            }
             return self.read(st, e, path, flow);
         }
         let projected = std::mem::take(&mut self.projecting);
@@ -1132,6 +1155,25 @@ impl<'a> Walk<'a> {
             }
             Expr::Lambda(l) => {
                 self.lambda(st, l, &[], (Kept::Lent, false));
+                // A lambda that is stored or returned takes the values of what it
+                // reads, as a value that is stored or returned does, so a value
+                // without `Copy` is given away and one that is lent is refused.
+                if let Some(s) = self.defs.env_of(l)
+                    && !matches!(flow, Flow::Bind)
+                {
+                    let mut all = Vec::new();
+                    for value in values(&l.body) {
+                        super::walk(value, &mut all);
+                    }
+                    for field in &self.defs.file.structs[s].fields {
+                        let read = all
+                            .iter()
+                            .find(|e| matches!(e, Expr::Name { name, .. } if *name == field.name));
+                        if let Some(read) = read {
+                            self.read(st, read, (field.name.clone(), Vec::new()), flow);
+                        }
+                    }
+                }
                 None
             }
             Expr::Loop(l) => {
@@ -1903,6 +1945,10 @@ impl<'a> Walk<'a> {
                 _ => Flow::Lend,
             };
             match &arg.value {
+                // A lambda that holds names, stored in a field, takes the values.
+                Expr::Lambda(l) if defs.env_of(l).is_some() => {
+                    self.eval(st, &arg.value, Flow::Stored);
+                }
                 Expr::Lambda(l) => {
                     // A handler's lambda for an operation owns what the
                     // operation takes, as a function owns what it takes. The
