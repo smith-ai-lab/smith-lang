@@ -101,14 +101,14 @@ fn sum_of(xs: [3]Byte) -> 0..766 {
 
 `sum_of([200, 100, 255])` is `555`. One pass adds a `0..256`, so at most `255`, and there are three passes, so `acc` is a `0..766`.
 
-For each such `var` the solver tries one fixed set of templates and searches for nothing else. Where the `var` starts as a `start_lo..start_hi`, and an assignment adds a `lo..hi` and runs at most `passes` times while the `var` lives, the templates are
+For each such `var` the solver tries one fixed set of templates and searches for nothing else. Where the `var` starts as a `start_lo..start_hi`, and one pass of a loop changes it by a `lo..hi`, then after `n` passes it is within
 
 ```
-start_lo + passes * lo <= x
-x <= start_hi + passes * hi
+start_lo + n * lo <= x
+x <= start_hi + n * hi
 ```
 
-with `passes * lo` taken as `0` where it is above `0`, and `passes * hi` as `0` where it is below. Each holds before the first pass, and holds after each pass, since a pass adds at most `hi` and at least `lo`, so the range of the `var` is what they bound. A value given to the `var` that does not read it, as `acc = 0` is, is another start. An assignment in an `if` runs at most as often as the `if` is reached, and one in a loop inside the loop runs at most the product of the passes of both.
+and each holds before the first pass and after each pass. The change of one pass is worked out from the body, in the order it is read: an assignment changes the `var` by what it adds or takes, which may be nothing where it is in an `if`; a loop in the pass changes it by its range times its passes; and one thing and then another change it by the sum of both. So a pass that adds `30` in an inner loop and then, in an `if`, takes `1`, changes the `var` by `29..30`, and the `var` is at its least when the `1` is taken after each `30`. The range of the `var` is what holds every value it has after any part of any pass, so what a pass takes away is charged against what the same pass added before it, and not against the start. A value given to the `var` that does not read it, as `acc = 0` is, is another start, and then each assignment counts at its own `lo..hi` for as many times as it runs. A `break` ends the loop after a part of a pass, which the range holds.
 
 The number of passes is known when the program is built, and is one of these:
 
@@ -135,6 +135,19 @@ fn down(d: 1..4) -> 70..101 {
 ```
 
 `n` is a `70..101`: at most `10` passes take at most `3` each.
+
+```
+fn netted(c: bool) -> 0..301 {
+  var s = 0
+  loop i in 0..10 {
+    loop j in 0..10 { s = s + 3 }
+    if c { s = s - 1 }
+  }
+  s
+}
+```
+
+`netted(true)` is `290`. Each pass of the outer loop changes `s` by `29..30`, so `s` is a `0..301`.
 
 A `var` whose range is not finite within 64 bits is refused, with the range, why, and the choices.
 
