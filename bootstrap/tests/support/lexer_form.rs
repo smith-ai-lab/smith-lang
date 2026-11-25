@@ -32,31 +32,32 @@ fn keyword_place(k: Keyword) -> Nat {
     .kw_break { 2 }
     .kw_derive { 3 }
     .kw_effect { 4 }
-    .kw_else { 5 }
-    .kw_ensures { 6 }
-    .kw_enum { 7 }
-    .kw_fn { 8 }
-    .kw_for { 9 }
-    .kw_foreign { 10 }
-    .kw_if { 11 }
-    .kw_impl { 12 }
-    .kw_in { 13 }
-    .kw_loop { 14 }
-    .kw_match { 15 }
-    .kw_not { 16 }
-    .kw_or { 17 }
-    .kw_out { 18 }
-    .kw_pub { 19 }
-    .kw_requires { 20 }
-    .kw_return { 21 }
-    .kw_struct { 22 }
-    .kw_take { 23 }
-    .kw_trait { 24 }
-    .kw_try { 25 }
-    .kw_use { 26 }
-    .kw_var { 27 }
-    .kw_with { 28 }
-    .kw_without { 29 }
+    .kw_effects { 5 }
+    .kw_else { 6 }
+    .kw_ensures { 7 }
+    .kw_enum { 8 }
+    .kw_fn { 9 }
+    .kw_for { 10 }
+    .kw_foreign { 11 }
+    .kw_if { 12 }
+    .kw_impl { 13 }
+    .kw_in { 14 }
+    .kw_loop { 15 }
+    .kw_match { 16 }
+    .kw_not { 17 }
+    .kw_or { 18 }
+    .kw_out { 19 }
+    .kw_pub { 20 }
+    .kw_requires { 21 }
+    .kw_return { 22 }
+    .kw_struct { 23 }
+    .kw_take { 24 }
+    .kw_trait { 25 }
+    .kw_try { 26 }
+    .kw_use { 27 }
+    .kw_var { 28 }
+    .kw_with { 29 }
+    .kw_without { 30 }
   }
 }
 

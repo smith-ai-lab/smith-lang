@@ -23,6 +23,7 @@ enum Keyword {
   kw_break
   kw_derive
   kw_effect
+  kw_effects
   kw_else
   kw_ensures
   kw_enum
@@ -455,6 +456,8 @@ fn keyword_of(word: str) -> Option[Keyword] {
     .some(.kw_derive)
   } else if word == "effect" {
     .some(.kw_effect)
+  } else if word == "effects" {
+    .some(.kw_effects)
   } else if word == "else" {
     .some(.kw_else)
   } else if word == "ensures" {

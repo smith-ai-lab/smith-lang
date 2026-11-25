@@ -108,7 +108,7 @@ fn head(source: &str, at: usize, end: usize, line: usize) -> Option<Piece> {
         "struct" => Kind::Struct,
         "enum" => Kind::Enum,
         "trait" => Kind::Trait,
-        "effect" => Kind::Effect,
+        "effect" | "effects" => Kind::Effect,
         "without" => Kind::Without,
         "impl" => Kind::Impl,
         _ => return None,

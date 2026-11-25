@@ -83,6 +83,7 @@ fn keyword_text(k: Keyword) -> str {
     .kw_break { "break" }
     .kw_derive { "derive" }
     .kw_effect { "effect" }
+    .kw_effects { "effects" }
     .kw_else { "else" }
     .kw_ensures { "ensures" }
     .kw_enum { "enum" }

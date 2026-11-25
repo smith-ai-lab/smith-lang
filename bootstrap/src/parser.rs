@@ -3,7 +3,7 @@
 //! compiler builds so far, and reports anything else the grammar allows as
 //! not supported yet.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::diag::{Error, Pos};
@@ -38,6 +38,10 @@ pub struct File {
     pub enums: Vec<Arc<Enum>>,
     pub traits: Vec<Arc<Trait>>,
     pub effects: Vec<EffectDef>,
+    /// The effects a function or a parameter lists as written, by the place of
+    /// the function or parameter, for each whose list names a group. The list
+    /// the item holds is what the groups stand for.
+    pub written_effects: HashMap<Pos, Vec<(String, Pos)>>,
     pub impls: Vec<Arc<Impl>>,
     pub withouts: Vec<Without>,
     /// The `use` lines, which come before every other item.
@@ -877,6 +881,13 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
                     p.skip_item(start);
                 }
             },
+            Tok::Keyword("effects") => match p.declare_group() {
+                Ok(g) => effects.push(g),
+                Err(e) => {
+                    p.errors.push(e);
+                    p.skip_item(start);
+                }
+            },
             Tok::Keyword("impl") => match p.implementation() {
                 Ok(i) => impls.extend(i),
                 Err(e) => {
@@ -943,6 +954,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
             enums: share(enums),
             traits: share(traits),
             effects,
+            written_effects: HashMap::new(),
             impls: share(impls),
             withouts,
             written: if uses.is_empty() {
@@ -1009,7 +1021,9 @@ fn ident_uses(tokens: &[Token], before: Option<&Tok>, into: &mut Vec<(String, Po
                     previous,
                     Some(
                         Tok::Punct(".")
-                            | Tok::Keyword("fn" | "struct" | "enum" | "trait" | "effect")
+                            | Tok::Keyword(
+                                "fn" | "struct" | "enum" | "trait" | "effect" | "effects"
+                            )
                     )
                 );
                 let label = matches!(tokens.get(i + 1).map(|t| &t.tok), Some(Tok::Punct(":")));

@@ -15,6 +15,9 @@ pub struct EffectDef {
     /// For each operation, where `pub` is written before it, if it is. An
     /// operation is private to its module unless it is.
     pub public: Vec<Option<Pos>>,
+    /// For a group, `effects NAME = <...>`, what it names, as written, and
+    /// nothing for a plain effect. A group has no operations.
+    pub group: Option<Vec<(String, Pos)>>,
 }
 
 /// Whether a function is an operation of an effect, which has no body and
@@ -218,9 +221,32 @@ impl Parser<'_> {
                 pos,
                 operations: names,
                 public,
+                group: None,
             },
             operations,
         ))
+    }
+
+    /// Parses `effects NAME = <e1, e2>`, a group, and the line break after it.
+    pub(super) fn declare_group(&mut self) -> Result<EffectDef, Error> {
+        self.bump();
+        let (name, pos) = self.defined("the group's name")?;
+        self.expect_punct("=", "`=` after the group's name")?;
+        if self.tok() != &Tok::Punct("<") {
+            return Err(self.expected("`<` to open the effects the group names", self.tok()));
+        }
+        let members = self.effects()?;
+        match self.tok() {
+            Tok::Newline | Tok::Eof => {}
+            tok => return Err(self.expected("a line break", tok)),
+        }
+        Ok(EffectDef {
+            name,
+            pos,
+            operations: Vec::new(),
+            public: Vec::new(),
+            group: Some(members),
+        })
     }
 
     /// Parses `with e` or `with x = e`, whose call `e` is passed the rest
