@@ -47,7 +47,7 @@ fn fetch_within_5_seconds(url: str) -> Result[Response[65536], FetchError] <fetc
   }
   match first(work, [wait]) {
     .page(result) { result }
-    .late { .err(.failed("the time ran out after 5 seconds")) }
+    .late { .err(.failed((url, "the time ran out after 5 seconds"))) }
   }
 }
 ```
