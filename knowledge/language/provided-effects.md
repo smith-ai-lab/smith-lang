@@ -5,6 +5,7 @@ description: The seven effects the standard library declares, the five the compi
 status: partial
 built:
   - "`entropy` in a signature, required by `fill`, which the system answers on every target, and a handler answers on any"
+  - "`fs` in a signature, required by the operations of `std.fs`, which the system answers on Linux, on x86-64 and arm64, and a handler answers on any target, though a program that carries `fs` is refused for macOS, Windows, and WebAssembly with one message that names the target"
   - "`net` and `time` in a signature, required by the operations of `std.net` and `std.time`, which the system answers on Linux and macOS, on x86-64 and arm64, with a call that waits blocking, which a handler answers on any target with no system call, though a handler of `net` cannot give a `Listener`, a `Connection`, or a `Socket`, and which a program that carries them is refused for Windows and WebAssembly with one message that names the target"
   - "`task` in a signature, required by `spawn` and `join` of `std.task`, which `with tasks()` handles and which the system answers for a program that reaches `main` with no group, by running the child to its end"
   - "`console`, `alloc`, and `diverge` in a signature, `console` required by `print`, `alloc` by a string that holds an expression, and `diverge` by an open-ended `loop` with no `decreases`"

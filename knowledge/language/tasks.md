@@ -10,6 +10,7 @@ built:
   - "`task` is declared by `std.task` and is imported as `net` is, `use std.task (task, join, spawn, tasks)`; a group that no scheduler is in force of is the scheduler of its children, which wait in `epoll` on Linux and in `kqueue` on macOS, as [Task](../library/task.md) says, and a group inside a task that a scheduler runs hands its children to that scheduler, so no child is found still running when the block ends"
   - "only `std.task` handles `task`, with `tasks()` and the schedulers it has, and a program that writes a handler of it is refused"
   - "the operations of `net` suspend the task that calls them in a group, `read`, `write`, and `accept` waiting for the connection while other tasks run, on Linux and on macOS, and block on Windows, which waits for an issue of its own, and a function that opens a group needs no more than before"
+  - "a read or a write of `fs` suspends the task that calls it in a group on Linux when the file would make it wait, as a pipe with nothing in it does, and the others run meanwhile"
   - "`with test_scheduler(seed)` of `std.task` runs the tasks in an order that the seed picks, so that a test finds a mistake of order: one seed always gives one order, and a child may start a grandchild and join it, as [Task](../library/task.md) says"
   - "not built: `first`, and a child that runs at the same time as its parent, and a child that runs under a handler that holds state, which is refused as not built yet, as [Handlers and tasks](task-handlers.md) says"
 ---
