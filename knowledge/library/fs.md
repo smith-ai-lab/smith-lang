@@ -4,14 +4,15 @@ title: Files
 description: The fs effect, for files, a file open for a block, ranges of it read as values, and reading and writing a whole file.
 status: partial
 built:
-  - "`std.fs` declares `fs`, with the six operations, `FsError`, and `File`, a struct with one private field, the system's handle, and neither `Copy` nor `Discard`, so a `File` that is not closed, is closed twice, or is used after it is closed is refused where it is compiled"
+  - "`std.fs` declares `fs`, with the six operations, `FsError`, and `File`, a struct with the system's handle and `path`, the path it was opened with, and neither `Copy` nor `Discard`, so a `File` that is not closed, is closed twice, or is used after it is closed is refused where it is compiled"
   - "`open` and `create`, written for `with`, which lend the file to the rest of the block and close it afterwards on every path, and `read_all` and `write_all`, written with the operations as the page shows them"
-  - "on Linux, on x86-64 and arm64, the system answers every operation with the kernel's own calls: `openat`, `pread64`, `pwrite64`, `lseek`, `fchmod`, and `close`, with `read` and `write` for a file that has no places; a file that is not there is `missing`, one the program may not read or write is `denied`, and any other refusal is `failed` with the call and the system's error number, as `read: error 21` for a directory, and no operation ends the program"
+  - "on Linux, on x86-64 and arm64, the system answers every operation with the kernel's own calls: `openat`, `pread64`, `pwrite64`, `lseek`, `fchmod`, and `close`, with `read` and `write` for a file that has no places; a file that is not there is `missing`, one the program may not read or write is `denied`, and any other refusal is `failed` with the call and the system's error number, as `read: error 21` for a directory, each holding the path, and no operation ends the program"
   - "`read` gives the bytes that lie in the range, fewer where the file ends first and none past its end, and reads a range of a file of a million bytes with one call; `write_all` of `executable: true` makes a file that the system runs, also one that existed"
   - "a task in a group that calls `read` or `write` suspends when the file would make it wait, as a pipe does with nothing in it, and the others run meanwhile, as [Files that have no places](#files-that-have-no-places) says; a function that holds a `File` while it may wait and does not carry `fs` is refused where it is compiled"
   - "`memory_fs`, a handler of `fs` over files kept in memory, with `file`, `handle`, and `release`, by which a handler that a test writes makes, reads the number of, and ends a `File`, as [Handlers](#handlers-of-fs) says"
   - "on macOS, on x86-64 and arm64, the system answers with the wrappers of `libSystem` of the same names, `openat`, `pread`, `pwrite`, `lseek`, `fchmod`, `read`, `write`, and `close`, with the flags and the error numbers of that kernel, and on Windows, on x86-64 and arm64, with `CreateFileW`, which the path is given to in UTF-16, `ReadFile` and `WriteFile`, which a place is given to by an `OVERLAPPED`, `GetFileSizeEx`, and `CloseHandle`, with each refusal read as the same `missing`, `denied`, or `failed` as on Linux; a program that does not carry `fs` imports none of them, and a file written as `executable: true` is one that macOS runs, and one that Windows runs by its name, which has no mode"
   - "a `File` that a task holds, directly, in a struct, a list, or a lambda that never ran, is closed by the handler in force, once, when the task is cancelled or fails, as a handle of `net` is"
+  - "`FsError` has a `Fmt` that writes the message of [Errors of the library](errors.md), so a `main` that returns a `Result` of it and uses `try` writes `photo.jpg: no such file` to standard error and ends with status 1 on each target `fs` is built for"
   - "not built: WebAssembly, where a program that carries `fs` is refused naming the target, and the wait of a task for a file that has no places on Windows"
 ---
 
@@ -50,9 +51,9 @@ fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
 
 ```
 enum FsError {
-  missing
-  denied
-  failed: str
+  missing: str
+  denied: str
+  failed: (str, str)
 }
 
 effect fs {
@@ -73,6 +74,10 @@ effect fs {
 | `size` | Gives how many bytes the file holds |
 | `read` | Gives the bytes in a range of the file |
 | `write` | Puts the bytes in the file from the place `at` |
+
+Each case of `FsError` holds the path, and `failed` holds what the system said besides it, as [Errors of the library](errors.md) says. `open_file` and `create_file` hold the path they were given. `size`, `read`, and `write` hold the path the `File` was opened with, which the `File` keeps, so a `read` of a file opened as `data.bin` fails with the path `data.bin`. A `File` shows it as the field `path`, which a handler reads, and a call that succeeds does nothing for it. A `File` that a handler made with `file` has the path `""`.
+
+`FsError` has a `Fmt`, so `"{e}"` is `missing.txt: no such file` for `.missing("missing.txt")`, `secret.key: permission denied` for `.denied("secret.key")`, and `data.bin: read: error 5` for `.failed(("data.bin", "read: error 5"))`.
 
 - **A place in a file is a number the program holds.** A file has no position of its own that a read moves, so two tasks read one file without disturbing each other, and reading any part costs the same as reading the next.
 - **What is read is a value.** It never changes after it is read. If another program changes the file, a later read gives other bytes, as reading the console twice gives two lines.
@@ -97,6 +102,24 @@ fn fixture() -> Result[List[Byte], FsError] <alloc> {
 }
 ```
 
-`memory_fs(files, body)` takes `files`, a `Files`, which is a list of `MemoryFile`, each a `path` and its `bytes`. A file is found by its path as a whole, so `a/b` is one name and no directory. `create_file` adds a file or empties the one there is, `write` puts bytes in from the place and fills what the file did not hold with zeros, and nothing in memory is refused.
+`memory_fs(files, body)` takes `files`, a `Files`, which is a list of `MemoryFile`, each a `path` and its `bytes`. A file is found by its path as a whole, so `a/b` is one name and no directory. `create_file` adds a file or empties the one there is, `write` puts bytes in from the place and fills what the file did not hold with zeros, and nothing in memory is refused. A file that `open_file` of it is not given is `.missing(path)`.
+
+A handler that refuses builds the case with what it was given: the path for `open_file` and `create_file`, and the path of the `File` it is lent, `f.path`, for the others.
+
+```
+use std.fs (fs, release)
+
+fn refusing[T](body: fn() -> T <fs>) -> T {
+  fs(
+    open_file: fn(path) { .err(.denied(path)) },
+    create_file: fn(path, executable) { .err(.failed((path, "disk"))) },
+    close_file: fn(f) { n = release(f) },
+    size: fn(f) { .err(.missing(f.path)) },
+    read: fn(f, range) { .err(.missing(f.path)) },
+    write: fn(f, at, bytes) { .err(.denied(f.path)) },
+    body: body,
+  )
+}
+```
 
 A handler that a test writes makes a `File` from a number of its own choosing with `file`, reads the number of the one it is lent with `handle`, and ends the one it is given with `release`, as the handlers of [`net`](net.md#making-a-value-in-a-handler) do for a connection. The system's handler answers each operation given a `File` it did not open with `failed`, and makes no system call with it.

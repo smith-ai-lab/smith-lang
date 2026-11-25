@@ -103,7 +103,7 @@ Nothing unwinds. A `return` gives a value to whatever called the function or lam
 fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   with f = open(path)
   n = try size(f)
-  if n < 64 { return .err(.failed("too short")) }
+  if n < 64 { return .err(.failed((path, "too short"))) }
   read(f, 0..64)
 }
 ```

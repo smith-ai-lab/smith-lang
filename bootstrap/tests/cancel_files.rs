@@ -60,15 +60,15 @@ fn run() -> u64 <fs, diverge, alloc> {{
 
 fn main() <console, alloc, diverge> {{
   r = fs(
-    open_file: fn(path) {{ .err(.missing) }},
-    create_file: fn(path, executable) {{ .err(.missing) }},
+    open_file: fn(path) {{ .err(.missing(path)) }},
+    create_file: fn(path, executable) {{ .err(.missing(path)) }},
     close_file: fn(f) {{
       print(\"closed {{handle(f)}}\")
       n = release(f)
     }},
-    size: fn(f) {{ .err(.missing) }},
-    read: fn(f, range) {{ .err(.missing) }},
-    write: fn(f, at, bytes) {{ .err(.missing) }},
+    size: fn(f) {{ .err(.missing(f.path)) }},
+    read: fn(f, range) {{ .err(.missing(f.path)) }},
+    write: fn(f, at, bytes) {{ .err(.missing(f.path)) }},
     body: {{ run() }},
   )
   print(\"{{r}}\")
