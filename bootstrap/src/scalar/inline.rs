@@ -178,17 +178,7 @@ fn inlined(f: Function, done: &mut [Option<Function>], sites: &[usize]) -> Funct
                 at: place,
             } = instruction;
             let (function, args) = match op {
-                // A call that a landing follows is not replaced when its function fails
-                // itself: the failure of an `Allocate`, a `Write` or a `Fail` goes up from
-                // the frame that holds it, to the landings of the calls it went up
-                // through, and would go past this one if the code were in this function.
-                Op::Call { function, args }
-                    if replaced(done, function)
-                        && !(outer.as_ref().is_some_and(|(_, call, _)| *call == index)
-                            && fails_itself(done[function].as_ref().unwrap())) =>
-                {
-                    (function, args)
-                }
+                Op::Call { function, args } if replaced(done, function) => (function, args),
                 op => {
                     blocks[at].instructions.push(Instruction {
                         results: call_results,
@@ -374,9 +364,10 @@ fn chained(
             continue;
         }
         let mut b = b;
-        // A call whose next instruction is not `Unwinding` has no landing.
+        // A call, or an instruction that the system may refuse, whose next instruction is
+        // not `Unwinding` has no landing.
         while let Some(c) = (0..blocks[b].instructions.len()).find(|&c| {
-            matches!(blocks[b].instructions[c].op, Op::Call { .. })
+            may_fail(&blocks[b].instructions[c].op)
                 && !matches!(
                     blocks[b].instructions.get(c + 1).map(|i| &i.op),
                     Some(Op::System {
@@ -441,16 +432,15 @@ fn chained(
     }
 }
 
-/// Whether the function holds an instruction that the system may refuse, which
-/// ends the task by a failure that starts in the frame of the function.
-fn fails_itself(f: &Function) -> bool {
-    (f.blocks.iter().flat_map(|b| &b.instructions)).any(|i| {
-        matches!(
-            i.op,
-            Op::System {
+/// Whether a failure may start at the instruction: a call, whose callee may
+/// fail, or a request for memory, a write, or a failure itself.
+fn may_fail(op: &Op) -> bool {
+    matches!(
+        op,
+        Op::Call { .. }
+            | Op::System {
                 call: System::Allocate | System::Write(_) | System::Fail,
                 ..
             }
-        )
-    })
+    )
 }
