@@ -15,7 +15,7 @@ built:
   - "the product of two numbers of 64 bits or fewer, both signed or both not, as the one instruction of each chip that gives both halves: `mul` or `imul` of one operand on x86-64, and `mul` with `umulh` or `smulh` on arm64"
   - "`narrow(x)` and `clamp(x)` of a number of 65 to 128 bits, to a range of 64 bits or fewer, compared with the ends of the range as two words"
   - "not `wrapping_`, `saturating_`, and `checked_` of a number of more than 64 bits, or `narrow` and `clamp` of a float"
-  - "not a name with no stated type given the range its body infers, as [Inference](inference.md) says; today a `var` has the range of its first value"
+  - "a `var` with no stated type given the range its body infers, where it is a number"
 ---
 
 # Integer arithmetic
