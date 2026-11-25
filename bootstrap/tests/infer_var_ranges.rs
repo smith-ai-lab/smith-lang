@@ -34,6 +34,10 @@ pub const ONCE: &[Test] = &[
         a_var_that_a_loop_gives_itself_plus_its_counter_is_refused_at_the_assignment_with_the_range_to_state,
     ),
     (
+        "a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program",
+        a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program,
+    ),
+    (
         "every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give",
         every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give,
     ),
@@ -418,4 +422,33 @@ fn every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_a
             "{source}"
         );
     });
+}
+
+/// A program that has another mistake, here a missing `alloc`, is refused for
+/// the `var` that a loop changes by itself and for the mistake, and the range
+/// the `var` has so far is said in neither.
+fn a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program() {
+    let source = with_header(
+        "fn main() <console> {\n  var sum = 0\n  loop i in 0..5 { sum = sum + i }\n  print(\"{sum}\")\n}\n"
+            .to_string(),
+    );
+    let errors = lower(source.as_bytes()).expect_err("two mistakes");
+    let at = line_of(&source, "loop i in 0..5 { sum = sum + i }");
+    let print = line_of(&source, "print(\"{sum}\")");
+    assert!(
+        errors.iter().any(|e| e.pos.line == at
+            && e.message.contains("changed by itself in this loop")
+            && e.message.contains("not inferred")),
+        "{errors:?} for\n{source}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.pos.line == print && e.message.contains("`alloc`")),
+        "{errors:?} for\n{source}"
+    );
+    assert!(
+        errors.iter().all(|e| !e.message.contains("does not fit")),
+        "{errors:?} for\n{source}"
+    );
 }
