@@ -112,20 +112,24 @@ fn chosen_half(x: f32) -> f32 { chosen()(x) }
 
 ## Which function it is is known when the program is built
 
-A value of a function type is one function, and which one is known when the program is built, so a call of it is a call of that function. A struct with a field of a function type is a type for each function it holds, as a struct with a type parameter is a type for each type it holds, and the field takes no bytes. The function is written in brackets where the type is written.
-
-```
-fn priced(p: Pricing[half], x: f32) -> f32 { p.discount(x) }
-```
-
-`Pricing[half]` is the `Pricing` that holds `half`. A function that returns a function names that function in its last expression, and a name bound to a function is that function.
-
-Two values that hold different functions where one type is needed are refused, since which function it is would depend on what the program does when it runs. These are the arms of an `if` or a `match`, two elements of a list, a `var` given one function and then another, and a function that returns one of two functions by a branch.
+A value of a function type is one function, and which one is known when the program is built, so a call of it is a call of that function. A struct with a field of a function type is a type for each function it holds, as a struct with a type parameter is a type for each type it holds, and the field takes no bytes. The function is never written: `Pricing` is the type of every `Pricing`, and a function that takes one takes whichever it is given, as a function with a type parameter does. It is built once for each function its callers' values hold.
 
 ```
 fn double(x: f32) -> f32 { x * 2.0 }
 
-fn pick(wide: bool) -> Pricing[half] {
+fn priced(p: Pricing, x: f32) -> f32 { p.discount(x) }
+
+fn both() -> (f32, f32) {
+  (priced(Pricing(discount: half), 8.0), priced(Pricing(discount: double), 8.0))
+}
+```
+
+`both()` is `(4.0, 16.0)`. A struct that holds a `Pricing` holds the function it holds in turn. A function that returns a function, or a `Pricing`, gives what the construction or the name that ends its body says, and a name bound to a function is that function.
+
+Two values that hold different functions where one type is needed are refused, since which function it is would depend on what the program does when it runs. These are the arms of an `if` or a `match`, two elements of a list, a `var` given one function and then another, and a function that returns one of two functions by a branch.
+
+```
+fn pick(wide: bool) -> Pricing {
   if wide { Pricing(discount: double) } else { Pricing(discount: half) }
 }
 ```
@@ -144,7 +148,6 @@ This is refused at the first `Pricing(discount: double)`: "which function this i
 | `sale.discount(x)` | The function in a field, called |
 | `-> fn(f32) -> f32` | A return type that is a function |
 | `chosen()(x)` | The function a call returns, called |
-| `Pricing[half]` | The struct that holds `half` in its function field |
 | `fn(v) { scale(v) }` | A lambda, the way to pass a function that has defaults |
 
 Next: [`with`](with.md)
