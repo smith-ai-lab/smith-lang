@@ -1027,6 +1027,9 @@ struct Defs<'a> {
     /// The structs of `std.net` that hold a handle the system opened, by their
     /// places in the file's structs, and the operation of `net` that ends each.
     handles: Vec<(usize, &'static str)>,
+    /// The `File` of `std.fs`, by its place in the file's structs, when the program
+    /// has that module.
+    file_handle: Option<usize>,
     poll: Option<usize>,
     wait: Option<usize>,
     /// The prelude's `bool`, `Order`, `Option`, `Flow`, and `Result`, by their
@@ -2981,6 +2984,7 @@ fn check_file(
             library_item(&file, &items, "std.net", Kind::Struct, name).map(|s| (s, end))
         })
         .collect(),
+        file_handle: library_item(&file, &items, "std.fs", Kind::Struct, "File"),
         poll: library_item(&file, &items, "std.task", Kind::Enum, "Poll"),
         wait: library_item(&file, &items, "std.task", Kind::Enum, "Wait"),
         boolean: prelude_item(&file, Kind::Enum, "bool"),

@@ -87,7 +87,7 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}() -> Int <@fs> { 1 }\n",
+        declares: "fn u{i}() -> Int <@gpu> { 1 }\n",
         call: "u{i}()",
         parsed: false,
     },

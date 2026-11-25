@@ -107,6 +107,7 @@ fn names() -> &'static [Held] {
                 Box::leak(path.file_stem().unwrap().to_str().unwrap().to_string().into_boxed_str());
             let text = std::fs::read_to_string(&path).unwrap();
             let mut in_trait = false;
+            let mut in_effect = false;
             for line in text.lines() {
                 let word = |rest: &str| -> String {
                     rest.chars()
@@ -116,6 +117,12 @@ fn names() -> &'static [Held] {
                 if let Some(rest) = line.strip_prefix("pub trait ") {
                     found.push((word(rest), module));
                     in_trait = true;
+                } else if line.starts_with("pub effect ") {
+                    in_effect = true;
+                } else if in_effect && line == "}" {
+                    in_effect = false;
+                } else if in_effect && let Some(rest) = line.trim_start().strip_prefix("pub fn ") {
+                    found.push((word(rest), module));
                 } else if let Some(rest) = ["pub fn ", "pub struct ", "pub enum "]
                     .iter()
                     .find_map(|k| line.strip_prefix(k))

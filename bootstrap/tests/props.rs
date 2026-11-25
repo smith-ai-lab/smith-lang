@@ -1295,7 +1295,7 @@ fn file_with_check_errors(g: &mut Gen) -> (String, Vec<(Pos, String)>) {
         let mut unknown = false;
         for i in 0..g.below(4) {
             source.push_str(if i == 0 { " <" } else { ", " });
-            let effect = *g.pick(&["console", "fs", "alloc", "consol", "ui"]);
+            let effect = *g.pick(&["console", "gpu", "alloc", "consol", "ui"]);
             let at = pos_after(&source);
             source.push_str(effect);
             if listed.contains(&effect) {

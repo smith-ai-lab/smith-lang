@@ -507,7 +507,7 @@ fn uses(g: &mut Gen) -> Uses {
         match g.below(7) {
             0 => file.push(&format!("use {m} ({first})\n")),
             1 => {
-                let bad = *g.pick(&["std.nope", "std.fs", "other.thing"]);
+                let bad = *g.pick(&["std.nope", "std.ui", "other.thing"]);
                 file.push("use ");
                 file.mistake(bad, format!("no module `{bad}`"));
                 file.push(" (x)\n");
