@@ -453,15 +453,15 @@ fn under_a_handler() -> Vec<String> {
     let mut main = String::from(
         "fn copy_of(r: Request) -> Request <alloc> {\n  Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)\n}\n\n\
          fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <alloc> {\n  http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)\n}\n\n\
-         fn ask(method: str, path: str, body: str) <console, alloc> {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })\n  app()\n}\n\n\
+         fn ask(method: Method, path: str, body: str) <console, alloc> {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })\n  app()\n}\n\n\
          fn main() <console, alloc> {\n",
     );
     for (method, path, body) in REQUESTS {
-        main.push_str(&format!("  ask(\"{method}\", \"{path}\", \"{}\")\n", quoted(body)));
+        main.push_str(&format!("  ask(.{}, \"{path}\", \"{}\")\n", method.to_lowercase(), quoted(body)));
     }
     main.push_str("}\n");
     let routes = routes()
-        .replace("use std.http (get, http, listen, post, routes)", "use std.console (console, print)\nuse std.http (Request, Response, get, http, post, routes)")
+        .replace("use std.http (get, http, listen, post, routes)", "use std.console (console, print)\nuse std.fetch (Method)\nuse std.http (Request, Response, get, http, post, routes)")
         .replace("use std.net (net)\n", "")
         .replace("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n", "");
     let source = format!("{routes}\n{main}");

@@ -42,6 +42,7 @@ fn printed(source: &str) -> String {
 /// prints its response, and a handler of `store`.
 const PROGRAM: &str = "use std.bits (u8, u64)
 use std.console (console, print)
+use std.fetch (Method)
 use std.http (NotFound, Request, Response, delete, get, http, post, routes, routing)
 
 struct User {
@@ -91,7 +92,7 @@ fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <all
   http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)
 }
 
-fn ask(method: str, path: str, query: str, body: str) <console, alloc> {
+fn ask(method: Method, path: str, query: str, body: str) <console, alloc> {
   with once(Request(method: method, path: path, query: query, headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })
   with fixed_store()
   with routes()
@@ -105,7 +106,7 @@ fn ask(method: str, path: str, query: str, body: str) <console, alloc> {
 
 fn the_first_program_of_the_page_answers_a_user_a_missing_user_a_bad_id_and_a_path_with_no_route() {
     let source = format!(
-        "{PROGRAM}fn main() <console, alloc> {{\n  ask(\"GET\", \"/users/7\", \"\", \"\")\n  ask(\"GET\", \"/users/8\", \"\", \"\")\n  ask(\"GET\", \"/users/x\", \"\", \"\")\n  ask(\"GET\", \"/nothing\", \"\", \"\")\n}}\n"
+        "{PROGRAM}fn main() <console, alloc> {{\n  ask(.get, \"/users/7\", \"\", \"\")\n  ask(.get, \"/users/8\", \"\", \"\")\n  ask(.get, \"/users/x\", \"\", \"\")\n  ask(.get, \"/nothing\", \"\", \"\")\n}}\n"
     );
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
     let said = printed(&source);
@@ -215,8 +216,8 @@ fn quoted(s: &str) -> String {
 
 fn call(a: &Ask) -> String {
     format!(
-        "  ask(\"{}\", \"{}\", \"{}\", \"{}\")\n",
-        a.method,
+        "  ask(.{}, \"{}\", \"{}\", \"{}\")\n",
+        a.method.to_lowercase(),
         a.path,
         a.query,
         quoted(a.body)

@@ -2,7 +2,10 @@
 type: specification
 title: Requests to another server
 description: The fetch effect of std.fetch, by which a program sends an HTTP request to another server and gets its response, and what answers it natively and in a WebAssembly module.
-status: planned
+status: partial
+built:
+  - "`Method` of `std.fetch`, the enum of `get`, `post`, `put`, `delete`, `patch`, and `head`, which `Request.method` of [`std.http`](http.md) is"
+  - "not the effect `fetch`, `Request`, `Response`, `Body`, `FetchError`, or any handler"
 ---
 
 # Requests to another server
