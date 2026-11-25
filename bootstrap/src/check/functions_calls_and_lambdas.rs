@@ -739,10 +739,26 @@ impl<'a> Checker<'a> {
     /// The type of a call of a function that gives its parameter `i`, which is a
     /// function: the type whose one value is the function the argument is.
     fn argument_function(&mut self, body: &Body<'a>, call: &Call, sig: &Signature, i: usize) -> Ty {
+        match self.argument_named(body, call, sig, i) {
+            (Some(named), _) => named,
+            (None, value) => {
+                self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+                Ty::Unknown
+            }
+        }
+    }
+
+    /// The type whose one value is the function that the argument for parameter
+    /// `i` is, when it is one, and the argument.
+    fn argument_named<'c>(
+        &self,
+        body: &Body<'a>,
+        call: &'c Call,
+        sig: &Signature,
+        i: usize,
+    ) -> (Option<Ty>, &'c Expr) {
         let places = params_of(&sig.params, &call.args).unwrap_or_default();
-        let Some(a) = places.iter().position(|&p| p == i) else {
-            return Ty::Unknown;
-        };
+        let a = places.iter().position(|&p| p == i).unwrap_or(0);
         let value = &call.args[a].value;
         let known = match value {
             _ if self.fn_values.contains_key(&addr(value)) => {
@@ -757,10 +773,7 @@ impl<'a> Checker<'a> {
                 _ => None,
             },
         };
-        known.unwrap_or_else(|| {
-            self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
-            Ty::Unknown
-        })
+        (known, value)
     }
 
     /// What the field a call is written on holds, when the call is
@@ -1030,7 +1043,26 @@ impl<'a> Checker<'a> {
             if let Some(i) = sig.gives_param {
                 return self.argument_function(body, call, sig, i);
             }
-            return sig.gives.solved(&sol);
+            let gives = sig.gives.solved(&sol);
+            if let (false, Ty::Struct(u, mut held)) = (sig.gives_held.is_empty(), gives.clone()) {
+                // The functions of parameters are those of the arguments.
+                let first = held.len() - defs.implicit[u];
+                for &(at, i) in &sig.gives_held {
+                    let (named, value) = self.argument_named(body, call, sig, i);
+                    match named {
+                        Some(Ty::Named(g)) => {
+                            self.stored_effects(value, g, "the type of the result it is stored in");
+                            held[first + at] = Ty::Named(g);
+                        }
+                        _ => {
+                            self.errors.push(Error::new(value.pos(), WHICH_FUNCTION));
+                            return Ty::Unknown;
+                        }
+                    }
+                }
+                return Ty::structure(u, held);
+            }
+            return gives;
         }
         let mut of = (defs.trait_fns_at(call.name_pos, name))
             .cloned()

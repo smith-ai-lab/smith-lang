@@ -866,6 +866,10 @@ struct Signature {
     /// The parameter of a function type that the function gives, when its
     /// result is one of its parameters: the function is that of the argument.
     gives_param: Option<usize>,
+    /// For a result that is a struct that holds functions, the functions that
+    /// are those of parameters: the place among the functions it holds, and the
+    /// parameter, whose argument at each call is the function.
+    gives_held: Vec<(usize, usize)>,
     /// The effects it carries that a caller must have, which are those it
     /// lists that the compiler builds.
     effects: Vec<String>,
@@ -886,6 +890,7 @@ impl Signature {
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
             gives_param: None,
+            gives_held: Vec::new(),
             effects: Vec::new(),
             fn_effects: Vec::new(),
         }
@@ -900,6 +905,7 @@ impl Signature {
             param_defaults: Vec::new(),
             gives: Ty::Nothing,
             gives_param: None,
+            gives_held: Vec::new(),
             effects: vec!["console".to_string()],
             fn_effects: Vec::new(),
         }
@@ -1611,7 +1617,7 @@ impl<'a> Defs<'a> {
                 },
                 Some(t) if self.implicit_result(t, &scope).is_some() => {
                     let u = self.implicit_result(t, &scope).expect("checked");
-                    self.returned_struct(f, u, &scope).unwrap_or(Ty::Unknown)
+                    (self.returned_struct(f, u, &scope).map(|(t, _)| t)).unwrap_or(Ty::Unknown)
                 }
                 Some(t) => self.quietly(t, &scope),
                 None => Ty::Nothing,
@@ -1621,6 +1627,16 @@ impl<'a> Defs<'a> {
                     self.returned_parameter(f)
                 }
                 _ => None,
+            },
+            gives_held: match &f.result {
+                Some(t) => match self.implicit_result(t, &scope) {
+                    Some(u) => self
+                        .returned_struct(f, u, &scope)
+                        .map(|(_, from)| from)
+                        .unwrap_or_default(),
+                    None => Vec::new(),
+                },
+                None => Vec::new(),
             },
             effects: {
                 let mut built: Vec<String> = Vec::new();
@@ -1731,8 +1747,13 @@ impl<'a> Defs<'a> {
                     return Some(h.clone());
                 }
                 if let Some((f, scope)) = own
-                    && let Some(p) = f.params.iter().find(|p| &p.name == name)
+                    && let Some(at) = f.params.iter().position(|p| &p.name == name)
                 {
+                    let p = &f.params[at];
+                    // A function that is a parameter is the function of the argument.
+                    if p.ty.function {
+                        return Some(Holds::Func(param_slot(at)));
+                    }
                     return match self.quietly(&p.ty, scope) {
                         Ty::Struct(u, args) if self.implicit[u] > 0 => {
                             let at = args.len() - self.implicit[u];
@@ -1849,7 +1870,12 @@ impl<'a> Defs<'a> {
     /// The type of struct `u` that `f` gives, when its result is written as `u`,
     /// which holds functions: the functions that each end of the body holds,
     /// the same at each end.
-    pub(crate) fn returned_struct(&self, f: &Function, u: usize, scope: &Scope) -> Option<Ty> {
+    pub(crate) fn returned_struct(
+        &self,
+        f: &Function,
+        u: usize,
+        scope: &Scope,
+    ) -> Option<(Ty, Vec<(usize, usize)>)> {
         let def = &self.file.structs[u];
         if def.generics.iter().any(|g| !g.name.contains('@')) {
             return None;
@@ -1858,7 +1884,21 @@ impl<'a> Defs<'a> {
             [Holds::Struct(v, tail), rest @ ..]
                 if *v == u && rest.iter().all(|h| *h == Holds::Struct(u, tail.clone())) =>
             {
-                Some(Ty::structure(u, tail.clone()))
+                // A function that a parameter is is the argument's at each call.
+                let from: Vec<(usize, usize)> = (tail.iter().enumerate())
+                    .filter_map(|(at, t)| slot_param(t).map(|i| (at, i)))
+                    .collect();
+                let tail = tail
+                    .iter()
+                    .map(|t| {
+                        if slot_param(t).is_some() {
+                            Ty::Nothing
+                        } else {
+                            t.clone()
+                        }
+                    })
+                    .collect();
+                Some((Ty::structure(u, tail), from))
             }
             _ => None,
         }
@@ -7892,6 +7932,17 @@ impl<'a> Checker<'a> {
             }
             // A name that holds a function with a name is a function of that
             // function's type.
+            // A parameter of a function type held by a field is the function of
+            // the argument at each call, which the result settles there.
+            (Ty::Fn(_), Ty::Param(p))
+                if !self.fn_values.contains_key(&addr(value))
+                    && matches!(value, Expr::Name { .. })
+                    && vars.names[*p].ends_with("@function") =>
+            {
+                if sol[*p].is_none() {
+                    sol[*p] = Some(Ty::Unknown);
+                }
+            }
             (Ty::Named(g), Ty::Param(p))
                 if !self.fn_values.contains_key(&addr(value))
                     && vars.names[*p].ends_with("@function") =>
@@ -10132,3 +10183,20 @@ enum Holds {
     /// A struct that holds functions, with the types that stand for them.
     Struct(usize, Vec<Ty>),
 }
+
+/// The place that stands, among what a function holds, for the function that
+/// its parameter `i` is, which each call settles from the argument.
+fn param_slot(i: usize) -> Ty {
+    Ty::Param(PARAM_SLOTS + i)
+}
+
+/// The parameter a place stands for, if it is one made by `param_slot`.
+fn slot_param(t: &Ty) -> Option<usize> {
+    match t {
+        Ty::Param(p) if *p >= PARAM_SLOTS => Some(p - PARAM_SLOTS),
+        _ => None,
+    }
+}
+
+/// Where the places of `param_slot` begin, above every type parameter.
+const PARAM_SLOTS: usize = 1 << 20;
