@@ -8,9 +8,9 @@ const NO_CLOSING_QUOTE: &str = "this string has no closing quote on the line it 
 
 /// The keywords of Smith.
 const KEYWORDS: &[&str] = &[
-    "and", "as", "break", "derive", "effect", "else", "ensures", "enum", "fn", "for", "foreign",
-    "if", "impl", "in", "loop", "match", "not", "or", "out", "pub", "requires", "return", "struct",
-    "take", "trait", "try", "use", "var", "with", "without",
+    "and", "as", "break", "derive", "effect", "effects", "else", "ensures", "enum", "fn", "for",
+    "foreign", "if", "impl", "in", "loop", "match", "not", "or", "out", "pub", "requires",
+    "return", "struct", "take", "trait", "try", "use", "var", "with", "without",
 ];
 
 /// Punctuation and operators, longest first so that the first match is the

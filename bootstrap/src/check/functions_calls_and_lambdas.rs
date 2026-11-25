@@ -180,7 +180,7 @@ impl<'a> Checker<'a> {
         self.params(def, &defs.signatures[f].scope);
         self.defaults(def, &defs.signatures[f]);
         self.contracts(def, &defs.signatures[f]);
-        self.effects(&def.effects);
+        self.effects(self.defs.file.listed(def.pos, &def.effects));
         self.parameter_effects(def);
     }
 
@@ -203,6 +203,7 @@ impl<'a> Checker<'a> {
             extra,
             unknown_effect: false,
             missing: Vec::new(),
+            missing_at: Vec::new(),
             used: Vec::new(),
             names: Vec::new(),
             params: 0,

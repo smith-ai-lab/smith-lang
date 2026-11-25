@@ -56,7 +56,8 @@ use crate::parser::{
     Match, Over, Part, Pattern, Qualified, Range, Stmt, Struct, Trait, Type, Use,
 };
 use effects_with_and_try::{
-    BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, is_arena_call, provided_by,
+    BUILT, BUILT_IN_EFFECTS, LIBRARY_EFFECTS, declarations, expand_groups, is_arena_call,
+    provided_by,
 };
 use lists_and_text::{as_read, is_freeze, is_push, is_utf8};
 use names::{Naming, Resolution, own_final, renamed_tokens};
@@ -2202,6 +2203,7 @@ fn check_file(
 ) -> Result<Checked, Vec<Error>> {
     let mut loaded: Vec<usize> = Vec::new();
     let mut file = split_needs(with_prelude(file, prelude, &loaded, numeric));
+    expand_groups(&mut file, &mut errors);
     let trait_names: Vec<String> = file.traits.iter().map(|t| t.name.clone()).collect();
     let base_impls: Vec<Arc<Impl>> = std::mem::take(&mut file.impls);
     let (base_functions, base_structs, base_enums) =
@@ -2748,21 +2750,25 @@ fn check_file(
 /// the places `wanted` says, leaving out the functions used as values, which
 /// may list an effect for the type they are given.
 fn unused_effect_warnings(
-    unused: &[(Pos, String, String, Pos, String)],
+    unused: &[(Pos, String, String, Pos, String, bool)],
     as_value: &Set<Pos>,
     wanted: impl Fn(Pos) -> bool,
 ) -> Vec<Error> {
     (unused.iter())
-        .filter(|(pos, _, _, at, _)| wanted(*at) && !of_prelude(*at) && !as_value.contains(pos))
-        .map(|(_, name, effect, at, fix)| {
-            Error::new(
-                *at,
+        .filter(|(pos, _, _, at, _, _)| wanted(*at) && !of_prelude(*at) && !as_value.contains(pos))
+        .map(|(_, name, effect, at, fix, group)| {
+            let message = if *group {
+                format!(
+                    "`{name}` lists `{}`, and nothing in it needs any of its effects",
+                    written_name(effect)
+                )
+            } else {
                 format!(
                     "`{name}` lists the `{}` effect, and nothing in it needs it",
                     written_name(effect)
-                ),
-            )
-            .with_fix(format!("write `{fix}`"))
+                )
+            };
+            Error::new(*at, message).with_fix(format!("write `{fix}`"))
         })
         .collect()
 }
@@ -6707,7 +6713,7 @@ struct Checker<'a> {
     /// The effects a function lists that nothing in its body needs: the place
     /// of the function, its name, the effect, where it is listed, and the
     /// signature without the effects nothing in it needs.
-    unused_effects: Vec<(Pos, String, String, Pos, String)>,
+    unused_effects: Vec<(Pos, String, String, Pos, String, bool)>,
 }
 
 /// What is expected of an expression's value.
@@ -6982,6 +6988,9 @@ struct Body<'a> {
     unknown_effect: bool,
     /// The effects already reported missing, each reported once.
     missing: Vec<String>,
+    /// The places in the errors of the fixes that write the effects the
+    /// function lacks, which say the whole list once the body is checked.
+    missing_at: Vec<usize>,
     /// The listed effects something in the body needed.
     used: Vec<String>,
     /// The names defined so far, and what each gives.
@@ -7541,6 +7550,7 @@ impl<'a> Checker<'a> {
             extra: Vec::new(),
             unknown_effect,
             missing: Vec::new(),
+            missing_at: Vec::new(),
             used: Vec::new(),
             names: view.params.clone(),
             params: view.params.len(),
@@ -7626,17 +7636,33 @@ impl<'a> Checker<'a> {
             )),
             _ => {}
         }
+        if !body.missing_at.is_empty() {
+            let listed: Vec<&str> = body.listed.iter().map(|e| written_name(e)).collect();
+            let missing: Vec<&str> = body.missing.iter().map(|e| written_name(e)).collect();
+            let effects = defs.file.fix_effects(f, &listed, &missing);
+            let effects: Vec<&str> = effects.iter().map(|e| e.as_str()).collect();
+            let fix = format!("write `{}`", written(f, &effects));
+            for &at in &body.missing_at {
+                self.errors[at].fix = Some(fix.clone());
+            }
+        }
         if !view.effects.is_empty()
             && matches!(template, Template::Free(_))
             && !body.unknown_effect
             && self.errors.len() == errors_before
         {
             let is_used = |e: &str| body.used.iter().any(|u| written_name(u) == written_name(e));
+            // A group is used when anything in it is.
+            let entries = defs.file.listed(f.pos, view.effects);
+            let group_used = |e: &str| match defs.file.holds(e) {
+                Some(held) => held.iter().any(|h| is_used(h)),
+                None => is_used(e),
+            };
             let unused: Vec<&(String, Pos)> =
-                view.effects.iter().filter(|(e, _)| !is_used(e)).collect();
+                entries.iter().filter(|(e, _)| !group_used(e)).collect();
             if !unused.is_empty() {
-                let kept: Vec<&str> = (view.effects.iter())
-                    .filter(|(e, _)| is_used(e))
+                let kept: Vec<&str> = (entries.iter())
+                    .filter(|(e, _)| group_used(e))
                     .map(|(e, _)| written_name(e))
                     .collect();
                 let fix = written(f, &kept);
@@ -7646,8 +7672,8 @@ impl<'a> Checker<'a> {
                     if written_name(effect) == "task" && of_std(f.pos) {
                         continue;
                     }
-                    let known =
-                        (self.unused_effects.iter()).any(|(_, _, e, p, _)| e == effect && p == at);
+                    let known = (self.unused_effects.iter())
+                        .any(|(_, _, e, p, _, _)| e == effect && p == at);
                     if !known {
                         self.unused_effects.push((
                             f.pos,
@@ -7655,6 +7681,7 @@ impl<'a> Checker<'a> {
                             effect.clone(),
                             *at,
                             fix.clone(),
+                            defs.file.holds(effect).is_some(),
                         ));
                     }
                 }

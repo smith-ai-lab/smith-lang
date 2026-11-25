@@ -1515,7 +1515,7 @@ impl<'a> Checker<'a> {
             }
             self.params(f, &defs.trait_sigs[k][i].scope);
             self.defaults(f, &defs.trait_sigs[k][i]);
-            self.effects(&f.effects);
+            self.effects(self.defs.file.listed(f.pos, &f.effects));
             for requirement in &f.requires {
                 self.trait_requirement(k, f, requirement);
             }
@@ -1719,7 +1719,7 @@ impl<'a> Checker<'a> {
         }
         let before = self.errors.len();
         self.params(f, scope);
-        self.effects(&f.effects);
+        self.effects(self.defs.file.listed(f.pos, &f.effects));
         if self.errors.len() > before {
             return;
         }

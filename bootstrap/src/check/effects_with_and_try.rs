@@ -468,7 +468,7 @@ impl<'a> Checker<'a> {
     /// Checks the effects written on the function types of the parameters.
     pub(super) fn parameter_effects(&mut self, def: &Function) {
         for p in &def.params {
-            self.effects(&p.effects);
+            self.effects(self.defs.file.listed(p.pos, &p.effects));
         }
     }
 
@@ -722,8 +722,11 @@ impl<'a> Checker<'a> {
             return;
         }
         body.missing.push(effect.to_string());
-        let mut effects: Vec<&str> = body.listed.iter().map(|e| written_name(e)).collect();
-        effects.extend(body.missing.iter().map(|e| written_name(e)));
+        let listed: Vec<&str> = body.listed.iter().map(|e| written_name(e)).collect();
+        let missing: Vec<&str> = body.missing.iter().map(|e| written_name(e)).collect();
+        let effects = self.defs.file.fix_effects(body.owner(), &listed, &missing);
+        let effects: Vec<&str> = effects.iter().map(|e| e.as_str()).collect();
+        body.missing_at.push(self.errors.len());
         self.errors.push(
             Error::new(
                 pos,
@@ -735,5 +738,236 @@ impl<'a> Checker<'a> {
             )
             .with_fix(format!("write `{}`", written(body.owner(), &effects))),
         );
+    }
+}
+
+/// Replaces each group in the effects a function or a parameter lists with
+/// the effects it holds, as a set, so that the rest of the checker sees plain
+/// effects only. What was written is kept in `written_effects`. A group that
+/// names itself, and an effect or a group named twice in one list, are
+/// refused.
+pub(super) fn expand_groups(file: &mut File, errors: &mut Vec<Error>) {
+    let groups: HashMap<String, Vec<(String, Pos)>> = (file.effects.iter())
+        .filter_map(|e| Some((e.name.clone(), e.group.clone()?)))
+        .collect();
+    if groups.is_empty() {
+        return;
+    }
+    let mut circles: HashSet<String> = HashSet::new();
+    for e in file.effects.iter().filter(|e| e.group.is_some()) {
+        let mut chain = vec![e.name.clone()];
+        if !circles.contains(&e.name) && circle(&groups, &mut chain, &mut Vec::new()) {
+            circles.extend(chain.iter().cloned());
+            let names: Vec<&str> = chain.iter().map(|n| written_name(n)).collect();
+            errors.push(Error::new(
+                e.pos,
+                format!(
+                    "the group `{}` names itself: {}",
+                    written_name(&e.name),
+                    names.join(" -> ")
+                ),
+            ));
+        }
+        direct_twice(e.group.as_deref().unwrap_or_default(), errors);
+    }
+    let mut written: HashMap<Pos, Vec<(String, Pos)>> = HashMap::new();
+    let mut expand = |list: &[(String, Pos)], at: Pos| -> Option<Vec<(String, Pos)>> {
+        if !list.iter().any(|(e, _)| groups.contains_key(e)) {
+            return None;
+        }
+        written.insert(at, list.to_vec());
+        let mut out = Vec::new();
+        for (effect, pos) in list {
+            flatten(&groups, effect, *pos, &mut out, &mut Vec::new());
+        }
+        Some(out)
+    };
+    let mut function = |f: &mut Function| {
+        if let Some(out) = expand(&f.effects, f.pos) {
+            f.effects = out;
+        }
+        for p in &mut f.params {
+            if let Some(out) = expand(&p.effects, p.pos) {
+                p.effects = out;
+            }
+        }
+    };
+    let touches = |f: &Function| {
+        (f.effects
+            .iter()
+            .chain(f.params.iter().flat_map(|p| &p.effects)))
+        .any(|(e, _)| groups.contains_key(e))
+    };
+    for f in &mut file.functions {
+        if touches(f) {
+            function(Arc::get_mut(f).expect("a function of the file is not shared"));
+        }
+    }
+    for t in &mut file.traits {
+        if t.functions.iter().any(touches) {
+            (Arc::get_mut(t).expect("a trait of the file is not shared"))
+                .functions
+                .iter_mut()
+                .for_each(&mut function);
+        }
+    }
+    for i in &mut file.impls {
+        if i.functions.iter().any(touches) {
+            (Arc::get_mut(i).expect("an impl of the file is not shared"))
+                .functions
+                .iter_mut()
+                .for_each(&mut function);
+        }
+    }
+    file.written_effects = written;
+}
+
+/// Whether the chain, which ends in a group, reaches the group it starts at
+/// again, which `chain` then says, ending where the circle closes.
+fn circle(
+    groups: &HashMap<String, Vec<(String, Pos)>>,
+    chain: &mut Vec<String>,
+    seen: &mut Vec<String>,
+) -> bool {
+    let last = chain.last().expect("a chain starts at a group").clone();
+    if seen.contains(&last) {
+        return false;
+    }
+    seen.push(last.clone());
+    let Some(members) = groups.get(&last) else {
+        return false;
+    };
+    for (m, _) in members {
+        if *m == chain[0] {
+            chain.push(m.clone());
+            return true;
+        }
+        if groups.contains_key(m) {
+            chain.push(m.clone());
+            if circle(groups, chain, seen) {
+                return true;
+            }
+            chain.pop();
+        }
+    }
+    false
+}
+
+/// An effect or a group named twice in one list.
+fn direct_twice(list: &[(String, Pos)], errors: &mut Vec<Error>) {
+    for (i, (effect, pos)) in list.iter().enumerate() {
+        if list[..i].iter().any(|(e, _)| e == effect) {
+            let mut once: Vec<&str> = Vec::new();
+            for (e, _) in list {
+                if !once.contains(&written_name(e)) {
+                    once.push(written_name(e));
+                }
+            }
+            errors.push(
+                Error::new(
+                    *pos,
+                    format!("the `{}` effect is already listed", written_name(effect)),
+                )
+                .with_fix(format!("write `<{}>`", once.join(", "))),
+            );
+        }
+    }
+}
+
+/// Adds the effects `name` stands for to `out`, each once.
+fn flatten(
+    groups: &HashMap<String, Vec<(String, Pos)>>,
+    name: &str,
+    pos: Pos,
+    out: &mut Vec<(String, Pos)>,
+    open: &mut Vec<String>,
+) {
+    match groups.get(name) {
+        Some(members) if !open.iter().any(|o| o == name) => {
+            open.push(name.to_string());
+            for (m, _) in members {
+                flatten(groups, m, pos, out, open);
+            }
+            open.pop();
+        }
+        Some(_) => {}
+        None if out.iter().any(|(e, _)| e == name) => {}
+        None => out.push((name.to_string(), pos)),
+    }
+}
+
+impl File {
+    /// The effects a function or parameter at `pos` lists as they were
+    /// written, which `effects` is when they name no group.
+    pub(super) fn listed<'f>(
+        &'f self,
+        pos: Pos,
+        effects: &'f [(String, Pos)],
+    ) -> &'f [(String, Pos)] {
+        self.written_effects.get(&pos).map_or(effects, |w| w)
+    }
+}
+
+impl File {
+    /// The effects the group `name` stands for, or nothing when `name` is not
+    /// a group.
+    pub(super) fn holds(&self, name: &str) -> Option<Vec<String>> {
+        let groups: HashMap<String, Vec<(String, Pos)>> = (self.effects.iter())
+            .filter_map(|e| Some((e.name.clone(), e.group.clone()?)))
+            .collect();
+        groups.contains_key(name).then(|| {
+            let mut out = Vec::new();
+            flatten(&groups, name, Pos::START, &mut out, &mut Vec::new());
+            out.into_iter().map(|(e, _)| e).collect()
+        })
+    }
+}
+
+impl File {
+    /// The effects a signature lists as it writes them, and the group in scope
+    /// of the function that holds exactly `missing` beyond what the function
+    /// lists, if one does, so that the fix may write its name. `listed` is the
+    /// effects the function lists, as a set.
+    pub(super) fn fix_effects(
+        &self,
+        f: &Function,
+        listed: &[&str],
+        missing: &[&str],
+    ) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .listed(f.pos, &f.effects)
+            .iter()
+            .map(|(e, _)| written_name(e).to_string())
+            .collect();
+        let named = |effects: &[&str], held: &[String]| {
+            held.iter().all(|h| effects.contains(&h.as_str()))
+                && effects.iter().all(|e| held.iter().any(|h| h == e))
+        };
+        let module = module_of(f.pos);
+        let group = self.effects.iter().find_map(|g| {
+            let held = self.holds(&g.name)?;
+            let beyond: Vec<String> = (held.iter())
+                .filter(|h| !listed.contains(&h.as_str()))
+                .cloned()
+                .collect();
+            if beyond.is_empty() || !named(missing, &beyond) {
+                return None;
+            }
+            let written = written_name(&g.name);
+            if module_of(g.pos) == module {
+                return Some(written.to_string());
+            }
+            self.uses
+                .iter()
+                .filter(|u| module_of(u.pos) == module)
+                .flat_map(|u| &u.names)
+                .find(|l| l.name == written)
+                .map(|l| l.alias.as_ref().map_or(&l.name, |(a, _)| a).clone())
+        });
+        match group {
+            Some(g) => out.push(g),
+            None => out.extend(missing.iter().map(|m| m.to_string())),
+        }
+        out
     }
 }
