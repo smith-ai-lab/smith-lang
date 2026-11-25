@@ -75,7 +75,7 @@ pub fn split(key: take Key) -> (Key, Key) {
 
 fn widen(b: Byte) -> u64 { b }
 
-pub fn fresh() -> Key ! entropy, alloc {
+pub fn fresh() -> Key <entropy, alloc> {
   var zeros: List[Byte] = []
   loop i in 0..16 { zeros = push(zeros, 0) }
   var first: u64 = 0

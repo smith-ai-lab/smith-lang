@@ -3,6 +3,6 @@ use std.console (console, print)
 
 fn same_size(n: u32) -> i32 { convert(n) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{same_size(7)}")
 }

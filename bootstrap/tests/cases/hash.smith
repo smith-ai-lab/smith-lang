@@ -25,7 +25,7 @@ struct Ring {
   size: u16
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{hash("ada")}")
   print("{hash("")}")
   print("{hash(-1)}")

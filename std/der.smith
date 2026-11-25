@@ -129,7 +129,7 @@ fn holds_parts(tag: Tag) -> bool {
   }
 }
 
-pub fn children(of: Value) -> Result[List[Value], str] ! alloc {
+pub fn children(of: Value) -> Result[List[Value], str] <alloc> {
   if not holds_parts(of.tag) { return .err("a value that holds no parts") }
   var parts: List[Value] = []
   var rest = of.bytes
@@ -179,7 +179,7 @@ fn ascii_of(bytes: Slice[Byte]) -> Result[str, str] {
   text_of(bytes)
 }
 
-pub fn object(of: Value) -> Result[List[Nat], str] ! alloc {
+pub fn object(of: Value) -> Result[List[Nat], str] <alloc> {
   match of.tag {
     .object {
       c = of.bytes

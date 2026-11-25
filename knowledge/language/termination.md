@@ -46,7 +46,7 @@ A loop that can go on is an [open-ended `loop`](open-loop.md), and its function 
 `diverge` is not allowed in a contract or in a [GPU kernel](devices.md).
 
 ```
-fn settled(n: u64) -> bool ! diverge { n == 0 }
+fn settled(n: u64) -> bool <diverge> { n == 0 }
 
 fn first(n: u64) -> u64
   requires settled(n)
@@ -126,6 +126,6 @@ A loop's measure may have several parts too, written `loop decreases a, b { ... 
 | `loop { ... }` | May not end, and its function carries `diverge` |
 | `loop decreases e { ... }` | Ends, because `e` is smaller each time round again |
 | `fn f(...) -> T decreases e` | Ends, because `e` is smaller at each call of `f` from itself |
-| `! diverge` | Callers inherit it, and a contract or a GPU kernel may not carry it |
+| `<diverge>` | Callers inherit it, and a contract or a GPU kernel may not carry it |
 
 Next: [A struct that holds a proof](proof-fields.md)

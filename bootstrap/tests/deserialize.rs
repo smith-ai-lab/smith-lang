@@ -204,7 +204,7 @@ fn peek(r: Rd) -> Shape {
     helper(
         &mut out,
         &format!(
-            "fn step(r: Rd, line: str) -> Rd ! alloc {{
+            "fn step(r: Rd, line: str) -> Rd <alloc> {{
   at = if r.at < r.shapes.size {{ r.at + 1 }} else {{ r.at }}
   if r.log {{ {} }} else {{ {} }}
 }}",
@@ -215,7 +215,7 @@ fn peek(r: Rd) -> Shape {
     helper(
         &mut out,
         &format!(
-            "fn stepa(r: Rd, line: str, arg: str) -> Rd ! alloc {{
+            "fn stepa(r: Rd, line: str, arg: str) -> Rd <alloc> {{
   at = if r.at < r.shapes.size {{ r.at + 1 }} else {{ r.at }}
   if r.log {{ {} }} else {{ {} }}
 }}",
@@ -226,7 +226,7 @@ fn peek(r: Rd) -> Shape {
     helper(
         &mut out,
         &format!(
-            "fn note(r: Rd, line: str) -> Rd ! alloc {{
+            "fn note(r: Rd, line: str) -> Rd <alloc> {{
   if r.log {{ {} }} else {{ r }}
 }}",
             rd(&[("asked", "\"{r.asked}{line}\\n\"")])
@@ -235,7 +235,7 @@ fn peek(r: Rd) -> Shape {
     helper(
         &mut out,
         &format!(
-            "fn notea(r: Rd, line: str, arg: str) -> Rd ! alloc {{
+            "fn notea(r: Rd, line: str, arg: str) -> Rd <alloc> {{
   if r.log {{ {} }} else {{ r }}
 }}",
             rd(&[("asked", "\"{r.asked}{line} {arg}\\n\"")])
@@ -279,7 +279,7 @@ fn peek(r: Rd) -> Shape {
     );
     helper(
         &mut out,
-        "fn named(r: Rd, name: str) -> Rd ! alloc {
+        "fn named(r: Rd, name: str) -> Rd <alloc> {
   if r.log { set(r, \"{parent(r)}.{name}\") } else { r }
 }",
     );
@@ -338,7 +338,7 @@ fn peek(r: Rd) -> Shape {
     helper(
         &mut out,
         &format!(
-            "fn next(r: Rd) -> Rd ! alloc {{
+            "fn next(r: Rd) -> Rd <alloc> {{
   if r.log {{
     match r.depth {{
 {arms}      _ {{ r }}
@@ -349,7 +349,7 @@ fn peek(r: Rd) -> Shape {
     );
     helper(
         &mut out,
-        "fn casing(r: Rd, name: str) -> Rd ! alloc {
+        "fn casing(r: Rd, name: str) -> Rd <alloc> {
   if r.log {
     e = enter(r)
     set(e, \"{parent(e)}/{name}\")
@@ -364,7 +364,7 @@ fn peek(r: Rd) -> Shape {
     );
     helper(
         &mut out,
-        "fn show(e: ReadError) -> str ! alloc {
+        "fn show(e: ReadError) -> str <alloc> {
   match e.problem {
     .malformed { \"malformed\" }
     .missing(n) { \"missing {n}\" }
@@ -379,7 +379,7 @@ fn peek(r: Rd) -> Shape {
     // What each function does: the shape it takes, and what it gives.
     let simple = |name: &str, of: &str, shape: &str, value: &str| {
         format!(
-            "  fn {name}(r: take Rd) -> (Rd, Result[{of}, ReadError]) ! alloc {{
+            "  fn {name}(r: take Rd) -> (Rd, Result[{of}, ReadError]) <alloc> {{
     match peek(r) {{
       {shape} {{ (step(r, \"{name}\"), Result.ok({value})) }}
       _ {{ (note(r, \"{name}\"), Result.err(wrong(r, \"{name}\"))) }}
@@ -395,7 +395,7 @@ fn peek(r: Rd) -> Shape {
     out.push_str(&simple("text", "str", ".text(v)", "v"));
     out.push_str(&simple("nothing", "()", ".nothing", "()"));
     out.push_str(
-        "  fn raw(r: take Rd, of: str) -> (Rd, Result[Slice[Byte], ReadError]) ! alloc {
+        "  fn raw(r: take Rd, of: str) -> (Rd, Result[Slice[Byte], ReadError]) <alloc> {
     match peek(r) {
       .text(v) { (step(r, \"raw\"), Result.ok(v.bytes)) }
       _ { (note(r, \"raw\"), Result.err(wrong(r, \"raw\"))) }
@@ -404,26 +404,26 @@ fn peek(r: Rd) -> Shape {
 ",
     );
     out.push_str(
-        "  fn present(r: take Rd) -> (Rd, Result[bool, ReadError]) ! alloc {
+        "  fn present(r: take Rd) -> (Rd, Result[bool, ReadError]) <alloc> {
     match peek(r) {
       .present { (step(r, \"present\"), Result.ok(true)) }
       .absent { (step(r, \"present\"), Result.ok(false)) }
       _ { (note(r, \"present\"), Result.err(wrong(r, \"present\"))) }
     }
   }
-  fn sequence(r: take Rd) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn sequence(r: take Rd) -> (Rd, Result[(), ReadError]) <alloc> {
     match peek(r) {
       .sequence(n) { (enter(step(r, \"sequence\")), Result.ok(())) }
       _ { (note(r, \"sequence\"), Result.err(wrong(r, \"sequence\"))) }
     }
   }
-  fn more(r: take Rd) -> (Rd, Result[bool, ReadError]) ! alloc {
+  fn more(r: take Rd) -> (Rd, Result[bool, ReadError]) <alloc> {
     match peek(r) {
       .end_sequence { (leave(step(r, \"more\")), Result.ok(false)) }
       _ { (next(note(r, \"more\")), Result.ok(true)) }
     }
   }
-  fn tuple(r: take Rd, size: Nat) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn tuple(r: take Rd, size: Nat) -> (Rd, Result[(), ReadError]) <alloc> {
     match peek(r) {
       .tuple(n) {
         if n == size { (step(r, \"tuple\"), Result.ok(())) } else {
@@ -433,13 +433,13 @@ fn peek(r: Rd) -> Shape {
       _ { (note(r, \"tuple\"), Result.err(wrong(r, \"tuple\"))) }
     }
   }
-  fn end_tuple(r: take Rd) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn end_tuple(r: take Rd) -> (Rd, Result[(), ReadError]) <alloc> {
     match peek(r) {
       .end_tuple { (step(r, \"end_tuple\"), Result.ok(())) }
       _ { (note(r, \"end_tuple\"), Result.err(wrong(r, \"end_tuple\"))) }
     }
   }
-  fn structure(r: take Rd, name: str) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn structure(r: take Rd, name: str) -> (Rd, Result[(), ReadError]) <alloc> {
     match peek(r) {
       .structure(n) {
         if n == name { (enter(stepa(r, \"structure\", name)), Result.ok(())) } else {
@@ -449,29 +449,29 @@ fn peek(r: Rd) -> Shape {
       _ { (notea(r, \"structure\", name), Result.err(wrong(r, \"structure\"))) }
     }
   }
-  fn field(r: take Rd) -> (Rd, Result[Option[str], ReadError]) ! alloc {
+  fn field(r: take Rd) -> (Rd, Result[Option[str], ReadError]) <alloc> {
     match peek(r) {
       .field(n) { (named(step(r, \"field\"), n), Result.ok(Option.some(n))) }
       .end_structure { (leave(step(r, \"field\")), Result.ok(Option.none)) }
       _ { (note(r, \"field\"), Result.err(wrong(r, \"field\"))) }
     }
   }
-  fn unknown(r: take Rd, name: str) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn unknown(r: take Rd, name: str) -> (Rd, Result[(), ReadError]) <alloc> {
     if r.lenient { (stepa(r, \"unknown\", name), Result.ok(())) } else {
       error = ReadError(path: path_of(r), problem: Problem.unknown(name), line: 0, column: 0)
       (notea(r, \"unknown\", name), Result.err(error))
     }
   }
-  fn case(r: take Rd, of: str) -> (Rd, Result[str, ReadError]) ! alloc {
+  fn case(r: take Rd, of: str) -> (Rd, Result[str, ReadError]) <alloc> {
     match peek(r) {
       .case(n) { (casing(stepa(r, \"case\", of), n), Result.ok(n)) }
       _ { (notea(r, \"case\", of), Result.err(wrong(r, \"case\"))) }
     }
   }
-  fn end_case(r: take Rd) -> (Rd, Result[(), ReadError]) ! alloc {
+  fn end_case(r: take Rd) -> (Rd, Result[(), ReadError]) <alloc> {
     (leave(note(r, \"end_case\")), Result.ok(()))
   }
-  fn fail(r: take Rd, problem: Problem) -> (Rd, ReadError) ! alloc {
+  fn fail(r: take Rd, problem: Problem) -> (Rd, ReadError) <alloc> {
     (note(r, \"fail\"), ReadError(path: path_of(r), problem: problem, line: 0, column: 0))
   }
 }
@@ -490,7 +490,7 @@ fn a_struct_is_read_from_its_name_each_field_and_its_end() {
   y: Int
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   xs: List[Shape] = [Shape.structure(\"Point\"), Shape.field(\"x\"), Shape.signed(3), Shape.field(\"y\"), Shape.signed(4), Shape.end_structure]
   (r, p): (Rd, Result[Point, ReadError]) = read({})
   print(r.asked)
@@ -517,7 +517,7 @@ fn a_rawjson_read_from_a_reader_of_another_format_is_the_bytes_of_its_text() {
     let source = with_import(
         &[("std.json", &["RawJson", "raw_text"])],
         &format!(
-            "{}fn main() ! console, alloc {{\n  xs: List[Shape] = [Shape.text(\"[1.50, 1e400]\")]\n  (r, v): (Rd, Result[RawJson, ReadError]) = read({})\n  match v {{\n    .ok(x) {{ print(raw_text(x)) }}\n    .err(e) {{ print(show(e)) }}\n  }}\n}}\n",
+            "{}fn main() <console, alloc> {{\n  xs: List[Shape] = [Shape.text(\"[1.50, 1e400]\")]\n  (r, v): (Rd, Result[RawJson, ReadError]) = read({})\n  match v {{\n    .ok(x) {{ print(raw_text(x)) }}\n    .err(e) {{ print(show(e)) }}\n  }}\n}}\n",
             reader(),
             fresh("xs", false, false)
         ),
@@ -542,7 +542,7 @@ fn a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value
             let source = with_import(
                 &[("std.json", &["RawJson", "raw_text"])],
                 &format!(
-                    "{}fn main() ! console, alloc {{\n  xs: List[Shape] = [Shape.text(\"{text}\")]\n  (r, v): (Rd, Result[RawJson, ReadError]) = read({})\n  match v {{\n    .ok(x) {{ print(\"ok {{raw_text(x)}}\") }}\n    .err(e) {{ print(\"err {{show(e)}}\") }}\n  }}\n}}\n",
+                    "{}fn main() <console, alloc> {{\n  xs: List[Shape] = [Shape.text(\"{text}\")]\n  (r, v): (Rd, Result[RawJson, ReadError]) = read({})\n  match v {{\n    .ok(x) {{ print(\"ok {{raw_text(x)}}\") }}\n    .err(e) {{ print(\"err {{show(e)}}\") }}\n  }}\n}}\n",
                     reader(),
                     fresh("xs", false, false)
                 ),
@@ -757,7 +757,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
     if own_impl {
         out.push_str(
             "impl Deserialize[Celsius] {
-  fn read[R: Reader](from: take R) -> (R, Result[Celsius, ReadError]) ! alloc {
+  fn read[R: Reader](from: take R) -> (R, Result[Celsius, ReadError]) <alloc> {
     (r, n) = Reader.signed(from)
     match n {
       .ok(d) { (r, Result.ok(Celsius(degrees: d))) }
@@ -767,7 +767,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
 }
 
 impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W ! alloc { Writer.signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(to, value.degrees) }
 }
 
 ",
@@ -809,7 +809,7 @@ fn case(g: &mut Gen, parts: Parts, own_impl: bool, log: bool, writes: bool) -> C
             ("std.serialize", write),
         ],
         &format!(
-            "{}{}{}fn main() ! console, alloc {{\n  xs: List[Shape] = [{}]\n  (r, v): (Rd, Result[{}, ReadError]) = ",
+            "{}{}{}fn main() <console, alloc> {{\n  xs: List[Shape] = [{}]\n  (r, v): (Rd, Result[{}, ReadError]) = ",
             reader(),
             serialize::log(),
             definitions(&defs, own_impl),
@@ -930,7 +930,7 @@ fn a_field_left_out_is_none_or_its_default_or_an_error_that_names_it() {
         }
         source.push_str("}\n\nstruct Wrap {\n  inner: Tool\n}\n\n");
         source.push_str(
-            "fn report(v: Result[Wrap, ReadError]) ! console, alloc {
+            "fn report(v: Result[Wrap, ReadError]) <console, alloc> {
   match v {
     .ok(x) {
       l = write(x, Log(lines: \"\"))
@@ -940,7 +940,7 @@ fn a_field_left_out_is_none_or_its_default_or_an_error_that_names_it() {
   }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
 ",
         );
         let mut expected = String::new();
@@ -1035,7 +1035,7 @@ fn main() ! console, alloc {
 // A number that does not fit, and a shape that is not the one asked for.
 
 fn a_number_outside_its_type_is_range_with_the_types_name() {
-    let mut source = format!("{}fn main() ! console, alloc {{\n", reader());
+    let mut source = format!("{}fn main() <console, alloc> {{\n", reader());
     let mut expected = String::new();
     let mut at = 0;
     for (name, least, greatest) in INTS {
@@ -1215,7 +1215,7 @@ fn deserialize_and_reader_are_imported_with_use_and_are_not_in_the_prelude() {
         found.iter().any(|e| e.message.contains("`read`")),
         "{found:?}"
     );
-    let body = "struct Count {\n  n: u64\n}\n\nfn pass[R: Reader](r: take R) -> R ! alloc { r }\n\nfn main() ! alloc {\n  c = pass(Count(n: 0))\n}\n";
+    let body = "struct Count {\n  n: u64\n}\n\nfn pass[R: Reader](r: take R) -> R <alloc> { r }\n\nfn main() <alloc> {\n  c = pass(Count(n: 0))\n}\n";
     let bound = format!("use std.bits (u64)\n\n{body}");
     let bound = bound.as_str();
     let found = errors(bound);
@@ -1235,7 +1235,7 @@ fn deserialize_and_reader_are_imported_with_use_and_are_not_in_the_prelude() {
         &format!(
             "{}{}",
             reader(),
-            "fn pass[R: Reader](r: take R) -> R ! alloc { r }\n\nfn main() ! alloc {\n  xs: List[Shape] = [Shape.over]\n  c = pass(RD)\n}\n"
+            "fn pass[R: Reader](r: take R) -> R <alloc> { r }\n\nfn main() <alloc> {\n  xs: List[Shape] = [Shape.over]\n  c = pass(RD)\n}\n"
                 .replace("RD", &fresh("xs", true, false))
         ),
     );
@@ -1244,14 +1244,14 @@ fn deserialize_and_reader_are_imported_with_use_and_are_not_in_the_prelude() {
 }
 
 fn a_program_that_never_reads_a_value_is_the_program_it_was() {
-    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() ! console, alloc {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
+    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() <console, alloc> {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
     let base = format!("use std.console (console, print)\n\n{items}");
     // The same program, with the module imported and everything that reads a
     // value defined, and a function that reads that nothing calls.
     let extended = with_import(
         &[],
         &format!(
-            "{}fn unused(r: Rd) -> (Rd, Result[Point, ReadError]) ! alloc {{ read(r) }}\n\n{items}",
+            "{}fn unused(r: Rd) -> (Rd, Result[Point, ReadError]) <alloc> {{ read(r) }}\n\n{items}",
             reader()
         ),
     );

@@ -12,7 +12,7 @@ fn lower(b: Byte) -> Byte {
 }
 
 // The two bytes of a number, the high one first.
-fn put16(bytes: take List[Byte], n: u16) -> List[Byte] ! alloc {
+fn put16(bytes: take List[Byte], n: u16) -> List[Byte] <alloc> {
   high = bit_and(shift_right(n, 8), 255)
   low = bit_and(n, 255)
   push(push(bytes, high), low)
@@ -24,7 +24,7 @@ fn put16(bytes: take List[Byte], n: u16) -> List[Byte] ! alloc {
 // A name is a list of labels of one to 63 bytes, with at most 253 bytes in all
 // and no empty label, and with one dot at its end that is left off; any other is
 // not asked.
-pub fn query(id: u16, name: List[Byte], kind: u16) -> Option[List[Byte]] ! alloc {
+pub fn query(id: u16, name: List[Byte], kind: u16) -> Option[List[Byte]] <alloc> {
   var size = name.size
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
   if size == 0 or size > 253 { return .none }
@@ -66,7 +66,7 @@ fn word(msg: List[Byte], at: 0..70000) -> Option[u16]
 // goes on elsewhere. A pointer goes only to a place before itself, a label stays
 // in the message, and a name is at most 253 bytes, so no name is read past what
 // was given, and none loops: the loop is also bounded by the size of the message.
-fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] ! alloc
+fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] <alloc>
   requires msg.size <= 60000
 {
   var pos: 0..65536 = at
@@ -126,7 +126,7 @@ struct Record {
 }
 
 // The name as it is compared, in lower case and with no dot at its end.
-fn compared(name: List[Byte]) -> List[Byte] ! alloc {
+fn compared(name: List[Byte]) -> List[Byte] <alloc> {
   var size = name.size
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
   var made: List[Byte] = []
@@ -143,7 +143,7 @@ fn compared(name: List[Byte]) -> List[Byte] ! alloc {
 // `CNAME` of the answer, whatever the order of the records, gives from the name,
 // and any record that runs past the end of the message makes the whole message
 // none. A message that is cut short holds no address, since it is asked again.
-pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Option[Reply] ! alloc {
+pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Option[Reply] <alloc> {
   if msg.size < 12 or msg.size > 60000 { return .none }
   if msg[0] * 256 + msg[1] != id { return .none }
   if bit_and(msg[2], 128) == 0 { return .none }
@@ -217,7 +217,7 @@ fn hex_digit(b: Byte) -> Option[Byte] {
 }
 
 // The four bytes of an address written as numbers with dots.
-pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] ! alloc {
+pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
   var parts: List[Byte] = []
   var current: Nat = 0
   var digits: Nat = 0
@@ -246,7 +246,7 @@ pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] ! alloc {
 }
 
 // The sixteen bytes of an address written with colons, as `::1` is.
-pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] ! alloc {
+pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
   var before: List[Byte] = []
   var after: List[Byte] = []
   var gap = false
@@ -308,7 +308,7 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] ! alloc {
 // The lines of a file, each as the words of it that are not after a `#`, which
 // are the runs of bytes between spaces, tabs, and the end of a line; a line with
 // no word is left out.
-fn lines(text: List[Byte]) -> List[List[List[Byte]]] ! alloc {
+fn lines(text: List[Byte]) -> List[List[List[Byte]]] <alloc> {
   var made: List[List[List[Byte]]] = []
   var words: List[List[Byte]] = []
   var word: List[Byte] = []
@@ -337,7 +337,7 @@ fn lines(text: List[Byte]) -> List[List[List[Byte]]] ! alloc {
 }
 
 // The address that a word is, as four bytes or sixteen.
-fn address(word: List[Byte]) -> Option[List[Byte]] ! alloc {
+fn address(word: List[Byte]) -> Option[List[Byte]] <alloc> {
   match ipv4(word) {
     .some(four) { .some(four) }
     .none { ipv6(word) }
@@ -347,7 +347,7 @@ fn address(word: List[Byte]) -> Option[List[Byte]] ! alloc {
 // The addresses that the text of `/etc/hosts` gives the name, in the order of
 // its lines: each line holds an address and then names, and a name is the one
 // asked when it is the same with no regard for case.
-pub fn hosts(text: List[Byte], name: List[Byte]) -> List[List[Byte]] ! alloc {
+pub fn hosts(text: List[Byte], name: List[Byte]) -> List[List[Byte]] <alloc> {
   asked = compared(name)
   var found: List[List[Byte]] = []
   rows = lines(text)
@@ -412,7 +412,7 @@ fn says(word: List[Byte], letters: List[Byte]) -> bool {
 // `ndots:`, `timeout:`, and `attempts:`, at most 15, 30, and 5. A number of
 // attempts that is none is one. What is not said is the default: a nameserver
 // at 127.0.0.1, no domain, one dot, five seconds, and two tries.
-pub fn config(text: List[Byte]) -> Config ! alloc {
+pub fn config(text: List[Byte]) -> Config <alloc> {
   var servers: List[List[Byte]] = []
   var domains: List[List[Byte]] = []
   var dots: 0..16 = 1
@@ -468,7 +468,7 @@ pub fn config(text: List[Byte]) -> Config ! alloc {
 // with as many dots as the configuration says, or more, is asked as it is and then
 // with each domain added; any other is asked with each domain added and then as it
 // is. Each is as `query` takes it.
-pub fn candidates(name: List[Byte], conf: Config) -> List[List[Byte]] ! alloc {
+pub fn candidates(name: List[Byte], conf: Config) -> List[List[Byte]] <alloc> {
   var dots: Nat = 0
   loop i in 0..name.size { if name[i] == '.' { dots = saturating_add(dots, 1) } }
   var made: List[List[Byte]] = []

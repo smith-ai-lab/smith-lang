@@ -15,7 +15,7 @@ built:
 A task is a public function in `project.smith`, run by name. `smith deploy --env staging` runs the task `deploy` with `env` set to `"staging"`.
 
 ```
-pub fn deploy(env: str) -> Result[(), DeployError] ! fs, net, alloc {
+pub fn deploy(env: str) -> Result[(), DeployError] <fs, net, alloc> {
   binary = try build(package, target: .linux_x64)
   upload(binary, to: env)
 }
@@ -32,7 +32,7 @@ A task's parameters are named flags. `env` is the flag `--env`. A flag is spelle
 - There are no positional arguments.
 
 ```
-pub fn deploy(env: str, verbose: bool, region: str = "eu", note: Option[str]) -> Result[(), DeployError] ! fs, net, alloc
+pub fn deploy(env: str, verbose: bool, region: str = "eu", note: Option[str]) -> Result[(), DeployError] <fs, net, alloc>
 ```
 
 `smith deploy --env staging` leaves out the other three flags. `smith deploy --env staging --verbose --region us` gives `verbose` and `region`.
@@ -42,7 +42,7 @@ pub fn deploy(env: str, verbose: bool, region: str = "eu", note: Option[str]) ->
 A task declares its effects like any function. A task that runs another program needs the `exec` effect.
 
 ```
-pub fn format_all() ! exec
+pub fn format_all() <exec>
 ```
 
 ## Building in a task
@@ -50,7 +50,7 @@ pub fn format_all() ! exec
 `build` of `std.project` builds the package, as `smith build` does, and gives what it built.
 
 ```
-fn build(package: Package, target: Target, start: fn() = main) -> Result[Built, BuildError] ! fs, alloc
+fn build(package: Package, target: Target, start: fn() = main) -> Result[Built, BuildError] <fs, alloc>
 
 struct Built {
   target: Target
@@ -77,7 +77,7 @@ A `Result` error prints its message and exits non-zero. When `deploy` above give
 Built-in command names are reserved, so a task named `build` is a compile error.
 
 ```
-pub fn build() ! fs
+pub fn build() <fs>
 ```
 
 ## A project that has grown
@@ -113,7 +113,7 @@ serving/
 | `--batch_size 64` | The parameter `batch_size`, spelled as it is in the source |
 | `verbose: bool` | A bare flag, `--verbose` |
 | `region: str = "eu"` or `note: Option[str]` | A flag that may be left out |
-| `! exec` | The task may run another program |
+| `<exec>` | The task may run another program |
 | A task named like a built-in command | A compile error |
 
 Next: [Tests](tests.md)

@@ -38,7 +38,7 @@ fn word(b: bool) -> str {
   if b { "yes" } else { "no" }
 }
 
-fn main() ! console {
+fn main() <console> {
   tom = Cat(name: "Tom", age: 3)
   print(word("abc" == "abc"))
   print(word((1, "a") == (1, "a")))

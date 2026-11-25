@@ -5,7 +5,7 @@ enum Pet {
   none
 }
 
-fn main() ! console {
+fn main() <console> {
   p: Pet = .cat("Tom")
   name = match p {
     .cat(c) { c }

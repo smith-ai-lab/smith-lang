@@ -445,10 +445,10 @@ fn program<T: Float>(g: &mut Gen) -> (String, String) {
         "struct Pair {{\n  a: {t}\n  b: {t}\n}}\n\n\
          fn add(p: Pair) -> {t} {{ p.a + p.b }}\n\n\
          fn flip(x: {t}) -> {t} {{ -x }}\n\n\
-         fn line(a: {t}, b: {t}, s: {t}, d: {t}, p: {t}, q: {t}) ! console, alloc {{\n  \
+         fn line(a: {t}, b: {t}, s: {t}, d: {t}, p: {t}, q: {t}) <console, alloc> {{\n  \
          print(\"{{a + b == s}} {{a - b == d}} {{a * b == p}} {{a / b == q}} {{a < b}} {{a <= b}} {{a > b}} {{a >= b}} {{a == b}} {{a != b}}\")\n}}\n\n\
-         fn whole(n: Int, a: {t}) ! console, alloc {{\n  print(\"{{float(n) == a}}\")\n}}\n\n\
-         fn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n  ns: List[Int] = [{}]\n",
+         fn whole(n: Int, a: {t}) <console, alloc> {{\n  print(\"{{float(n) == a}}\")\n}}\n\n\
+         fn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n  ns: List[Int] = [{}]\n",
         xs.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", "),
         ns.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
     );
@@ -521,7 +521,7 @@ fn answers_on_every_executable<T: Float>(seed: u64) {
 /// that nothing in it is dead code.
 fn reaching(items: &str, shown: &str) -> String {
     with_header(format!(
-        "{items}\nfn main() ! console, alloc {{\n  print(\"{{{shown}}}\")\n}}\n"
+        "{items}\nfn main() <console, alloc> {{\n  print(\"{{{shown}}}\")\n}}\n"
     ))
 }
 
@@ -568,7 +568,7 @@ fn a_float_literal_takes_the_type_its_use_decides_and_is_an_f64_when_nothing_doe
     // `f64` nearest it where nothing decides, so the two are not equal as
     // floats once the first is widened: each is compared as its own type.
     let source = with_header(
-        "fn tenth() -> f32 { 0.1 }\n\nfn main() ! console, alloc {\n  \
+        "fn tenth() -> f32 { 0.1 }\n\nfn main() <console, alloc> {\n  \
          x = 0.1\n  y: f32 = 0.1\n  print(\"{x == 0.1} {y == tenth()}\")\n}\n"
             .to_string(),
     );
@@ -659,7 +659,7 @@ fn text_program<T: Float>(g: &mut Gen) -> (String, String) {
     let values = texts::<T>(g);
     let t = T::NAME;
     let mut source = format!(
-        "fn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n",
+        "fn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n",
         values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
     );
     let mut said = String::new();
@@ -726,7 +726,7 @@ fn texts_on_every_executable<T: Float>(seed: u64) {
 /// it, so the digit that is even is the one written.
 fn a_tie_between_two_shortest_texts_goes_to_the_even_digit() {
     let source = with_header(
-        "fn main() ! console, alloc {\n  x: f32 = 2097152.25\n  y: f32 = 2097152.75\n  print(\"{x} {y}\")\n}\n"
+        "fn main() <console, alloc> {\n  x: f32 = 2097152.25\n  y: f32 = 2097152.75\n  print(\"{x} {y}\")\n}\n"
             .to_string(),
     );
     let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
@@ -738,7 +738,7 @@ fn a_tie_between_two_shortest_texts_goes_to_the_even_digit() {
 /// builds floats.
 fn every_executable_prints_2_5_for_half_of_5() {
     let source = with_header(
-        "fn half(n: Int) -> f64 { float(n) / 2.0 }\n\nfn main() ! console, alloc {\n  print(\"{half(5)}\")\n}\n"
+        "fn half(n: Int) -> f64 { float(n) / 2.0 }\n\nfn main() <console, alloc> {\n  print(\"{half(5)}\")\n}\n"
             .to_string(),
     );
     let outcome = scalar::Outcome {
@@ -796,7 +796,7 @@ fn root_program<T: Float>(g: &mut Gen) -> (String, String) {
     }
     let t = T::NAME;
     let mut source = format!(
-        "use std.float (sqrt)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n",
+        "use std.float (sqrt)\n\nfn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n",
         values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
     );
     let mut said = String::new();
@@ -829,7 +829,7 @@ fn roots_on_every_executable<T: Float>(seed: u64) {
 /// the file, so what floats are compared by is read for it.
 fn a_float_written_only_inside_a_string_is_still_a_float_of_the_file() {
     let source = with_header(
-        "fn main() ! console, alloc {\n  print(\"{1.5 == 1.5} {2.0 < 3.0} {1.5}\")\n}\n".to_string(),
+        "fn main() <console, alloc> {\n  print(\"{1.5 == 1.5} {2.0 < 3.0} {1.5}\")\n}\n".to_string(),
     );
     let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&scalar::passes(&lowered));
@@ -938,7 +938,7 @@ fn exponential_program<T: Float>(g: &mut Gen) -> (String, String) {
     let values = exponent_inputs::<T>(g);
     let t = T::NAME;
     let mut source = format!(
-        "use std.float (exp)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n",
+        "use std.float (exp)\n\nfn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n",
         values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
     );
     let mut said = String::new();
@@ -1042,7 +1042,7 @@ fn logarithm_program<T: Float>(g: &mut Gen) -> (String, String) {
     let values = logarithm_inputs::<T>(g);
     let t = T::NAME;
     let mut source = format!(
-        "use std.float (ln)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  below: {t} = -1.0\n",
+        "use std.float (ln)\n\nfn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  below: {t} = -1.0\n",
         values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
     );
     let mut said = String::new();
@@ -1082,7 +1082,7 @@ fn logarithms_on_every_executable<T: Float>(seed: u64) {
 /// cannot show this: a series cut to 12 terms is wrong by about 2^-101, and
 /// there is no list of floats within 2^-100 of a tie to try it on.
 fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
-    let source = "use std.console (console, print)\nuse std.float (exp)\n\nfn main() ! console, alloc {\n  print(\"{exp(1.0)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.float (exp)\n\nfn main() <console, alloc> {\n  print(\"{exp(1.0)}\")\n}\n";
     let program = lower(source.as_bytes()).expect("builds");
     // The function of eight words that gives eight words.
     let series = program
@@ -1136,7 +1136,7 @@ fn the_series_of_exp_is_within_2_to_the_minus_228_of_the_reference() {
 /// series cut to 8 terms is wrong by about 2^-45 and shows, but one of 40 is
 /// wrong by about 2^-200 and shows on no float that is known.
 fn the_reciprocal_and_the_series_of_ln_are_within_2_to_the_minus_228_of_the_reference() {
-    let source = "use std.console (console, print)\nuse std.float (ln)\n\nfn main() ! console, alloc {\n  print(\"{ln(2.0)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.float (ln)\n\nfn main() <console, alloc> {\n  print(\"{ln(2.0)}\")\n}\n";
     let program = lower(source.as_bytes()).expect("builds");
     // The functions of eight words that give eight words, in the order the
     // runtime places them: the reciprocal, then the series.
@@ -1305,7 +1305,7 @@ fn trig_program<T: Float>(g: &mut Gen) -> (String, String) {
     let values = trig_inputs::<T>(g);
     let t = T::NAME;
     let mut source = format!(
-        "use std.float (sin, cos)\n\nfn main() ! console, alloc {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  infinity: {t} = 1.0 / zero\n",
+        "use std.float (sin, cos)\n\nfn main() <console, alloc> {{\n  xs: List[{t}] = [{}]\n  zero: {t} = 0.0\n  infinity: {t} = 1.0 / zero\n",
         values.iter().map(|x| written(*x)).collect::<Vec<_>>().join(", ")
     );
     let mut said = String::new();
@@ -1348,7 +1348,7 @@ fn trigs_on_every_executable<T: Float>(seed: u64) {
 /// shows the first only when the bits that are taken are too few, and none of
 /// them is within 2^-100 of one, so the floats cannot show this.
 fn the_reduction_and_the_series_of_trig_are_within_2_to_the_minus_228_of_the_reference() {
-    let source = "use std.console (console, print)\nuse std.float (sin)\n\nfn main() ! console, alloc {\n  print(\"{sin(1.0)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.float (sin)\n\nfn main() <console, alloc> {\n  print(\"{sin(1.0)}\")\n}\n";
     let program = lower(source.as_bytes()).expect("builds");
     let reduce = program
         .functions

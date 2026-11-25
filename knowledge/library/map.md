@@ -13,7 +13,7 @@ built:
 A `Map[K, V]` holds values, each under a key, and finds a value by its key in a time that does not grow with the size of the map.
 
 ```
-fn ages() -> Map[str, Byte] ! alloc {
+fn ages() -> Map[str, Byte] <alloc> {
   var m: Map[str, Byte] = []
   m = insert(m, "ada", 36)
   m = insert(m, "alan", 41)

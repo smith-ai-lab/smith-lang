@@ -27,7 +27,7 @@ The module `std.net` declares the `net` [effect](../language/effect-declarations
 ```
 use std.net (NetError, connect, net, read, write)
 
-fn ask(host: str, question: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn ask(host: str, question: str) -> Result[List[Byte], NetError] <net, alloc> {
   with c = connect(host, 7)
   try write(c, question.bytes)
   read(c, 4096)
@@ -47,13 +47,13 @@ effect net {
   fn stop(l: take Listener)
 
   fn connect_to(host: str, port: 0..65536) -> Result[Connection, NetError]
-  fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] ! alloc
+  fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc>
   fn write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError]
   fn close(c: take Connection)
 
   fn bind_to(host: str, port: 0..65536) -> Result[Socket, NetError]
   fn send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError]
-  fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] ! alloc
+  fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc>
   fn unbind(s: take Socket)
 }
 
@@ -96,12 +96,12 @@ enum NetError {
 use std.list (freeze)
 use std.net (Connection, NetError, accept, close, listen, net, read, write)
 
-fn turn(c: Connection) -> Result[(), NetError] ! net, alloc {
+fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   bytes = try read(c, 4096)
   write(c, freeze(bytes))
 }
 
-fn echo_once(port: 0..65536) -> Result[(), NetError] ! net, alloc {
+fn echo_once(port: 0..65536) -> Result[(), NetError] <net, alloc> {
   with l = listen("::", port)
   c = try accept(l)
   result = turn(c)
@@ -119,7 +119,7 @@ A handler's lambda for `stop`, `close`, or `unbind` takes the value, as [Handler
 ```
 use std.net (net, release)
 
-fn ended[T](body: fn() -> T ! net) -> T {
+fn ended[T](body: fn() -> T <net>) -> T {
   net(
     listen_on: fn(host, port) { .err(.refused) },
     accept: fn(l) { .err(.refused) },
@@ -146,7 +146,7 @@ A handler that plays the other side of a connection gives the program a `Connect
 ```
 use std.net (connection, handle, listener, net, release)
 
-fn one_client[T](body: fn() -> T ! net) -> T {
+fn one_client[T](body: fn() -> T <net>) -> T {
   net(
     listen_on: fn(host, port) { .ok(listener(1)) },
     accept: fn(l) { .ok(connection(handle(l) + 1)) },

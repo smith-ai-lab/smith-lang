@@ -27,7 +27,7 @@ fn sign(n: i32) -> str {
   if n < 0 { "negative" } else { "not negative" }
 }
 
-fn main() ! console {
+fn main() <console> {
   word = if sign(-3) == "negative" { "yes" } else { "no" }
   print(word)
   print(sign(4))
@@ -43,7 +43,7 @@ A condition is a `bool`, such as what `<`, `<=`, `>`, `>=`, `==`, and `!=` give.
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   if 1 { print("x") }
 }
 ```
@@ -57,7 +57,7 @@ With an `else`, the `if` gives what the block that ran gives, so both blocks giv
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   word = if true { "a" } else { true }
   print(word)
 }
@@ -84,7 +84,7 @@ fn pick(c: bool, x: 0..256) -> 0..256 {
   if c { 1 } else { x }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   y = if true { 1 } else { 300 }
   print("{pick(false, 7)} {y}")
 }
@@ -99,7 +99,7 @@ An `if` with no `else` gives `()`, and what its block gives is not read. It is f
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   if true { print("shown") }
   if false { print("hidden") }
 }
@@ -124,7 +124,7 @@ A block may assign to a [`var`](var.md) of the function around it, which is how 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   var word = "a"
   if true { word = "b" } else { word = "c" }
   print(word)
@@ -156,7 +156,7 @@ The `else` is written on the line where the block before it ends. On a line of i
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   a = true
   b = false
   print(if a and not b { "yes" } else { "no" })
@@ -172,7 +172,7 @@ This prints `yes`, `no`, and `yes`.
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   a = true
   b = false
   c = false
@@ -188,12 +188,12 @@ This prints `yes`, then `no`.
 ```
 use std.console (console, print)
 
-fn loud(text: str, answer: bool) -> bool ! console {
+fn loud(text: str, answer: bool) -> bool <console> {
   print(text)
   answer
 }
 
-fn main() ! console {
+fn main() <console> {
   if loud("one", false) and loud("two", true) { print("both") }
   if loud("three", true) or loud("four", true) { print("either") }
 }

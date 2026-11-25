@@ -30,7 +30,7 @@ effect time {
 use std.bits (u64)
 use std.time (now, sleep, time)
 
-fn pause_and_read() -> u64 ! time {
+fn pause_and_read() -> u64 <time> {
   sleep(250)
   now()
 }

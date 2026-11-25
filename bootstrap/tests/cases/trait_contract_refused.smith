@@ -18,7 +18,7 @@ fn twice[T: Plus](x: T) -> T
   Plus.plus(x, x)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   n: u8 = 200
   print("{twice(n)}")
 }

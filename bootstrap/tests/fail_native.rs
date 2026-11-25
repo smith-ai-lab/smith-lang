@@ -252,8 +252,8 @@ fn every_round_of_a_child_that_runs_out_of_memory_reaches_as_far_as_the_first_be
 fn every_round_of_a_child_that_a_parent_joins_and_that_runs_out_of_memory_reaches_as_far_as_the_first()
  {
     let source = ROUNDS.replace(
-        "fn eaten() -> u64 ! alloc, console {\n  eat()\n}",
-        "fn eaten() -> u64 ! alloc, console, task {\n  join(spawn { eat() })\n}",
+        "fn eaten() -> u64 <alloc, console> {\n  eat()\n}",
+        "fn eaten() -> u64 <alloc, console, task> {\n  join(spawn { eat() })\n}",
     );
     assert_ne!(source, ROUNDS);
     limited_to(200000, &source, "fail_rounds_joined", |said, status| {

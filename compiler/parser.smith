@@ -197,7 +197,7 @@ struct Aliased {
   alias: Option[Name]
 }
 
-fn alias_after(c: take Cursor, wanted: u64) -> Result[Aliased, Failed] ! alloc {
+fn alias_after(c: take Cursor, wanted: u64) -> Result[Aliased, Failed] <alloc> {
   if is_keyword(tok(c), kw_as()) {
     got = try ident(step(c), wanted)
     .ok(Aliased(at: got.at, alias: .some(got.name)))
@@ -212,7 +212,7 @@ struct Names {
 }
 
 // The names between the parentheses of a `use`, and the `)`.
-fn listed_names(c: take Cursor) -> Result[Names, Failed] ! alloc {
+fn listed_names(c: take Cursor) -> Result[Names, Failed] <alloc> {
   rounds = c.tokens.size
   var at = step(c)
   var names: List[Listed] = []
@@ -245,7 +245,7 @@ struct UseLine {
 
 // A `use` line and the line break after it: the module's name, then the names
 // taken from it in parentheses.
-fn use_line(c: take Cursor) -> Result[UseLine, Failed] ! alloc {
+fn use_line(c: take Cursor) -> Result[UseLine, Failed] <alloc> {
   start = pos(c)
   rounds = c.tokens.size
   first = try ident(step(c), 1)
@@ -291,7 +291,7 @@ struct Uses {
 // The `use` lines of a file, and the mistakes of the file in them. An item that
 // is not a `use` is stepped over, as the lines after it are not this part's:
 // it is read to the next item and no further.
-fn parse_uses(tokens: take List[Token]) -> Uses ! alloc {
+fn parse_uses(tokens: take List[Token]) -> Uses <alloc> {
   rounds = tokens.size
   var at = Cursor(tokens: tokens, at: 0)
   var uses: List[Use] = []

@@ -69,27 +69,27 @@ trait Function[F, out Args, out R] {
 }
 
 trait Fmt[T] {
-  fn fmt(value: T) -> str ! alloc
+  fn fmt(value: T) -> str <alloc>
 }
 
 trait Repr[T] {
-  fn repr(value: T) -> str ! alloc
+  fn repr(value: T) -> str <alloc>
 }
 
 impl Fmt[str] {
-  fn fmt(value: str) -> str ! alloc { value }
+  fn fmt(value: str) -> str <alloc> { value }
 }
 
 trait Exit[T] {
-  fn exit(value: T) -> u8 ! console, alloc
+  fn exit(value: T) -> u8 <console, alloc>
 }
 
 impl Exit[()] {
-  fn exit(value: ()) -> u8 ! console, alloc { 0 }
+  fn exit(value: ()) -> u8 <console, alloc> { 0 }
 }
 
 impl[T: Exit, E: Fmt] Exit[Result[T, E]] {
-  fn exit(value: Result[T, E]) -> u8 ! console, alloc {
+  fn exit(value: Result[T, E]) -> u8 <console, alloc> {
     match value {
       .ok(x) { Exit.exit(x) }
       .err(e) {
@@ -208,11 +208,11 @@ impl Ord[i8] {
 }
 
 impl Fmt[i8] {
-  fn fmt(value: i8) -> str ! alloc { __decimal(value) }
+  fn fmt(value: i8) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[i8] {
-  fn repr(value: i8) -> str ! alloc { __decimal(value) }
+  fn repr(value: i8) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[i8] {
@@ -260,11 +260,11 @@ impl Ord[i16] {
 }
 
 impl Fmt[i16] {
-  fn fmt(value: i16) -> str ! alloc { __decimal(value) }
+  fn fmt(value: i16) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[i16] {
-  fn repr(value: i16) -> str ! alloc { __decimal(value) }
+  fn repr(value: i16) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[i16] {
@@ -312,11 +312,11 @@ impl Ord[i32] {
 }
 
 impl Fmt[i32] {
-  fn fmt(value: i32) -> str ! alloc { __decimal(value) }
+  fn fmt(value: i32) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[i32] {
-  fn repr(value: i32) -> str ! alloc { __decimal(value) }
+  fn repr(value: i32) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[i32] {
@@ -364,11 +364,11 @@ impl Ord[i64] {
 }
 
 impl Fmt[i64] {
-  fn fmt(value: i64) -> str ! alloc { __decimal(value) }
+  fn fmt(value: i64) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[i64] {
-  fn repr(value: i64) -> str ! alloc { __decimal(value) }
+  fn repr(value: i64) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[i64] {
@@ -416,11 +416,11 @@ impl Ord[u8] {
 }
 
 impl Fmt[u8] {
-  fn fmt(value: u8) -> str ! alloc { __decimal(value) }
+  fn fmt(value: u8) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[u8] {
-  fn repr(value: u8) -> str ! alloc { __decimal(value) }
+  fn repr(value: u8) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[u8] {
@@ -468,11 +468,11 @@ impl Ord[u16] {
 }
 
 impl Fmt[u16] {
-  fn fmt(value: u16) -> str ! alloc { __decimal(value) }
+  fn fmt(value: u16) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[u16] {
-  fn repr(value: u16) -> str ! alloc { __decimal(value) }
+  fn repr(value: u16) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[u16] {
@@ -520,11 +520,11 @@ impl Ord[u32] {
 }
 
 impl Fmt[u32] {
-  fn fmt(value: u32) -> str ! alloc { __decimal(value) }
+  fn fmt(value: u32) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[u32] {
-  fn repr(value: u32) -> str ! alloc { __decimal(value) }
+  fn repr(value: u32) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[u32] {
@@ -572,11 +572,11 @@ impl Ord[u64] {
 }
 
 impl Fmt[u64] {
-  fn fmt(value: u64) -> str ! alloc { __decimal(value) }
+  fn fmt(value: u64) -> str <alloc> { __decimal(value) }
 }
 
 impl Repr[u64] {
-  fn repr(value: u64) -> str ! alloc { __decimal(value) }
+  fn repr(value: u64) -> str <alloc> { __decimal(value) }
 }
 
 impl Wrapping[u64] {
@@ -632,19 +632,19 @@ impl Ord[f64] {
 }
 
 impl Fmt[f32] {
-  fn fmt(value: f32) -> str ! alloc { __float_text(value) }
+  fn fmt(value: f32) -> str <alloc> { __float_text(value) }
 }
 
 impl Repr[f32] {
-  fn repr(value: f32) -> str ! alloc { __float_text(value) }
+  fn repr(value: f32) -> str <alloc> { __float_text(value) }
 }
 
 impl Fmt[f64] {
-  fn fmt(value: f64) -> str ! alloc { __float_text(value) }
+  fn fmt(value: f64) -> str <alloc> { __float_text(value) }
 }
 
 impl Repr[f64] {
-  fn repr(value: f64) -> str ! alloc { __float_text(value) }
+  fn repr(value: f64) -> str <alloc> { __float_text(value) }
 }
 
 impl Float[f32] {

@@ -105,7 +105,7 @@ fn digit(d: Byte) -> Byte {
   if d < 10 { wrapping_add(d, '0') } else { wrapping_add(d, 87) }
 }
 
-fn hex(b: Slice[Byte]) -> str ! alloc {
+fn hex(b: Slice[Byte]) -> str <alloc> {
   var built: List[Byte] = []
   loop i in 0..b.size {
     built = push(built, digit(shift_right(b[i], 4)))
@@ -117,7 +117,7 @@ fn hex(b: Slice[Byte]) -> str ! alloc {
   }
 }
 
-fn dotted(arcs: List[Nat]) -> str ! alloc {
+fn dotted(arcs: List[Nat]) -> str <alloc> {
   var s = \"\"
   loop i in 0..arcs.size {
     if i == 0 { s = \"{arcs[i]}\" } else { s = \"{s}.{arcs[i]}\" }
@@ -125,7 +125,7 @@ fn dotted(arcs: List[Nat]) -> str ! alloc {
   s
 }
 
-fn joined(names: List[str]) -> str ! alloc {
+fn joined(names: List[str]) -> str <alloc> {
   var s = \"\"
   loop i in 0..names.size {
     if i == 0 { s = names[i] } else { s = \"{s},{names[i]}\" }
@@ -133,7 +133,7 @@ fn joined(names: List[str]) -> str ! alloc {
   s
 }
 
-fn show(b: Slice[Byte]) ! console, alloc {
+fn show(b: Slice[Byte]) <console, alloc> {
   match certificate(b) {
     .err(e) { print(\"err\") }
     .ok(c) {
@@ -155,7 +155,7 @@ fn show(b: Slice[Byte]) ! console, alloc {
     for (i, input) in inputs.iter().enumerate() {
         source += &format!("fn input{i}() -> Slice[Byte] {{ {} }}\n\n", literal(input));
     }
-    source += "fn main() ! console, alloc {\n";
+    source += "fn main() <console, alloc> {\n";
     for i in 0..inputs.len() {
         source += &format!("  show(input{i}())\n");
     }
@@ -623,7 +623,7 @@ fn reading_a_certificate_asks_for_memory_that_does_not_depend_on_the_bytes_of_it
     let requests = |extra: usize| {
         let bytes = longer(extra);
         let source = format!(
-            "use std.console (console, print)\nuse std.x509 (certificate)\n\nfn input() -> Slice[Byte] {{ {} }}\n\nfn main() ! console, alloc {{\n  match certificate(input()) {{\n    .ok(c) {{ print(\"{{c.subject.size}}\") }}\n    .err(e) {{ print(e) }}\n  }}\n}}\n",
+            "use std.console (console, print)\nuse std.x509 (certificate)\n\nfn input() -> Slice[Byte] {{ {} }}\n\nfn main() <console, alloc> {{\n  match certificate(input()) {{\n    .ok(c) {{ print(\"{{c.subject.size}}\") }}\n    .err(e) {{ print(e) }}\n  }}\n}}\n",
             literal(&bytes)
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
@@ -862,7 +862,7 @@ fn digit(d: Byte) -> Byte {
   if d < 10 { wrapping_add(d, '0') } else { wrapping_add(d, 87) }
 }
 
-fn hex(b: List[Byte]) -> str ! alloc {
+fn hex(b: List[Byte]) -> str <alloc> {
   var built: List[Byte] = []
   loop i in 0..b.size {
     built = push(built, digit(shift_right(b[i], 4)))
@@ -874,7 +874,7 @@ fn hex(b: List[Byte]) -> str ! alloc {
   }
 }
 
-fn show(bytes: Slice[Byte]) ! console, alloc {
+fn show(bytes: Slice[Byte]) <console, alloc> {
   match utf8(bytes) {
     .err(e) { print(\"not text\") }
     .ok(t) {
@@ -895,7 +895,7 @@ fn show(bytes: Slice[Byte]) ! console, alloc {
     for (i, input) in inputs.iter().enumerate() {
         source += &format!("fn input{i}() -> Slice[Byte] {{ {} }}\n\n", literal(input));
     }
-    source += "fn main() ! console, alloc {\n";
+    source += "fn main() <console, alloc> {\n";
     for i in 0..inputs.len() {
         source += &format!("  show(input{i}())\n");
     }

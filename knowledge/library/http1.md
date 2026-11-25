@@ -15,7 +15,7 @@ The module `std.http1` turns bytes into the messages of HTTP/1.1 and back, as RF
 ```
 use std.http1 (Read, request_head)
 
-fn first_line(bytes: Slice[Byte]) -> str ! alloc {
+fn first_line(bytes: Slice[Byte]) -> str <alloc> {
   match request_head(bytes) {
     .complete((head, used)) { "{head.method} {head.target}" }
     .incomplete { "more bytes are needed" }
@@ -59,8 +59,8 @@ enum Body {
   chunked
 }
 
-fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] ! alloc
-fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] ! alloc
+fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] <alloc>
+fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] <alloc>
 fn body_of(headers: List[(str, str)]) -> Result[Body, str]
 fn chunk(bytes: Slice[Byte], limit: Nat = 16384) -> Read[Slice[Byte]]
 ```
@@ -89,9 +89,9 @@ The readers take the strict side of each, so that two servers cannot read one me
 ## Writing
 
 ```
-fn write_request_head(to: take Text, head: RequestHead) -> Text ! alloc
-fn write_response_head(to: take Text, head: ResponseHead) -> Text ! alloc
-fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] ! alloc
+fn write_request_head(to: take Text, head: RequestHead) -> Text <alloc>
+fn write_response_head(to: take Text, head: ResponseHead) -> Text <alloc>
+fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] <alloc>
 ```
 
 Each adds what it writes to what it is given, and gives it back. A head is text, so it is added to a [`Text`](text.md#building-a-text). A name or a value that holds a line break is not written: the two head functions are refused such a value by a `requires`, so a header that came from outside cannot add a line of its own.

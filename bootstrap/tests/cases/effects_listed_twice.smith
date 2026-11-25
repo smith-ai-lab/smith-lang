@@ -1,0 +1,5 @@
+use std.console (console, print)
+
+fn main() <console, console> {
+  print("hello")
+}

@@ -18,7 +18,7 @@ Smith provides twelve effects, which a signature lists by name like any other. S
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello")
 }
 ```
@@ -54,20 +54,20 @@ Five more are built in, because the compiler itself gives them their meaning. Th
 A string that holds an expression needs `alloc`, so the function that writes it lists it.
 
 ```
-fn greet(name: str) -> str ! alloc { "hello {name}" }
+fn greet(name: str) -> str <alloc> { "hello {name}" }
 ```
 
 An open-ended `loop` with no `decreases` may not end, so the function that has it lists `diverge`, and so does every caller.
 
 ```
-fn spin() ! diverge {
+fn spin() <diverge> {
   loop { }
 }
 
 fn main() { spin() }
 ```
 
-This gives "`spin` needs the `diverge` effect, which `main` does not declare", with the fix "write `fn main() ! diverge`". With `loop decreases n`, as [the open-ended `loop`](open-loop.md#a-loop-that-is-proven-to-end) describes, the loop is proven to end and the function lists nothing.
+This gives "`spin` needs the `diverge` effect, which `main` does not declare", with the fix "write `fn main() <diverge>`". With `loop decreases n`, as [the open-ended `loop`](open-loop.md#a-loop-that-is-proven-to-end) describes, the loop is proven to end and the function lists nothing.
 
 ## What a signature says about time
 
@@ -88,11 +88,11 @@ An effect that nothing handles is carried by every caller up to [`main`](first-p
 ```
 use std.console (console, print)
 
-fn greet(name: str) ! console, alloc {
+fn greet(name: str) <console, alloc> {
   print("hello {name}")
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   greet("Ana")
 }
 ```

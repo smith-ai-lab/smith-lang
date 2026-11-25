@@ -1221,7 +1221,7 @@ impl WrittenOut<'_> {
             text.push_str(&format!(" -> {}", self.type_name(r)));
         }
         if console {
-            text.push_str(" ! console");
+            text.push_str(" <console>");
         }
         text.push_str(" {\n");
         for stmt in m.body_of(*t) {
@@ -1600,7 +1600,7 @@ fn trait_fn_text(m: &Model, f: &TraitFn, args: &[Ty], names: &[&str]) -> String 
         type_text(m, &f.result.subst(args), names)
     );
     if f.console {
-        text.push_str(" ! console");
+        text.push_str(" <console>");
     }
     text
 }
@@ -1721,7 +1721,7 @@ fn differing(
     let params: Vec<String> = params.iter().map(|(p, t)| format!("{p}: {t}")).collect();
     let mut text = format!("{}({}) -> {result}", f.name, params.join(", "));
     if console {
-        text.push_str(" ! console");
+        text.push_str(" <console>");
     }
     (text, renamed)
 }
@@ -1762,7 +1762,7 @@ fn function(b: &mut Builder, m: &Model, f: usize, reached: bool, sites: &Sites) 
         b.push(&format!(" -> {}", type_text(m, r, &names)));
     }
     if def.console {
-        b.push(" ! console");
+        b.push(" <console>");
     }
     // Nothing is known of a type parameter but what its bounds say, so the
     // body may copy, drop and return its values only when each is `Copy` and `Discard`.
@@ -2058,7 +2058,7 @@ pub fn boxes(g: &mut Gen) -> (String, Vec<u8>) {
     } else {
         "impl[T: Named] Named[Box[T]] {\n  fn name_of(x: Box[T]) -> str { name_of(x.item) }\n}\n\n"
     });
-    source.push_str("fn main() ! console {\n");
+    source.push_str("fn main() <console> {\n");
     let mut stdout = Vec::new();
     for _ in 0..1 + g.below(4) {
         let depth = g.below(4);
@@ -2148,7 +2148,7 @@ pub fn requires(g: &mut Gen) -> Requires {
         "fn show_both[A, B](a: A, b: B) -> str\n  requires Pair[A, B]\n{\n  join(a, b)\n}\n\n",
     );
     let (a, b) = (g.below(TYPES.len()), g.below(TYPES.len()));
-    source.push_str("fn main() ! console {\n");
+    source.push_str("fn main() <console> {\n");
     let line = source.lines().count() + 1;
     source.push_str(&format!(
         "  print(show_both({}, {}))\n}}\n",

@@ -1,0 +1,4 @@
+effects_empty_list.smith:1:11: a list of effects names at least one effect
+  1 | fn main() <> {
+    |           ^
+  fix: write no effects, and leave out `<>`

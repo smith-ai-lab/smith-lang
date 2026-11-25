@@ -741,20 +741,20 @@ fn write(m: &Model, mistake: Option<Mistake>) -> (String, Option<Expected>) {
     if let Some(Mistake::NoFmt { .. }) = mistake {
         w.push("struct Dog {\n  name: str\n}\n\nwithout Fmt for Dog\n\n");
     }
-    w.push("impl Fmt[Cat] {\n  fn fmt(value: Cat) -> str ! alloc { ");
+    w.push("impl Fmt[Cat] {\n  fn fmt(value: Cat) -> str <alloc> { ");
     w.expr(&m.cat);
-    w.push(" }\n}\n\nimpl Fmt[Pet] {\n  fn fmt(value: Pet) -> str ! alloc {\n");
+    w.push(" }\n}\n\nimpl Fmt[Pet] {\n  fn fmt(value: Pet) -> str <alloc> {\n");
     w.push("    match value {\n      .cat(c) { ");
     w.expr(&m.pet.0);
     w.push(" }\n      .none { ");
     w.expr(&m.pet.1);
     w.push(" }\n    }\n  }\n}\n\n");
-    w.push("fn double(s: str) -> str ! alloc { \"{s}{s}\" }\n\n");
-    w.push("fn apply(s: str, f: fn(str) -> str) -> str ! alloc { \"");
+    w.push("fn double(s: str) -> str <alloc> { \"{s}{s}\" }\n\n");
+    w.push("fn apply(s: str, f: fn(str) -> str) -> str <alloc> { \"");
     w.pieces(&m.apply.0);
     w.push("{f(s)}");
     w.pieces(&m.apply.1);
-    w.push("\" }\n\nfn show[T: Fmt](x: T) -> str ! alloc { \"");
+    w.push("\" }\n\nfn show[T: Fmt](x: T) -> str <alloc> { \"");
     w.pieces(&m.show.0);
     w.push("{x}");
     w.pieces(&m.show.1);
@@ -771,7 +771,7 @@ fn write(m: &Model, mistake: Option<Mistake>) -> (String, Option<Expected>) {
             f.result.written()
         ));
         if needs_alloc(m, f) && mistake != Some(Mistake::NoAlloc(Some(k))) {
-            w.push(" ! alloc");
+            w.push(" <alloc>");
         }
         w.push(" {\n");
         for stmt in &f.body {
@@ -788,11 +788,11 @@ fn write(m: &Model, mistake: Option<Mistake>) -> (String, Option<Expected>) {
         w.push("double(\"a\") }\n\n");
     }
     w.at = Some(main);
-    w.push("fn main() ! console");
+    w.push("fn main() <console");
     if mistake != Some(Mistake::NoAlloc(None)) {
         w.push(", alloc");
     }
-    w.push(" {\n");
+    w.push("> {\n");
     let mut placed = None;
     for i in 0..=m.main.len() {
         match mistake {
@@ -832,7 +832,7 @@ fn write(m: &Model, mistake: Option<Mistake>) -> (String, Option<Expected>) {
         Some(Mistake::CallWithoutAlloc { .. }) => Some(Expected {
             at: w.sites[relay][0],
             mentions: "`double` needs the `alloc` effect".to_string(),
-            fix: Some("fn relay() -> str ! alloc".to_string()),
+            fix: Some("fn relay() -> str <alloc>".to_string()),
         }),
     };
     // The `use` line is as many lines as it was written as, and names

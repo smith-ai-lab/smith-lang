@@ -113,9 +113,9 @@ fn refused(source: &str) -> Vec<String> {
 }
 
 fn a_loop_over_a_range_sums_and_an_open_ended_loop_counts_until_it_breaks() {
-    let sum = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn sum_below(n: u64) -> u64 {\n  var total: u64 = 0\n  loop i in 0..n { total = wrapping_add(total, i) }\n  total\n}\n\nfn main() ! console, alloc {\n  print(\"{sum_below(10)}\")\n}\n";
+    let sum = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn sum_below(n: u64) -> u64 {\n  var total: u64 = 0\n  loop i in 0..n { total = wrapping_add(total, i) }\n  total\n}\n\nfn main() <console, alloc> {\n  print(\"{sum_below(10)}\")\n}\n";
     prints(sum, vec!["45".into()]);
-    let count = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_sub)\n\nfn takes(from: u64, step: u64) -> u64 ! diverge {\n  var left: u64 = from\n  var times: u64 = 0\n  loop {\n    if left < step { break }\n    left = wrapping_sub(left, step)\n    times = wrapping_add(times, 1)\n  }\n  times\n}\n\nfn main() ! console, alloc, diverge {\n  print(\"{takes(10, 3)}\")\n}\n";
+    let count = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_sub)\n\nfn takes(from: u64, step: u64) -> u64 <diverge> {\n  var left: u64 = from\n  var times: u64 = 0\n  loop {\n    if left < step { break }\n    left = wrapping_sub(left, step)\n    times = wrapping_add(times, 1)\n  }\n  times\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{takes(10, 3)}\")\n}\n";
     prints(count, vec!["3".into()]);
 }
 
@@ -155,7 +155,7 @@ fn span(g: &mut Gen) -> Span {
 
 fn show(ty: Int, a: i128, b: i128) -> String {
     with_header(format!(
-        "fn show(a: {t}, b: {t}) ! console, alloc {{\n  loop i in a..b {{ print(\"{{i}}\") }}\n}}\n\nfn main() ! console, alloc {{\n  show({a}, {b})\n}}\n",
+        "fn show(a: {t}, b: {t}) <console, alloc> {{\n  loop i in a..b {{ print(\"{{i}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  show({a}, {b})\n}}\n",
         t = ty.name
     ))
 }
@@ -217,7 +217,7 @@ fn inside_a_loop_over_a_range_arith_knows_the_counter_is_inside_the_range() {
             format!("i - {}", r.by)
         };
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  lo: {t} = {lo}\n  hi: {t} = {hi}\n  loop i in lo..hi {{\n    x: {t} = {operation}\n    print(\"{{x}}\")\n  }}\n}}\n",
+            "fn main() <console, alloc> {{\n  lo: {t} = {lo}\n  hi: {t} = {hi}\n  loop i in lo..hi {{\n    x: {t} = {operation}\n    print(\"{{x}}\")\n  }}\n}}\n",
             t = r.ty.name,
             lo = r.lo,
             hi = r.hi,
@@ -250,7 +250,7 @@ fn a_break_ends_the_nearest_loop_around_it_and_no_other() {
         |g| (g.below(6) as u32, g.below(6) as u32),
         |&(n, m)| {
             let source = with_header(format!(
-                "fn rounds(n: u32, m: u32) -> u32 ! diverge {{\n  var total: u32 = 0\n  loop i in 0..n {{\n    var done: u32 = 0\n    loop {{\n      if done >= m {{ break }}\n      done = wrapping_add(done, 1)\n      total = wrapping_add(total, 1)\n    }}\n  }}\n  total\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{rounds({n}, {m})}}\")\n}}\n"
+                "fn rounds(n: u32, m: u32) -> u32 <diverge> {{\n  var total: u32 = 0\n  loop i in 0..n {{\n    var done: u32 = 0\n    loop {{\n      if done >= m {{ break }}\n      done = wrapping_add(done, 1)\n      total = wrapping_add(total, 1)\n    }}\n  }}\n  total\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{rounds({n}, {m})}}\")\n}}\n"
             ));
             prints(&source, vec![(n * m).to_string()]);
         },
@@ -259,15 +259,15 @@ fn a_break_ends_the_nearest_loop_around_it_and_no_other() {
     // round has done.
     for stop in 0..5 {
         let source = with_header(format!(
-            "fn until(stop: Int) -> Int {{\n  var seen: Int = 0\n  loop i in 0..10 {{\n    if i == stop {{ break }}\n    seen = wrapping_add(seen, 1)\n  }}\n  seen\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{until({stop})}}\")\n}}\n"
+            "fn until(stop: Int) -> Int {{\n  var seen: Int = 0\n  loop i in 0..10 {{\n    if i == stop {{ break }}\n    seen = wrapping_add(seen, 1)\n  }}\n  seen\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{until({stop})}}\")\n}}\n"
         ));
         prints(&source, vec![stop.to_string()]);
     }
 }
 
 fn a_break_with_no_loop_to_end_is_an_error() {
-    let outside = "use std.console (console)\n\nfn stop() {\n  break\n}\n\nfn main() ! console, alloc {\n  stop()\n}\n";
-    let in_lambda = "use std.console (console)\n\nfn twice(body: fn()) {\n  body()\n  body()\n}\n\nfn main() ! console, alloc {\n  loop i in 0..3 {\n    twice({ break })\n  }\n}\n";
+    let outside = "use std.console (console)\n\nfn stop() {\n  break\n}\n\nfn main() <console, alloc> {\n  stop()\n}\n";
+    let in_lambda = "use std.console (console)\n\nfn twice(body: fn()) {\n  body()\n  body()\n}\n\nfn main() <console, alloc> {\n  loop i in 0..3 {\n    twice({ break })\n  }\n}\n";
     for source in [outside, in_lambda] {
         let errors = refused(source);
         assert!(
@@ -275,24 +275,24 @@ fn a_break_with_no_loop_to_end_is_an_error() {
             "{errors:?} does not name `break` for {source}"
         );
     }
-    let fine = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  loop i in 0..3 {\n    if i == 1 { break }\n    print(\"{i}\")\n  }\n}\n";
+    let fine = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  loop i in 0..3 {\n    if i == 1 { break }\n    print(\"{i}\")\n  }\n}\n";
     assert_eq!(refused(fine), Vec::<String>::new());
 }
 
 fn an_open_ended_loop_makes_its_function_and_every_caller_carry_diverge() {
     let program = |first: &str, second: &str, main: &str| {
         with_header(format!(
-            "fn once() -> Byte{first} {{\n  loop {{ break }}\n  1\n}}\n\nfn twice() -> Byte{second} {{\n  once()\n}}\n\nfn main() ! console, alloc{main} {{\n  print(\"{{twice()}}\")\n}}\n"
+            "fn once() -> Byte{first} {{\n  loop {{ break }}\n  1\n}}\n\nfn twice() -> Byte{second} {{\n  once()\n}}\n\nfn main() <console, alloc{main}> {{\n  print(\"{{twice()}}\")\n}}\n"
         ))
     };
-    let all = " ! diverge";
+    let all = " <diverge>";
     let names = |source: &str| refused(source).iter().any(|e| e.contains("`diverge`"));
     assert!(!names(&program(all, all, ", diverge")));
     assert!(names(&program("", all, ", diverge")));
     assert!(names(&program(all, "", ", diverge")));
     assert!(names(&program(all, all, "")));
     // A loop over a range adds no effect, and stays pure.
-    let pure = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn total(n: Byte) -> Byte {\n  var sum: Byte = 0\n  loop i in 0..n { sum = wrapping_add(sum, i) }\n  sum\n}\n\nfn main() ! console, alloc {\n  print(\"{total(4)}\")\n}\n";
+    let pure = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn total(n: Byte) -> Byte {\n  var sum: Byte = 0\n  loop i in 0..n { sum = wrapping_add(sum, i) }\n  sum\n}\n\nfn main() <console, alloc> {\n  print(\"{total(4)}\")\n}\n";
     prints(pure, vec!["6".into()]);
 }
 
@@ -304,14 +304,14 @@ fn a_var_assigned_in_a_loop_is_known_to_arith_in_the_round_that_gave_it_and_only
         let t = ty.name;
         let goal = format!("x + 1 <= {}", ty.max());
         let inside = with_header(format!(
-            "fn main() ! console, alloc {{\n  var x: {t} = 1\n  loop i in 0..2 {{\n    x = 1\n    y: {t} = x + 1\n    print(\"{{y}}\")\n  }}\n}}\n"
+            "fn main() <console, alloc> {{\n  var x: {t} = 1\n  loop i in 0..2 {{\n    x = 1\n    y: {t} = x + 1\n    print(\"{{y}}\")\n  }}\n}}\n"
         ));
         assert_eq!(refused(&inside), Vec::<String>::new(), "for {inside}");
         let after = with_header(format!(
-            "fn main() ! console, alloc {{\n  var x: {t} = 1\n  loop i in 0..2 {{ x = 1 }}\n  y: {t} = x + 1\n  print(\"{{y}}\")\n}}\n"
+            "fn main() <console, alloc> {{\n  var x: {t} = 1\n  loop i in 0..2 {{ x = 1 }}\n  y: {t} = x + 1\n  print(\"{{y}}\")\n}}\n"
         ));
         let earlier = with_header(format!(
-            "fn main() ! console, alloc {{\n  var x: {t} = 1\n  loop i in 0..2 {{\n    y: {t} = x + 1\n    print(\"{{y}}\")\n    x = 1\n  }}\n}}\n"
+            "fn main() <console, alloc> {{\n  var x: {t} = 1\n  loop i in 0..2 {{\n    y: {t} = x + 1\n    print(\"{{y}}\")\n    x = 1\n  }}\n}}\n"
         ));
         for source in [after, earlier] {
             let errors = refused(&source);
@@ -340,12 +340,12 @@ fn the_ends_of_a_range_are_values_from_when_the_loop_starts_and_nothing_ties_the
     };
     let list = |before: &str, after: &str| {
         with_header(format!(
-            "fn run(f: fn()) {{ f() }}\n\nfn main() ! console, alloc {{\n  var xs: List[Byte] = [1, 2, 3]\n  loop i in 0..xs.size {{\n    {before}\n    print(\"{{xs[i]}}\")\n    {after}\n  }}\n}}\n"
+            "fn run(f: fn()) {{ f() }}\n\nfn main() <console, alloc> {{\n  var xs: List[Byte] = [1, 2, 3]\n  loop i in 0..xs.size {{\n    {before}\n    print(\"{{xs[i]}}\")\n    {after}\n  }}\n}}\n"
         ))
     };
     let number = |before: &str, after: &str| {
         with_header(format!(
-            "fn run(f: fn()) {{ f() }}\n\nfn f(n: Byte) -> Byte {{\n  var m: Byte = n\n  var s: Byte = 0\n  loop i in 0..m {{\n    {before}\n    s = m - i - 1\n    {after}\n  }}\n  s\n}}\n\nfn main() ! console, alloc {{ print(\"{{f(3)}}\") }}\n"
+            "fn run(f: fn()) {{ f() }}\n\nfn f(n: Byte) -> Byte {{\n  var m: Byte = n\n  var s: Byte = 0\n  loop i in 0..m {{\n    {before}\n    s = m - i - 1\n    {after}\n  }}\n  s\n}}\n\nfn main() <console, alloc> {{ print(\"{{f(3)}}\") }}\n"
         ))
     };
     for ((name, list_assign), (_, number_assign)) in wrap("xs = []").into_iter().zip(wrap("m = 0"))
@@ -374,15 +374,15 @@ fn a_break_in_an_if_gives_arith_the_condition_that_is_false_in_the_rest_of_the_r
         let t = ty.name;
         let round = "    if left < 3 { break }\n    left = left - 3\n";
         let plain = with_header(format!(
-            "fn f(n: {t}) -> {t} ! diverge {{\n  var left: {t} = n\n  loop {{\n{round}  }}\n  left\n}}\n\nfn main() ! console, alloc, diverge {{\n  print(\"{{f(7)}}\")\n}}\n"
+            "fn f(n: {t}) -> {t} <diverge> {{\n  var left: {t} = n\n  loop {{\n{round}  }}\n  left\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{f(7)}}\")\n}}\n"
         ));
         let ranged = with_header(format!(
-            "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop i in 0..5 {{\n{round}  }}\n  left\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(7)}}\")\n}}\n"
+            "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop i in 0..5 {{\n{round}  }}\n  left\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(7)}}\")\n}}\n"
         ));
         let mut sources = vec![plain, ranged];
         if !ty.signed {
             sources.push(with_header(format!(
-                "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n{round}  }}\n  left\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(7)}}\")\n}}\n"
+                "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n{round}  }}\n  left\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(7)}}\")\n}}\n"
             )));
         }
         for source in sources {
@@ -390,14 +390,14 @@ fn a_break_in_an_if_gives_arith_the_condition_that_is_false_in_the_rest_of_the_r
         }
     }
     // Without the `if`, nothing says `left` is at least 3.
-    let bare = "use std.console (console, print)\n\nfn f(n: Byte) -> Byte ! diverge {\n  var left: Byte = n\n  loop {\n    left = left - 3\n  }\n  left\n}\n\nfn main() ! console, alloc, diverge {\n  print(\"{f(7)}\")\n}\n";
+    let bare = "use std.console (console, print)\n\nfn f(n: Byte) -> Byte <diverge> {\n  var left: Byte = n\n  loop {\n    left = left - 3\n  }\n  left\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{f(7)}\")\n}\n";
     assert!(refused(bare).iter().any(|e| e.contains("left - 3")));
 }
 
 fn count_program(with: &str) -> String {
     with_header(format!(
-        "fn count() -> u64{effects} {{\n  var left: u64 = 10\n  var times: u64 = 0\n  loop{with} {{\n    if left < 3 {{ break }}\n    left = left - 3\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() ! console, alloc{more} {{\n  print(\"{{count()}}\")\n}}\n",
-        effects = if with.is_empty() { " ! diverge" } else { "" },
+        "fn count() -> u64{effects} {{\n  var left: u64 = 10\n  var times: u64 = 0\n  loop{with} {{\n    if left < 3 {{ break }}\n    left = left - 3\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() <console, alloc{more}> {{\n  print(\"{{count()}}\")\n}}\n",
+        effects = if with.is_empty() { " <diverge>" } else { "" },
         more = if with.is_empty() { ", diverge" } else { "" },
     ))
 }
@@ -407,7 +407,7 @@ fn a_loop_that_decreases_a_measure_ends_without_diverge() {
     prints(&count_program(" decreases left"), vec!["3".into()]);
     // Without `decreases`, the function needs `diverge`.
     let without = count_program("")
-        .replace(" ! diverge", "")
+        .replace(" <diverge>", "")
         .replace(", diverge", "");
     assert!(
         refused(&without).iter().any(|e| e.contains("`diverge`")),
@@ -461,7 +461,7 @@ fn a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stay
             format!("    if left < {guard} {{ break }}\n    left = left - {step}\n")
         };
         let source = with_header(format!(
-            "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n{rest}  }}\n  left\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(5)}}\")\n}}\n"
+            "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n{rest}  }}\n  left\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(5)}}\")\n}}\n"
         ));
         let errors = refused(&source);
         let fits = step <= guard;
@@ -497,7 +497,7 @@ fn a_round_that_always_ends_in_break_has_no_place_to_go_round_again() {
             "if left == 0 { break } else { break }",
         ] {
             let source = with_header(format!(
-                "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n    {round}\n  }}\n  left\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(5)}}\")\n}}\n"
+                "fn f(n: {t}) -> {t} {{\n  var left: {t} = n\n  loop decreases left {{\n    {round}\n  }}\n  left\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(5)}}\")\n}}\n"
             ));
             assert_eq!(refused(&source), Vec::<String>::new(), "for {source}");
         }
@@ -546,7 +546,7 @@ fn every_loop_with_decreases_that_compiles_ends() {
     generate::check(59, 120, countdown, |c| {
         let (t, start, step) = (c.ty.name, c.start, c.step);
         let source = with_header(format!(
-            "fn rounds(n: {t}) -> u64 {{\n  var left: {t} = n\n  var times: u64 = 0\n  loop decreases left {{\n    if left < {step} {{ break }}\n    left = left - {step}\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{rounds({start})}}\")\n}}\n"
+            "fn rounds(n: {t}) -> u64 {{\n  var left: {t} = n\n  var times: u64 = 0\n  loop decreases left {{\n    if left < {step} {{ break }}\n    left = left - {step}\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{rounds({start})}}\")\n}}\n"
         ));
         prints(&source, vec![(start / step).to_string()]);
     });
@@ -559,12 +559,12 @@ fn a_measure_is_never_computed_when_the_program_runs() {
         let t = ty.name;
         let program = |head: &str, effects: &str| {
             with_header(format!(
-                "fn f(n: {t}) -> {t}{effects} {{\n  var left: {t} = n\n  loop{head} {{\n    if left < 3 {{ break }}\n    left = left - 3\n  }}\n  left\n}}\n\nfn main() ! console, alloc{effects2} {{\n  print(\"{{f(10)}}\")\n}}\n",
+                "fn f(n: {t}) -> {t}{effects} {{\n  var left: {t} = n\n  loop{head} {{\n    if left < 3 {{ break }}\n    left = left - 3\n  }}\n  left\n}}\n\nfn main() <console, alloc{effects2}> {{\n  print(\"{{f(10)}}\")\n}}\n",
                 effects2 = if effects.is_empty() { "" } else { ", diverge" },
             ))
         };
         let with = lower(program(" decreases left", "").as_bytes()).expect("compiles");
-        let without = lower(program("", " ! diverge").as_bytes()).expect("compiles");
+        let without = lower(program("", " <diverge>").as_bytes()).expect("compiles");
         assert_eq!(with, without, "for {t}");
     }
 }
@@ -575,7 +575,7 @@ fn a_measure_is_never_computed_when_the_program_runs() {
 fn a_loop_over_a_range_is_one_counter_and_one_comparison_each_time_round() {
     for ty in INTS {
         let source = with_header(format!(
-            "fn main() ! console {{\n  a: {t} = {a}\n  b: {t} = {b}\n  loop i in a..b {{ print(\"x\") }}\n}}\n",
+            "fn main() <console> {{\n  a: {t} = {a}\n  b: {t} = {b}\n  loop i in a..b {{ print(\"x\") }}\n}}\n",
             t = ty.name,
             a = ty.min(),
             b = ty.max()
@@ -622,7 +622,7 @@ fn two_literal_ends_of_a_range_take_the_type_the_counter_is_used_as() {
         let (t, max) = (ty.name, ty.max());
         let source = |from: i128, by: i128| {
             with_header(format!(
-                "fn f() -> {t} {{\n  var s: {t} = 0\n  loop i in {from}..{max} {{ s = i + {by} }}\n  s\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f()}}\")\n}}\n"
+                "fn f() -> {t} {{\n  var s: {t} = 0\n  loop i in {from}..{max} {{ s = i + {by} }}\n  s\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n"
             ))
         };
         prints(&source(max - 3, 1), vec![max.to_string()]);
@@ -634,7 +634,7 @@ fn two_literal_ends_of_a_range_take_the_type_the_counter_is_used_as() {
         );
     }
     // Nothing decides, so the numbers are `Int`.
-    let nothing = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  loop i in 0..3 { print(\"{i}\") }\n}\n";
+    let nothing = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  loop i in 0..3 { print(\"{i}\") }\n}\n";
     prints(nothing, vec!["0".into(), "1".into(), "2".into()]);
 }
 
@@ -645,13 +645,13 @@ fn a_distance_to_an_end_is_proven_where_the_loop_goes_round_again_and_nowhere_be
         fn count_to(size: u64) -> u64 {\n  var at: u64 = 0\n  var n: u64 = 0\n  loop decreases size - at {\n    if at >= size { break }\n    at = at + 1\n    n = wrapping_add(n, 1)\n  }\n  n\n}\n\n\
         fn skip(src: List[Byte], at: u64) -> next: u64\n  requires at < src.size\n  ensures next > at and next <= src.size\n{\n  at + 1\n}\n\n\
         fn steps(src: List[Byte]) -> u64 {\n  var at: u64 = 0\n  var n: u64 = 0\n  loop decreases src.size - at {\n    if at >= src.size { break }\n    at = skip(src, at)\n    n = wrapping_add(n, 1)\n  }\n  n\n}\n\n\
-        fn main() ! console, alloc {\n  print(\"{count_to(3)} {steps([1, 2, 3, 4])}\")\n}\n";
+        fn main() <console, alloc> {\n  print(\"{count_to(3)} {steps([1, 2, 3, 4])}\")\n}\n";
     prints(page, vec!["3 4".into()]);
     // The place goes toward the end by `step`, and the loop breaks where the
     // place is at or past the end, or only past it.
     for (guard, step) in [(">=", 1), (">=", 2), (">=", 0), (">", 1)] {
         let source = with_header(format!(
-            "fn f(size: u64) -> u64 {{\n  var at: u64 = 0\n  loop decreases size - at {{\n    if at {guard} size {{ break }}\n    at = at + {step}\n  }}\n  at\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(3)}}\")\n}}\n"
+            "fn f(size: u64) -> u64 {{\n  var at: u64 = 0\n  loop decreases size - at {{\n    if at {guard} size {{ break }}\n    at = at + {step}\n  }}\n  at\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(3)}}\")\n}}\n"
         ));
         let errors = refused(&source);
         // Past the end the measure is below zero, which is only left alone where

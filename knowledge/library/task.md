@@ -28,10 +28,10 @@ pub effect task {
   pub fn finish(child: u64) -> Frame
 }
 
-fn tasks[T](body: take fn() -> T ! task) -> T
-fn spawn[T](work: take fn() -> T) -> Task[T] ! task
-fn join[T](child: take Task[T]) -> T ! task
-fn outcome[T](child: take Task[T]) -> Result[T, Failure] ! task
+fn tasks[T](body: take fn() -> T <task>) -> T
+fn spawn[T](work: take fn() -> T) -> Task[T] <task>
+fn join[T](child: take Task[T]) -> T <task>
+fn outcome[T](child: take Task[T]) -> Result[T, Failure] <task>
 
 pub enum Failure { out_of_memory, refused_write }
 ```

@@ -92,7 +92,7 @@ fn refused(source: &str) -> Vec<String> {
 /// A program of `count` with `body`, which `main` calls.
 fn counting(header: &str, body: &str) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn count(n: u64, acc: u64) -> u64{header}\n{{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{count(5, 0)}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn count(n: u64, acc: u64) -> u64{header}\n{{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{count(5, 0)}}\")\n}}\n"
     )
 }
 
@@ -140,7 +140,7 @@ fn a_decreases_is_a_whole_number_of_an_unsigned_type_over_the_parameters() {
             "{errors:?} for {source}"
         );
     }
-    let signed = "use std.bits (i64, u64)\nuse std.console (console, print)\n\nfn f(n: i64) -> i64\n  decreases n\n{\n  n\n}\n\nfn main() ! console, alloc {\n  print(\"{f(3)}\")\n}\n";
+    let signed = "use std.bits (i64, u64)\nuse std.console (console, print)\n\nfn f(n: i64) -> i64\n  decreases n\n{\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{f(3)}\")\n}\n";
     let errors = refused(signed);
     assert!(errors.iter().any(|e| e.contains("unsigned type")), "{errors:?}");
 }
@@ -257,7 +257,7 @@ fn a_call_of_itself_where_the_decreases_is_not_proven_smaller_is_refused_with_th
 /// in a dictionary are, and no one of the parts alone goes down at each.
 fn two_parts(measure: &str, inner: &str) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\n\nfn f(n: u64, m: u64) -> u64\n  decreases {measure}\n{{\n  if m > 0 {{\n    {inner}\n  }} else if n > 0 {{\n    f(n - 1, 5)\n  }} else {{\n    0\n  }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(3, 4)}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\n\nfn f(n: u64, m: u64) -> u64\n  decreases {measure}\n{{\n  if m > 0 {{\n    {inner}\n  }} else if n > 0 {{\n    f(n - 1, 5)\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(3, 4)}}\")\n}}\n"
     )
 }
 
@@ -300,7 +300,7 @@ fn an_executable_of_a_function_that_calls_itself_fifty_million_times_prints_the_
 fn depth(body: &str, header: &str, at: &[u64]) -> String {
     let prints: String = at.iter().map(|n| format!("  print(\"{{depth({n})}}\")\n")).collect();
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn depth(n: u64) -> u64{header}\n  decreases n\n{{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n{prints}}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn depth(n: u64) -> u64{header}\n  decreases n\n{{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n{prints}}}\n"
     )
 }
 
@@ -313,7 +313,7 @@ fn a_call_of_itself_that_is_not_the_last_thing_a_function_does_gives_what_the_ca
         "if n == 0 { 0 } else { wrapping_add(1, depth(n - 1)) }",
     ] {
         for n in [0u64, 1, 2, 7, 100, 10_000] {
-            let source = depth(body, " ! alloc", &[n]);
+            let source = depth(body, " <alloc>", &[n]);
             assert_eq!(refused(&source), Vec::<String>::new(), "for {source}");
             let lowered = lower(source.as_bytes()).unwrap();
             let said = scalar::run(&lowered);
@@ -326,7 +326,7 @@ fn a_call_of_itself_that_is_not_the_last_thing_a_function_does_gives_what_the_ca
 /// The program of the issue: `depth(3)` and `depth(1000000)`, in an executable
 /// whose stack is the system's at its usual size.
 fn an_executable_of_a_function_that_calls_itself_a_million_deep_not_last_prints_the_depth() {
-    let source = depth(NOT_LAST, " ! alloc", &[3, 10_000_000]);
+    let source = depth(NOT_LAST, " <alloc>", &[3, 10_000_000]);
     let said = Outcome {
         stdout: b"3\n10000000\n".to_vec(),
         status: 0,
@@ -347,11 +347,11 @@ fn a_call_of_itself_that_is_not_the_last_thing_a_function_does_needs_alloc_and_a
     let last = counting("\n  decreases n", TAIL);
     assert_eq!(refused(&last), Vec::<String>::new());
     // A measure that is not smaller is refused with the goal, as at a call that is last.
-    let stuck = depth("if n == 0 { 0 } else { wrapping_add(depth(n), 1) }", " ! alloc", &[3]);
+    let stuck = depth("if n == 0 { 0 } else { wrapping_add(depth(n), 1) }", " <alloc>", &[3]);
     let errors = refused(&stuck);
     assert!(errors.iter().any(|e| e.contains("`n` is smaller at this call")), "{errors:?}");
     // And a function with no `decreases` is asked for one.
-    let bare = depth(NOT_LAST, " ! alloc", &[3]).replace("\n  decreases n", "");
+    let bare = depth(NOT_LAST, " <alloc>", &[3]).replace("\n  decreases n", "");
     let errors = refused(&bare);
     assert!(errors.iter().any(|e| e.contains("needs a `decreases`")), "{errors:?}");
 }
@@ -362,7 +362,7 @@ fn a_call_of_itself_that_is_not_the_last_thing_a_function_does_needs_alloc_and_a
 fn ring(header: &str, even_measure: &str, odd_measure: &str, at: &[u64]) -> String {
     let prints: String = at.iter().map(|n| format!("  print(\"{{even({n})}}\")\n")).collect();
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn even(n: u64) -> u64{header}{even_measure}\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(odd(n - 1), 1) }}\n}}\n\nfn odd(n: u64) -> u64{header}{odd_measure}\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(even(n - 1), 2) }}\n}}\n\nfn main() ! console, alloc {{\n{prints}}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn even(n: u64) -> u64{header}{even_measure}\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(odd(n - 1), 1) }}\n}}\n\nfn odd(n: u64) -> u64{header}{odd_measure}\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(even(n - 1), 2) }}\n}}\n\nfn main() <console, alloc> {{\n{prints}}}\n"
     )
 }
 
@@ -377,13 +377,13 @@ fn ring_gives(n: u64) -> u64 {
 /// goes from 2 to 1 to 0, and then the first gets smaller.
 fn parts(n: u64) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn sum(n: u64) -> u64 ! alloc\n  decreases n, 2\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(product(n), 1) }}\n}}\n\nfn product(n: u64) -> u64 ! alloc\n  decreases n, 1\n{{\n  wrapping_add(atom(n), 1)\n}}\n\nfn atom(n: u64) -> u64 ! alloc\n  decreases n, 0\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(sum(n - 1), 1) }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{sum({n})}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn sum(n: u64) -> u64 <alloc>\n  decreases n, 2\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(product(n), 1) }}\n}}\n\nfn product(n: u64) -> u64 <alloc>\n  decreases n, 1\n{{\n  wrapping_add(atom(n), 1)\n}}\n\nfn atom(n: u64) -> u64 <alloc>\n  decreases n, 0\n{{\n  if n == 0 {{ 0 }} else {{ wrapping_add(sum(n - 1), 1) }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{sum({n})}}\")\n}}\n"
     )
 }
 
 fn functions_that_call_each_other_give_what_the_calls_gave_to_any_depth_with_a_measure_of_one_part_or_three() {
     for n in [0u64, 1, 2, 7, 100, 10_000] {
-        let source = ring(" ! alloc", "\n  decreases n", "\n  decreases n", &[n]);
+        let source = ring(" <alloc>", "\n  decreases n", "\n  decreases n", &[n]);
         assert_eq!(refused(&source), Vec::<String>::new(), "for {source}");
         let lowered = lower(source.as_bytes()).unwrap();
         let said = scalar::run(&lowered);
@@ -398,7 +398,7 @@ fn functions_that_call_each_other_give_what_the_calls_gave_to_any_depth_with_a_m
 }
 
 fn an_executable_of_functions_that_call_each_other_a_million_deep_prints_the_sum_and_one_that_calls_last_needs_no_alloc() {
-    let source = ring(" ! alloc", "\n  decreases n", "\n  decreases n", &[3, 1_000_000]);
+    let source = ring(" <alloc>", "\n  decreases n", "\n  decreases n", &[3, 1_000_000]);
     let said = Outcome {
         stdout: format!("{}\n{}\n", ring_gives(3), ring_gives(1_000_000)).into_bytes(),
         status: 0,
@@ -407,7 +407,7 @@ fn an_executable_of_functions_that_call_each_other_a_million_deep_prints_the_sum
         runs_as(source.as_bytes(), target, &said);
     }
     // Two functions that call each other last are loops, and carry nothing.
-    let last = "use std.bits (u64)\nuse std.console (console, print)\n\nfn even(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 0 } else { odd(n - 1) }\n}\n\nfn odd(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 1 } else { even(n - 1) }\n}\n\nfn main() ! console, alloc {\n  print(\"{even(5000000)}\")\n  print(\"{odd(5000000)}\")\n}\n";
+    let last = "use std.bits (u64)\nuse std.console (console, print)\n\nfn even(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 0 } else { odd(n - 1) }\n}\n\nfn odd(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 1 } else { even(n - 1) }\n}\n\nfn main() <console, alloc> {\n  print(\"{even(5000000)}\")\n  print(\"{odd(5000000)}\")\n}\n";
     assert_eq!(refused(last), Vec::<String>::new());
     let said = Outcome {
         stdout: b"0\n1\n".to_vec(),
@@ -423,7 +423,7 @@ fn a_circle_of_functions_needs_a_decreases_of_the_same_parts_in_each_and_a_call_
         assert!(errors.iter().any(|e| e.contains(what)), "{errors:?} lacks {what}");
     };
     // A function of the circle with no `decreases` is refused, and the error names the circle.
-    let errors = refused(&ring(" ! alloc", "\n  decreases n", "", &[3]));
+    let errors = refused(&ring(" <alloc>", "\n  decreases n", "", &[3]));
     said(&errors, "`even` and `odd` call each other");
     said(&errors, "which `odd` has not");
     // Of more functions, and two with none.
@@ -432,11 +432,11 @@ fn a_circle_of_functions_needs_a_decreases_of_the_same_parts_in_each_and_a_call_
     said(&errors, "`sum`, `product`, and `atom` call each other");
     said(&errors, "which `sum` and `product` have none");
     // Measures of different numbers of parts.
-    let errors = refused(&ring(" ! alloc", "\n  decreases n", "\n  decreases n, 0", &[3]));
+    let errors = refused(&ring(" <alloc>", "\n  decreases n", "\n  decreases n, 0", &[3]));
     said(&errors, "the same number of parts");
     said(&errors, "`even` has 1, `odd` has 2");
     // A call that does not make the measure smaller is refused where it is, with the goal.
-    let stuck = ring(" ! alloc", "\n  decreases n", "\n  decreases n", &[3])
+    let stuck = ring(" <alloc>", "\n  decreases n", "\n  decreases n", &[3])
         .replace("wrapping_add(odd(n - 1), 1)", "wrapping_add(odd(n), 1)");
     said(&refused(&stuck), "`n` is smaller at this call");
     // A circle that keeps a frame needs `alloc` in each function of it.

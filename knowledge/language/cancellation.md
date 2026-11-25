@@ -15,7 +15,7 @@ built:
 Ending a group's block is the one way to cancel. When the block of `with tasks()` ends, each child still running is cancelled. User code cannot end a task in any other way.
 
 ```
-fn first_page(a: str, b: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn first_page(a: str, b: str) -> Result[List[Byte], NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
@@ -38,7 +38,7 @@ enum Outcome {
   late
 }
 
-fn fetch_within_5_seconds(url: str) -> Result[Response[65536], FetchError] ! fetch, time, alloc {
+fn fetch_within_5_seconds(url: str) -> Result[Response[65536], FetchError] <fetch, time, alloc> {
   with tasks()
   work = spawn { Outcome.page(send(Request(url: url), 65536)) }
   wait = spawn {
@@ -82,7 +82,7 @@ fn abandon(n: u64) {
 A task's own children are cancelled with it.
 
 ```
-fn outer(a: str) ! net, alloc {
+fn outer(a: str) <net, alloc> {
   with tasks()
   spawn {
     with tasks()

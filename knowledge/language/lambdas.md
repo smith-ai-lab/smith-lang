@@ -38,7 +38,7 @@ fn twice(x: f32, f: fn(f32) -> f32) -> f32 { f(f(x)) }
 
 `twice` takes a float and a function from one float to another, and calls the function two times.
 
-A function that gives nothing has no arrow, as `fn(f32)`, and one that takes nothing is `fn() -> f32`. The effects of a function type follow its result, as a function writes them, `fn(f32) -> f32 ! console`, and a parameter the function owns is `fn(take f32) -> f32`. A list of types in parentheses without `fn` is always a [tuple](tuples.md).
+A function that gives nothing has no arrow, as `fn(f32)`, and one that takes nothing is `fn() -> f32`. The effects of a function type follow its result, as a function writes them, `fn(f32) -> f32 <console>`, and a parameter the function owns is `fn(take f32) -> f32`. A list of types in parentheses without `fn` is always a [tuple](tuples.md).
 
 ## Writing a lambda
 

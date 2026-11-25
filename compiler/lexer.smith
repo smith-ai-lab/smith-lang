@@ -237,13 +237,13 @@ fn is_unseen(code: u64) -> bool {
 }
 
 // A character as an error shows it.
-fn show_char(c: str) -> str ! alloc {
+fn show_char(c: str) -> str <alloc> {
   code = code_point(c)
   if is_unseen(code) { "U+{hex(code, width: 4)}" } else { "`{c}`" }
 }
 
 // What follows a backslash, as an error shows it.
-fn after_backslash(lx: Lexer) -> str ! alloc {
+fn after_backslash(lx: Lexer) -> str <alloc> {
   match byte_at(lx.src, lx.at) {
     .none { "nothing" }
     .some(c) {
@@ -316,7 +316,7 @@ fn advance(pos: Pos, b: Byte) -> Pos {
 
 // The mistakes of the text itself: a carriage return, and bytes that are not
 // UTF-8. A file that has one is not read further.
-fn text_errors(src: List[Byte]) -> List[LexError] ! alloc {
+fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
   var errors: List[LexError] = []
   var pos = Pos(line: 1, col: 1)
   var i: Nat = 0
@@ -342,7 +342,7 @@ fn text_errors(src: List[Byte]) -> List[LexError] ! alloc {
 
 // ---- tokens so far ----
 
-fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer ! alloc {
+fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer <alloc> {
   var next = lx
   next.errors = push(next.errors, LexError(pos: pos, message: message))
   next
@@ -368,7 +368,7 @@ fn is_pipe(tok: Tok) -> bool {
 }
 
 // The line breaks that wait are tokens now.
-fn flush(lx: take Lexer) -> Lexer ! alloc {
+fn flush(lx: take Lexer) -> Lexer <alloc> {
   var next = lx
   waiting = next.pending
   next.pending = []
@@ -380,7 +380,7 @@ fn flush(lx: take Lexer) -> Lexer ! alloc {
 
 // A line that starts with `|>` goes on from the line before, so the line breaks
 // that wait are not tokens when one is read.
-fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer ! alloc {
+fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer <alloc> {
   var next = lx
   next.line_has_token = not is_newline(tok)
   if is_newline(tok) {
@@ -510,7 +510,7 @@ fn keyword_of(word: str) -> Option[Keyword] {
   }
 }
 
-fn word(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn word(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
   next = take_while_word(lx)
   name = text_of(next.src, from, next.at)
@@ -521,7 +521,7 @@ fn word(lx: take Lexer, start: Pos) -> Lexer ! alloc {
   push_token(next, tok, start)
 }
 
-fn comment(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn comment(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   var next = if lx.line_has_token { error_at(lx, start, "a comment must stand on its own line") } else { lx }
   rounds = next.src.size
   loop round in 0..rounds {
@@ -537,7 +537,7 @@ fn comment(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // Why a run of digits of a base is not written as the lexical rules say, or
 // none when it is: at least one digit, and an `_` only between two digits.
-fn digits(text: Slice[Byte], base: Byte, name: str) -> Option[str] ! alloc {
+fn digits(text: Slice[Byte], base: Byte, name: str) -> Option[str] <alloc> {
   var why: Option[str] = .none
   var failed = false
   var previous: Byte = 0
@@ -584,7 +584,7 @@ fn first_why(a: Option[str], b: Option[str]) -> Option[str] {
 
 // Why the text of a number, as the lexer reads it, is not written as the
 // lexical rules say, or none when it is.
-fn check_number(text: str) -> Option[str] ! alloc {
+fn check_number(text: str) -> Option[str] <alloc> {
   bytes = text.bytes
   if text.size >= 2 and text[0] == '0' and text[1] == 'x' {
     digits(part(bytes, 2, text.size), 16, "hexadecimal")
@@ -629,7 +629,7 @@ fn check_number(text: str) -> Option[str] ! alloc {
   }
 }
 
-fn number(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn number(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
   var next = take_while_word(lx)
   if byte_at(next.src, next.at) == .some('.') {
@@ -665,7 +665,7 @@ fn number(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // ---- characters ----
 
-fn close_character(lx: take Lexer, start: Pos, from: Nat, ok: bool) -> Lexer ! alloc {
+fn close_character(lx: take Lexer, start: Pos, from: Nat, ok: bool) -> Lexer <alloc> {
   if byte_at(lx.src, lx.at) == .some('\'') {
     closed = bump(lx)
     text = text_of(closed.src, from, closed.at)
@@ -675,7 +675,7 @@ fn close_character(lx: take Lexer, start: Pos, from: Nat, ok: bool) -> Lexer ! a
   }
 }
 
-fn character(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn character(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
   opened = bump(lx)
   at = opened.pos
@@ -785,7 +785,7 @@ fn punct_at(src: List[Byte], at: Nat) -> Option[(Punct, Nat)] {
   }
 }
 
-fn punct(lx: take Lexer, start: Pos) -> Lexer ! alloc {
+fn punct(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   match punct_at(lx.src, lx.at) {
     .none {
       from = lx.at
@@ -811,7 +811,7 @@ fn punct(lx: take Lexer, start: Pos) -> Lexer ! alloc {
 
 // Reads a string literal. Each mistake inside it is reported, and the string
 // still becomes a token, so that the rest of the line is read.
-fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer ! alloc
+fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
   decreases fuel
 {
   rounds = lx.src.size
@@ -904,7 +904,7 @@ fn last_is_unclosed(errors: List[LexError]) -> bool {
 
 // Reads the tokens of an expression in a string, from after its `{` through the
 // `}` that closes it, which are the tokens when the line has not ended first.
-fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Token]]) ! alloc
+fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Token]]) <alloc>
   decreases fuel
 {
   rounds = lx.src.size
@@ -951,7 +951,7 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
 
 // Reads what starts with `c`, which is not a line break: a space, a
 // comment, or a token.
-fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer ! alloc
+fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer <alloc>
   decreases fuel
 {
   if c == ' ' or c == '\t' {
@@ -971,7 +971,7 @@ fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer ! alloc
   }
 }
 
-fn run(lx: take Lexer) -> Lexer ! alloc {
+fn run(lx: take Lexer) -> Lexer <alloc> {
   rounds = lx.src.size
   fuel = saturating_add(saturating_mul(rounds, 3), 3)
   var next = lx
@@ -993,7 +993,7 @@ fn run(lx: take Lexer) -> Lexer ! alloc {
 }
 
 // Splits a file into tokens. The last token is always `eof`.
-fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] ! alloc {
+fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] <alloc> {
   bad = text_errors(src)
   if bad.size > 0 {
     .err(bad)
@@ -1005,7 +1005,7 @@ fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] ! alloc {
   }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   match lex(['f', 'n', ' ', 'm', '\n']) {
     .ok(tokens) { print("{tokens.size}") }
     .err(errors) { print("errors") }

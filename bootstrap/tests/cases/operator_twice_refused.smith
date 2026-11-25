@@ -18,7 +18,7 @@ fn twice[T: Add](x: T) -> T
   x + x
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   unit = Rect(w: 1, h: 2)
   big = twice(unit)
   print("{big.w} {big.h}")

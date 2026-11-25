@@ -25,7 +25,7 @@ fn show[T: Named](x: T) -> str { name_of(x) }
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(show(Cat(name: "Tom")))
   print(show(Bird(name: "Tweety")))
 }
@@ -143,7 +143,7 @@ impl[T] Show[Box[T]]
   fn show(x: Box[T]) -> str { "ordered" }
 }
 
-fn main() ! console {
+fn main() <console> {
   b: Box[Int] = Box(item: 1)
   print(show(b))
 }

@@ -92,12 +92,12 @@ fn count(g: &mut Gen) -> u64 {
 fn a_literal_is_a_nat_where_one_is_needed_and_is_refused_when_it_does_not_fit() {
     generate::check(3630, 40, count, |n| {
         let source = with_header(format!(
-            "fn same(n: Nat) -> Nat {{ n }}\n\nfn main() ! console, alloc {{\n  a: Nat = {n}\n  print(\"{{a}} {{same({n})}}\")\n}}\n"
+            "fn same(n: Nat) -> Nat {{ n }}\n\nfn main() <console, alloc> {{\n  a: Nat = {n}\n  print(\"{{a}} {{same({n})}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{n} {n}\n"), "for\n{source}");
     });
     for (written, fits) in [("0", true), ("18446744073709551615", true), ("-1", false), ("18446744073709551616", false)] {
-        let source = with_header(format!("fn main() ! console, alloc {{\n  a: Nat = {written}\n  print(\"{{a}}\")\n}}\n"));
+        let source = with_header(format!("fn main() <console, alloc> {{\n  a: Nat = {written}\n  print(\"{{a}}\")\n}}\n"));
         assert_eq!(compiles(&source), fits, "for\n{source}");
     }
 }
@@ -115,7 +115,7 @@ fn the_size_of_a_list_and_of_a_text_is_a_nat_and_no_other_type() {
         ] {
             for ty in whole() {
                 let source = with_header(format!(
-                    "fn size_of(xs: {ty_of_xs}) -> {} {{ xs.size }}\n\nfn main() ! console, alloc {{\n  {given}\n  print(\"{{size_of(xs)}}\")\n}}\n",
+                    "fn size_of(xs: {ty_of_xs}) -> {} {{ xs.size }}\n\nfn main() <console, alloc> {{\n  {given}\n  print(\"{{size_of(xs)}}\")\n}}\n",
                     ty.name
                 ));
                 if ty.name == "u64" {
@@ -137,13 +137,13 @@ fn a_loop_over_the_size_gives_a_nat_that_indexes_and_no_other_type_indexes() {
     generate::check(3632, 6, |g: &mut Gen| g.below(6), |n| {
         let items: Vec<String> = (0..*n).map(|i| i.to_string()).collect();
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  xs: List[Byte] = [{}]\n  loop i in 0..xs.size {{\n    k: Nat = i\n    print(\"{{xs[k]}}\")\n  }}\n}}\n",
+            "fn main() <console, alloc> {{\n  xs: List[Byte] = [{}]\n  loop i in 0..xs.size {{\n    k: Nat = i\n    print(\"{{xs[k]}}\")\n  }}\n}}\n",
             items.join(", ")
         ));
         assert_eq!(stdout(&source), items.iter().map(|i| format!("{i}\n")).collect::<String>());
         for ty in whole() {
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  xs: List[Byte] = [1, 2, 3]\n  i: {} = 1\n  print(\"{{xs[i]}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  xs: List[Byte] = [1, 2, 3]\n  i: {} = 1\n  print(\"{{xs[i]}}\")\n}}\n",
                 ty.name
             ));
             assert_eq!(compiles(&source), ty.min >= 0, "for\n{source}");
@@ -177,14 +177,14 @@ fn an_operator_between_two_types_compiles_exactly_when_they_are_one_type_for_nat
                     _ => false,
                 };
                 with_header(format!(
-                    "fn f(x: {}, y: {}) -> {}\n  requires 0 <= x and x < 9 and 0 <= y and y < 9\n{{\n  x {op} y\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
+                    "fn f(x: {}, y: {}) -> {}\n  requires 0 <= x and x < 9 and 0 <= y and y < 9\n{{\n  x {op} y\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
                     a.name, b.name, a.name
                 ))
             } else {
                 compared = true;
                 let op = COMPARE[(i + j) % COMPARE.len()];
                 with_header(format!(
-                    "fn f(x: {}, y: {}) -> bool {{ x {op} y }}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 2)}}\")\n}}\n",
+                    "fn f(x: {}, y: {}) -> bool {{ x {op} y }}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 2)}}\")\n}}\n",
                     a.name, b.name
                 ))
             };
@@ -216,7 +216,7 @@ fn a_nat_is_held_by_a_field_a_tuple_a_list_an_option_and_a_function() {
             _ => ("fn pass(n: Nat) -> Nat { n }\n", format!("m: Nat = {n}"), "pass(m)"),
         };
         let source = with_header(format!(
-            "{items}\nfn main() ! console, alloc {{\n  {held}\n  print(\"{{{shown}}}\")\n}}\n"
+            "{items}\nfn main() <console, alloc> {{\n  {held}\n  print(\"{{{shown}}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{n}\n"), "for\n{source}");
     });
@@ -229,23 +229,23 @@ fn arith_proves_a_sum_and_a_difference_of_a_nat_from_what_is_known_of_it() {
     generate::check(3635, 8, |g: &mut Gen| (g.below(1000), count(g)), |(bound, n)| {
         let bound = bound + 1;
         let next = with_header(format!(
-            "fn next(n: Nat) -> Nat requires n < {bound} {{ n + 1 }}\n\nfn main() ! console, alloc {{\n  print(\"{{next({})}}\")\n}}\n",
+            "fn next(n: Nat) -> Nat requires n < {bound} {{ n + 1 }}\n\nfn main() <console, alloc> {{\n  print(\"{{next({})}}\")\n}}\n",
             bound - 1
         ));
         assert_eq!(stdout(&next), format!("{bound}\n"), "for\n{next}");
-        let unproven = "use std.console (console, print)\n\nfn next(n: Nat) -> Nat { n + 1 }\n\nfn main() ! console, alloc {\n  print(\"{next(1)}\")\n}\n";
+        let unproven = "use std.console (console, print)\n\nfn next(n: Nat) -> Nat { n + 1 }\n\nfn main() <console, alloc> {\n  print(\"{next(1)}\")\n}\n";
         let errors = check(unproven.as_bytes()).expect_err("a sum that may not fit");
         assert!(errors.iter().all(|e| e.message.contains("n + 1")), "{errors:?}");
         let top = with_header(format!(
-            "fn next(n: Nat) -> Nat requires n < 18446744073709551615 {{ n + 1 }}\n\nfn main() ! console, alloc {{\n  print(\"{{next({})}}\")\n}}\n",
+            "fn next(n: Nat) -> Nat requires n < 18446744073709551615 {{ n + 1 }}\n\nfn main() <console, alloc> {{\n  print(\"{{next({})}}\")\n}}\n",
             n.min(&18446744073709551614)
         ));
         assert!(compiles(&top), "for\n{top}");
-        let drop = "use std.console (console, print)\n\nfn drop(n: Nat, k: Nat) -> Nat {\n  if k <= n { n - k } else { 0 }\n}\n\nfn main() ! console, alloc {\n  print(\"{drop(5, 2)} {drop(2, 5)}\")\n}\n";
+        let drop = "use std.console (console, print)\n\nfn drop(n: Nat, k: Nat) -> Nat {\n  if k <= n { n - k } else { 0 }\n}\n\nfn main() <console, alloc> {\n  print(\"{drop(5, 2)} {drop(2, 5)}\")\n}\n";
         assert_eq!(stdout(drop), "3 0\n");
-        let refused = "use std.console (console, print)\n\nfn drop(n: Nat, k: Nat) -> Nat { n - k }\n\nfn main() ! console, alloc {\n  print(\"{drop(5, 2)}\")\n}\n";
+        let refused = "use std.console (console, print)\n\nfn drop(n: Nat, k: Nat) -> Nat { n - k }\n\nfn main() <console, alloc> {\n  print(\"{drop(5, 2)}\")\n}\n";
         assert!(!compiles(refused));
-        let sizes = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs: List[Byte] = [1, 2]\n  var last: Nat = 0\n  loop i in 0..xs.size { last = i + 1 }\n  print(\"{last}\")\n}\n";
+        let sizes = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs: List[Byte] = [1, 2]\n  var last: Nat = 0\n  loop i in 0..xs.size { last = i + 1 }\n  print(\"{last}\")\n}\n";
         assert_eq!(stdout(sizes), "2\n");
     });
 }
@@ -257,7 +257,7 @@ fn arith_proves_a_sum_and_a_difference_of_a_nat_from_what_is_known_of_it() {
 fn nat_and_u64_are_one_type() {
     generate::check(3639, 20, count, |n| {
         let source = with_header(format!(
-            "use std.bits (u64)\nuse std.int (wrapping_add)\n\nfn count(n: Nat) -> u64 {{ n }}\n\nfn back(n: u64) -> Nat {{ n }}\n\nfn main() ! console, alloc {{\n  a: Nat = {n}\n  b: u64 = a\n  l: List[Nat] = [a]\n  m: List[u64] = l\n  print(\"{{count(a)}} {{back(b)}} {{a == b}} {{wrapping_add(a, b)}} {{m[0]}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.int (wrapping_add)\n\nfn count(n: Nat) -> u64 {{ n }}\n\nfn back(n: u64) -> Nat {{ n }}\n\nfn main() <console, alloc> {{\n  a: Nat = {n}\n  b: u64 = a\n  l: List[Nat] = [a]\n  m: List[u64] = l\n  print(\"{{count(a)}} {{back(b)}} {{a == b}} {{wrapping_add(a, b)}} {{m[0]}}\")\n}}\n"
         ));
         let twice = (*n as u128 * 2) as u64;
         assert_eq!(stdout(&source), format!("{n} {n} true {twice} {n}\n"), "for\n{source}");

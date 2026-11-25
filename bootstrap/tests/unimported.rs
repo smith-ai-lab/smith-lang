@@ -165,12 +165,12 @@ fn mentions(e: &Error, name: &str, module: &str) -> bool {
         && e.fix.as_deref().is_some_and(|fix| fix.contains(&format!("use std.{module} ({name})")))
 }
 
-/// `fn main() ! console { print("hi") }` with no `use` is refused with one
+/// `fn main() <console> { print("hi") }` with no `use` is refused with one
 /// error for each name it lacks, at the name's first use.
 fn a_program_with_no_use_is_one_error_for_each_missing_name_at_its_first_use() {
-    let before_console = "fn main() ! ";
-    let before_print = "fn main() ! console { ";
-    let source = "fn main() ! console { print(\"hi\") }\n";
+    let before_console = "fn main() <";
+    let before_print = "fn main() <console> { ";
+    let source = "fn main() <console> { print(\"hi\") }\n";
     let said = missing(source);
     assert_eq!(said.len(), 2, "{said:?}");
     assert_eq!(said[0].pos, pos_after(before_console));
@@ -193,7 +193,7 @@ const SHAPES: &[Shape] = &[
         program: "fn f(first: NAME, second: NAME) { }\n\nfn main() { }\n",
     },
     Shape {
-        program: "fn main() ! alloc {\n  s = \"{NAME(1)} and {NAME(2)}\"\n}\n",
+        program: "fn main() <alloc> {\n  s = \"{NAME(1)} and {NAME(2)}\"\n}\n",
     },
 ];
 
@@ -244,13 +244,13 @@ fn errors_of(source: &str) -> Vec<Error> {
 /// No error says the listed effect is undeclared or lists an effect twice.
 fn an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import() {
     let bodies = ["print(\"hi\")", "print(\"a\")\n  print(\"b\")", "x = \"{1}\"\n  print(x)"];
-    let signatures = ["fn hi() ! console ", "pub fn hi() ! console "];
+    let signatures = ["fn hi() <console> ", "pub fn hi() <console> "];
     for signature in signatures {
         for body in bodies {
             let source = format!("use std.console (print)\n\n{signature}{{\n  {body}\n}}\n\nfn main() {{ }}\n");
             let said = errors_of(&source);
             assert_eq!(said.len(), 1, "{said:?}\n{source}");
-            let before = &source[..source.find("console {").unwrap()];
+            let before = &source[..source.find("console> {").unwrap()];
             assert_eq!(said[0].pos, pos_after(before), "{source}");
             assert!(mentions(&said[0], "console", "console"), "{:?}", said[0]);
             for e in &said {
@@ -264,7 +264,7 @@ fn an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import() {
 /// The caller of such a function is still told that it does not declare the
 /// effect, and the fix lists the effect once.
 fn a_caller_of_a_function_whose_effect_is_not_imported_is_told_to_list_the_effect_once() {
-    let source = "use std.console (print)\n\nfn hi() ! console { print(\"hi\") }\n\nfn main() { hi() }\n";
+    let source = "use std.console (print)\n\nfn hi() <console> { print(\"hi\") }\n\nfn main() { hi() }\n";
     let said = errors_of(source);
     let undeclared: Vec<&Error> = said.iter().filter(|e| e.message.contains("does not declare")).collect();
     assert_eq!(undeclared.len(), 1, "{said:?}");
@@ -282,10 +282,10 @@ fn a_listed_effect_satisfies_a_needed_one_only_when_they_are_the_same_effect() {
     let effect = "pub effect log {\n  pub fn note(n: Int)\n}\n";
     let files = [
         ("a.smith", effect.to_string()),
-        ("b.smith", format!("{effect}\npub fn shout() ! log {{ note(1) }}\n")),
+        ("b.smith", format!("{effect}\npub fn shout() <log> {{ note(1) }}\n")),
         (
             "main.smith",
-            "use a (log)\nuse b (shout)\n\nfn go() ! log {\n  shout()\n}\n\nfn main() ! log { go() }\n".to_string(),
+            "use a (log)\nuse b (shout)\n\nfn go() <log> {\n  shout()\n}\n\nfn main() <log> { go() }\n".to_string(),
         ),
     ];
     for (file, text) in &files {
@@ -300,7 +300,7 @@ fn a_listed_effect_satisfies_a_needed_one_only_when_they_are_the_same_effect() {
 /// Importing `console` brings the effect and not `print`, and importing
 /// `print` brings the function and not the effect.
 fn importing_an_effect_brings_its_name_alone() {
-    let body = "fn main() ! console { print(\"hi\") }\n";
+    let body = "fn main() <console> { print(\"hi\") }\n";
     let said = missing(&format!("use std.console (console)\n\n{body}"));
     assert_eq!(said.len(), 1, "{said:?}");
     assert!(mentions(&said[0], "print", "console"), "{:?}", said[0]);

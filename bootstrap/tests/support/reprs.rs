@@ -516,14 +516,14 @@ fn write_defs(m: &Model, out: &mut String) {
                 let f = name.to_lowercase();
                 let d = &def.name;
                 out.push_str(&format!(
-                    "impl {name}[{d}] {{\n  fn {f}(value: {d}) -> str ! alloc {{ {} }}\n}}\n\n",
+                    "impl {name}[{d}] {{\n  fn {f}(value: {d}) -> str <alloc> {{ {} }}\n}}\n\n",
                     literal(text)
                 ));
             }
         }
     }
-    out.push_str("fn shown[T: Fmt](x: T) -> str ! alloc { \"{x}\" }\n\n");
-    out.push_str("fn written[T: Repr](x: T) -> str ! alloc { repr(x) }\n\n");
+    out.push_str("fn shown[T: Fmt](x: T) -> str <alloc> { \"{x}\" }\n\n");
+    out.push_str("fn written[T: Repr](x: T) -> str <alloc> { repr(x) }\n\n");
 }
 
 fn printed(m: &Model, v: &Val, way: Print) -> Vec<u8> {
@@ -547,7 +547,7 @@ fn print_line(way: Print, name: &str) -> String {
 fn write(m: &Model) -> (Written, Vec<u8>) {
     let mut template = String::from(HEADER);
     write_defs(m, &mut template);
-    template.push_str("fn main() ! console, alloc {\n");
+    template.push_str("fn main() <console, alloc> {\n");
     let mut stdout = Vec::new();
     let mut values = Vec::new();
     let mut lines = Vec::new();
@@ -678,7 +678,7 @@ pub fn program_with_mistake(g: &mut Gen) -> ReprCase {
     source.push_str("struct Hidden {\n  key: str\n}\n\n");
     if mistake == Mistake::Itself {
         source.push_str(
-            "impl Fmt[Hidden] {\n  fn fmt(value: Hidden) -> str ! alloc { \"a\" }\n}\n\n",
+            "impl Fmt[Hidden] {\n  fn fmt(value: Hidden) -> str <alloc> { \"a\" }\n}\n\n",
         );
     }
     let without = |trait_name: &str| format!("without {trait_name} for ");
@@ -718,7 +718,7 @@ pub fn program_with_mistake(g: &mut Gen) -> ReprCase {
             Some((at, "`Hidden` implements `Fmt` itself".to_string()))
         }
     };
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     let at = g.below(m.values.len() + 1);
     let mut expected = placed.map(|(at, mentions)| Expected {
         at,

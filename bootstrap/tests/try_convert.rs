@@ -67,7 +67,7 @@ fn chain(g: &mut Gen, leave_out: bool) -> Chain {
         source.push_str(&format!("  v{i} = try s{i}(n)\n"));
     }
     source.push_str(&format!("  .ok(v{})\n}}\n\n", steps - 1));
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     let numbers: Vec<usize> = (0..4).map(|_| g.below(11)).collect();
     let mut prints = String::new();
     for n in &numbers {

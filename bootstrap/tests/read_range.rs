@@ -74,9 +74,9 @@ fn a_number_read_into_a_range_is_read_exactly_when_it_is_in_the_range_at_both_en
     generate::check(7941, 5, range, |r| {
         let mut source = format!(
             "{USES}struct P {{ a: {}..{} }}\n\n\
-             fn show(r: Result[P, ReadError]) -> str ! alloc {{\n  match r {{\n    \
+             fn show(r: Result[P, ReadError]) -> str <alloc> {{\n  match r {{\n    \
              .ok(p) {{ \"{{p.a}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-             fn main() ! console, alloc {{\n",
+             fn main() <console, alloc> {{\n",
             r.least, r.end
         );
         let mut said = String::new();
@@ -104,13 +104,13 @@ fn a_number_read_for_an_argument_of_a_function_called_by_call_is_held_to_the_ran
     generate::check(7942, 4, range, |r| {
         let mut source = format!(
             "{USES}fn pick(a: {l}..{e}, b: {l}..{e} = {l}) -> {l}..{e} {{ a }}\n\n\
-             fn run[F, A, R](f: F, text: str) -> Option[R] ! alloc\n  \
+             fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
              requires Function[F, A, R]\n  requires FromJson[A]\n  requires Discard[A]\n{{\n  \
              r: Result[A, ReadError] = from_json(text)\n  match r {{\n    \
              .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
-             fn show(o: Option[{l}..{e}]) -> str ! alloc {{\n  match o {{\n    \
+             fn show(o: Option[{l}..{e}]) -> str <alloc> {{\n  match o {{\n    \
              .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
-             fn main() ! console, alloc {{\n",
+             fn main() <console, alloc> {{\n",
             l = r.least,
             e = r.end
         );
@@ -135,9 +135,9 @@ fn a_number_read_for_an_argument_of_a_function_called_by_call_is_held_to_the_ran
 fn every_executable_refuses_a_number_outside_the_range_it_is_read_into() {
     let source = format!(
         "{USES}struct P {{ a: 0..1000 }}\n\n\
-         fn show(r: Result[P, ReadError]) -> str ! alloc {{\n  match r {{\n    \
+         fn show(r: Result[P, ReadError]) -> str <alloc> {{\n  match r {{\n    \
          .ok(p) {{ \"{{p.a}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  \
+         fn main() <console, alloc> {{\n  \
          r: Result[P, ReadError] = from_json(\"\\{{\\\"a\\\": 5000\\}}\")\n  \
          print(show(r))\n}}\n"
     );

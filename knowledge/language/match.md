@@ -52,7 +52,7 @@ A `match` whose value is used is an expression, and its blocks give the same typ
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   l = Light.red
   word = match l {
     .green { "go" }
@@ -80,7 +80,7 @@ This gives "this is a number, where text is needed". Used as a statement, nothin
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   match Light.red {
     .green { print("go") }
     .yellow { print("slow") }

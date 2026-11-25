@@ -7,7 +7,7 @@ enum Number {
 
 without Convert for Number
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   n: Byte = 4
   p: Number = convert(n)
   print("{p}")

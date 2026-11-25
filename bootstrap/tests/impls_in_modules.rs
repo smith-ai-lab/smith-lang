@@ -82,13 +82,13 @@ fn program(c: &Case, home: &str) -> (String, String) {
             .map(|i| format!("    match open_{i}({}) {{\n      .ok(b) {{ drop_{i}(b) }}\n      .err(e) {{ print(\"{{e}}\") }}\n    }}\n", c.weights[i]))
             .collect();
         let source = format!(
-            "use {home} (scale, weight, {uses})\n\nfn main() ! console, alloc {{\n  scale({handlers}) {{\n{calls}  }}\n}}\n"
+            "use {home} (scale, weight, {uses})\n\nfn main() <console, alloc> {{\n  scale({handlers}) {{\n{calls}  }}\n}}\n"
         );
         return (source, format!("{}\n", c.weights[0]));
     }
     let uses = ops(&|i| format!("make_{i}"));
     let sum = ops(&|i| format!("{{weight(make_{i}({}))}}", c.weights[i])).replace(", ", " ");
-    let source = format!("use {home} (weight, {uses})\n\nfn main() ! console, alloc {{\n  print(\"{sum}\")\n}}\n");
+    let source = format!("use {home} (weight, {uses})\n\nfn main() <console, alloc> {{\n  print(\"{sum}\")\n}}\n");
     let said: Vec<String> = c.weights.iter().map(|w| w.to_string()).collect();
     (source, said.join(" ") + "\n")
 }
@@ -128,13 +128,13 @@ fn a_handler_that_ends_each_value_of_net_with_the_release_of_std_net_is_checked_
     let source = crate::numbers::with_header(
         "use std.net (NetError, close, connect, net, read, release, write)
 
-fn ask(question: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
   with c = connect(\"example.test\", 7)
   try write(c, question.bytes)
   read(c, 16)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused) },
     accept: fn(l) { .err(.refused) },

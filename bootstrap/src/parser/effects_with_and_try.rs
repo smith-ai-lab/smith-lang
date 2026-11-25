@@ -1,4 +1,4 @@
-//! Parses the feature of effects, `with`, and `try`: the effects after `!` in a
+//! Parses the feature of effects, `with`, and `try`: the effects in angle brackets in a
 //! signature, `with`, which passes the rest of a block to a call, and `try`.
 
 use super::*;
@@ -127,17 +127,35 @@ impl Block {
 }
 
 impl Parser<'_> {
-    /// Parses the effects after `!` in a function's signature, if it has any.
+    /// Parses the effects in angle brackets after a function's signature, if
+    /// it has any. A `<` there opens them, as no comparison can stand after
+    /// the parameters or the result.
     pub(super) fn effects(&mut self) -> Result<Effects, Error> {
         let mut effects = Vec::new();
-        if self.tok() == &Tok::Punct("!") {
+        if self.tok() == &Tok::Punct("<") {
+            let open = self.pos();
             self.bump();
-            effects.push(self.ident("an effect")?);
-            while self.tok() == &Tok::Punct(",") {
-                self.bump();
-                self.skip_newlines();
-                effects.push(self.ident("an effect")?);
+            if self.tok() == &Tok::Punct(">") {
+                return Err(
+                    Error::new(open, "a list of effects names at least one effect")
+                        .with_fix("write no effects, and leave out `<>`"),
+                );
             }
+            loop {
+                effects.push(self.ident("an effect")?);
+                match self.tok() {
+                    Tok::Punct(",") => {
+                        self.bump();
+                        self.skip_newlines();
+                        if self.tok() == &Tok::Punct(">") {
+                            break;
+                        }
+                    }
+                    Tok::Punct(">") => break,
+                    tok => return Err(self.expected("`,` or `>`", tok)),
+                }
+            }
+            self.bump();
         }
         Ok(effects)
     }

@@ -50,7 +50,7 @@ fn case(g: &mut Gen) -> Case {
         if names.is_empty() {
             String::new()
         } else {
-            format!(" ! {}", names.join(", "))
+            format!(" <{}>", names.join(", "))
         }
     };
     let mut body = String::new();
@@ -127,14 +127,14 @@ fn a_function_used_as_a_value_is_not_warned_for_the_effects_it_lists() {
     let source = with_imports(
         "use std.console (console, print)
 
-fn quiet() ! console {
+fn quiet() <console> {
 }
 
-fn takes(body: fn() ! console) {
+fn takes(body: fn() <console>) {
   body()
 }
 
-fn main() ! console {
+fn main() <console> {
   takes(quiet)
   print(\"done\")
 }
@@ -153,11 +153,11 @@ fn an_effect_needed_only_inside_a_lambda_of_the_function_is_needed() {
 
 fn run[T](body: fn() -> T) -> T { body() }
 
-fn work() ! console {
+fn work() <console> {
   run { print(\"hi\") }
 }
 
-fn main() ! console {
+fn main() <console> {
   work()
 }
 ",
@@ -175,15 +175,15 @@ struct Quiet {
 }
 
 trait Greet[T] {
-  fn greet(x: T) ! console
+  fn greet(x: T) <console>
 }
 
 impl Greet[Quiet] {
-  fn greet(x: Quiet) ! console {
+  fn greet(x: Quiet) <console> {
   }
 }
 
-fn main() ! console {
+fn main() <console> {
   greet(Quiet(n: 1))
   print(\"done\")
 }

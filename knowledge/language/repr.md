@@ -16,7 +16,7 @@ built:
 
 ```
 trait Repr[T] {
-  fn repr(value: T) -> str ! alloc
+  fn repr(value: T) -> str <alloc>
 }
 ```
 
@@ -29,7 +29,7 @@ struct Cat {
   name: str
 }
 
-fn describe(tom: Cat) ! console, alloc {
+fn describe(tom: Cat) <console, alloc> {
   print("{tom.name}")
   print("{repr(tom.name)}")
   print("{tom}")
@@ -55,7 +55,7 @@ enum Pet {
   none
 }
 
-fn pets() ! console, alloc {
+fn pets() <console, alloc> {
   print("{repr(Pet.cat("a"))} {repr(Pet.none)} {repr(("a", "b"))} {repr(())}")
 }
 ```
@@ -78,7 +78,7 @@ struct Secret {
 
 without Fmt for Secret
 
-fn leak(s: Secret) ! console, alloc {
+fn leak(s: Secret) <console, alloc> {
   print("{s}")
 }
 ```

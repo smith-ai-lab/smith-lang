@@ -16,9 +16,9 @@ Data whose size is known only at run time, such as a growing list or a map, allo
 ```
 use std.console (console, print)
 
-fn greet(name: str) -> str ! alloc { "hello {name}" }
+fn greet(name: str) -> str <alloc> { "hello {name}" }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(greet("world"))
 }
 ```
@@ -35,18 +35,18 @@ use std.console (console, print)
 use std.int (wrapping_mul)
 use std.list (push)
 
-fn squares(n: u64) -> List[u64] ! alloc {
+fn squares(n: u64) -> List[u64] <alloc> {
   var acc: List[u64] = []
   loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }
   acc
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{squares(5).size}")
 }
 ```
 
-This prints `5`. Leaving `alloc` out of `squares` is refused: "`push` needs the `alloc` effect, which `squares` does not declare", with the fix "write `fn squares(n: u64) -> List[u64] ! alloc`". A caller that lacks it is refused in the same way, at the call: for `fn count() -> u64 { squares(5).size }` it is "`squares` needs the `alloc` effect, which `count` does not declare", with the fix "write `fn count() -> u64 ! alloc`".
+This prints `5`. Leaving `alloc` out of `squares` is refused: "`push` needs the `alloc` effect, which `squares` does not declare", with the fix "write `fn squares(n: u64) -> List[u64] <alloc>`". A caller that lacks it is refused in the same way, at the call: for `fn count() -> u64 { squares(5).size }` it is "`squares` needs the `alloc` effect, which `count` does not declare", with the fix "write `fn count() -> u64 <alloc>`".
 
 ## What a function leaves behind
 
@@ -56,7 +56,7 @@ A function's temporaries are released when it returns, and its result is built d
 use std.bits (u64)
 use std.int (wrapping_add)
 
-fn sum_of_squares(n: u64) -> u64 ! alloc {
+fn sum_of_squares(n: u64) -> u64 <alloc> {
   xs = squares(n)
   var total = 0
   loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }
@@ -94,7 +94,7 @@ In `handle`, the list `sum_of_squares` builds belongs to the arena of the `with`
 
 | Written | Is |
 | --- | --- |
-| `fn f() ! alloc` | `f` allocates, and its caller must have `alloc` or handle it |
+| `fn f() <alloc>` | `f` allocates, and its caller must have `alloc` or handle it |
 | `use std.alloc (arena)` | Brings in `arena`, which `with` needs |
 | `with arena()` | The rest of the block allocates in a fresh arena, freed when the block ends |
 

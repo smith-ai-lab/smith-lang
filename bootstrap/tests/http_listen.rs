@@ -451,10 +451,10 @@ fn under_a_handler() -> Vec<String> {
         s.replace('\\', "\\\\").replace('"', "\\\"").replace('{', "\\{").replace('}', "\\}")
     };
     let mut main = String::from(
-        "fn copy_of(r: Request) -> Request ! alloc {\n  Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)\n}\n\n\
-         fn once[T](asked: Request, sink: fn(Response), body: fn() -> T ! http) -> T ! alloc {\n  http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)\n}\n\n\
-         fn ask(method: str, path: str, body: str) ! console, alloc {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })\n  app()\n}\n\n\
-         fn main() ! console, alloc {\n",
+        "fn copy_of(r: Request) -> Request <alloc> {\n  Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)\n}\n\n\
+         fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <alloc> {\n  http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)\n}\n\n\
+         fn ask(method: str, path: str, body: str) <console, alloc> {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })\n  app()\n}\n\n\
+         fn main() <console, alloc> {\n",
     );
     for (method, path, body) in REQUESTS {
         main.push_str(&format!("  ask(\"{method}\", \"{path}\", \"{}\")\n", quoted(body)));
@@ -666,7 +666,7 @@ use std.int (narrow)
 use std.net (listen_on, net, stop)
 use std.time (sleep, time)
 
-fn main(args: List[str]) ! net, time, alloc {
+fn main(args: List[str]) <net, time, alloc> {
   if args.size == 0 { return }
   number: Result[Nat, ReadError] = from_text(\"port\", args[0])
   match number {
@@ -782,7 +782,7 @@ fn the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given(
         .replace("use std.net (net)\n", "")
         .replace("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n", "")
         .replace("fn app()", "pub fn main()");
-    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(port: Nat = 8080) ! net, alloc, diverge {\n  with listen(port: port)\n  main()\n}\n";
+    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(port: Nat = 8080) <net, alloc, diverge> {\n  with listen(port: port)\n  main()\n}\n";
     std::fs::write(dir.join("main.smith"), main).unwrap();
     std::fs::write(dir.join("project.smith"), project).unwrap();
     let built = smith(&dir, &["build", "serve"]);

@@ -62,11 +62,11 @@ effect store {
   fn find(id: u64) -> Option[User]
 }
 
-fn fixed_store[T](body: fn() -> T ! store) -> T {
+fn fixed_store[T](body: fn() -> T <store>) -> T {
   store(find: fn(id) { if id == 7 { Option.some(User(id: 7, name: \"Ana\")) } else { Option.none } }, body: body)
 }
 
-fn user(id: u64) -> Result[User, NotFound] ! store {
+fn user(id: u64) -> Result[User, NotFound] <store> {
   match find(id) {
     .some(u) { Result.ok(u) }
     .none { Result.err(NotFound(message: \"no user\")) }
@@ -83,15 +83,15 @@ fn search(text: str, limit: u8 = 20) -> Search {
   Search(text: text, limit: limit)
 }
 
-fn copy_of(r: Request) -> Request ! alloc {
+fn copy_of(r: Request) -> Request <alloc> {
   Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)
 }
 
-fn once[T](asked: Request, sink: fn(Response), body: fn() -> T ! http) -> T ! alloc {
+fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <alloc> {
   http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)
 }
 
-fn ask(method: str, path: str, query: str, body: str) ! console, alloc {
+fn ask(method: str, path: str, query: str, body: str) <console, alloc> {
   with once(Request(method: method, path: path, query: query, headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })
   with fixed_store()
   with routes()
@@ -105,7 +105,7 @@ fn ask(method: str, path: str, query: str, body: str) ! console, alloc {
 
 fn the_first_program_of_the_page_answers_a_user_a_missing_user_a_bad_id_and_a_path_with_no_route() {
     let source = format!(
-        "{PROGRAM}fn main() ! console, alloc {{\n  ask(\"GET\", \"/users/7\", \"\", \"\")\n  ask(\"GET\", \"/users/8\", \"\", \"\")\n  ask(\"GET\", \"/users/x\", \"\", \"\")\n  ask(\"GET\", \"/nothing\", \"\", \"\")\n}}\n"
+        "{PROGRAM}fn main() <console, alloc> {{\n  ask(\"GET\", \"/users/7\", \"\", \"\")\n  ask(\"GET\", \"/users/8\", \"\", \"\")\n  ask(\"GET\", \"/users/x\", \"\", \"\")\n  ask(\"GET\", \"/nothing\", \"\", \"\")\n}}\n"
     );
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
     let said = printed(&source);
@@ -237,7 +237,7 @@ fn holds(line: &str, status: u16, body: &Body) -> bool {
 fn each_request_is_answered_as_the_route_it_fits_reads_and_answers_it() {
     let asks = |g: &mut Gen| (0..8).map(|_| ask(g)).collect::<Vec<Ask>>();
     generate::check(8701, 2, asks, |all| {
-        let mut source = format!("{PROGRAM}fn main() ! console, alloc {{\n");
+        let mut source = format!("{PROGRAM}fn main() <console, alloc> {{\n");
         for a in all {
             source += &call(a);
         }
@@ -260,7 +260,7 @@ fn every_executable_answers_each_request_as_the_evaluator_does() {
         Ask { method: "DELETE", path: "/users/7", query: "", body: "" },
         Ask { method: "GET", path: "/nothing", query: "", body: "" },
     ];
-    let mut source = format!("{PROGRAM}fn main() ! console, alloc {{\n");
+    let mut source = format!("{PROGRAM}fn main() <console, alloc> {{\n");
     for a in &asks {
         source += &call(a);
     }

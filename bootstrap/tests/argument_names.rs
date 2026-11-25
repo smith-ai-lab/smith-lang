@@ -110,20 +110,20 @@ fn a_name_that_is_no_parameter_is_one_error_at_the_name_however_the_function_is_
             };
             let (main, module) = match how {
                 Written::Library => (
-                    format!("use std.bits (shift_left)\nuse std.console (console, print)\n\nfn main() ! console, alloc {{\n  x: Byte = 3\n  print(\"{{shift_left({shift})}}\")\n}}\n"),
+                    format!("use std.bits (shift_left)\nuse std.console (console, print)\n\nfn main() <console, alloc> {{\n  x: Byte = 3\n  print(\"{{shift_left({shift})}}\")\n}}\n"),
                     None,
                 ),
                 Written::Plain => (
-                    format!("use std.console (console, print)\n\n{function}\nfn main() ! console, alloc {{\n  print(\"{{f({args})}}\")\n}}\n"),
+                    format!("use std.console (console, print)\n\n{function}\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n"),
                     None,
                 ),
                 Written::Module => (
-                    format!("use shapes\nuse std.console (console, print)\n\nfn main() ! console, alloc {{\n  print(\"{{shapes.f({args})}}\")\n}}\n"),
+                    format!("use shapes\nuse std.console (console, print)\n\nfn main() <console, alloc> {{\n  print(\"{{shapes.f({args})}}\")\n}}\n"),
                     Some(format!("pub {function}")),
                 ),
                 Written::Trait => (
                     format!(
-                        "use std.console (console, print)\n\ntrait Shown[T] {{\n  fn f(a: Byte, b: T) -> Byte\n}}\n\ntrait Named[T] {{\n  fn f(a: Byte, b: T) -> Byte\n}}\n\nimpl Shown[Byte] {{\n  fn f(a: Byte, b: Byte) -> Byte {{ a }}\n}}\n\nimpl Named[Byte] {{\n  fn f(a: Byte, b: Byte) -> Byte {{ a }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{Named.f({args})}}\")\n}}\n"
+                        "use std.console (console, print)\n\ntrait Shown[T] {{\n  fn f(a: Byte, b: T) -> Byte\n}}\n\ntrait Named[T] {{\n  fn f(a: Byte, b: T) -> Byte\n}}\n\nimpl Shown[Byte] {{\n  fn f(a: Byte, b: Byte) -> Byte {{ a }}\n}}\n\nimpl Named[Byte] {{\n  fn f(a: Byte, b: Byte) -> Byte {{ a }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{Named.f({args})}}\")\n}}\n"
                     ),
                     None,
                 ),

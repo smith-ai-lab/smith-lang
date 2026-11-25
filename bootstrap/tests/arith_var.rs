@@ -150,7 +150,7 @@ fn program(g: &mut Gen) -> Program {
 fn source(p: &Program) -> String {
     let mut out = String::from("fn call(f: () -> ()) {\n  f()\n  f()\n}\n\n");
     out.push_str(&format!("fn id(x: {0}) -> {0} {{ x }}\n\n", p.ty.name));
-    out.push_str("fn f(c: Byte) ! console, alloc {\n");
+    out.push_str("fn f(c: Byte) <console, alloc> {\n");
     for v in [V::N, V::M] {
         out.push_str(&format!(
             "  var {}: {} = {}\n",
@@ -199,7 +199,7 @@ fn source(p: &Program) -> String {
     if looped {
         out.push_str("  }\n");
     }
-    out.push_str("}\n\nfn main() ! console, alloc {\n");
+    out.push_str("}\n\nfn main() <console, alloc> {\n");
     for c in CS {
         out.push_str(&format!("  f({c})\n"));
     }
@@ -339,7 +339,7 @@ fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_
                 ("", "")
             };
             with_header(format!(
-                "fn f(x: {0}, c: Byte) ! console, alloc {{\n  var n: {0} = {init}\n  var m: {0} = 0\n  {open}  {between}\n  if n < {1} {{\n    got: {0} = n + {2}\n    print(\"{{got}}\")\n  }}\n  {close}}}\n\nfn main() ! console, alloc {{\n  f({3}, 1)\n}}\n",
+                "fn f(x: {0}, c: Byte) <console, alloc> {{\n  var n: {0} = {init}\n  var m: {0} = 0\n  {open}  {between}\n  if n < {1} {{\n    got: {0} = n + {2}\n    print(\"{{got}}\")\n  }}\n  {close}}}\n\nfn main() <console, alloc> {{\n  f({3}, 1)\n}}\n",
                 f.ty.name,
                 f.limit,
                 f.k,

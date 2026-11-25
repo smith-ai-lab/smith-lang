@@ -21,10 +21,10 @@ Each task has an [arena](arenas.md) of its own.
 - A server is one task per connection with one arena per request. `serve` of [What a spawned task may use](task-sharing.md) starts a task for each `conn`, and `handle` opens `with arena()` for each request, which frees it whole when the request is answered.
 
 ```
-fn read_request(conn: Conn) -> Request ! net, alloc
-fn respond(conn: Conn, request: Request) ! net, alloc
+fn read_request(conn: Conn) -> Request <net, alloc>
+fn respond(conn: Conn, request: Request) <net, alloc>
 
-fn handle(conn: Conn) ! net, alloc, diverge {
+fn handle(conn: Conn) <net, alloc, diverge> {
   loop {
     with arena()
     request = read_request(conn)

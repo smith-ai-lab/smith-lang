@@ -17,7 +17,7 @@ Three things end a task before its work is done. Two are failures: running out o
 ```
 use std.console (console, print)
 
-fn log_all(lines: List[str]) ! console, alloc {
+fn log_all(lines: List[str]) <console, alloc> {
   loop line in lines {
     print(line)
   }
@@ -31,7 +31,7 @@ If the system refuses a `print` of `log_all`, the task that runs it ends there, 
 In each case the task's arena is dropped whole, the `fs` and `net` handlers close the handles it left open, and the code it was running sees nothing and runs no further. No other task shares its memory, so none is left in a broken state.
 
 ```
-fn header(path: str) -> Result[List[Byte], FsError] ! fs, alloc {
+fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   with f = open(path)
   read(f, 0..64)
 }
@@ -47,7 +47,7 @@ A task that is cancelled while it waits is ended by the handlers: each handle of
 use std.net (Connection)
 use std.time (sleep, time)
 
-fn relay(c: take Connection) -> Connection ! time {
+fn relay(c: take Connection) -> Connection <time> {
   sleep(10)
   c
 }

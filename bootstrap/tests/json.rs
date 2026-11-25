@@ -67,7 +67,7 @@ fn prints(source: &str) -> Vec<u8> {
 }
 
 /// The function the programs print through.
-const SHOW: &str = "fn show(r: Result[str, Clash]) ! console, alloc {\n  match r {\n    .ok(t) { print(t) }\n    .err(c) { print(\"err {c.of} {c.case} {c.member}\") }\n  }\n}\n\n";
+const SHOW: &str = "fn show(r: Result[str, Clash]) <console, alloc> {\n  match r {\n    .ok(t) { print(t) }\n    .err(c) { print(\"err {c.of} {c.case} {c.member}\") }\n  }\n}\n\n";
 
 /// The program of `rest`, which writes `show` and what follows it, opened with
 /// the `use` lines it needs: `console` and `print`, the names of `std.json`
@@ -645,7 +645,7 @@ fn model(tree: &Tree) -> Vec<u8> {
 /// for each.
 fn program(defs: &Defs, t: &Ty, v: &Val) -> String {
     let mut out = format!("{TEXT}{}", defs.source());
-    out.push_str(&format!("fn main() ! console, alloc {{\n  v: {} = {}\n", defs.name(t), v.source()));
+    out.push_str(&format!("fn main() <console, alloc> {{\n  v: {} = {}\n", defs.name(t), v.source()));
     for settings in SETTINGS {
         out.push_str(&format!("  show(to_json_as(v, {}))\n", settings.source()));
     }
@@ -683,7 +683,7 @@ struct Content {
   input_schema: Byte
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(to_json(Point(x: 3, y: 4)))
   print(to_json(Shape.empty))
   print(to_json(Shape.square(4)))
@@ -763,7 +763,7 @@ fn a_text_is_written_so_that_the_reader_gives_the_same_bytes_back() {
     let all: Vec<u8> = pieces.concat();
     let run = |bytes: &[u8]| {
         let source = with_import(format!(
-            "{TEXT}fn main() ! console, alloc {{\n  print(to_json({}))\n}}\n",
+            "{TEXT}fn main() <console, alloc> {{\n  print(to_json({}))\n}}\n",
             text_source(bytes)
         ));
         let printed = prints(&source);
@@ -783,7 +783,7 @@ fn the_least_and_the_greatest_of_each_whole_number_type_are_written_in_full() {
             "  least_{name}: {name} = {least}\n  print(to_json(least_{name}))\n  greatest_{name}: {name} = {greatest}\n  print(to_json(greatest_{name}))\n"
         ));
     }
-    let source = with_import(format!("fn main() ! console, alloc {{\n{body}}}\n"));
+    let source = with_import(format!("fn main() <console, alloc> {{\n{body}}}\n"));
     let printed = prints(&source);
     let expected: String = INTS.iter().flat_map(|(_, l, g)| [l, g]).map(|n| format!("{n}\n")).collect();
     assert_eq!(String::from_utf8(printed).unwrap(), expected);
@@ -796,7 +796,7 @@ fn camel_of(names: &[&str]) -> Vec<String> {
     for (i, name) in names.iter().enumerate() {
         source.push_str(&format!("struct N{i} {{\n  {name}: Byte\n}}\n\n"));
     }
-    source.push_str("fn main() ! console, alloc {\n  j = Json(cases: .key, names: .camel)\n");
+    source.push_str("fn main() <console, alloc> {\n  j = Json(cases: .key, names: .camel)\n");
     for (i, name) in names.iter().enumerate() {
         source.push_str(&format!("  show(to_json_as(N{i}({}: 1), j))\n", name));
     }
@@ -881,7 +881,7 @@ enum Shape2 {
   nothing
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   j = Json(cases: .tag(\"kind\"), names: .written)
   show(to_json_as(Shape.empty, j))
   show(to_json_as(Shape.circle(Circle(radius: 2)), j))
@@ -943,7 +943,7 @@ enum Wrap {
   circle: Circle
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   t = Json(cases: .tag(\"type\"), names: .written)
   v = Json(cases: .tag(\"value\"), names: .written)
   c = Circle(type: \"round\", radius: 2)
@@ -997,12 +997,12 @@ enum Holder2 {
 // Where `std.json` is, and what it costs.
 
 fn a_program_that_does_not_import_std_json_is_the_program_it_was() {
-    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() ! console, alloc {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
+    let items = "struct Point {\n  x: Int\n  y: Int\n}\n\nfn main() <console, alloc> {\n  p = Point(x: 3, y: 4)\n  print(\"{p.x} {p.y}\")\n}\n";
     let base = format!("use std.console (console, print)\n\n{items}");
     // The same program, with the module imported and a function that writes
     // a value that nothing calls.
     let extended = with_import(format!(
-        "fn unused(p: Point) -> str ! alloc {{ to_json(p) }}\n\n{items}"
+        "fn unused(p: Point) -> str <alloc> {{ to_json(p) }}\n\n{items}"
     ));
     let (a, b) = (lower(base.as_bytes()).unwrap(), lower(extended.as_bytes()).unwrap());
     assert_eq!(a, b);
@@ -1021,7 +1021,7 @@ fn to_json_asks_for_memory_in_proportion_to_the_text_it_gives() {
             "  print(\"{xs.size}\")\n"
         };
         let source = with_import(format!(
-            "struct P {{\n  a: Byte\n  b: bool\n}}\n\nfn main() ! console, alloc {{\n  var xs: List[P] = []\n  loop i in 0..{n} {{ xs = push(xs, P(a: 7, b: true)) }}\n{tail}}}\n"
+            "struct P {{\n  a: Byte\n  b: bool\n}}\n\nfn main() <console, alloc> {{\n  var xs: List[P] = []\n  loop i in 0..{n} {{ xs = push(xs, P(a: 7, b: true)) }}\n{tail}}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
         let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
@@ -1059,7 +1059,7 @@ fn a_rawjson_is_written_as_the_bytes_it_holds_and_under_value_when_a_case_holds_
     );
     source.push_str(TEXT);
     source.push_str(
-        "fn show(r: Result[str, Clash]) ! console, alloc {\n  match r {\n    .ok(t) { print(t) }\n    .err(c) { print(\"err {c.of} {c.case} {c.member}\") }\n  }\n}\n\nfn main() ! console, alloc {\n",
+        "fn show(r: Result[str, Clash]) <console, alloc> {\n  match r {\n    .ok(t) { print(t) }\n    .err(c) { print(\"err {c.of} {c.case} {c.member}\") }\n  }\n}\n\nfn main() <console, alloc> {\n",
     );
     for text in texts {
         source.push_str(&format!(

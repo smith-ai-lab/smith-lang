@@ -24,7 +24,7 @@ fn describe(p: Pet) -> str {
   }
 }
 
-fn main() ! console {
+fn main() <console> {
   print(describe(.lost(.some(Cat(name: "Tom")))))
   print(describe(Pet.lost(Maybe.none)))
   print(describe(.stray("Rex")))

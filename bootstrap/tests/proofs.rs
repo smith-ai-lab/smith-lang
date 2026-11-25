@@ -80,7 +80,7 @@ fn messages(source: &str) -> Vec<String> {
     }
 }
 
-const MAIN: &str = "fn main() ! console, alloc { print(\"{1}\") }\n";
+const MAIN: &str = "fn main() <console, alloc> { print(\"{1}\") }\n";
 
 /// For each way a statement is written, what is refused is what `same` cannot
 /// prove of it, and nothing about how it is written: the statement is a `bool`.
@@ -128,7 +128,7 @@ fn a_proof_function_is_checked_though_no_code_reaches_it() {
 /// that built before is read another way.
 fn a_result_that_is_a_type_is_read_as_a_type_still() {
     let found = messages(
-        "fn a(n: u64) -> u64 { n }\n\nfn b(n: u64) -> List[u64] ! alloc { [n] }\n\nfn c(n: u64) -> r: u64 ensures r == n { n }\n\nfn main() ! console, alloc {\n  print(\"{a(1)}\")\n  print(\"{b(1).size}\")\n  print(\"{c(1)}\")\n}\n"
+        "fn a(n: u64) -> u64 { n }\n\nfn b(n: u64) -> List[u64] <alloc> { [n] }\n\nfn c(n: u64) -> r: u64 ensures r == n { n }\n\nfn main() <console, alloc> {\n  print(\"{a(1)}\")\n  print(\"{b(1).size}\")\n  print(\"{c(1)}\")\n}\n"
     );
     assert!(found.is_empty(), "{found:?}");
 }
@@ -379,9 +379,9 @@ fn a_proof_function_is_in_no_executable() {
 pub const LISTS: &str = "use std.bits (u64)\nuse std.list (push, freeze)\nuse std.console (console, print)\n\n\
 fn push_grows(xs: take List[Byte], x: take Byte) -> push(xs, x).size == xs.size + 1 {\n  arith()\n}\n\n\
 fn slice_size(xs: Slice[Byte], a: u64, b: u64) -> xs[a..b].size == b - a\n  requires a <= b and b <= xs.size\n{\n  arith()\n}\n\n\
-fn grown(xs: take List[Byte], x: take Byte) -> List[Byte] ! alloc { push(xs, x) }\n\n\
+fn grown(xs: take List[Byte], x: take Byte) -> List[Byte] <alloc> { push(xs, x) }\n\n\
 fn cut(xs: Slice[Byte], a: u64, b: u64) -> u64\n  requires a <= b and b <= xs.size\n{\n  xs[a..b].size\n}\n\n\
-fn main() ! console, alloc {\n  xs: List[Byte] = [1]\n  s: Slice[Byte] = freeze([1, 2, 3])\n  if 3 <= s.size {\n    print(\"{grown(xs, 2).size} {cut(s, 1, 3)}\")\n  }\n}\n";
+fn main() <console, alloc> {\n  xs: List[Byte] = [1]\n  s: Slice[Byte] = freeze([1, 2, 3])\n  if 3 <= s.size {\n    print(\"{grown(xs, 2).size} {cut(s, 1, 3)}\")\n  }\n}\n";
 
 fn lists_refused(change: impl Fn(&str) -> String) -> Vec<String> {
     match check(change(LISTS).as_bytes()) {
@@ -412,7 +412,7 @@ fn a_push_has_one_more_and_a_slice_has_the_difference_of_its_ends_only_where_it_
 const BOUND: &str = "use std.bits (u64)\nuse std.console (console, print)\n\n\
 fn twice(n: u64) -> u64\n  requires n < 100\n{\n  k = n + n\n  k + 1\n}\n\n\
 fn twice_and_one(n: u64) -> twice(n) == n + n + 1\n  requires n < 100\n{\n  opened = unfold(twice(n))\n  arith(opened)\n}\n\n\
-fn main() ! console, alloc {\n  print(\"{twice(4)}\")\n}\n";
+fn main() <console, alloc> {\n  print(\"{twice(4)}\")\n}\n";
 
 /// A name the body of a function binds is the value it is given, in what
 /// `unfold` says, and what is said of it is checked as it is for any other.

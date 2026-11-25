@@ -639,7 +639,7 @@ fn write(
     for ty in taken {
         text.push_str(&format!("fn id_{0}(n: {0}) -> {0} {{ n }}\n\n", ty.name));
     }
-    text.push_str("fn main() ! console, alloc {\n");
+    text.push_str("fn main() <console, alloc> {\n");
     text.push_str(&bindings);
     let mut expected = None;
     for (i, l) in m.lines.iter().enumerate() {
@@ -898,7 +898,7 @@ pub fn quiet(g: &mut Gen) -> NumberCase {
     let vars = variables(g);
     let first = vars[0].ty;
     let mut source = format!("struct Pair {{\n  a: {0}\n  b: {0}\n}}\n\n", first.name);
-    source.push_str("fn main() ! console {\n");
+    source.push_str("fn main() <console> {\n");
     for v in &vars {
         let spelling = spelled(g, v.value);
         source.push_str(&format!("  {}: {} = {spelling}\n", v.name, v.ty.name));

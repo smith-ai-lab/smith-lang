@@ -19,7 +19,7 @@ built:
 ```
 use std.html (render, Html, html, head, title, body, h1, p)
 
-fn hello(name: str) -> Html ! alloc {
+fn hello(name: str) -> Html <alloc> {
   render() {
     html() {
       head() {
@@ -87,7 +87,7 @@ A text given to an element, to `text`, or to an attribute is written so that it 
 No function writes a text as HTML. What is already HTML is an `Html`, which only `render` makes, and `insert` puts one inside another page.
 
 ```
-fn frame(inside: Html) -> Html ! alloc {
+fn frame(inside: Html) -> Html <alloc> {
   render() {
     div(class: "frame") {
       insert(inside)
@@ -102,7 +102,7 @@ A part of a page is a function that carries the effect `markup`, which every ele
 
 ```
 // One note of the list.
-fn note_card(note: Note) ! markup, alloc {
+fn note_card(note: Note) <markup, alloc> {
   article(class: "card") {
     h2(note.title)
     p(note.body)
@@ -112,7 +112,7 @@ fn note_card(note: Note) ! markup, alloc {
   }
 }
 
-fn notes(all: List[Note]) -> Html ! alloc {
+fn notes(all: List[Note]) -> Html <alloc> {
   render() {
     ul() {
       loop note in all {
@@ -130,7 +130,7 @@ fn notes(all: List[Note]) -> Html ! alloc {
 A component that puts its caller's content somewhere takes it as a block, a lambda that carries `markup`.
 
 ```
-fn layout(heading: str, inside: fn() ! markup) -> Html ! alloc {
+fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
   render() {
     html() {
       head() {
@@ -144,7 +144,7 @@ fn layout(heading: str, inside: fn() ! markup) -> Html ! alloc {
   }
 }
 
-fn about() -> Html ! alloc {
+fn about() -> Html <alloc> {
   layout("About") {
     p("Smith is a programming language.")
   }
@@ -155,7 +155,7 @@ fn about() -> Html ! alloc {
 
 Each element writes through the effect `markup`, and `render` is the [handler](../language/handlers.md) that answers it: it runs its block, gathers what the block writes into one text, and gives it as an `Html`. So a function that calls `render` carries no `markup`, and a component, which does not, carries it.
 
-The operations of `markup` are private to `std.html`, as [an operation is unless it is marked `pub`](../language/effect-declarations.md#an-operation-is-private-unless-it-is-marked-pub). A program writes `! markup` and calls the elements, `text`, `attr`, and `insert`, and nothing else reaches the page, so `render` is the only handler and no function writes a text as HTML.
+The operations of `markup` are private to `std.html`, as [an operation is unless it is marked `pub`](../language/effect-declarations.md#an-operation-is-private-unless-it-is-marked-pub). A program writes `<markup>` and calls the elements, `text`, `attr`, and `insert`, and nothing else reaches the page, so `render` is the only handler and no function writes a text as HTML.
 
 Nothing is sent or printed while a page is written.
 
@@ -164,7 +164,7 @@ Nothing is sent or printed while a page is written.
 A block gives no value, so nothing fails through one: a [`try`](../language/try.md) in a block has no function to leave. What can fail a page is done before the page is written.
 
 ```
-fn note_page(id: str) -> Result[Html, str] ! alloc, store {
+fn note_page(id: str) -> Result[Html, str] <alloc, store> {
   note = try load(id)
   .ok(render() {
     h1(note.title)
@@ -176,7 +176,7 @@ fn note_page(id: str) -> Result[Html, str] ! alloc, store {
 A component that meets a failure handles it where it is, and writes what stands in its place.
 
 ```
-fn note_card(id: str) ! markup, alloc, store {
+fn note_card(id: str) <markup, alloc, store> {
   match load(id) {
     .ok(note) => h2(note.title)
     .err(_) => p("This note is gone.", class: "missing")
@@ -194,7 +194,7 @@ An `Html` has [`Fmt`](fmt.md), which writes the page as its text. So a program p
 use std.console (console, print)
 use std.html (render, p)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   page = render() {
     p("a < b")
   }
@@ -217,7 +217,7 @@ A file imports each element it uses, as any name, or imports the module and writ
 | `text("Hello")` | A text among other elements |
 | `a("Open", href: "/")` | An attribute, as an argument with a name |
 | `attr("data-id", "7")` | An attribute the library has no parameter for |
-| `fn card(n: Note) ! markup, alloc` | A component |
-| `fn layout(inside: fn() ! markup)` | A component that takes its caller's content |
+| `fn card(n: Note) <markup, alloc>` | A component |
+| `fn layout(inside: fn() <markup>)` | A component that takes its caller's content |
 | `render() { ... }` | The page its block writes, as an `Html` |
 | `insert(page)` | An `Html` put inside another |

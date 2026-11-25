@@ -284,7 +284,7 @@ impl std::fmt::Debug for Case {
 fn program(g: &mut Gen) -> Case {
     let defs = definitions(g);
     let mut source = write_defs(&defs);
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     let mut stdout = String::new();
     for i in 0..4 {
         let t = ty(g, defs.len(), 1);
@@ -356,7 +356,7 @@ fn holding_a_key(g: &mut Gen) -> (String, bool) {
         }
     }
     let source = format!(
-        "use std.console (console, print)\n\n{defs}fn main() ! console, alloc {{\n  a: {ty} = {value}\n  b: {ty} = {value}\n  if a < b {{ print(\"less\") }}\n}}\n"
+        "use std.console (console, print)\n\n{defs}fn main() <console, alloc> {{\n  a: {ty} = {value}\n  b: {ty} = {value}\n  if a < b {{ print(\"less\") }}\n}}\n"
     );
     (source, true)
 }
@@ -380,7 +380,7 @@ fn without_ord_takes_the_order_a_type_was_given_away() {
         let (a, b) = (value(g, &defs, &t), value(g, &defs, &t));
         let name = written_ty(&defs, &t);
         let main = format!(
-            "fn main() ! console, alloc {{\n  a: {name} = {}\n  b: {name} = {}\n  if a < b {{ print(\"less\") }}\n}}\n",
+            "fn main() <console, alloc> {{\n  a: {name} = {}\n  b: {name} = {}\n  if a < b {{ print(\"less\") }}\n}}\n",
             written(&defs, &t, &a),
             written(&defs, &t, &b)
         );
@@ -409,7 +409,7 @@ fn an_ord_a_program_writes_replaces_the_one_a_type_was_given() {
         |g: &mut Gen| (*g.pick(&[-1i64, 0, 1, 2]), *g.pick(&[-1i64, 0, 1, 2])),
         |&(x, y)| {
             let source = format!(
-                "use std.console (console, print)\n\nstruct Rev {{\n  n: Int\n}}\n\nimpl Ord[Rev] {{\n  fn compare(a: Rev, b: Rev) -> Order {{ compare(b.n, a.n) }}\n}}\n\nfn main() ! console, alloc {{\n  a = (Rev(n: {x}), 0)\n  b = (Rev(n: {y}), 0)\n  print(\"{{a < b}} {{Rev(n: {x}) < Rev(n: {y})}}\")\n}}\n"
+                "use std.console (console, print)\n\nstruct Rev {{\n  n: Int\n}}\n\nimpl Ord[Rev] {{\n  fn compare(a: Rev, b: Rev) -> Order {{ compare(b.n, a.n) }}\n}}\n\nfn main() <console, alloc> {{\n  a = (Rev(n: {x}), 0)\n  b = (Rev(n: {y}), 0)\n  print(\"{{a < b}} {{Rev(n: {x}) < Rev(n: {y})}}\")\n}}\n"
             );
             let expected = format!("{} {}\n", y < x, y < x);
             assert_eq!(
@@ -443,7 +443,7 @@ fn comparing_two_structs_of_whole_numbers_is_no_call() {
                 items.join(", ")
             };
             let source = format!(
-                "{}struct S {{\n{}\n}}\n\nfn below(a: S, b: S) -> bool {{ a < b }}\n\nfn main() ! console {{\n  if below(S({}), S({})) {{ print(\"x\") }}\n}}\n",
+                "{}struct S {{\n{}\n}}\n\nfn below(a: S, b: S) -> bool {{ a < b }}\n\nfn main() <console> {{\n  if below(S({}), S({})) {{ print(\"x\") }}\n}}\n",
                 uses(&list.join("\n")),
                 list.join("\n"),
                 values(&zeros),

@@ -12,16 +12,16 @@ built:
 The module `std.base64` writes bytes as text of 64 characters, three bytes to four characters, and reads such text back. It has two alphabets: the standard one, which ends in `+` and `/` and pads with `=`, and the one for an address and a token, which ends in `-` and `_` and pads with nothing.
 
 ```
-fn encode(bytes: Slice[Byte]) -> str ! alloc
-fn decode(text: str) -> Option[List[Byte]] ! alloc
-fn encode_url(bytes: Slice[Byte]) -> str ! alloc
-fn decode_url(text: str) -> Option[List[Byte]] ! alloc
+fn encode(bytes: Slice[Byte]) -> str <alloc>
+fn decode(text: str) -> Option[List[Byte]] <alloc>
+fn encode_url(bytes: Slice[Byte]) -> str <alloc>
+fn decode_url(text: str) -> Option[List[Byte]] <alloc>
 ```
 
 ```
 use std.base64 (decode, encode, encode_url)
 
-fn demo() ! alloc {
+fn demo() <alloc> {
   a = encode("hi?".bytes)
   b = encode_url("hi?".bytes)
   c = decode("aGk/")

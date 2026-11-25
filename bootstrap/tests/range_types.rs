@@ -183,7 +183,7 @@ fn a_range_holds_exactly_the_numbers_from_its_first_bound_up_to_its_second() {
     generate::check(4001, 30, range, |(low, high)| {
         for n in around(*low, *high) {
             let source = with_header(format!(
-                "fn main() ! console, alloc {{\n  x: {low}..{} = {n}\n  print(\"{{x}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  x: {low}..{} = {n}\n  print(\"{{x}}\")\n}}\n",
                 high + 1
             ));
             let fits = *low <= n && n <= *high;
@@ -213,7 +213,7 @@ fn a_range_is_held_by_a_parameter_a_result_a_field_a_list_and_an_option() {
             _ => (String::new(), format!("t: ({r}, Byte) = ({n}, 1)\n  (a, b) = t"), "a"),
         };
         let source = with_header(format!(
-            "{items}\nfn main() ! console, alloc {{\n  {held}\n  print(\"{{{shown}}}\")\n}}\n"
+            "{items}\nfn main() <console, alloc> {{\n  {held}\n  print(\"{{{shown}}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{n}\n"), "for\n{source}");
     });
@@ -226,7 +226,7 @@ fn a_range_is_compared_and_shown_whatever_its_bounds() {
         let r = format!("{low}..{}", high + 1);
         let (a, b) = (*low, *high);
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  x: {r} = {a}\n  y: {r} = {b}\n  print(\"{{x}} {{y}} {{x == y}} {{x != y}} {{x < y}} {{x <= y}} {{x > y}} {{x >= y}}\")\n}}\n"
+            "fn main() <console, alloc> {{\n  x: {r} = {a}\n  y: {r} = {b}\n  print(\"{{x}} {{y}} {{x == y}} {{x != y}} {{x < y}} {{x <= y}} {{x > y}} {{x >= y}}\")\n}}\n"
         ));
         let want = format!("{a} {b} {} {} {} {} {} {}\n", a == b, a != b, a < b, a <= b, a > b, a >= b);
         assert_eq!(stdout(&source), want, "for\n{source}");
@@ -250,7 +250,7 @@ fn a_range_written_two_ways_is_one_type() {
         ("-2147483648..2147483648", "i32"),
     ] {
         let source = with_header(format!(
-            "use std.bits ({name})\n\nfn same(n: {name}) -> {written} {{ n }}\n\nfn main() ! console, alloc {{\n  a: {written} = 7\n  b: {name} = same(a)\n  print(\"{{b}}\")\n}}\n"
+            "use std.bits ({name})\n\nfn same(n: {name}) -> {written} {{ n }}\n\nfn main() <console, alloc> {{\n  a: {written} = 7\n  b: {name} = same(a)\n  print(\"{{b}}\")\n}}\n"
         ));
         let source = if matches!(name, "Byte" | "Nat" | "Int") {
             source.replace(&format!("use std.bits ({name})\n"), "")
@@ -267,15 +267,15 @@ fn a_range_written_two_ways_is_one_type() {
 fn a_range_with_no_number_is_a_type_and_a_range_that_ends_before_it_begins_is_refused() {
     generate::check(4004, 20, range, |(low, _)| {
         let empty = with_header(format!(
-            "fn never(x: {low}..{low}) -> Nat {{ 0 }}\n\nfn main() ! console, alloc {{\n  print(\"1\")\n}}\n"
+            "fn never(x: {low}..{low}) -> Nat {{ 0 }}\n\nfn main() <console, alloc> {{\n  print(\"1\")\n}}\n"
         ));
         assert!(compiles(&empty), "for\n{empty}");
         let called = with_header(format!(
-            "fn never(x: {low}..{low}) -> Nat {{ 0 }}\n\nfn main() ! console, alloc {{\n  print(\"{{never({low})}}\")\n}}\n"
+            "fn never(x: {low}..{low}) -> Nat {{ 0 }}\n\nfn main() <console, alloc> {{\n  print(\"{{never({low})}}\")\n}}\n"
         ));
         assert!(!compiles(&called), "for\n{called}");
         let backwards = with_header(format!(
-            "fn never(x: {low}..{}) -> Nat {{ 0 }}\n\nfn main() ! console, alloc {{\n  print(\"1\")\n}}\n",
+            "fn never(x: {low}..{}) -> Nat {{ 0 }}\n\nfn main() <console, alloc> {{\n  print(\"1\")\n}}\n",
             low - 1
         ));
         assert!(!compiles(&backwards), "for\n{backwards}");
@@ -293,7 +293,7 @@ fn a_range_of_more_than_64_bits_is_a_type_and_is_held_in_two_words() {
     ] {
         let low = r.split("..").next().unwrap();
         let source = with_header(format!(
-            "fn same(x: {r}) -> {r} {{ x }}\n\nfn main() ! console, alloc {{\n  print(\"{{same({low})}}\")\n}}\n"
+            "fn same(x: {r}) -> {r} {{ x }}\n\nfn main() <console, alloc> {{\n  print(\"{{same({low})}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{low}\n"), "for\n{source}");
     }
@@ -302,7 +302,7 @@ fn a_range_of_more_than_64_bits_is_a_type_and_is_held_in_two_words() {
 /// A result that needs more than 128 bits is refused until it is narrowed.
 fn a_result_of_more_than_128_bits_is_refused() {
     let source = with_header(
-        "fn cube(a: Nat) -> Nat {\n  p = a * a\n  p * a\n}\n\nfn main() ! console, alloc {\n  print(\"{cube(2)}\")\n}\n".to_string(),
+        "fn cube(a: Nat) -> Nat {\n  p = a * a\n  p * a\n}\n\nfn main() <console, alloc> {\n  print(\"{cube(2)}\")\n}\n".to_string(),
     );
     assert!(!compiles(&source), "for\n{source}");
 }
@@ -316,13 +316,13 @@ fn arith_proves_a_sum_of_a_range_exactly_when_it_fits_the_range() {
     const SIZES: [i128; 4] = [1 << 8, 1 << 16, 1 << 32, 1 << 64];
     let case = |n: i128| {
         let proven = with_header(format!(
-            "fn next(i: 0..{n}) -> 0..{n}\n  requires i < {}\n{{\n  i + 1\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{next({})}}\")\n}}\n",
+            "fn next(i: 0..{n}) -> 0..{n}\n  requires i < {}\n{{\n  i + 1\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{next({})}}\")\n}}\n",
             n - 1,
             n - 2
         ));
         assert_eq!(stdout(&proven), format!("{}\n", n - 1), "for\n{proven}");
         let unproven = with_header(format!(
-            "fn next(i: 0..{n}) -> 0..{n} {{ i + 1 }}\n\nfn main() ! console, alloc {{\n  print(\"{{next(0)}}\")\n}}\n"
+            "fn next(i: 0..{n}) -> 0..{n} {{ i + 1 }}\n\nfn main() <console, alloc> {{\n  print(\"{{next(0)}}\")\n}}\n"
         ));
         let errors = check(unproven.as_bytes()).expect_err("a sum that may not fit");
         assert!(errors.iter().all(|e| e.message.contains("i + 1")), "{errors:?}");
@@ -337,7 +337,7 @@ fn arith_proves_a_sum_of_a_range_exactly_when_it_fits_the_range() {
     }
     generate::check(4005, 20, |g: &mut Gen| g.below(1000) as i128 + 2, |n| case(*n));
     let sized = with_header(
-        "fn next(i: Byte) -> Byte { i + 1 }\n\nfn main() ! console, alloc {\n  print(\"{next(0)}\")\n}\n".to_string(),
+        "fn next(i: Byte) -> Byte { i + 1 }\n\nfn main() <console, alloc> {\n  print(\"{next(0)}\")\n}\n".to_string(),
     );
     let errors = check(sized.as_bytes()).expect_err("a sum that may not fit");
     let fixes: Vec<String> = errors.iter().filter_map(|e| e.fix.clone()).collect();
@@ -362,7 +362,7 @@ fn a_range_is_taken_where_a_range_that_holds_every_number_of_it_is_needed() {
         let wide = format!("{low}..{}", high + 1);
         let narrow = format!("{ilow}..{}", ihigh + 1);
         let source = with_header(format!(
-            "struct Held {{\n  n: {wide}\n}}\n\nfn pass(x: {wide}) -> {wide} {{ x }}\n\nfn lift(x: {narrow}) -> {wide} {{ x }}\n\nfn pick(flag: bool, x: {narrow}) -> {wide} {{\n  if flag {{ x }} else {{ {ilow} }}\n}}\n\nfn which(o: Option[{narrow}]) -> {wide} {{\n  match o {{\n    .some(v) {{ v }}\n    .none {{ {ilow} }}\n  }}\n}}\n\nfn main() ! console, alloc {{\n  a: {narrow} = {n}\n  b: {wide} = a\n  var c: {wide} = {low}\n  c = a\n  h = Held(n: a)\n  xs: List[{wide}] = [a, {low}]\n  print(\"{{b}} {{pass(a)}} {{lift(a)}} {{c}} {{h.n}} {{xs[0]}} {{pick(true, a)}} {{which(.some(a))}}\")\n}}\n"
+            "struct Held {{\n  n: {wide}\n}}\n\nfn pass(x: {wide}) -> {wide} {{ x }}\n\nfn lift(x: {narrow}) -> {wide} {{ x }}\n\nfn pick(flag: bool, x: {narrow}) -> {wide} {{\n  if flag {{ x }} else {{ {ilow} }}\n}}\n\nfn which(o: Option[{narrow}]) -> {wide} {{\n  match o {{\n    .some(v) {{ v }}\n    .none {{ {ilow} }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  a: {narrow} = {n}\n  b: {wide} = a\n  var c: {wide} = {low}\n  c = a\n  h = Held(n: a)\n  xs: List[{wide}] = [a, {low}]\n  print(\"{{b}} {{pass(a)}} {{lift(a)}} {{c}} {{h.n}} {{xs[0]}} {{pick(true, a)}} {{which(.some(a))}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{}\n", vec![n.to_string(); 8].join(" ")), "for\n{source}");
     });
@@ -376,7 +376,7 @@ fn a_value_is_not_taken_where_a_range_that_does_not_hold_every_number_of_its_ran
             return;
         }
         let source = with_header(format!(
-            "fn same(x: {a}..{}) -> {c}..{} {{ x }}\n\nfn main() ! console, alloc {{\n  print(\"{{same({a})}}\")\n}}\n",
+            "fn same(x: {a}..{}) -> {c}..{} {{ x }}\n\nfn main() <console, alloc> {{\n  print(\"{{same({a})}}\")\n}}\n",
             b + 1,
             d + 1
         ));
@@ -393,7 +393,7 @@ fn the_blocks_of_an_if_and_a_match_give_the_smallest_range_that_holds_them() {
         let (low, high) = (*a.min(c), *b.max(d));
         let want = [a, c][*which];
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  s: Byte = {which}\n  x: {a}..{} = {a}\n  y: {c}..{} = {c}\n  r = if s == 0 {{ x }} else {{ y }}\n  m = match s {{\n    0 {{ y }}\n    _ {{ x }}\n  }}\n  h: {low}..{} = r\n  k: {low}..{} = m\n  print(\"{{h}} {{k}}\")\n}}\n",
+            "fn main() <console, alloc> {{\n  s: Byte = {which}\n  x: {a}..{} = {a}\n  y: {c}..{} = {c}\n  r = if s == 0 {{ x }} else {{ y }}\n  m = match s {{\n    0 {{ y }}\n    _ {{ x }}\n  }}\n  h: {low}..{} = r\n  k: {low}..{} = m\n  print(\"{{h}} {{k}}\")\n}}\n",
             b + 1,
             d + 1,
             high + 1,
@@ -418,7 +418,7 @@ fn a_value_enters_a_narrower_range_exactly_when_a_condition_or_a_requires_shows_
         );
         let facts = format!("requires x >= {ilow} and x <= {ihigh}");
         let tail = format!(
-            "fn checked(x: {wide}) -> {narrow} {{\n  if x >= {ilow} and x <= {ihigh} {{ x }} else {{ {ilow} }}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  var y: {narrow} = {ilow}\n  if x >= {ilow} and x <= {ihigh} {{ y = x }}\n  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n  {facts}\n{{\n  takes(x)\n}}\n\nfn main() ! console, alloc {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
+            "fn checked(x: {wide}) -> {narrow} {{\n  if x >= {ilow} and x <= {ihigh} {{ x }} else {{ {ilow} }}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  var y: {narrow} = {ilow}\n  if x >= {ilow} and x <= {ihigh} {{ y = x }}\n  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n  {facts}\n{{\n  takes(x)\n}}\n\nfn main() <console, alloc> {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
         );
         let proven = with_header(format!("{lead}\n  {facts}\n{{ x }}\n\n{tail}"));
         assert_eq!(stdout(&proven), format!("{}\n", vec![n.to_string(); 4].join(" ")), "for\n{proven}");
@@ -460,7 +460,7 @@ fn any_two_ranges_are_compared_as_the_numbers_they_hold_are() {
     generate::check(4010, 40, |g: &mut Gen| (range(g), range(g), g.below(2), g.below(2)), |((a, b), (c, d), x, y)| {
         let (x, y) = ([*a, *b][*x], [*c, *d][*y]);
         let source = with_header(format!(
-            "fn main() ! console, alloc {{\n  p: {a}..{} = {x}\n  q: {c}..{} = {y}\n  print(\"{{p == q}} {{p != q}} {{p < q}} {{p <= q}} {{p > q}} {{p >= q}}\")\n}}\n",
+            "fn main() <console, alloc> {{\n  p: {a}..{} = {x}\n  q: {c}..{} = {y}\n  print(\"{{p == q}} {{p != q}} {{p < q}} {{p <= q}} {{p > q}} {{p >= q}}\")\n}}\n",
             b + 1,
             d + 1
         ));
@@ -476,7 +476,7 @@ fn a_parameter_of_a_range_to_a_name_is_below_it_at_every_call_and_in_the_body() 
     generate::check(4011, 30, |g: &mut Gen| (g.below(40) as u64, g.below(40) as u64), |(n, i)| {
         let source = |args: &str| {
             with_header(format!(
-                "fn pick(n: Nat, i: 0..n) -> Nat {{ i }}\n\nfn inner(n: Nat, i: 0..n) -> Nat {{ i }}\n\nfn outer(n: Nat, i: 0..n) -> Nat {{ inner(n, i) }}\n\nfn main() ! console, alloc {{\n  print(\"{{pick({args})}} {{outer({args})}}\")\n}}\n"
+                "fn pick(n: Nat, i: 0..n) -> Nat {{ i }}\n\nfn inner(n: Nat, i: 0..n) -> Nat {{ i }}\n\nfn outer(n: Nat, i: 0..n) -> Nat {{ inner(n, i) }}\n\nfn main() <console, alloc> {{\n  print(\"{{pick({args})}} {{outer({args})}}\")\n}}\n"
             ))
         };
         let called = source(&format!("{n}, {i}"));
@@ -488,7 +488,7 @@ fn a_parameter_of_a_range_to_a_name_is_below_it_at_every_call_and_in_the_body() 
         }
         // A function that is not given a fact about `i` cannot give it on.
         let loose = with_header(
-            "fn inner(n: Nat, i: 0..n) -> Nat { i }\n\nfn outer(n: Nat, i: Nat) -> Nat { inner(n, i) }\n\nfn main() ! console, alloc {\n  print(\"{outer(5, 2)}\")\n}\n"
+            "fn inner(n: Nat, i: 0..n) -> Nat { i }\n\nfn outer(n: Nat, i: Nat) -> Nat { inner(n, i) }\n\nfn main() <console, alloc> {\n  print(\"{outer(5, 2)}\")\n}\n"
                 .to_string(),
         );
         assert!(!compiles(&loose), "for\n{loose}");
@@ -499,7 +499,7 @@ fn a_parameter_of_a_range_to_a_name_is_below_it_at_every_call_and_in_the_body() 
 fn a_range_from_a_name_is_at_least_it_at_every_call() {
     generate::check(4012, 30, |g: &mut Gen| (g.below(256) as u64, g.below(256) as u64), |(m, i)| {
         let source = with_header(format!(
-            "fn from(m: Byte, i: m..256) -> Byte {{ i }}\n\nfn main() ! console, alloc {{\n  print(\"{{from({m}, {i})}}\")\n}}\n"
+            "fn from(m: Byte, i: m..256) -> Byte {{ i }}\n\nfn main() <console, alloc> {{\n  print(\"{{from({m}, {i})}}\")\n}}\n"
         ));
         if m <= i {
             assert_eq!(stdout(&source), format!("{i}\n"), "for\n{source}");
@@ -529,7 +529,7 @@ fn a_bound_that_is_not_a_parameter_or_is_written_where_a_name_is_not_a_bound_is_
         ("struct S {\n  a: 0..n\n}\n\nfn f(s: S) -> Nat { 0 }", "f(S(a: 0))", "a name is not a bound in the type of a field"),
     ] {
         let source = with_header(format!(
-            "{bad}\n\nfn main() ! console, alloc {{\n  print(\"{{{call}}}\")\n}}\n"
+            "{bad}\n\nfn main() <console, alloc> {{\n  print(\"{{{call}}}\")\n}}\n"
         ));
         let errors = check(source.as_bytes()).expect_err("a bound that is refused");
         assert!(errors.iter().any(|e| e.message.contains(mentions)), "{errors:?} for\n{source}");
@@ -574,7 +574,7 @@ fn a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one() {
             );
             let program = |result_low: i128, result_high: i128| {
                 with_header(format!(
-                    "fn f(a: {a_low}..{}, b: {b_low}..{}) -> {result_low}..{} {{ a {op} b }}\n\nfn main() ! console, alloc {{\n  print(\"{{f({a_low}, {b_low})}} {{f({a_low}, {b_high})}} {{f({a_high}, {b_low})}} {{f({a_high}, {b_high})}}\")\n}}\n",
+                    "fn f(a: {a_low}..{}, b: {b_low}..{}) -> {result_low}..{} {{ a {op} b }}\n\nfn main() <console, alloc> {{\n  print(\"{{f({a_low}, {b_low})}} {{f({a_low}, {b_high})}} {{f({a_high}, {b_low})}} {{f({a_high}, {b_high})}}\")\n}}\n",
                     a_high + 1,
                     b_high + 1,
                     result_high + 1
@@ -685,7 +685,7 @@ fn a_range_is_taken_in_every_place_a_type_is_needed(part: u64) {
     ];
     // A tuple whose items are ranges of their own, and a case that holds one, to any depth.
     let items = with_header(
-        "enum E {\n  pair: (Byte, 0..10)\n  none\n}\n\nfn tup(b: Byte) -> (Byte, 0..10) {\n  if b >= 48 and b <= 57 { (b - 48, b - 48) } else { (0, 0) }\n}\n\nfn case(b: Byte) -> E {\n  if b >= 48 and b <= 57 { .pair((b - 48, b - 48)) } else { .none }\n}\n\nfn deep(b: Byte) -> ((Byte, 0..10), Byte) {\n  if b >= 48 and b <= 57 { ((b - 48, b - 48), b - 48) } else { ((0, 0), 0) }\n}\n\nfn main() ! console, alloc {\n  match tup(50) {\n    (x, y) { print(\"{x} {y}\") }\n  }\n  match case(50) {\n    .pair((x, y)) { print(\"{x} {y}\") }\n    .none { print(\"none\") }\n  }\n  match deep(50) {\n    ((x, y), z) { print(\"{x} {y} {z}\") }\n  }\n}\n"
+        "enum E {\n  pair: (Byte, 0..10)\n  none\n}\n\nfn tup(b: Byte) -> (Byte, 0..10) {\n  if b >= 48 and b <= 57 { (b - 48, b - 48) } else { (0, 0) }\n}\n\nfn case(b: Byte) -> E {\n  if b >= 48 and b <= 57 { .pair((b - 48, b - 48)) } else { .none }\n}\n\nfn deep(b: Byte) -> ((Byte, 0..10), Byte) {\n  if b >= 48 and b <= 57 { ((b - 48, b - 48), b - 48) } else { ((0, 0), 0) }\n}\n\nfn main() <console, alloc> {\n  match tup(50) {\n    (x, y) { print(\"{x} {y}\") }\n  }\n  match case(50) {\n    .pair((x, y)) { print(\"{x} {y}\") }\n    .none { print(\"none\") }\n  }\n  match deep(50) {\n    ((x, y), z) { print(\"{x} {y} {z}\") }\n  }\n}\n"
             .to_string(),
     );
     if part == 0 {
@@ -701,7 +701,7 @@ fn a_range_is_taken_in_every_place_a_type_is_needed(part: u64) {
                 let program = |guard: &str, given: &str| {
                     let made = make.replace('E', given);
                     with_header(format!(
-                        "{decls}fn shifted(b: Byte) -> {ty} ! alloc {{\n  if {guard} {{ {made} }} else {{ {none} }}\n}}\n\nfn main() ! console, alloc {{\n  r = shifted({})\n  {read}\n}}\n",
+                        "{decls}fn shifted(b: Byte) -> {ty} <alloc> {{\n  if {guard} {{ {made} }} else {{ {none} }}\n}}\n\nfn main() <console, alloc> {{\n  r = shifted({})\n  {read}\n}}\n",
                         low + by
                     ))
                 };
@@ -716,7 +716,7 @@ fn a_range_is_taken_in_every_place_a_type_is_needed(part: u64) {
                 // A range that a wider one holds is taken with nothing shown.
                 let wide = ty.replace("Byte", "u16");
                 let wider = with_header(format!(
-                    "{}fn shifted(b: Byte) -> {wide} ! alloc {{\n  {}\n}}\n\nfn main() ! console, alloc {{\n  r = shifted({low})\n  {read}\n}}\n",
+                    "{}fn shifted(b: Byte) -> {wide} <alloc> {{\n  {}\n}}\n\nfn main() <console, alloc> {{\n  r = shifted({low})\n  {read}\n}}\n",
                     decls.replace("Byte", "u16"),
                     make.replace("Byte", "u16").replace('E', "b")
                 ));
@@ -738,7 +738,7 @@ fn a_minus_before_a_number_gives_the_range_of_its_negation_and_groups_tighter_th
         |&((low, high), k)| {
             let program = |result_low: i128, result_high: i128| {
                 with_header(format!(
-                    "fn f(a: {low}..{}) -> {result_low}..{} {{ -a }}\n\nfn main() ! console, alloc {{\n  print(\"{{f({low})}} {{f({high})}}\")\n}}\n",
+                    "fn f(a: {low}..{}) -> {result_low}..{} {{ -a }}\n\nfn main() <console, alloc> {{\n  print(\"{{f({low})}} {{f({high})}}\")\n}}\n",
                     high + 1,
                     result_high + 1
                 ))
@@ -752,7 +752,7 @@ fn a_minus_before_a_number_gives_the_range_of_its_negation_and_groups_tighter_th
             }
             // It groups tighter than `*`, `+`, and `-`.
             let grouped = with_header(format!(
-                "fn main() ! console, alloc {{\n  a: {low}..{} = {low}\n  print(\"{{-a * {k}}} {{{k} - -a}} {{-a + {k}}} {{-(a + {k})}}\")\n}}\n",
+                "fn main() <console, alloc> {{\n  a: {low}..{} = {low}\n  print(\"{{-a * {k}}} {{{k} - -a}} {{-a + {k}}} {{-(a + {k})}}\")\n}}\n",
                 high + 1
             ));
             assert_eq!(
@@ -778,13 +778,13 @@ fn a_name_is_a_bound_in_a_result_and_in_a_binding_and_what_it_says_is_known() {
             // A result below a parameter, taken where the bound that follows from
             // it is needed, with nothing written.
             let result = with_header(format!(
-                "fn last(n: 1..{top}) -> 0..n {{ n - 1 }}\n\nfn takes(x: 0..{}) -> Nat {{ x }}\n\nfn use_it(n: 1..{top}) -> Nat {{ takes(last(n)) }}\n\nfn main() ! console, alloc {{\n  print(\"{{use_it({n})}}\")\n}}\n",
+                "fn last(n: 1..{top}) -> 0..n {{ n - 1 }}\n\nfn takes(x: 0..{}) -> Nat {{ x }}\n\nfn use_it(n: 1..{top}) -> Nat {{ takes(last(n)) }}\n\nfn main() <console, alloc> {{\n  print(\"{{use_it({n})}}\")\n}}\n",
                 top - 1
             ));
             assert_eq!(stdout(&result), format!("{}\n", n - 1), "for\n{result}");
             // A result at least a parameter.
             let above = with_header(format!(
-                "fn from(m: 0..{top}) -> m..{top} {{ m }}\n\nfn main() ! console, alloc {{\n  print(\"{{from({n})}}\")\n}}\n",
+                "fn from(m: 0..{top}) -> m..{top} {{ m }}\n\nfn main() <console, alloc> {{\n  print(\"{{from({n})}}\")\n}}\n",
             ));
             assert_eq!(stdout(&above), format!("{n}\n"), "for\n{above}");
             // A result that is not shown to be below the name is refused.
@@ -795,7 +795,7 @@ fn a_name_is_a_bound_in_a_result_and_in_a_binding_and_what_it_says_is_known() {
             let size = n.min(8) as usize;
             let items: Vec<String> = (0..size).map(|i| (i * 7).to_string()).collect();
             let binding = with_header(format!(
-                "fn last_of(xs: List[Nat]) -> Nat\n  requires xs.size > 0\n{{\n  n = xs.size\n  i: 0..n = n - 1\n  xs[i]\n}}\n\nfn main() ! console, alloc {{\n  xs: List[Nat] = [{}]\n  print(\"{{last_of(xs)}}\")\n}}\n",
+                "fn last_of(xs: List[Nat]) -> Nat\n  requires xs.size > 0\n{{\n  n = xs.size\n  i: 0..n = n - 1\n  xs[i]\n}}\n\nfn main() <console, alloc> {{\n  xs: List[Nat] = [{}]\n  print(\"{{last_of(xs)}}\")\n}}\n",
                 items.join(", ")
             ));
             if size > 0 {
@@ -828,8 +828,8 @@ fn a_range_has_every_trait_a_whole_number_has_in_every_place_and_what_the_number
     ];
     // Each trait: a bounded function that asks for it, and what it prints of `p`.
     const TRAITS: [(&str, &str); 9] = [
-        ("fn ask[T: Fmt](p: T) -> str ! alloc { \"{p}\" }", "print(ask(p))\n  print(\"{p}\")"),
-        ("fn ask[T: Repr](p: T) -> str ! alloc { repr(p) }", "print(ask(p))\n  print(repr(p))"),
+        ("fn ask[T: Fmt](p: T) -> str <alloc> { \"{p}\" }", "print(ask(p))\n  print(\"{p}\")"),
+        ("fn ask[T: Repr](p: T) -> str <alloc> { repr(p) }", "print(ask(p))\n  print(repr(p))"),
         ("fn ask[T: Eq](p: T) -> bool { p == p }", "print(\"{ask(p)}\")\n  print(\"{p == p}\")"),
         ("fn ask[T: Ord](p: T) -> bool { p < p }", "print(\"{ask(p)}\")\n  print(\"{p <= p}\")"),
         ("fn ask[T: Hash](p: T) -> u64 { hash(p) }", "print(\"{ask(p)}\")\n  print(\"{hash(p)}\")"),
@@ -866,7 +866,7 @@ fn a_range_has_every_trait_a_whole_number_has_in_every_place_and_what_the_number
                     let program = |number: &str| {
                         let ty = place.replace('N', number);
                         with_header(format!(
-                            "{imports}{}{func}\n\nfn main() ! console, alloc {{\n  x: {number} = {value}\n  p: {ty} = {make}\n  {uses}\n}}\n",
+                            "{imports}{}{func}\n\nfn main() <console, alloc> {{\n  x: {number} = {value}\n  p: {ty} = {make}\n  {uses}\n}}\n",
                             decls.replace('N', number)
                         ))
                     };
@@ -897,7 +897,7 @@ fn the_size_of_a_name_is_a_bound_in_a_parameter_a_result_and_a_binding_and_nothi
             let make = format!("[{}]", items.join(", "));
             let program = |body: &str, i: usize| {
                 with_header(format!(
-                    "fn pick(xs: {ty}, i: 0..xs.size) -> Nat {{ xs[i] }}\n\nfn last(xs: {ty}) -> 0..xs.size\n  requires xs.size > 0\n{{\n  xs.size - 1\n}}\n\nfn main() ! console, alloc {{\n  xs: {ty} = {make}\n{body}  print(\"{{pick(xs, {i})}}\")\n}}\n"
+                    "fn pick(xs: {ty}, i: 0..xs.size) -> Nat {{ xs[i] }}\n\nfn last(xs: {ty}) -> 0..xs.size\n  requires xs.size > 0\n{{\n  xs.size - 1\n}}\n\nfn main() <console, alloc> {{\n  xs: {ty} = {make}\n{body}  print(\"{{pick(xs, {i})}}\")\n}}\n"
                 ))
             };
             let want = 7 * (size - 1);
@@ -936,7 +936,7 @@ fn the_size_of_a_name_is_a_bound_in_a_parameter_a_result_and_a_binding_and_nothi
             "a bound is a whole number, a name, or the `size` of a name",
         ),
         (
-            "fn f(n: Nat, i: 0..n.size) -> Nat { 0 }\n\nfn main() ! console, alloc {\n  print(\"{f(1, 0)}\")\n}\n",
+            "fn f(n: Nat, i: 0..n.size) -> Nat { 0 }\n\nfn main() <console, alloc> {\n  print(\"{f(1, 0)}\")\n}\n",
             "the field `size` is read from a `Nat`",
         ),
         (
@@ -968,7 +968,7 @@ fn two_ranges_that_no_type_of_64_bits_holds_are_compared_as_the_numbers_they_hol
     for x in ends {
         for y in high {
             let program = with_header(format!(
-                "fn main() ! console, alloc {{\n  a: Int = {x}\n  b: Nat = {y}\n  print(\"{{a < b}} {{a <= b}} {{a > b}} {{a >= b}} {{a == b}} {{a != b}} {{b < a}} {{b >= a}} {{Ord.compare(a, b)}} {{Ord.compare(b, a)}}\")\n}}\n"
+                "fn main() <console, alloc> {{\n  a: Int = {x}\n  b: Nat = {y}\n  print(\"{{a < b}} {{a <= b}} {{a > b}} {{a >= b}} {{a == b}} {{a != b}} {{b < a}} {{b >= a}} {{Ord.compare(a, b)}} {{Ord.compare(b, a)}}\")\n}}\n"
             ));
             let want = format!(
                 "{} {} {} {} {} {} {} {} {} {}\n",

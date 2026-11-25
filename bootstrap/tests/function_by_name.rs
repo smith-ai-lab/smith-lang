@@ -69,7 +69,7 @@ impl Shape {
             uses.push('\n');
         }
         format!(
-            "{uses}fn hi({}) ! {} {{\n{body}}}\n\nfn run(f: fn({types})) {{ f({args}) }}\n\n",
+            "{uses}fn hi({}) <{}> {{\n{body}}}\n\nfn run(f: fn({types})) {{ f({args}) }}\n\n",
             params.join(", "),
             effects.join(", ")
         )
@@ -96,7 +96,7 @@ impl Shape {
 }
 
 fn main_with(shape: &Shape, main_effects: &str, passed: &str) -> String {
-    let bang = if main_effects.is_empty() { String::new() } else { format!(" ! {main_effects}") };
+    let bang = if main_effects.is_empty() { String::new() } else { format!(" <{main_effects}>") };
     format!("{}fn main(){bang} {{\n  {passed}\n}}\n", shape.head())
 }
 
@@ -136,13 +136,13 @@ fn an_effect_the_function_passed_by_name_needs_is_one_error_at_the_name_as_for_i
 /// outermost lambda is written in.
 fn a_name_inside_a_lambda_asks_the_function_the_lambda_is_written_in_at_any_depth() {
     generate::check(303, 6, |g| 1 + g.below(3), |&depth| {
-        let head = "use std.console (console, print)\n\nfn hi() ! console { print(\"hi\") }\n\n\
+        let head = "use std.console (console, print)\n\nfn hi() <console> { print(\"hi\") }\n\n\
                     fn run(f: fn()) { f() }\n\n";
         let mut inner = "run(hi)".to_string();
         for _ in 0..depth {
             inner = format!("run {{ {inner} }}");
         }
-        let allowed = format!("{head}fn main() ! console {{\n  {inner}\n}}\n");
+        let allowed = format!("{head}fn main() <console> {{\n  {inner}\n}}\n");
         let program = lower(allowed.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in {allowed}"));
         assert_eq!(scalar::run(&program).stdout, b"hi\n");
         let refused = format!("{head}fn main() {{\n  {inner}\n}}\n");

@@ -88,7 +88,7 @@ fn is_lower(bytes: Slice[Byte]) -> bool {
   true
 }
 
-fn name_of(bytes: Slice[Byte]) -> str ! alloc {
+fn name_of(bytes: Slice[Byte]) -> str <alloc> {
   if is_lower(bytes) {
     match utf8(bytes) {
       .ok(s) { return s }
@@ -153,7 +153,7 @@ fn text_of(bytes: Slice[Byte]) -> Result[str, str] {
   }
 }
 
-fn header(line: Slice[Byte]) -> Result[(str, str), str] ! alloc
+fn header(line: Slice[Byte]) -> Result[(str, str), str] <alloc>
   requires line.size > 0
 {
   colon = token_end(line, 0)
@@ -232,7 +232,7 @@ fn crlf_at(view: Slice[Byte], from: Nat) -> r: Nat
   view.size
 }
 
-fn scan(bytes: Slice[Byte], limit: Nat, fold: bool) -> Read[Lines] ! alloc {
+fn scan(bytes: Slice[Byte], limit: Nat, fold: bool) -> Read[Lines] <alloc> {
   view = if bytes.size > limit { bytes[0..limit] } else { bytes }
   match fault(view) {
     .some(why) { return .refused(why) }
@@ -395,7 +395,7 @@ fn has_header(headers: List[(str, str)], wanted: str) -> bool {
   false
 }
 
-pub fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] ! alloc {
+pub fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] <alloc> {
   match scan(bytes, limit, false) {
     .incomplete { .incomplete }
     .refused(why) { .refused(why) }
@@ -439,7 +439,7 @@ fn head_end(view: Slice[Byte]) -> Option[Nat] {
 }
 
 // The head with each obsolete line fold, after the start line, made one space.
-fn unfold(head: Slice[Byte]) -> List[Byte] ! alloc {
+fn unfold(head: Slice[Byte]) -> List[Byte] <alloc> {
   var written: List[Byte] = []
   var started = false
   var drop: Nat = 0
@@ -474,7 +474,7 @@ fn response_of(lines: take Lines, used: Nat) -> Read[ResponseHead] {
   }
 }
 
-fn folded_response(bytes: Slice[Byte], limit: Nat) -> Read[ResponseHead] ! alloc {
+fn folded_response(bytes: Slice[Byte], limit: Nat) -> Read[ResponseHead] <alloc> {
   view = if bytes.size > limit { bytes[0..limit] } else { bytes }
   match head_end(view) {
     .none {
@@ -491,7 +491,7 @@ fn folded_response(bytes: Slice[Byte], limit: Nat) -> Read[ResponseHead] ! alloc
   }
 }
 
-pub fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] ! alloc {
+pub fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] <alloc> {
   match scan(bytes, limit, true) {
     .incomplete { .incomplete }
     .refused(why) { if why == folding() { folded_response(bytes, limit) } else { .refused(why) } }
@@ -580,7 +580,7 @@ fn hex_digit(d: Byte) -> Byte {
   if c < 10 { 48 + c } else { 87 + c }
 }
 
-pub fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] ! alloc {
+pub fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] <alloc> {
   var written = to
   var rest: Nat = bytes.size
   var started = false

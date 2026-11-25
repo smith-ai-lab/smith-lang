@@ -59,7 +59,7 @@ fn has(named: List[(str, RawJson)], name: str) -> bool {
 }
 
 impl Deserialize[Members] {
-  fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) ! alloc {
+  fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) <alloc> {
     (opened, began) = Reader.structure(from, "Members")
     match began {
       .err(e) { return (opened, Result.err(e)) }
@@ -111,7 +111,7 @@ fn kind(raw: RawJson) -> Byte {
 }
 
 // The text a member is, when it is one.
-fn member_text(named: List[(str, RawJson)], name: str) -> Option[str] ! alloc {
+fn member_text(named: List[(str, RawJson)], name: str) -> Option[str] <alloc> {
   match find(named, name) {
     .none { .none }
     .some(raw) {
@@ -153,7 +153,7 @@ fn ends(s: str, suffix: str) -> bool {
 // The text a header holds, which a client writes as `=?base64?` and the base64 of
 // the UTF-8 of the text and `?=` when the text is not safe to write as it is.
 // None for one that begins as that and is not base64 of a text.
-fn header_text(value: str) -> Option[str] ! alloc {
+fn header_text(value: str) -> Option[str] <alloc> {
   if begins(value, "=?base64?") and ends(value, "?=") {
     if value.size < 11 { return .none }
     match utf8(value.bytes[9..value.size - 2]) {
@@ -177,7 +177,7 @@ fn header_text(value: str) -> Option[str] ! alloc {
 
 // The text of an error response. An id that could not be read is left out, as
 // the protocol writes it, where JSON-RPC writes `null`.
-fn failure_text(id: Option[str], code: Int, message: str, data: Option[str]) -> str ! alloc {
+fn failure_text(id: Option[str], code: Int, message: str, data: Option[str]) -> str <alloc> {
   a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\"")
   b = match id {
     .some(i) { texts.append(texts.append(a, ",\"id\":"), i) }
@@ -192,13 +192,13 @@ fn failure_text(id: Option[str], code: Int, message: str, data: Option[str]) -> 
   texts.finish(texts.append(e, "\}\}"))
 }
 
-fn success_text(id: str, result: str) -> str ! alloc {
+fn success_text(id: str, result: str) -> str <alloc> {
   a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\",\"id\":")
   b = texts.append(texts.append(a, id), ",\"result\":")
   texts.finish(texts.append(texts.append(b, result), "\}"))
 }
 
-fn refusal(id: Option[str], code: Int, message: str, data: Option[str], status: 100..600) -> Reply ! alloc {
+fn refusal(id: Option[str], code: Int, message: str, data: Option[str], status: 100..600) -> Reply <alloc> {
   Reply(text: .some(failure_text(id, code, message, data)), status: status)
 }
 
@@ -208,7 +208,7 @@ struct Unsupported {
 }
 
 // -32022, with the versions the server speaks, for a version it does not.
-fn unsupported(id: str, requested: str) -> Reply ! alloc {
+fn unsupported(id: str, requested: str) -> Reply <alloc> {
   data = to_json(Unsupported(supported: [spoken()], requested: requested))
   refusal(.some(id), -32022, "Unsupported protocol version", .some(data), 400)
 }
@@ -225,7 +225,7 @@ struct ResultMeta {
 }
 
 impl Serialize[ResultMeta] {
-  fn write[W: Writer](value: ResultMeta, to: take W) -> W ! alloc {
+  fn write[W: Writer](value: ResultMeta, to: take W) -> W <alloc> {
     var w = Writer.structure(to, "ResultMeta", 1)
     w = Writer.field(w, "io.modelcontextprotocol/serverInfo")
     w = Serialize.write(value.server_info, w)
@@ -240,7 +240,7 @@ struct Capabilities {
 // What the lines of the server imply: an object with a member for each kind of
 // offer, which is empty for a server that offers none.
 impl Serialize[Capabilities] {
-  fn write[W: Writer](value: Capabilities, to: take W) -> W ! alloc {
+  fn write[W: Writer](value: Capabilities, to: take W) -> W <alloc> {
     var count: Nat = 0
     if value.tools { count = 1 }
     var w = Writer.structure(to, "Capabilities", count)
@@ -264,7 +264,7 @@ struct Discovered {
 // The result of `server/discover`, with the members written as the protocol
 // names them, and `instructions` left out when there are none.
 impl Serialize[Discovered] {
-  fn write[W: Writer](value: Discovered, to: take W) -> W ! alloc {
+  fn write[W: Writer](value: Discovered, to: take W) -> W <alloc> {
     var count: Nat = 5
     match value.instructions {
       .some(s) { count = 6 }
@@ -294,7 +294,7 @@ impl Serialize[Discovered] {
   }
 }
 
-fn discovered(server: Server, tools: bool) -> str ! alloc {
+fn discovered(server: Server, tools: bool) -> str <alloc> {
   to_json(Discovered(
     supported_versions: [spoken()],
     capabilities: Capabilities(tools: tools),
@@ -325,7 +325,7 @@ struct Seen {
   members: List[(str, RawJson)]
 }
 
-fn seen_of(params: Option[RawJson]) -> Result[Seen, str] ! alloc {
+fn seen_of(params: Option[RawJson]) -> Result[Seen, str] <alloc> {
   match params {
     .none { Result.err("params has no `_meta`") }
     .some(p) {
@@ -368,7 +368,7 @@ fn seen_of(params: Option[RawJson]) -> Result[Seen, str] ! alloc {
 // What is wrong with the headers of a request that came over HTTP, as a code
 // and a sentence, or none when they hold to the message. A message with no
 // headers came by the standard input and has nothing to hold to.
-fn header_fault(headers: List[(str, str)], method: str, seen: Seen) -> Option[(Int, str)] ! alloc {
+fn header_fault(headers: List[(str, str)], method: str, seen: Seen) -> Option[(Int, str)] <alloc> {
   if headers.size == 0 { return .none }
   match header(headers, "mcp-protocol-version") {
     .none { return .some((-32020, "Header mismatch: the request has no `MCP-Protocol-Version` header")) }
@@ -395,7 +395,7 @@ fn header_fault(headers: List[(str, str)], method: str, seen: Seen) -> Option[(I
   .none
 }
 
-fn name_fault(headers: List[(str, str)], seen: Seen, key: str) -> Option[(Int, str)] ! alloc {
+fn name_fault(headers: List[(str, str)], seen: Seen, key: str) -> Option[(Int, str)] <alloc> {
   match member_text(seen.members, key) {
     .none { .some((-32602, "params has no text `{key}`")) }
     .some(want) {
@@ -415,7 +415,7 @@ fn name_fault(headers: List[(str, str)], seen: Seen, key: str) -> Option[(Int, s
 }
 
 // The version a client of the earlier protocol says it speaks in `initialize`.
-fn said_version(params: Option[RawJson]) -> str ! alloc {
+fn said_version(params: Option[RawJson]) -> str <alloc> {
   match params {
     .none { "" }
     .some(p) {
@@ -433,7 +433,7 @@ fn said_version(params: Option[RawJson]) -> str ! alloc {
   }
 }
 
-fn request_route(server: Server, incoming: Incoming, id: str, method: str, params: Option[RawJson]) -> Routed ! alloc {
+fn request_route(server: Server, incoming: Incoming, id: str, method: str, params: Option[RawJson]) -> Routed <alloc> {
   if method == "initialize" {
     return Routed.done(unsupported(id, said_version(params)))
   }
@@ -481,7 +481,7 @@ enum Routed {
   lines: Call
 }
 
-fn call_of(id: str, method: str, params: Option[RawJson]) -> Call ! alloc {
+fn call_of(id: str, method: str, params: Option[RawJson]) -> Call <alloc> {
   var name: Option[str] = .none
   var arguments = "\{\}"
   match params {
@@ -503,11 +503,11 @@ fn call_of(id: str, method: str, params: Option[RawJson]) -> Call ! alloc {
   Call(id: id, method: method, name: name, arguments: arguments)
 }
 
-fn meta_text(server: Server) -> str ! alloc {
+fn meta_text(server: Server) -> str <alloc> {
   to_json(ResultMeta(server_info: ServerInfo(name: server.name, version: server.version)))
 }
 
-fn list_text(server: Server, entries: List[str]) -> str ! alloc {
+fn list_text(server: Server, entries: List[str]) -> str <alloc> {
   var b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"tools\":[")
   loop i in 0..entries.size {
     if i > 0 { b = texts.append(b, ",") }
@@ -522,7 +522,7 @@ fn list_text(server: Server, entries: List[str]) -> str ! alloc {
 
 // The result of a call: what the tool gave, as text and as structured content,
 // marked as an error when it failed.
-fn call_text(server: Server, failed: bool, value: str) -> str ! alloc {
+fn call_text(server: Server, failed: bool, value: str) -> str <alloc> {
   var b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"content\":[\{\"type\":\"text\",\"text\":")
   b = texts.append(b, json_string(value))
   b = texts.append(b, "\}],\"structuredContent\":")
@@ -536,7 +536,7 @@ fn call_text(server: Server, failed: bool, value: str) -> str ! alloc {
 // What the server answers to a message of its lines, from what the lines gave:
 // whether any line asked, the entries of the tools, the result of the one tool
 // that was called, and the failure of reading its arguments.
-fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result: Option[str], failure: Option[(Int, str)]) -> Reply ! alloc {
+fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result: Option[str], failure: Option[(Int, str)]) -> Reply <alloc> {
   if call.method == "server/discover" {
     return Reply(text: .some(success_text(call.id, discovered(server, asked))), status: 200)
   }
@@ -568,7 +568,7 @@ fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result:
 
 // What the server answers to one message when no line answers it, so that it
 // offers nothing.
-pub fn reply_to(server: Server, incoming: Incoming) -> Reply ! alloc {
+pub fn reply_to(server: Server, incoming: Incoming) -> Reply <alloc> {
   match route(server, incoming) {
     .done(reply) { reply }
     .lines(call) { conclude(server, call, false, [], .none, .none) }
@@ -592,8 +592,8 @@ pub fn mcp(
   instructions: Option[str] = .none,
   ttl: Nat = 0,
   origins: take List[str] = [],
-  body: fn() ! lines, alloc
-) ! messages, alloc {
+  body: fn() <lines, alloc>
+) <messages, alloc> {
   server = Server(name: name, version: version, instructions: instructions, ttl: ttl, origins: origins)
   match route(server, message()) {
     .done(reply) { answer(reply) }
@@ -621,7 +621,7 @@ pub fn mcp(
 // lines of the server answer. A message of a page that the server does not list
 // is refused before it is read, and one that needs no answer, a notification, is
 // answered by none.
-fn route(server: Server, incoming: Incoming) -> Routed ! alloc {
+fn route(server: Server, incoming: Incoming) -> Routed <alloc> {
   if from_another_origin(server.origins, incoming.headers) {
     return Routed.done(Reply(text: .none, status: 403))
   }
@@ -651,14 +651,14 @@ fn route(server: Server, incoming: Incoming) -> Routed ! alloc {
 // What a tool gave, as the text of its value and whether it is a failure: a
 // tool gives a value, or a `Result` of one whose `.err` is a failure.
 trait Gave[R] {
-  fn gave(r: take R) -> (bool, str) ! alloc
+  fn gave(r: take R) -> (bool, str) <alloc>
 }
 
 impl[T] Gave[T]
   requires Serialize[T]
   requires Discard[T]
 {
-  fn gave(r: take T) -> (bool, str) ! alloc { (false, to_json(r)) }
+  fn gave(r: take T) -> (bool, str) <alloc> { (false, to_json(r)) }
 }
 
 impl[T, E] Gave[Result[T, E]]
@@ -667,7 +667,7 @@ impl[T, E] Gave[Result[T, E]]
   requires Discard[T]
   requires Discard[E]
 {
-  fn gave(r: take Result[T, E]) -> (bool, str) ! alloc {
+  fn gave(r: take Result[T, E]) -> (bool, str) <alloc> {
     match r {
       .ok(v) { (false, to_json(v)) }
       .err(e) { (true, to_json(e)) }
@@ -677,7 +677,7 @@ impl[T, E] Gave[Result[T, E]]
 
 // The entry of a tool in the list of the tools: its name, its comment, and the
 // schema of what it takes, with a description for each parameter.
-fn entry_of[F, A, R](f: F) -> str ! alloc
+fn entry_of[F, A, R](f: F) -> str <alloc>
   requires Function[F, A, R]
   requires Describe[A]
 {
@@ -694,7 +694,7 @@ fn entry_of[F, A, R](f: F) -> str ! alloc
 // The function `f` offered as a tool. It is listed when the message lists the
 // tools, and it is called, with its arguments read from the message, when the
 // message calls it by its name. For any other message it does nothing.
-pub fn tool[F, A, R](f: F) ! lines, alloc
+pub fn tool[F, A, R](f: F) <lines, alloc>
   requires Function[F, A, R]
   requires Deserialize[A]
   requires Discard[A]
@@ -726,7 +726,7 @@ pub fn tool[F, A, R](f: F) ! lines, alloc
 // the standard input is one message, the lines under `stdio` are run for each,
 // and each answer is written as one line of the standard output. What the lines
 // print goes to the standard error. It ends when the input does.
-pub fn stdio(body: fn() ! messages, console, alloc) ! console, alloc {
+pub fn stdio(body: fn() <messages, console, alloc>) <console, alloc> {
   loop round in 0..4294967296 {
     match input() {
       .none { break }

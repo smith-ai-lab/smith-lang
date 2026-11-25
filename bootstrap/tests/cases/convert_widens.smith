@@ -5,7 +5,7 @@ fn widen(small: Byte) -> u32 { convert(small) }
 
 fn sign(small: i8) -> Int { convert(small) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{widen(200)}")
   print("{sign(-5)}")
 }

@@ -10,7 +10,7 @@ enum Pet {
   none
 }
 
-fn say(text: str) ! console { print(text) }
+fn say(text: str) <console> { print(text) }
 
 fn name_of(a0: Cat) -> str { a0.name }
 
@@ -37,7 +37,7 @@ fn twice(body: fn()) {
 
 fn apply(text: str, f: fn(str) -> str) -> str { f(text) }
 
-fn main() ! console {
+fn main() <console> {
   var note = "a"
   say("")
   u15 = name_of(Cat(name: note))
@@ -66,7 +66,7 @@ fn main() ! console {
   print(note)
 }
 
-fn h0[T](p0: T, f0: fn() -> Cat, f1: fn(str) -> Cat) -> Pet ! console {
+fn h0[T](p0: T, f0: fn() -> Cat, f1: fn(str) -> Cat) -> Pet <console> {
   ()
   v1 = f0()
   v2 = f1(v1.name)
@@ -81,7 +81,7 @@ fn h0[T](p0: T, f0: fn() -> Cat, f1: fn(str) -> Cat) -> Pet ! console {
   Pet.none
 }
 
-fn h1[T](p0: T, f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str ! console {
+fn h1[T](p0: T, f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str <console> {
   v8 = match f0(Cat(name: "")) {
     .cat(c7) { f0(Cat(name: "")) }
     .none { f0(Cat(name: "")) }

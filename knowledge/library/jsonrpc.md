@@ -63,7 +63,7 @@ enum Received {
   many: List[Result[Message, Failure]]
 }
 
-fn read(text: str) -> Result[Received, Failure] ! alloc
+fn read(text: str) -> Result[Received, Failure] <alloc>
 ```
 
 `read` takes the text of one JSON value. An object is one message. An array is a batch, and each member is read on its own, so one bad member does not lose the rest.
@@ -71,7 +71,7 @@ fn read(text: str) -> Result[Received, Failure] ! alloc
 ```
 use std.jsonrpc (Message, Received, read)
 
-fn method_of(text: str) -> str ! alloc {
+fn method_of(text: str) -> str <alloc> {
   match read(text) {
     .ok(.one(.request(r))) { r.method }
     .ok(.one(.notification(n))) { n.method }
@@ -104,8 +104,8 @@ Where the standard is silent, `read` does this:
 ## Writing
 
 ```
-fn write(to: take Text, message: Message) -> Text ! alloc
-fn write_batch(to: take Text, messages: List[Message]) -> Text ! alloc
+fn write(to: take Text, message: Message) -> Text <alloc>
+fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc>
 ```
 
 `write` appends one message to a [`Text`](text.md), with `"jsonrpc":"2.0"` first, and `write_batch` appends several as one array. `write_batch` of no messages appends `[]`, which `read` refuses; what answers a batch sends nothing when it has nothing to say. For every message `m`, reading what `write` wrote gives `m`.
@@ -115,8 +115,8 @@ fn write_batch(to: take Text, messages: List[Message]) -> Text ! alloc
 ```
 fn parse_error() -> Failure
 fn invalid_request() -> Failure
-fn method_not_found(method: str) -> Failure ! alloc
-fn invalid_params(why: str) -> Failure ! alloc
+fn method_not_found(method: str) -> Failure <alloc>
+fn invalid_params(why: str) -> Failure <alloc>
 fn internal_error() -> Failure
 ```
 

@@ -38,7 +38,7 @@ fn outcome(source: &str) -> Outcome {
 
 /// The generic function that reads the arguments of a function from JSON and
 /// says them in each form a struct has, and calls the function with them.
-const RUN: &str = "fn run[F, A, R](f: F, text: str) -> str ! alloc\n  \
+const RUN: &str = "fn run[F, A, R](f: F, text: str) -> str <alloc>\n  \
     requires Function[F, A, R]\n  requires FromJson[A]\n  requires Serialize[A]\n  \
     requires Eq[A]\n  requires Repr[A]\n  requires Discard[A]\n{\n  \
     r: Result[A, ReadError] = from_json(text)\n  match r {\n    \
@@ -96,7 +96,7 @@ fn the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_i
             said += &format!("pick{n}.Args({}) {{{}}} true\n", shown.join(", "), written.join(","));
         }
         let source = format!(
-            "{USES}{functions}{RUN}fn main() ! console, alloc {{\n{}}}\n",
+            "{USES}{functions}{RUN}fn main() <console, alloc> {{\n{}}}\n",
             calls.concat()
         );
         assert_eq!(outcome(&source).stdout, said.into_bytes(), "for\n{source}");
@@ -109,9 +109,9 @@ fn the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_i
 fn a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has() {
     let program = |name: &str| {
         format!(
-            "{USES}fn pat((a, b): (str, str)) -> str ! alloc {{ \"{{a}}{{b}}\" }}\n\n\
+            "{USES}fn pat((a, b): (str, str)) -> str <alloc> {{ \"{{a}}{{b}}\" }}\n\n\
              fn spend(x: take str) -> str {{ x }}\n\n{RUN}\
-             fn main() ! console, alloc {{\n  print(run({name}, \"\\{{\\\"x\\\": \\\"v\\\"\\}}\"))\n}}\n"
+             fn main() <console, alloc> {{\n  print(run({name}, \"\\{{\\\"x\\\": \\\"v\\\"\\}}\"))\n}}\n"
         )
     };
     assert!(errors(&program("spend")).is_empty());
@@ -140,11 +140,11 @@ fn call_holds_the_function_once_and_no_copy_of_it() {
             );
         }
         source += &format!(
-            "fn run[F, A, R](f: F, text: str) -> Option[R] ! alloc\n  requires Function[F, A, R]\n  \
+            "fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  requires Function[F, A, R]\n  \
              requires FromJson[A]\n  requires Discard[A]\n{{\n  r: Result[A, ReadError] = from_json(text)\n  \
              match r {{\n    .ok(a) {{ Option.some(call{}(f, a)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
-             fn show(o: Option[Int]) -> str ! alloc {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
-             fn main() ! console, alloc {{\n  print(show(run(grow, \"\\{{\\\"a\\\": 3\\}}\")))\n}}\n",
+             fn show(o: Option[Int]) -> str <alloc> {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
+             fn main() <console, alloc> {{\n  print(show(run(grow, \"\\{{\\\"a\\\": 3\\}}\")))\n}}\n",
             through - 1
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));

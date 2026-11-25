@@ -17,7 +17,7 @@ built:
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hello world")
 }
 ```
@@ -37,7 +37,7 @@ This writes `hello` beside the command, as [Projects](projects.md) names it. `sm
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(1 +)
 }
 ```
@@ -62,7 +62,7 @@ use std.console (console, print)
 
 fn unused(x: i32) -> i32 { 1 }
 
-fn main() ! console {
+fn main() <console> {
   y = 3
   print("hi")
 }

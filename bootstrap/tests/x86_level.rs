@@ -9,7 +9,7 @@ pub const ONCE: &[Test] = &[(
     an_executable_checks_its_chip_for_the_level_it_is_built_for_on_x86_64_and_nowhere_else,
 )];
 
-const HELLO: &[u8] = b"use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &[u8] = b"use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 /// What the check's message says, which every one of them has.
 pub const LEVEL: &[u8] = b"x86-64-v3";

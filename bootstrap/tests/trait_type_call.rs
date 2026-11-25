@@ -83,7 +83,7 @@ impl Program {
                 "impl Tagged[S{k}] {{\n  fn tag(prefix: str) -> str {{ \"{said}\" }}\n}}\n\n"
             );
         }
-        text += "fn main() ! console {\n";
+        text += "fn main() <console> {\n";
         for k in &self.asked {
             text += &format!("  print(Tagged[S{k}].tag(\"p\"))\n");
         }
@@ -119,7 +119,7 @@ fn a_function_that_names_no_type_of_its_trait_is_refused_without_the_type_writte
              struct Cat {{\n  x: str\n}}\n\n\
              trait Tagged[T] {{\n  fn tag(prefix: str) -> str\n}}\n\n\
              impl Tagged[Cat] {{\n  fn tag(prefix: str) -> str {{ \"cat\" }}\n}}\n\n\
-             fn main() ! console {{\n  print({call})\n}}\n"
+             fn main() <console> {{\n  print({call})\n}}\n"
         )
     };
     assert!(errors(&source("Tagged[Cat].tag(\"p\")")).is_empty());
@@ -143,7 +143,7 @@ fn a_type_written_with_no_impl_or_the_wrong_number_of_types_is_one_error() {
              struct Cat {{\n  x: str\n}}\n\nstruct Dog {{\n  x: str\n}}\n\n\
              trait Tagged[T] {{\n  fn tag(prefix: str) -> str\n}}\n\n\
              impl Tagged[Cat] {{\n  fn tag(prefix: str) -> str {{ \"cat\" }}\n}}\n\n\
-             fn main() ! console {{\n  print({call})\n}}\n"
+             fn main() <console> {{\n  print({call})\n}}\n"
         )
     };
     let none = errors(&source("Tagged[Dog].tag(\"p\")"));
@@ -165,14 +165,14 @@ fn a_type_parameter_written_after_the_trait_runs_the_impl_of_the_type_it_stands_
     generate::check(7932, 30, program, |p| {
         let mut source = p.source();
         source = source.replace(
-            "fn main() ! console {\n",
-            "fn tagged[T: Tagged](x: T) -> str {\n  Tagged[T].tag(\"p\")\n}\n\nfn main() ! console {\n",
+            "fn main() <console> {\n",
+            "fn tagged[T: Tagged](x: T) -> str {\n  Tagged[T].tag(\"p\")\n}\n\nfn main() <console> {\n",
         );
         // Ask by a value of each type instead of by the written type.
         let mut said = String::new();
         let main = source.find("fn main()").expect("main");
         source.truncate(main);
-        source += "fn main() ! console {\n";
+        source += "fn main() <console> {\n";
         for k in &p.asked {
             source += &format!("  print(tagged(S{k}(x: \"a\")))\n");
             said += &format!("{}\n", p.says[*k]);
@@ -201,7 +201,7 @@ fn a_tuple_or_unit_type_written_after_the_trait_is_one_type() {
          impl Tagged[()] {\n  fn tag(prefix: str) -> str { \"unit\" }\n}\n\n\
          impl Tagged[(Int, str)] {\n  fn tag(prefix: str) -> str { \"pair\" }\n}\n\n\
          impl Tagged[Option[(Int, str)]] {\n  fn tag(prefix: str) -> str { \"maybe\" }\n}\n\n\
-         fn main() ! console {\n  print(Tagged[()].tag(\"p\"))\n  print(Tagged[(Int, str)].tag(\"p\"))\n  print(Tagged[Option[(Int, str)]].tag(\"p\"))\n}\n";
+         fn main() <console> {\n  print(Tagged[()].tag(\"p\"))\n  print(Tagged[(Int, str)].tag(\"p\"))\n  print(Tagged[Option[(Int, str)]].tag(\"p\"))\n}\n";
     let found = errors(source);
     assert!(found.is_empty(), "{found:?}");
     assert_eq!(outcome(source).stdout, b"unit\npair\nmaybe\n");

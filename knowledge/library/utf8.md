@@ -11,7 +11,7 @@ The module `std.utf8` holds `decode` and `encode`, which turn between one charac
 
 ```
 fn decode(bytes: List[Byte], at: Nat) -> Option[(u32, Nat)]
-fn encode(code: u32) -> Option[str] ! alloc
+fn encode(code: u32) -> Option[str] <alloc>
 ```
 
 ## Reading a character
@@ -43,7 +43,7 @@ fn demo() {
 ```
 use std.utf8 (encode)
 
-fn demo() ! alloc {
+fn demo() <alloc> {
   encode(97)
   encode(233)
   encode(55296)

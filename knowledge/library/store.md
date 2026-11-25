@@ -20,11 +20,11 @@ struct User {
   visits: Nat
 }
 
-fn remember(id: str, user: User) -> Result[(), StoreError] ! store, alloc {
+fn remember(id: str, user: User) -> Result[(), StoreError] <store, alloc> {
   save(id, user)
 }
 
-fn recall(id: str) -> Result[Option[User], StoreError] ! store, alloc {
+fn recall(id: str) -> Result[Option[User], StoreError] <store, alloc> {
   load(id)
 }
 ```
@@ -32,8 +32,8 @@ fn recall(id: str) -> Result[Option[User], StoreError] ! store, alloc {
 After `remember("user/7", User(name: "Ada", visits: 3))`, `recall("user/7")` is `.ok(.some(User(name: "Ada", visits: 3)))`, in this run of the program and in the next. `recall("user/8")` is `.ok(.none)`, as nothing was kept under that key.
 
 ```
-fn save[T: Serialize](key: str, value: T) -> Result[(), StoreError] ! store, alloc
-fn load[T: Deserialize](key: str) -> Result[Option[T], StoreError] ! store, alloc
+fn save[T: Serialize](key: str, value: T) -> Result[(), StoreError] <store, alloc>
+fn load[T: Deserialize](key: str) -> Result[Option[T], StoreError] <store, alloc>
 ```
 
 Both are written in Smith with the operations below. `save` keeps the bytes of [`to_json`](json.md) of the value, and `load` reads them with `from_json` as the type the place of its result needs. So what is kept is in one format that the program chose, whatever answers the effect, and a value kept under one deployment is read under another.
@@ -83,7 +83,7 @@ Whatever answers `store` keeps two promises, and one that cannot is not allowed 
 use std.int (clamp)
 use std.store (StoreError, load, save, store, together)
 
-fn move_points(from: str, to: str, n: Nat) -> Result[(), StoreError] ! store, alloc {
+fn move_points(from: str, to: str, n: Nat) -> Result[(), StoreError] <store, alloc> {
   with together()
   a: Option[Nat] = try load(from)
   b: Option[Nat] = try load(to)
@@ -106,7 +106,7 @@ fn move_points(from: str, to: str, n: Nat) -> Result[(), StoreError] ! store, al
 Either both accounts change or neither does. When the block gives `.ok`, both writes are kept. When it gives `.err`, at the first `try` or at its end, nothing it wrote is kept. No reader, in this program or another, ever sees one write without the other.
 
 ```
-fn together[T](body: fn() -> Result[T, StoreError] ! store) -> Result[T, StoreError] ! store
+fn together[T](body: fn() -> Result[T, StoreError] <store>) -> Result[T, StoreError] <store>
 ```
 
 - A read inside the block sees what the block has written.

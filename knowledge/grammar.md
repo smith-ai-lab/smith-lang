@@ -16,7 +16,7 @@ This grammar is the single source of truth for syntax. It is a first draft, and 
 
 - Source text is UTF-8. Spaces and tabs separate tokens, and a line break is a line feed. A carriage return is an error anywhere in a file, inside a string or a comment too. Any other character that belongs to no token, string, or comment is an error.
 - A newline ends a statement, except inside `( )` or `[ ]`, after an operator or comma, or before `|>`, `requires`, `ensures`, `decreases`, and the `{` that opens a function's body, or that opens an `impl`'s after a `requires`. A block inside `( )` or `[ ]` separates its own statements by newlines as usual.
-- Commas appear only inside `( )` and `[ ]`, in a list of effects, and between the indices of a `for`.
+- Commas appear only inside `( )` and `[ ]`, in a list of effects in `< >`, and between the indices of a `for`.
 - An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword. The letters are `a` to `z` and `A` to `Z`.
 - The keywords are `and`, `as`, `break`, `decreases`, `derive`, `effect`, `else`, `ensures`, `enum`, `fn`, `for`, `foreign`, `if`, `impl`, `in`, `loop`, `match`, `not`, `or`, `out`, `pub`, `requires`, `return`, `struct`, `take`, `trait`, `try`, `use`, `var`, `with`, and `without`.
 - A comment starts with `//`, stands on its own line, and attaches to the definition, parameter, field, case, or statement that follows it.
@@ -69,7 +69,7 @@ params     = param { "," param } [ "," ] ;
 param      = ( IDENT | tuple_pat ) ":" [ "take" ] type [ "=" expr ] ;
 tuple_pat  = "(" bind_pat { "," bind_pat } ")" ;
 bind_pat   = IDENT | "var" IDENT | tuple_pat ;
-effects    = "!" IDENT { "," IDENT } ;
+effects    = "<" IDENT { "," IDENT } [ "," ] ">" ;
 contract   = ( "requires" | "ensures" ) expr | "decreases" expr { "," expr } ;
 
 struct_def = "struct" IDENT [ generics ] "{" { [ "pub" ] IDENT ":" type [ "=" expr ] } "}" ;
@@ -136,6 +136,7 @@ type_arg   = type | expr ;
 - **A string that is a pattern holds no expression.** A literal is a pattern only in a `match`.
 - **No name lookup.** Parsing never needs to know what a name refers to, so definitions parse independently and in parallel. `x = e` with a bare name is one form to the parser, and the checker decides whether it defines `x` or assigns to a `var`.
 - **One token of lookahead,** with one exception: a statement that starts like a tuple is read as an expression and converted to a pattern when `=` follows. This is still linear time.
+- **A `<` after a parameter list or a result opens effects,** since no comparison can stand there, and a comma inside the effects never ends a parameter or a type argument. A function type, as `fn() <console>`, so ends at its `>`, and a parameter, a `,` or `]`, or a `{` can follow it, with one token of lookahead.
 - **A statement in a type position is a comparison,** such as `value < n`, where `CMP` is one of the comparison operators. It is the type of its proofs.
 - **A bound of a range type is a whole number or a name,** as `0..256` or `0..n`, and `a..b` is a type only where a type is expected, as it is an expression elsewhere.
 - **`f[n](x)` and `a[i]` are the same postfix form,** and the brackets may hold several expressions separated by commas. The type checker tells a type argument from an index. A `requires` that names a trait, as `requires Convert[A, B]`, is that form too, and the checker tells it from a statement about values.

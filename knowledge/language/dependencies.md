@@ -66,7 +66,7 @@ fn announce() {
 }
 ```
 
-`config` is pure because `parse` has no effects. `announce` is refused if `shout` is `fn shout(text: str) ! console`, since `announce` does not declare `console`: "`shout` needs the `console` effect, which `announce` does not declare".
+`config` is pure because `parse` has no effects. `announce` is refused if `shout` is `fn shout(text: str) <console>`, since `announce` does not declare `console`: "`shout` needs the `console` effect, which `announce` does not declare".
 
 ## Nothing runs on its own
 
@@ -76,7 +76,7 @@ Nothing runs because a dependency is present. Its code runs only when the projec
 use std.console (console, print)
 use vendor.toml.parse (parse)
 
-fn main() ! console {
+fn main() <console> {
   print("hello")
 }
 ```

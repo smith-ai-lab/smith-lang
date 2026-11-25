@@ -41,12 +41,12 @@ A function that runs its lambda between two things of its own shows the order. `
 ```
 use std.console (console, print)
 
-fn wrap(body: fn()) ! console {
+fn wrap(body: fn()) <console> {
   body()
   print("after")
 }
 
-fn main() ! console {
+fn main() <console> {
   print("before")
   with wrap()
   print("in")
@@ -61,7 +61,7 @@ When nothing follows the `with`, the lambda has no lines. The `main` below print
 ```
 use std.console (console)
 
-fn main() ! console {
+fn main() <console> {
   with wrap()
 }
 ```
@@ -71,7 +71,7 @@ Two `with`s nest, the second inside the lambda of the first, so the lines under 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   with wrap()
   with wrap()
   print("in")
@@ -85,7 +85,7 @@ When the function gives its lambda a value, `with x = f(args)` names it. It mean
 ```
 fn lend(name: str, body: fn(str) -> str) -> str { body(name) }
 
-fn greeting() -> str ! alloc {
+fn greeting() -> str <alloc> {
   with who = lend("Ana")
   "hello {who}"
 }

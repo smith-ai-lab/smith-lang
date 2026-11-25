@@ -25,7 +25,7 @@ Every whole number is a range: the whole numbers from one number up to but not i
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   small: 0..256 = 200
   low: -5..6 = -3
   print("{small} {low}")
@@ -207,7 +207,7 @@ fn half(n: Int) -> f64 { float(n) / 2.0 }
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x: 0..256 = 200
   y: -5..6 = 3
   print("{x == 200} {x < y} {x != y}")

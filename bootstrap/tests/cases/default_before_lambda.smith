@@ -2,7 +2,7 @@ use std.console (console, print)
 
 fn repeat(word: str = "again", body: fn(str) -> str) -> str { body(word) }
 
-fn main() ! console {
+fn main() <console> {
   print(repeat fn(w) { w })
   print(repeat("once") fn(w) { w })
 }

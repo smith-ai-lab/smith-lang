@@ -4,12 +4,12 @@ title: Handlers
 description: A handler, a function that runs a lambda with an effect handled, how it is written with the effect's name, what it keeps, and what it may do.
 status: partial
 built:
-  - "a function with a parameter `body: fn() -> T ! e` runs it with `e` handled by calling the effect's name with a lambda for each operation, named as the operation is, and the body, and the body a lambda or a name is given may carry `e` while the function that gives it does not"
+  - "a function with a parameter `body: fn() -> T <e>` runs it with `e` handled by calling the effect's name with a lambda for each operation, named as the operation is, and the body, and the body a lambda or a name is given may carry `e` while the function that gives it does not"
   - "a call of an operation runs the lambda that the handler in force gives for it, with the arguments it is called with and the defaults it leaves out, under the handlers that were in force outside that handler, and the executable holds no trace of the handler: the call is the lambda lowered in place"
   - "a function that carries a handled effect and takes no function, as `report` does, runs under the handlers it is called under: the handler in force where it is called answers it, it is built once for each handler it runs under, found by where the handler is installed, and it is given what the functions of those handlers use, so `at_one()` is `1` and `at_two()` is `2` from one copy of `report`"
   - "a handler inside a handler, whose function asks the effect again, is answered by the handler outside it, for a function that carries the effect as well as for the code under `with`"
   - "a handler keeps its state in a `var` that its function assigns, as `fake_clock` does: the code under `with`, a function that carries the effect and runs under the handler, the functions that one calls, and a `loop` that asks, all count on the one state, and `two_readings` is `(1, 2)`"
-  - "`fake_clock`, `two_readings`, `doubled_clock`, and `doubled` of this page run today with `wrapping_add` and `wrapping_mul` written where the page writes `clamp`, which is not built, and `doubled()` is `84`; `loud_clock` runs as written, prints `asked`, and without `! console` is refused with the error the page gives, whose fix keeps the effects of the parameters"
+  - "`fake_clock`, `two_readings`, `doubled_clock`, and `doubled` of this page run today with `wrapping_add` and `wrapping_mul` written where the page writes `clamp`, which is not built, and `doubled()` is `84`; `loud_clock` runs as written, prints `asked`, and without `<console>` is refused with the error the page gives, whose fix keeps the effects of the parameters"
   - "a `return` in a function that carries the effect and runs under a handler whose functions assign a name is refused as not built yet"
   - "a lambda given to a task is lowered as a function of its own, built for the handlers in force where it is written, with the names it reads, and what a handler that holds no state reads, kept in its frame; one under a handler that holds state is given that state through each poll"
   - "an effect that the target answers, as `console` is, is handled by the same mechanism: a handler of it answers the operations where it is in force, and the target answers them where none is"
@@ -23,7 +23,7 @@ A handler is a function that runs a lambda with an effect handled, and it is ins
 ```
 use std.bits (u64)
 
-fn fixed_clock[T](body: fn() -> T ! time) -> T {
+fn fixed_clock[T](body: fn() -> T <time>) -> T {
   time(now: { 42 }, body: body)
 }
 
@@ -40,11 +40,11 @@ fn reading() -> u64 {
 A function that runs under a handler does not carry the effect the handler handles. `read_all` is shown by its signature alone, and `memory_fs` handles `fs` with an in-memory file system, so `fixture_config` does not carry `fs`.
 
 ```
-fn read_all(path: str) -> Result[List[Byte], FsError] ! fs, alloc
+fn read_all(path: str) -> Result[List[Byte], FsError] <fs, alloc>
 
-fn memory_fs[T](files: Files, body: fn() -> T ! fs) -> T
+fn memory_fs[T](files: Files, body: fn() -> T <fs>) -> T
 
-fn fixture_config() -> Result[Config, FsError] ! alloc {
+fn fixture_config() -> Result[Config, FsError] <alloc> {
   with memory_fs(fixtures)
   bytes = try read_all("model.toml")
   parse_config(bytes)
@@ -61,7 +61,7 @@ A handler is an ordinary function. This one is a clock for tests, which reads on
 use std.bits (u64)
 use std.int (clamp)
 
-fn fake_clock[T](body: fn() -> T ! time) -> T {
+fn fake_clock[T](body: fn() -> T <time>) -> T {
   var ticks: u64 = 0
   time(
     now: {
@@ -91,7 +91,7 @@ The lambda of an operation runs under the handlers outside its own. A handler wh
 use std.bits (u64)
 use std.int (clamp)
 
-fn doubled_clock[T](body: fn() -> T ! time) -> T ! time {
+fn doubled_clock[T](body: fn() -> T <time>) -> T <time> {
   time(now: { clamp(now() * 2) }, body: body)
 }
 
@@ -109,7 +109,7 @@ A handler whose operations print must sit in a function that carries `console`, 
 ```
 use std.console (console, print)
 
-fn loud_clock[T](body: fn() -> T ! time) -> T ! console {
+fn loud_clock[T](body: fn() -> T <time>) -> T <console> {
   time(
     now: {
       print("asked")
@@ -119,13 +119,13 @@ fn loud_clock[T](body: fn() -> T ! time) -> T ! console {
   )
 }
 
-fn main() ! console {
+fn main() <console> {
   with loud_clock()
   now()
 }
 ```
 
-`main` carries `console` for the `print` that `loud_clock` does, and the code after `with` needs only `time`. Without `! console` on `loud_clock` it is refused: "`print` needs the `console` effect, which `loud_clock` does not declare".
+`main` carries `console` for the `print` that `loud_clock` does, and the code after `with` needs only `time`. Without `<console>` on `loud_clock` it is refused: "`print` needs the `console` effect, which `loud_clock` does not declare".
 
 ## What a handler's lambda takes
 
@@ -144,7 +144,7 @@ effect gate {
   fn pass(t: take Token)
 }
 
-fn closed[T](body: fn() -> T ! gate) -> T {
+fn closed[T](body: fn() -> T <gate>) -> T {
   gate(pass: fn(t) { }, body: body)
 }
 ```
@@ -158,11 +158,11 @@ The handler in force at every call is known when the program is built, because `
 ```
 use std.bits (u64)
 
-fn fixed[T](tick: u64, body: fn() -> T ! time) -> T {
+fn fixed[T](tick: u64, body: fn() -> T <time>) -> T {
   time(now: { tick }, body: body)
 }
 
-fn report() -> u64 ! time { now() }
+fn report() -> u64 <time> { now() }
 
 fn at_one() -> u64 {
   with fixed(1)
@@ -183,10 +183,10 @@ A lambda that is given to a task is kept in the task's frame until its group end
 
 | Written | Means |
 | --- | --- |
-| `fn h[T](body: fn() -> T ! e) -> T` | A handler of `e`: it runs `body` with `e` handled |
+| `fn h[T](body: fn() -> T <e>) -> T` | A handler of `e`: it runs `body` with `e` handled |
 | `e(op: { ... }, body: body)` | Inside a handler, the operation `op` is that lambda |
 | `with h()` then lines | The lines run under `h`, so they do not carry `e` |
 | `var` in a handler | The handler's state, assigned by its lambdas |
-| `fn h[T](body: fn() -> T ! e) -> T ! f` | A handler whose lambdas use `f`, which its caller must have |
+| `fn h[T](body: fn() -> T <e>) -> T <f>` | A handler whose lambdas use `f`, which its caller must have |
 
 Next: [The effects Smith provides](provided-effects.md)

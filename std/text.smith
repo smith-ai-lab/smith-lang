@@ -8,11 +8,11 @@ pub fn text() -> Text {
   Text(bytes: [])
 }
 
-pub fn append(t: take Text, s: str) -> Text ! alloc {
+pub fn append(t: take Text, s: str) -> Text <alloc> {
   Text(bytes: __append(t.bytes, s))
 }
 
-pub fn append_ascii(t: take Text, b: 0..128) -> Text ! alloc {
+pub fn append_ascii(t: take Text, b: 0..128) -> Text <alloc> {
   Text(bytes: push(t.bytes, b))
 }
 

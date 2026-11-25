@@ -43,7 +43,7 @@ struct List[T] {
 - A pattern in brackets matches a list of exactly that many elements, as [Patterns in brackets](../language/array-patterns.md) says, which is how a program reads its arguments:
 
   ```
-  fn main(args: List[str]) -> Result[(), CliError] ! console, fs, alloc {
+  fn main(args: List[str]) -> Result[(), CliError] <console, fs, alloc> {
     match args {
       [] { usage() }
       ["build", path] { build(path) }
@@ -55,13 +55,13 @@ struct List[T] {
 - `push` takes a list and gives it back with one more element. When the list has room it is written in place, wherever it is held, and otherwise its elements are copied into memory with room for twice as many, or for one when there are none. The memory of a list holds its elements and nothing else.
 
 ```
-fn push[T](list: take List[T], item: take T) -> List[T] ! alloc
+fn push[T](list: take List[T], item: take T) -> List[T] <alloc>
 ```
 
 A list is what a program builds, and [`freeze`](slice.md), a function of `std.list` as `push` and `copy` are, turns one that is done into a `Slice`, which is shared freely. A list is never copied unless `copy` is written: `push` takes the list it is given, and a list used after it is given away is refused, as [Ownership](../language/ownership.md#a-list-is-never-copied-unasked) says.
 
 ```
-fn copy[T: Copy](list: List[T]) -> List[T] ! alloc
+fn copy[T: Copy](list: List[T]) -> List[T] <alloc>
 ```
 
 `copy(xs)` gives a new list of the same elements, which `xs` lends and `push` to either does not change in the other. It needs `T: Copy`, so a list of lists is copied by copying each list in it.

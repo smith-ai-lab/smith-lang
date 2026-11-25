@@ -75,14 +75,14 @@ fn whole_bits(v: Value) -> Result[Slice[Byte], str] {
 
 // The parts of a sequence, which there must be at least `least` of and at most
 // `most`.
-fn parts(v: Value, least: Nat, most: Nat) -> Result[List[Value], str] ! alloc {
+fn parts(v: Value, least: Nat, most: Nat) -> Result[List[Value], str] <alloc> {
   if not is_sequence(v) { return .err("a value that is not a sequence") }
   xs = try children(v)
   if xs.size < least or xs.size > most { return .err("a sequence of the wrong number of parts") }
   .ok(xs)
 }
 
-fn algorithm_of(v: Value) -> Result[List[Nat], str] ! alloc {
+fn algorithm_of(v: Value) -> Result[List[Nat], str] <alloc> {
   xs = try parts(v, 1, 2)
   if xs.size == 0 { return .err("an algorithm with no identifier") }
   object(xs[0])
@@ -208,7 +208,7 @@ fn is_id_ce(arcs: List[Nat], n: Nat) -> bool {
   arcs.size == 4 and arcs[0] == 2 and arcs[1] == 5 and arcs[2] == 29 and arcs[3] == n
 }
 
-fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] ! alloc {
+fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> {
   var found = names
   xs = try children(v)
   if xs.size == 0 { return .err("a subject alternative name of no names") }
@@ -226,7 +226,7 @@ fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] ! alloc 
 }
 
 // What an extension that says whether a certificate may sign others holds.
-fn basic_constraints(v: Value) -> Result[(bool, Option[Nat]), str] ! alloc {
+fn basic_constraints(v: Value) -> Result[(bool, Option[Nat]), str] <alloc> {
   xs = try children(v)
   if xs.size > 2 { return .err("basic constraints of more than two parts") }
   var authority = false
@@ -260,7 +260,7 @@ struct Found {
 }
 
 // The extensions, which are the parts of a sequence of them.
-fn extensions(list: Value) -> Result[Found, str] ! alloc {
+fn extensions(list: Value) -> Result[Found, str] <alloc> {
   xs = try parts(list, 1, 1000000)
   var names: List[str] = []
   var authority: Option[bool] = .none
@@ -301,13 +301,13 @@ fn extensions(list: Value) -> Result[Found, str] ! alloc {
 }
 
 // The two times of a validity.
-fn validity(v: Value) -> Result[(u64, u64), str] ! alloc {
+fn validity(v: Value) -> Result[(u64, u64), str] <alloc> {
   xs = try parts(v, 2, 2)
   if xs.size < 2 { return .err("a validity of too few parts") }
   .ok((try seconds(xs[0]), try seconds(xs[1])))
 }
 
-pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] ! alloc {
+pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {
   (outer, whole_outer, after) = try next_value(bytes)
   if after.size > 0 { return .err("bytes left after the certificate") }
   if not is_sequence(outer) { return .err("a certificate that is not a sequence") }
@@ -429,7 +429,7 @@ fn started(input: str, from: Nat, end: Nat) -> begin: Nat
   end
 }
 
-fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str] ! alloc {
+fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str] <alloc> {
   var s = state
   if to > input.size or from > to { return .err("a line that is not in the text") }
   end = trimmed(input, from, to)
@@ -481,7 +481,7 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
   .ok(s)
 }
 
-pub fn pem(input: str) -> Result[List[List[Byte]], str] ! alloc {
+pub fn pem(input: str) -> Result[List[List[Byte]], str] <alloc> {
   var s = Pem(found: [], body: new_text(), at: .outside)
   var from: Nat = 0
   var i: Nat = 0

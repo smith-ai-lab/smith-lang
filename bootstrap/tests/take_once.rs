@@ -111,7 +111,7 @@ enum Dir {
 
 fn look[T](x: T) -> u64 { 1 }
 
-fn sink[T](x: take T) ! diverge {
+fn sink[T](x: take T) <diverge> {
   loop {
     n = 1
   }
@@ -682,9 +682,9 @@ fn write_items(
 fn write(c: &Case) -> Written {
     let ty = c.shape.ty(c.held);
     let effect = if c.shape == Shape::List {
-        " ! alloc, diverge"
+        " <alloc, diverge>"
     } else {
-        " ! diverge"
+        " <diverge>"
     };
     let mut w = Written {
         source: String::new(),
@@ -694,7 +694,7 @@ fn write(c: &Case) -> Written {
         lambdas: Vec::new(),
         names: Vec::new(),
     };
-    let alloc = if c.shape == Shape::List { " ! alloc" } else { "" };
+    let alloc = if c.shape == Shape::List { " <alloc>" } else { "" };
     let mut out = format!(
         "{TYPES}fn mk() -> {ty}{alloc} {{ {} }}\n\nfn f(",
         c.shape.make(c.held)
@@ -823,18 +823,18 @@ fn debit(t: Transaction, amount: u64) -> u64 { amount }
 
 fn prepare(db: Db) -> Result[(), DbError] { .ok(()) }
 
-fn end[T](x: take T) ! diverge {
+fn end[T](x: take T) <diverge> {
   loop {
     n = 1
   }
 }
 
-fn commit(t: take Transaction) -> Result[(), DbError] ! diverge {
+fn commit(t: take Transaction) -> Result[(), DbError] <diverge> {
   end(t)
   .ok(())
 }
 
-fn rollback(t: take Transaction) -> Result[(), DbError] ! diverge {
+fn rollback(t: take Transaction) -> Result[(), DbError] <diverge> {
   end(t)
   .ok(())
 }
@@ -842,15 +842,15 @@ fn rollback(t: take Transaction) -> Result[(), DbError] ! diverge {
 ";
 
 fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
-    let program = |body: &str| format!("{PAGE}{body}\n\nfn main() ! diverge {{\n  r = run(Db(n: 1), true)\n}}\n");
+    let program = |body: &str| format!("{PAGE}{body}\n\nfn main() <diverge> {{\n  r = run(Db(n: 1), true)\n}}\n");
     // Each accepted example, and each refused one with where it is refused.
     let accepted = [
-        "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+        "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   debit(t, 100)
   commit(t)
 }",
-        "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+        "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   if ok { commit(t) } else { rollback(t) }
 }",
@@ -861,7 +861,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
     }
     let refused = [
         (
-            "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+            "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   debit(t, 100)
   .ok(())
@@ -870,7 +870,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
             "nothing takes it",
         ),
         (
-            "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+            "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   try commit(t)
   commit(t)
@@ -879,7 +879,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
             "after it was given away",
         ),
         (
-            "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+            "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   if ok { commit(t) } else { .ok(()) }
 }",
@@ -887,7 +887,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
             "nothing takes it",
         ),
         (
-            "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+            "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   try prepare(db)
   commit(t)
@@ -896,7 +896,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
             "nothing takes it",
         ),
         (
-            "fn run(db: Db, ok: bool) -> Result[(), DbError] ! diverge {
+            "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   var t = begin(db)
   debit(t, 100)
   t = begin(db)
@@ -925,10 +925,10 @@ fn a_lambda_that_takes_a_value_without_discard_is_refused_where_it_may_not_run()
         let head = format!(
             "{TYPES}fn maybe[T](c: bool, f: {takes}fn() -> T) -> u64 {{ 1 }}
 
-fn run(r: take Res) -> u64 ! diverge {{
+fn run(r: take Res) -> u64 <diverge> {{
   maybe(true) "
         );
-        let source = format!("{head}{{ r }}\n}}\n\nfn main() ! diverge {{\n  n = run(Res(n: 1))\n}}\n");
+        let source = format!("{head}{{ r }}\n}}\n\nfn main() <diverge> {{\n  n = run(Res(n: 1))\n}}\n");
         let found = errors(&source);
         assert_eq!(found.len() == 1, errors_at_lambda, "{found:?}\n{source}");
         assert_eq!(found[0].pos, pos_after(&head), "{source}");
@@ -964,7 +964,7 @@ fn begin() -> Tx { Tx(id: 1) }
 
 fn peek(t: Tx) -> bool { true }
 
-fn commit(t: take Tx) ! diverge {
+fn commit(t: take Tx) <diverge> {
   loop {
     n = 1
   }
@@ -979,7 +979,7 @@ fn mk[T](x: take T) -> T { x }
 /// The errors of a function `run` that `main` calls, and the program.
 fn probe(body: &str) -> (Vec<Error>, String) {
     let source = format!(
-        "{PARTS}fn run(c: bool) ! diverge {{\n{body}}}\n\nfn main() ! diverge {{\n  run(true)\n}}\n"
+        "{PARTS}fn run(c: bool) <diverge> {{\n{body}}}\n\nfn main() <diverge> {{\n  run(true)\n}}\n"
     );
     (errors(&source), source)
 }
@@ -1059,7 +1059,7 @@ fn a_chain_of_vars_that_a_loop_moves_a_value_along_is_read_until_it_settles() {
                 body.push_str(&fresh);
                 body.push_str(&moves.collect::<String>());
             }
-            let mut source = format!("{PARTS}fn mk2() -> Tx {{ begin() }}\n\nfn run(c: bool) ! diverge {{\n");
+            let mut source = format!("{PARTS}fn mk2() -> Tx {{ begin() }}\n\nfn run(c: bool) <diverge> {{\n");
             for v in &names {
                 source.push_str(&format!("  var {v} = mk2()\n"));
             }
@@ -1067,7 +1067,7 @@ fn a_chain_of_vars_that_a_loop_moves_a_value_along_is_read_until_it_settles() {
             for v in &names {
                 source.push_str(&format!("  commit({v})\n"));
             }
-            source.push_str("}\n\nfn main() ! diverge {\n  run(true)\n}\n");
+            source.push_str("}\n\nfn main() <diverge> {\n  run(true)\n}\n");
             let found = errors(&source);
             let wanted = if forward { 2 * n - 2 } else { 2 * n };
             assert_eq!(found.len(), wanted, "{found:?}\n{source}");
@@ -1277,7 +1277,7 @@ fn feed_take(x: take {ty}, f: take fn(take {ty}) -> {ty}) -> {ty} {{ f(x) }}
 
 fn feed_lend(x: take {ty}, f: fn(take {ty}) -> {ty}) -> {ty} {{ f(x) }}
 
-fn run(c: bool, d: Dir) ! diverge {{
+fn run(c: bool, d: Dir) <diverge> {{
   m = {}(mk()) fn(",
             c.shape.make(c.held),
             if c.kept { "feed_take" } else { "feed_lend" }
@@ -1299,7 +1299,7 @@ fn run(c: bool, d: Dir) ! diverge {{
                 reach.dropped = true;
             }
         }
-        out.push_str("  }\n  sink(m)\n}\n\nfn main() ! diverge {\n  run(true, Dir.north)\n}\n");
+        out.push_str("  }\n  sink(m)\n}\n\nfn main() <diverge> {\n  run(true, Dir.north)\n}\n");
         let found = errors(&out);
         let wanted = reach.dropped && c.held == Held::Res;
         let got: Vec<Pos> = found.iter().map(|e| e.pos).collect();

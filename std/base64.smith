@@ -19,13 +19,13 @@ fn character(v: Byte, url: bool) -> 0..128
   }
 }
 
-fn put(t: take Text, v: Byte, url: bool) -> Text ! alloc
+fn put(t: take Text, v: Byte, url: bool) -> Text <alloc>
   requires v < 64
 {
   append_ascii(t, character(v, url))
 }
 
-fn spell(bytes: Slice[Byte], url: bool) -> str ! alloc {
+fn spell(bytes: Slice[Byte], url: bool) -> str <alloc> {
   var built = text()
   var state: Byte = 0
   var rest: Byte = 0
@@ -55,11 +55,11 @@ fn spell(bytes: Slice[Byte], url: bool) -> str ! alloc {
   finish(built)
 }
 
-pub fn encode(bytes: Slice[Byte]) -> str ! alloc {
+pub fn encode(bytes: Slice[Byte]) -> str <alloc> {
   spell(bytes, false)
 }
 
-pub fn encode_url(bytes: Slice[Byte]) -> str ! alloc {
+pub fn encode_url(bytes: Slice[Byte]) -> str <alloc> {
   spell(bytes, true)
 }
 
@@ -82,7 +82,7 @@ fn value(c: Byte, url: bool) -> Option[0..64] {
   }
 }
 
-fn unspell(s: str, url: bool) -> Option[List[Byte]] ! alloc {
+fn unspell(s: str, url: bool) -> Option[List[Byte]] <alloc> {
   var bytes: List[Byte] = []
   var state: Byte = 0
   var rest: Byte = 0
@@ -133,10 +133,10 @@ fn unspell(s: str, url: bool) -> Option[List[Byte]] ! alloc {
   }
 }
 
-pub fn decode(s: str) -> Option[List[Byte]] ! alloc {
+pub fn decode(s: str) -> Option[List[Byte]] <alloc> {
   unspell(s, false)
 }
 
-pub fn decode_url(s: str) -> Option[List[Byte]] ! alloc {
+pub fn decode_url(s: str) -> Option[List[Byte]] <alloc> {
   unspell(s, true)
 }

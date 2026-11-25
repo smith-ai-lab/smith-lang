@@ -39,7 +39,7 @@ use std.console (console, print)
 use std.int (wrapping_add)
 use std.task (time_left)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var wrong: u64 = 0
   var lost_two: u64 = 0
   var lost_one: u64 = 0
@@ -81,7 +81,7 @@ const PROGRAM: &str = "use std.console (console, print)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
-fn main() ! console, alloc, time {
+fn main() <console, alloc, time> {
   with tasks()
   t = spawn { sleep(600) }
   join(t)

@@ -36,7 +36,7 @@ Every call proves the `requires` of the function it calls, of the arguments it p
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc { print("{gap(3, 5)}") }
+fn main() <console, alloc> { print("{gap(3, 5)}") }
 ```
 
 This is refused: "cannot prove that `3 >= 5`, which `gap` requires of its arguments", with the fix "check the arguments first with an `if`, or state it in a `requires`".
@@ -137,7 +137,7 @@ fn pick(xs: List[i32], k: i32) -> i32
   k
 }
 
-fn main() ! console, alloc { print("{pick([1, 2, 3], 2)}") }
+fn main() <console, alloc> { print("{pick([1, 2, 3], 2)}") }
 ```
 
 `pick([1, 2, 3], 2)` is `2`. With `5` in place of `2` it is refused: "`has([1, 2, 3], 5)` is false: its last comparison, `3 == 5` at 7:8, was false". The message says where the answer came from: the comparison that gave `false` and the numbers it compared. A predicate that does not end within 1000000 steps is refused with the call and the limit named, and is never taken as proven. An argument that is not written out leaves the call to a `check`, as any `requires` that is not proven.
@@ -151,7 +151,7 @@ use std.console (console, print)
 
 fn apply(f: fn(Byte, Byte) -> Byte) -> Byte { f(5, 3) }
 
-fn main() ! console, alloc { print("{apply(gap)}") }
+fn main() <console, alloc> { print("{apply(gap)}") }
 ```
 
 This is refused: "`gap` has a `requires`, which a function type does not state, so it is only called by its name".

@@ -16,7 +16,7 @@ An open-ended `loop` has no range. It runs its block again and again until a `br
 use std.bits (u64)
 use std.int (wrapping_add, wrapping_sub)
 
-fn takes(from: u64, step: u64) -> u64 ! diverge {
+fn takes(from: u64, step: u64) -> u64 <diverge> {
   var left: u64 = from
   var times: u64 = 0
   loop {
@@ -36,19 +36,19 @@ A loop that goes on until something is found, and not once for each of a known n
 
 ## Why the function says `diverge`
 
-An open-ended loop may not end, as `takes(10, 0)` does not, since `left` is never below `0`. So the function that has one lists the `diverge` effect, and so does every function that calls it. Without it, `takes` is refused: "an open-ended `loop` needs the `diverge` effect, which `takes` does not declare", with the fix "write `fn takes(from: u64, step: u64) -> u64 ! diverge`".
+An open-ended loop may not end, as `takes(10, 0)` does not, since `left` is never below `0`. So the function that has one lists the `diverge` effect, and so does every function that calls it. Without it, `takes` is refused: "an open-ended `loop` needs the `diverge` effect, which `takes` does not declare", with the fix "write `fn takes(from: u64, step: u64) -> u64 <diverge>`".
 
 A caller is refused in the same way.
 
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{takes(10, 3)}")
 }
 ```
 
-This is refused: "`takes` needs the `diverge` effect, which `main` does not declare", with the fix "write `fn main() ! console, alloc, diverge`". [The effects Smith provides](provided-effects.md#built-in) lists `diverge`, and [Effects](effects.md) says how a signature lists them.
+This is refused: "`takes` needs the `diverge` effect, which `main` does not declare", with the fix "write `fn main() <console, alloc, diverge>`". [The effects Smith provides](provided-effects.md#built-in) lists `diverge`, and [Effects](effects.md) says how a signature lists them.
 
 ## A loop that is proven to end
 

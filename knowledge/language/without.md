@@ -35,7 +35,7 @@ struct Cat {
 
 without Eq for Cat
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a = Cat(name: "tom")
   b = Cat(name: "tom")
   print("{a == b}")

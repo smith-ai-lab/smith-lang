@@ -2,6 +2,6 @@ use std.console (console, print)
 
 fn greet(greeting: str = "hello", name: str) -> str { greeting }
 
-fn main() ! console {
+fn main() <console> {
   print(greet(name: "Ada"))
 }

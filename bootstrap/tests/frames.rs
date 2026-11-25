@@ -258,10 +258,10 @@ fn module_of(case: &[Lambda]) -> String {
     for (k, l) in case.iter().enumerate() {
         // The same work behind a function that is called, with no frame of its
         // own for what it reads.
-        s += &format!("fn plain{k}() -> u64 ! alloc {{\n{}{}}}\n\n", l.defines(k), l.body(k, "  "));
+        s += &format!("fn plain{k}() -> u64 <alloc> {{\n{}{}}}\n\n", l.defines(k), l.body(k, "  "));
     }
     for how in ["made", "reference"] {
-        s += &format!("pub fn drive_{how}(order: u64) ! console, alloc {{\n");
+        s += &format!("pub fn drive_{how}(order: u64) <console, alloc> {{\n");
         for (k, l) in case.iter().enumerate() {
             if how == "made" {
                 s += &format!("{}  f{k} = __frame({{\n{}  }})\n", l.defines(k), l.body(k, "    "));
@@ -303,7 +303,7 @@ fn module_of(case: &[Lambda]) -> String {
 }
 
 fn main_of(orders: &[u64]) -> String {
-    let mut s = String::from("use std.console (console, print)\nuse std.frames (drive_made, drive_reference)\n\nfn floats_equal(a: f32, b: f32, c: f64, d: f64) -> bool { a == b and c == d }\n\nfn main() ! console, alloc {\n  same = floats_equal(1.5, 1.5, 2.5, 2.5)\n");
+    let mut s = String::from("use std.console (console, print)\nuse std.frames (drive_made, drive_reference)\n\nfn floats_equal(a: f32, b: f32, c: f64, d: f64) -> bool { a == b and c == d }\n\nfn main() <console, alloc> {\n  same = floats_equal(1.5, 1.5, 2.5, 2.5)\n");
     for o in orders {
         s += &format!("  print(\"made {o}\")\n  drive_made({o})\n  print(\"reference {o}\")\n  drive_reference({o})\n");
     }
@@ -407,32 +407,32 @@ fn a_frame_read_at_a_type_its_lambda_does_not_give_is_refused() {
 /// `T`, and no other frame is read where its lambda is not seen: a number that
 /// is not read from a `Task` is refused.
 fn a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused() {
-    let module = "use std.bits (u64)\nuse std.task (finish, task)\n\npub fn unseen(n: u64) -> u64 ! task {\n  r: u64 = __result(finish(n))\n  r\n}\n";
-    let main = "use std.frames (unseen)\nuse std.task (task)\n\nfn main() ! task {\n  a = unseen(1)\n}\n";
+    let module = "use std.bits (u64)\nuse std.task (finish, task)\n\npub fn unseen(n: u64) -> u64 <task> {\n  r: u64 = __result(finish(n))\n  r\n}\n";
+    let main = "use std.frames (unseen)\nuse std.task (task)\n\nfn main() <task> {\n  a = unseen(1)\n}\n";
     let error = lowered(main, module).expect_err("a frame of a number nothing says is a task's");
     assert!(error.contains("what this frame gives is not known here"), "{error}");
 }
 
 fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
-    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  var s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 ! alloc {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  r: u64 = __result(f)\n  r\n}\n\npub fn twice() -> u64 ! alloc {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  g = total(xs)\n  r: u64 = __result(f)\n  wrapping_add(r, g)\n}\n";
-    let main = "use std.frames (once)\n\nfn main() ! alloc {\n  a = once()\n}\n";
+    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  var s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  r: u64 = __result(f)\n  r\n}\n\npub fn twice() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  g = total(xs)\n  r: u64 = __result(f)\n  wrapping_add(r, g)\n}\n";
+    let main = "use std.frames (once)\n\nfn main() <alloc> {\n  a = once()\n}\n";
     lowered(main, module).expect("a list taken once");
-    let main = "use std.frames (twice)\n\nfn main() ! alloc {\n  a = twice()\n}\n";
+    let main = "use std.frames (twice)\n\nfn main() <alloc> {\n  a = twice()\n}\n";
     let error = lowered(main, module).expect_err("a list taken twice");
     assert!(error.contains("xs"), "{error}");
 }
 
 /// A handler of `count` that keeps state, and one that does not.
-const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T ! sense) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T ! sense) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 ! sense {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
+const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T <sense>) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T <sense>) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 <sense> {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
 
 fn a_frame_under_a_handler_that_holds_state_reads_and_changes_it() {
-    let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() ! console, alloc {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";
+    let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() <console, alloc> {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";
     let program = lowered(main, HANDLERS).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(String::from_utf8(run(&program).stdout).unwrap(), "1 2\n");
 }
 
 fn a_frame_under_a_handler_without_state_reads_what_the_handler_holds() {
-    let main = "use std.console (console, print)\nuse std.frames (fixed, read)\n\nfn main() ! console, alloc {\n  with fixed(42)\n  print(\"{read()}\")\n}\n";
+    let main = "use std.console (console, print)\nuse std.frames (fixed, read)\n\nfn main() <console, alloc> {\n  with fixed(42)\n  print(\"{read()}\")\n}\n";
     let program = lowered(main, HANDLERS).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(String::from_utf8(run(&program).stdout).unwrap(), "42\n");
 }
@@ -440,7 +440,7 @@ fn a_frame_under_a_handler_without_state_reads_what_the_handler_holds() {
 fn a_program_that_makes_no_frame_is_built_as_it_was() {
     // A program with no frame has no function that waits, so `suspend` gives it
     // back as it was, and the passes after it see the program they always did.
-    let program = smith::lower(b"use std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"hello\")\n}\n")
+    let program = smith::lower(b"use std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"hello\")\n}\n")
         .unwrap();
     let suspended = scalar::suspend(program.clone()).expect("no wait");
     assert_eq!(suspended.program, program);

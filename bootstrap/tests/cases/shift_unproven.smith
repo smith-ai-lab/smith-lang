@@ -5,6 +5,6 @@ fn up(x: u32, by: Byte) -> u32 {
   shift_left(x, by)
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{up(1, 40)}")
 }

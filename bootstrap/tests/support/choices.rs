@@ -652,7 +652,7 @@ fn write_defs(m: &Model, out: &mut String) {
     }
     out.push_str("fn same[T: Eq](a: T, b: T) -> bool { a == b }\n\n");
     out.push_str(
-        "fn loud(text: str, given: bool) -> bool ! console {\n  print(text)\n  given\n}\n\n",
+        "fn loud(text: str, given: bool) -> bool <console> {\n  print(text)\n  given\n}\n\n",
     );
     out.push_str("fn word(given: bool) -> str {\n  if given { \"yes\" } else { \"no\" }\n}\n\n");
     out.push_str("fn twice(body: fn()) {\n  body()\n  body()\n}\n\n");
@@ -812,7 +812,7 @@ pub fn program(g: &mut Gen) -> ChoiceCase {
     let m = model(g);
     let mut source = String::from(USES);
     write_defs(&m, &mut source);
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     write_values(&m, &mut source);
     write_block(&m, &m.main, 1, &mut source);
     source.push_str("}\n");
@@ -864,7 +864,7 @@ pub fn program_with_mistake(g: &mut Gen) -> ChoiceCase {
     write_defs(&m, &mut source);
     source.push_str("struct Hidden {\n  key: str\n}\n\nwithout Eq for Hidden\n\n");
     source.push_str("fn risky() -> Result[str, str] { .ok(\"a\") }\n\n");
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     write_values(&m, &mut source);
     let at = g.below(m.main.len() + 1);
     let mut before = String::new();

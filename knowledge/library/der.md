@@ -40,11 +40,11 @@ enum Tag {
 }
 
 fn value(bytes: Slice[Byte]) -> Result[(Value, Slice[Byte]), str]
-fn children(of: Value) -> Result[List[Value], str] ! alloc
+fn children(of: Value) -> Result[List[Value], str] <alloc>
 fn whole(of: Value) -> Result[Slice[Byte], str]
 fn text(of: Value) -> Result[str, str]
 fn bits(of: Value) -> Result[(Slice[Byte], Nat), str]
-fn object(of: Value) -> Result[List[Nat], str] ! alloc
+fn object(of: Value) -> Result[List[Nat], str] <alloc>
 ```
 
 - `value` reads one value from the front of the bytes and gives it with the bytes after it. The bytes of a `Value` are a piece of what was given, so nothing is copied.
@@ -72,8 +72,8 @@ struct Certificate {
   path_length: Option[Nat]
 }
 
-fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] ! alloc
-fn pem(text: str) -> Result[List[List[Byte]], str] ! alloc
+fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc>
+fn pem(text: str) -> Result[List[List[Byte]], str] <alloc>
 ```
 
 - `certificate` reads one certificate of version 3. `signed` is the part the signature is over, as the bytes it was, and `issuer` and `subject` are the bytes of each name, as two names are the same when their bytes are.

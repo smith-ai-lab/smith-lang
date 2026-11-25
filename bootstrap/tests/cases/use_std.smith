@@ -3,7 +3,7 @@ use std.console (console, print)
 use std.int (checked_add, wrapping_add)
 use std.list (push)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a: Byte = 250
   var xs: List[Byte] = []
   xs = push(xs, wrapping_add(a, 10))

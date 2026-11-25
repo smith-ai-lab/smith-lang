@@ -1015,7 +1015,7 @@ impl Writer<'_> {
             }
             self.push("}\n");
         }
-        self.push("\nfn main() ! console {\n");
+        self.push("\nfn main() <console> {\n");
         self.stmts(&m.main, 1);
         self.push("}\n");
         for (i, f) in m.fns.iter().enumerate() {

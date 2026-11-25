@@ -403,9 +403,9 @@ pub fn every_function() -> Vec<&'static scalar::Function> {
 /// as the programs of the pages of WebAssembly that did not load were.
 fn an_array_of_literals_is_held_as_the_range_of_its_elements_and_is_well_formed() {
     for source in [
-        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
-        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
-        "use std.console (console, print)\n\nfn main() ! console, alloc {\n  xs = [-5, 100, 3]\n  ys = [300, 65000, 1]\n  print(repr(xs[0]))\n  print(repr(ys[1]))\n}\n",
+        "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs = [1, 2, 3]\n  print(\"{xs}\")\n}\n",
+        "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs = [1, 2, 3]\n  print(repr(xs[0]))\n  print(repr(xs[0]))\n}\n",
+        "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs = [-5, 100, 3]\n  ys = [300, 65000, 1]\n  print(repr(xs[0]))\n  print(repr(ys[1]))\n}\n",
     ] {
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(scalar::check(&program), Ok(()), "{source}");
@@ -459,31 +459,31 @@ const LENGTH: Type = Type::Int(Bits::B64);
 const BYTE: Type = Type::Int(Bits::B8);
 
 fn a_text_is_an_address_and_a_length_and_a_bool_is_one_byte() {
-    let text = "use std.console (console, print)\n\nfn say(s: str) ! console { print(s) }\nfn main() ! console { say(\"hi\") }\n";
+    let text = "use std.console (console, print)\n\nfn say(s: str) <console> { print(s) }\nfn main() <console> { say(\"hi\") }\n";
     assert_eq!(parameters_of_the_first_call(text), [ADDRESS, LENGTH]);
-    let truth = "use std.console (console, print)\n\nfn say(b: bool) ! console { if b { print(\"yes\") } else { print(\"no\") } }\n\
-                 fn main() ! console { say(true) }\n";
+    let truth = "use std.console (console, print)\n\nfn say(b: bool) <console> { if b { print(\"yes\") } else { print(\"no\") } }\n\
+                 fn main() <console> { say(true) }\n";
     assert_eq!(parameters_of_the_first_call(truth), [BYTE]);
 }
 
 fn a_struct_a_tuple_and_an_enum_are_their_parts() {
     let structure = "use std.console (console, print)\n\nstruct Named {\n name: str\n loud: bool\n}\n\
-        fn say(n: Named) ! console { print(n.name) }\n\
-        fn main() ! console { say(Named(name: \"hi\", loud: true)) }\n";
+        fn say(n: Named) <console> { print(n.name) }\n\
+        fn main() <console> { say(Named(name: \"hi\", loud: true)) }\n";
     assert_eq!(
         parameters_of_the_first_call(structure),
         [ADDRESS, LENGTH, BYTE]
     );
-    let tuple = "use std.console (console, print)\n\nfn say(pair: (str, bool)) ! console { (s, b) = pair\n print(s) }\n\
-        fn main() ! console { say((\"hi\", true)) }\n";
+    let tuple = "use std.console (console, print)\n\nfn say(pair: (str, bool)) <console> { (s, b) = pair\n print(s) }\n\
+        fn main() <console> { say((\"hi\", true)) }\n";
     assert_eq!(parameters_of_the_first_call(tuple), [ADDRESS, LENGTH, BYTE]);
     let enumeration = "use std.console (console, print)\n\nenum Shade {\n light\n dark\n}\n\
-        fn say(s: Shade) ! console { match s {\n .light { print(\"l\") }\n .dark { print(\"d\") }\n } }\n\
-        fn main() ! console { say(.dark) }\n";
+        fn say(s: Shade) <console> { match s {\n .light { print(\"l\") }\n .dark { print(\"d\") }\n } }\n\
+        fn main() <console> { say(.dark) }\n";
     assert_eq!(parameters_of_the_first_call(enumeration), [BYTE]);
     let holding = "use std.console (console, print)\n\nenum Maybe {\n some: str\n none\n}\n\
-        fn say(m: Maybe) ! console { match m {\n .some(s) { print(s) }\n .none { print(\"none\") }\n } }\n\
-        fn main() ! console { say(.some(\"x\")) }\n";
+        fn say(m: Maybe) <console> { match m {\n .some(s) { print(s) }\n .none { print(\"none\") }\n } }\n\
+        fn main() <console> { say(.some(\"x\")) }\n";
     assert_eq!(
         parameters_of_the_first_call(holding),
         [BYTE, ADDRESS, LENGTH]
@@ -503,7 +503,7 @@ fn size_of(int: numbers::Int) -> Type {
 fn a_number_is_one_scalar_of_the_size_of_its_type() {
     for int in numbers::INTS {
         let source = numbers::with_header(format!(
-            "fn say(n: {0}) ! console {{ print(\"x\") }}\nfn main() ! console {{ say(1) }}\n",
+            "fn say(n: {0}) <console> {{ print(\"x\") }}\nfn main() <console> {{ say(1) }}\n",
             int.name
         ));
         assert_eq!(parameters_of_the_first_call(&source), [size_of(*int)]);
@@ -522,7 +522,7 @@ fn a_program_that_holds_numbers_and_builds_no_text_is_lowered_and_prints_what_it
 }
 
 fn a_program_that_prints_a_number_is_lowered_and_prints_it() {
-    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn main() ! console, alloc { x: i32 = -12\n print(\"{x}\") }\n";
+    let source = "use std.bits (i32)\nuse std.console (console, print)\n\nfn main() <console, alloc> { x: i32 = -12\n print(\"{x}\") }\n";
     let s = lowered_from(source.as_bytes(), None).scalar;
     assert_eq!(scalar::check(&s), Ok(()));
     assert_eq!(scalar::run(&s).stdout, b"-12\n");
@@ -1174,8 +1174,8 @@ fn layouts(g: &mut Gen) -> Layouts {
     }
     let value = built(g, &defs, &ty);
     source += &format!(
-        "fn consume(v: {}) ! console {{\n  print(\"consumed\")\n}}\n\
-         fn main() ! console {{\n  v: {} = {value}\n  consume(v)\n}}\n",
+        "fn consume(v: {}) <console> {{\n  print(\"consumed\")\n}}\n\
+         fn main() <console> {{\n  v: {} = {value}\n  consume(v)\n}}\n",
         written(&ty),
         written(&ty)
     );

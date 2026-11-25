@@ -82,12 +82,12 @@ fn user(id: u64) -> User {{
   User(id: id, name: \"Ana\")
 }}
 
-fn app() ! http, alloc {{
+fn app() <http, alloc> {{
   with routes()
   get(\"/users/:id\", user)
 }}
 
-fn recording[T](body: fn() -> T ! net) -> (T, List[List[Byte]]) ! alloc {{
+fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
   var accepted: u64 = 0
   var asked: List[u64] = []
   var kept: List[List[Byte]] = []
@@ -135,13 +135,13 @@ fn recording[T](body: fn() -> T ! net) -> (T, List[List[Byte]]) ! alloc {{
   (result, kept)
 }}
 
-fn run() -> ((), List[List[Byte]]) ! alloc, diverge {{
+fn run() -> ((), List[List[Byte]]) <alloc, diverge> {{
   with recording()
 {scheduler}  with listen(port: 80)
   app()
 }}
 
-fn main() ! console, alloc, diverge {{
+fn main() <console, alloc, diverge> {{
   (done, writes) = run()
   print(\"{{writes.size}}\")
   loop i in 0..writes.size {{
@@ -249,7 +249,7 @@ fn listen_returns_when_it_is_closed_after_three_connections_part_3_of_3() {
 /// `quiet` waits for tasks that no handle names, which a program is not given: it
 /// joins the handle of each task it waits for, or drops it.
 fn a_program_that_calls_quiet_is_refused() {
-    let source = "use std.task (quiet, spawn, task, tasks)\n\nfn main() ! alloc, task {\n  quiet()\n}\n";
+    let source = "use std.task (quiet, spawn, task, tasks)\n\nfn main() <alloc, task> {\n  quiet()\n}\n";
     match lower(source.as_bytes()) {
         Ok(_) => panic!("a program that calls `quiet` was built"),
         Err(errors) => {

@@ -50,20 +50,20 @@ struct Out {
   top: Nat
 }
 
-fn put(to: take Out, b: 0..128) -> Out ! alloc {
+fn put(to: take Out, b: 0..128) -> Out <alloc> {
   var w = to
   w.bytes = append_ascii(w.bytes, b)
   w
 }
 
-fn put_text(to: take Out, s: str) -> Out ! alloc {
+fn put_text(to: take Out, s: str) -> Out <alloc> {
   var w = to
   w.bytes = append(w.bytes, s)
   w
 }
 
 // A hexadecimal digit, in lower case, of a number below 16.
-fn put_hex(to: take Out, d: Byte) -> Out ! alloc {
+fn put_hex(to: take Out, d: Byte) -> Out <alloc> {
   if d < 10 {
     put(to, d + 48)
   } else if d < 16 {
@@ -75,7 +75,7 @@ fn put_hex(to: take Out, d: Byte) -> Out ! alloc {
 
 // The bytes of `s` from `from` up to `end`, which are whole characters, as
 // they are.
-fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out ! alloc {
+fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out <alloc> {
   var w = to
   if from == 0 and end == s.size {
     w = put_text(w, s)
@@ -89,7 +89,7 @@ fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out ! alloc {
 }
 
 // How a byte that a string cannot hold as it is is written.
-fn escape(to: take Out, b: Byte) -> Out ! alloc {
+fn escape(to: take Out, b: Byte) -> Out <alloc> {
   if b == '"' {
     put_text(to, "\\\"")
   } else if b == '\\' {
@@ -112,7 +112,7 @@ fn escape(to: take Out, b: Byte) -> Out ! alloc {
 // The text as the inside of a string of JSON: `"`, `\`, and the bytes below a
 // space are written as escapes, and every other byte as it is. The bytes
 // between two that are escaped are written together.
-fn body(to: take Out, s: str) -> Out ! alloc {
+fn body(to: take Out, s: str) -> Out <alloc> {
   var w = to
   var from: Nat = 0
   loop i in 0..s.size {
@@ -126,7 +126,7 @@ fn body(to: take Out, s: str) -> Out ! alloc {
   run(w, s, from, s.size)
 }
 
-fn quote(to: take Out, s: str) -> Out ! alloc {
+fn quote(to: take Out, s: str) -> Out <alloc> {
   put_text(body(put_text(to, "\""), s), "\"")
 }
 
@@ -134,7 +134,7 @@ fn quote(to: take Out, s: str) -> Out ! alloc {
 // the letter in upper case. A `_` that follows a `_`, that ends the name, or
 // that is followed by anything else stays, so two names written with lower
 // case letters, digits, and `_` are never made one.
-fn camel_case(to: take Out, name: str) -> Out ! alloc {
+fn camel_case(to: take Out, name: str) -> Out <alloc> {
   var w = to
   var from: Nat = 0
   var after: Nat = 0
@@ -153,7 +153,7 @@ fn camel_case(to: take Out, name: str) -> Out ! alloc {
 
 // Starts a value: a `,` where the value follows another, or what a case
 // that holds a value gives before it.
-fn start(to: take Out) -> Out ! alloc {
+fn start(to: take Out) -> Out <alloc> {
   var w = to
   if w.tagged {
     w = put_text(w, ",\"value\":")
@@ -168,7 +168,7 @@ fn start(to: take Out) -> Out ! alloc {
 }
 
 // Ends a value, and closes each case whose value it is.
-fn ended(to: take Out) -> Out ! alloc {
+fn ended(to: take Out) -> Out <alloc> {
   var w = to
   w.comma = true
   loop j in 0..w.top {
@@ -188,15 +188,15 @@ fn ended(to: take Out) -> Out ! alloc {
   w
 }
 
-fn scalar(to: take Out, s: str) -> Out ! alloc { ended(put_text(start(to), s)) }
+fn scalar(to: take Out, s: str) -> Out <alloc> { ended(put_text(start(to), s)) }
 
-fn open(to: take Out, b: 0..128) -> Out ! alloc {
+fn open(to: take Out, b: 0..128) -> Out <alloc> {
   var w = put(start(to), b)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
-fn close(to: take Out, b: 0..128) -> Out ! alloc {
+fn close(to: take Out, b: 0..128) -> Out <alloc> {
   var w = put(to, b)
   w.depth = saturating_sub(w.depth, 1)
   ended(w)
@@ -204,7 +204,7 @@ fn close(to: take Out, b: 0..128) -> Out ! alloc {
 
 // The bytes as the bytes of a text: each byte that does not begin a character
 // of UTF-8 is U+FFFD.
-fn text_of(bytes: Slice[Byte]) -> str ! alloc {
+fn text_of(bytes: Slice[Byte]) -> str <alloc> {
   var acc = text()
   var i: Nat = 0
   loop k in 0..bytes.size {
@@ -238,20 +238,20 @@ fn text_of(bytes: Slice[Byte]) -> str ! alloc {
 }
 
 impl Writer[Out] {
-  fn boolean(w: take Out, value: bool) -> Out ! alloc {
+  fn boolean(w: take Out, value: bool) -> Out <alloc> {
     if value { scalar(w, "true") } else { scalar(w, "false") }
   }
-  fn signed(w: take Out, value: Int) -> Out ! alloc { scalar(w, fmt(value)) }
-  fn unsigned(w: take Out, value: u64) -> Out ! alloc { scalar(w, fmt(value)) }
-  fn text(w: take Out, value: str) -> Out ! alloc { ended(quote(start(w), value)) }
-  fn nothing(w: take Out) -> Out ! alloc { scalar(w, "null") }
-  fn absent(w: take Out) -> Out ! alloc { scalar(w, "null") }
-  fn present(w: take Out) -> Out ! alloc { if w.tagged { start(w) } else { w } }
-  fn sequence(w: take Out, size: Nat) -> Out ! alloc { open(w, '[') }
-  fn end_sequence(w: take Out) -> Out ! alloc { close(w, ']') }
-  fn tuple(w: take Out, size: Nat) -> Out ! alloc { open(w, '[') }
-  fn end_tuple(w: take Out) -> Out ! alloc { close(w, ']') }
-  fn structure(w: take Out, name: str, fields: Nat) -> Out ! alloc {
+  fn signed(w: take Out, value: Int) -> Out <alloc> { scalar(w, fmt(value)) }
+  fn unsigned(w: take Out, value: u64) -> Out <alloc> { scalar(w, fmt(value)) }
+  fn text(w: take Out, value: str) -> Out <alloc> { ended(quote(start(w), value)) }
+  fn nothing(w: take Out) -> Out <alloc> { scalar(w, "null") }
+  fn absent(w: take Out) -> Out <alloc> { scalar(w, "null") }
+  fn present(w: take Out) -> Out <alloc> { if w.tagged { start(w) } else { w } }
+  fn sequence(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
+  fn end_sequence(w: take Out) -> Out <alloc> { close(w, ']') }
+  fn tuple(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
+  fn end_tuple(w: take Out) -> Out <alloc> { close(w, ']') }
+  fn structure(w: take Out, name: str, fields: Nat) -> Out <alloc> {
     if w.tagged {
       var v = w
       v.tagged = false
@@ -261,7 +261,7 @@ impl Writer[Out] {
       open(w, '{')
     }
   }
-  fn field(w: take Out, name: str) -> Out ! alloc {
+  fn field(w: take Out, name: str) -> Out <alloc> {
     var v = w
     lead = if v.comma { ",\"" } else { "\"" }
     match v.settings.names {
@@ -271,8 +271,8 @@ impl Writer[Out] {
     v.comma = false
     put_text(v, "\":")
   }
-  fn end_structure(w: take Out) -> Out ! alloc { close(w, '}') }
-  fn case(w: take Out, of: str, name: str, holds: bool) -> Out ! alloc {
+  fn end_structure(w: take Out) -> Out <alloc> { close(w, '}') }
+  fn case(w: take Out, of: str, name: str, holds: bool) -> Out <alloc> {
     match w.settings.cases {
       .key {
         if holds {
@@ -296,9 +296,9 @@ impl Writer[Out] {
       }
     }
   }
-  fn map(w: take Out, size: Nat) -> Out ! alloc { open(w, '[') }
-  fn end_map(w: take Out) -> Out ! alloc { close(w, ']') }
-  fn raw(w: take Out, of: str, bytes: Slice[Byte]) -> Out ! alloc {
+  fn map(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
+  fn end_map(w: take Out) -> Out <alloc> { close(w, ']') }
+  fn raw(w: take Out, of: str, bytes: Slice[Byte]) -> Out <alloc> {
     var v = start(w)
     if of == "json" {
       match utf8(bytes) {
@@ -386,7 +386,7 @@ fn same_bytes(bytes: List[Byte], t: str) -> bool {
 }
 
 // The name of a field as `Out` writes it.
-fn written_name(name: str, camel: bool) -> str ! alloc {
+fn written_name(name: str, camel: bool) -> str <alloc> {
   var w = Out(settings: Json(cases: .key, names: .camel), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0)
   if camel {
     w = camel_case(w, name)
@@ -397,21 +397,21 @@ fn written_name(name: str, camel: bool) -> str ! alloc {
 }
 
 impl Writer[Check] {
-  fn boolean(w: take Check, value: bool) -> Check ! alloc { begin(w) }
-  fn signed(w: take Check, value: Int) -> Check ! alloc { begin(w) }
-  fn unsigned(w: take Check, value: u64) -> Check ! alloc { begin(w) }
-  fn text(w: take Check, value: str) -> Check ! alloc { begin(w) }
-  fn nothing(w: take Check) -> Check ! alloc { begin(w) }
-  fn absent(w: take Check) -> Check ! alloc { begin(w) }
-  fn present(w: take Check) -> Check ! alloc { begin(w) }
-  fn sequence(w: take Check, size: Nat) -> Check ! alloc { deeper(w) }
-  fn end_sequence(w: take Check) -> Check ! alloc { shallower(w) }
-  fn tuple(w: take Check, size: Nat) -> Check ! alloc { deeper(w) }
-  fn end_tuple(w: take Check) -> Check ! alloc { shallower(w) }
-  fn map(w: take Check, size: Nat) -> Check ! alloc { deeper(w) }
-  fn end_map(w: take Check) -> Check ! alloc { shallower(w) }
-  fn raw(w: take Check, of: str, bytes: Slice[Byte]) -> Check ! alloc { begin(w) }
-  fn structure(w: take Check, name: str, fields: Nat) -> Check ! alloc {
+  fn boolean(w: take Check, value: bool) -> Check <alloc> { begin(w) }
+  fn signed(w: take Check, value: Int) -> Check <alloc> { begin(w) }
+  fn unsigned(w: take Check, value: u64) -> Check <alloc> { begin(w) }
+  fn text(w: take Check, value: str) -> Check <alloc> { begin(w) }
+  fn nothing(w: take Check) -> Check <alloc> { begin(w) }
+  fn absent(w: take Check) -> Check <alloc> { begin(w) }
+  fn present(w: take Check) -> Check <alloc> { begin(w) }
+  fn sequence(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
+  fn end_sequence(w: take Check) -> Check <alloc> { shallower(w) }
+  fn tuple(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
+  fn end_tuple(w: take Check) -> Check <alloc> { shallower(w) }
+  fn map(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
+  fn end_map(w: take Check) -> Check <alloc> { shallower(w) }
+  fn raw(w: take Check, of: str, bytes: Slice[Byte]) -> Check <alloc> { begin(w) }
+  fn structure(w: take Check, name: str, fields: Nat) -> Check <alloc> {
     var v = w
     if v.held {
       v.held = false
@@ -423,7 +423,7 @@ impl Writer[Check] {
       deeper(v)
     }
   }
-  fn field(w: take Check, name: str) -> Check ! alloc {
+  fn field(w: take Check, name: str) -> Check <alloc> {
     var v = w
     m = v.top
     if m > 0 and m <= v.frames.size {
@@ -435,7 +435,7 @@ impl Writer[Check] {
     }
     v
   }
-  fn end_structure(w: take Check) -> Check ! alloc {
+  fn end_structure(w: take Check) -> Check <alloc> {
     var v = w
     m = v.top
     if m > 0 and m <= v.frames.size {
@@ -444,7 +444,7 @@ impl Writer[Check] {
     }
     shallower(v)
   }
-  fn case(w: take Check, of: str, name: str, holds: bool) -> Check ! alloc {
+  fn case(w: take Check, of: str, name: str, holds: bool) -> Check <alloc> {
     var v = begin(w)
     if holds {
       v.held = true
@@ -455,7 +455,7 @@ impl Writer[Check] {
   }
 }
 
-fn clash_in[T: Serialize](value: T, json: Json) -> Option[Clash] ! alloc {
+fn clash_in[T: Serialize](value: T, json: Json) -> Option[Clash] <alloc> {
   match json.cases {
     .key { Option.none }
     .tag(t) {
@@ -469,30 +469,30 @@ fn clash_in[T: Serialize](value: T, json: Json) -> Option[Clash] ! alloc {
   }
 }
 
-fn render[T: Serialize](value: T, json: Json) -> str ! alloc {
+fn render[T: Serialize](value: T, json: Json) -> str <alloc> {
   w = write(value, Out(settings: json, bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0))
   finish(w.bytes)
 }
 
-pub fn to_json_as[T: Serialize](value: T, json: Json) -> Result[str, Clash] ! alloc {
+pub fn to_json_as[T: Serialize](value: T, json: Json) -> Result[str, Clash] <alloc> {
   match clash_in(value, json) {
     .none { Result.ok(render(value, json)) }
     .some(c) { Result.err(c) }
   }
 }
 
-pub fn to_json[T: Serialize](value: T) -> str ! alloc {
+pub fn to_json[T: Serialize](value: T) -> str <alloc> {
   render(value, Json(cases: .key, names: .written))
 }
 
 // A text as a string of JSON, between its quotes.
-pub fn json_string(s: str) -> str ! alloc {
+pub fn json_string(s: str) -> str <alloc> {
   w = quote(Out(settings: Json(cases: .key, names: .written), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0), s)
   finish(w.bytes)
 }
 
 // The name of a field as `to_json_as` writes it with the settings.
-pub fn written_member(name: str, json: Json) -> str ! alloc {
+pub fn written_member(name: str, json: Json) -> str <alloc> {
   camel = match json.names {
     .written { false }
     .camel { true }
@@ -768,7 +768,7 @@ fn frame_at(frames: List[Frame], at: Nat) -> Frame {
 // JSON value, and stops at the first place that is `target` or beyond, where
 // it says which containers are open. The containers are kept as the byte that
 // opened each, so a value that holds none asks for no memory.
-fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] ! alloc {
+fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
   var frames: List[Frame] = []
   var top: Nat = 0
   var key: Nat = 0
@@ -871,7 +871,7 @@ fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] ! alloc {
 
 // The end of the value that starts at `start`, which is checked to be one
 // whole JSON value.
-fn scan(b: Slice[Byte], start: Nat) -> Result[Nat, Bad] ! alloc {
+fn scan(b: Slice[Byte], start: Nat) -> Result[Nat, Bad] <alloc> {
   match walk(b, start, saturating_add(b.size, 1)) {
     .ok(w) {
       match w.bad {
@@ -897,7 +897,7 @@ fn member(b: Slice[Byte], at: Nat) -> Result[Nat, Bad] {
 }
 
 // A character of the number `code`, as bytes.
-fn put_char(to: take List[Byte], code: u32) -> List[Byte] ! alloc {
+fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
   var acc = to
   if code < 128 {
     acc = push(acc, wrapping_narrow(code))
@@ -919,7 +919,7 @@ fn put_char(to: take List[Byte], code: u32) -> List[Byte] ! alloc {
 
 // Takes the bytes of a string that `quoted` checked from `at` to `end`, with
 // its escapes undone.
-fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] ! alloc {
+fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] <alloc> {
   var acc: List[Byte] = []
   var i = saturating_add(at, 1)
   loop k in 0..b.size {
@@ -964,7 +964,7 @@ fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] ! alloc {
 
 // The text that the string at `at`, which ends at `end`, stands for. A string
 // with nothing to undo is a piece of the input, so nothing is copied for it.
-fn text_at(b: Slice[Byte], q: Quoted, at: Nat) -> str ! alloc {
+fn text_at(b: Slice[Byte], q: Quoted, at: Nat) -> str <alloc> {
   lo = saturating_add(at, 1)
   hi = saturating_sub(q.end, 1)
   if not q.escaped and lo <= hi and hi <= b.size {
@@ -1009,7 +1009,7 @@ fn written_camel(name: List[Byte]) -> (bool, bool) {
 // field that is written as the member's name, with each upper case letter read
 // as a `_` and the letter in lower case. A member that is not a name that is
 // written is given with a space before it, which is no name of a field.
-fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str ! alloc {
+fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str <alloc> {
   lo = saturating_add(at, 1)
   hi = saturating_sub(q.end, 1)
   if not q.escaped and lo <= hi and hi <= b.size {
@@ -1036,14 +1036,14 @@ fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str ! alloc {
 
 // The path to the place `at`, which is the way to the value there from the
 // top, as `tools[2].timeout`.
-fn path_at(b: Slice[Byte], at: Nat) -> str ! alloc {
+fn path_at(b: Slice[Byte], at: Nat) -> str <alloc> {
   match walk(b, skip_space(b, 0), at) {
     .ok(w) { render_path(b, w) }
     .err(e) { "" }
   }
 }
 
-fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: Nat) -> List[Byte] ! alloc {
+fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: Nat) -> List[Byte] <alloc> {
   var acc = to
   if kind == '{' {
     match quoted(b, key) {
@@ -1063,7 +1063,7 @@ fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: 
   acc
 }
 
-fn render_path(b: Slice[Byte], w: Walk) -> str ! alloc {
+fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
   // The open containers, innermost first.
   var chain: List[Nat] = []
   var t = w.top
@@ -1103,18 +1103,18 @@ fn place(b: Slice[Byte], at: Nat) -> (Nat, Nat) {
   (line, saturating_add(saturating_sub(at, row), 1))
 }
 
-fn read_error(b: Slice[Byte], bad: Bad) -> ReadError ! alloc {
+fn read_error(b: Slice[Byte], bad: Bad) -> ReadError <alloc> {
   (line, column) = place(b, bad.at)
   ReadError(path: path_at(b, bad.at), problem: bad.problem, line: line, column: column)
 }
 
-fn grown_nat(items: Slice[Nat], item: Nat) -> Slice[Nat] ! alloc {
+fn grown_nat(items: Slice[Nat], item: Nat) -> Slice[Nat] <alloc> {
   var acc: List[Nat] = []
   loop i in 0..items.size { acc = push(acc, items[i]) }
   freeze(push(acc, item))
 }
 
-fn grown_byte(items: Slice[Byte], item: Byte) -> Slice[Byte] ! alloc {
+fn grown_byte(items: Slice[Byte], item: Byte) -> Slice[Byte] <alloc> {
   var acc: List[Byte] = []
   loop i in 0..items.size { acc = push(acc, items[i]) }
   freeze(push(acc, item))
@@ -1153,7 +1153,7 @@ fn tag_at(r: In) -> Nat {
 }
 
 // The reader with the tag of a case that is open at `at`.
-fn tagged(r: take In, at: Nat) -> Result[In, Bad] ! alloc {
+fn tagged(r: take In, at: Nat) -> Result[In, Bad] <alloc> {
   var w = r
   w.tags = grown_nat(w.tags, at)
   Result.ok(w)
@@ -1181,7 +1181,7 @@ fn top_closes(r: In) -> bool {
 }
 
 // The reader with the innermost case not taking a `}` to close.
-fn top_not_closing(r: take In) -> In ! alloc {
+fn top_not_closing(r: take In) -> In <alloc> {
   var w = r
   n = saturating_sub(w.cases, 1)
   if w.cases == 0 {
@@ -1233,31 +1233,31 @@ pub struct In {
   tags: Slice[Nat]
 }
 
-fn failed_bool(r: take In, bad: Bad) -> (In, Result[bool, ReadError]) ! alloc {
+fn failed_bool(r: take In, bad: Bad) -> (In, Result[bool, ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_i64(r: take In, bad: Bad) -> (In, Result[Int, ReadError]) ! alloc {
+fn failed_i64(r: take In, bad: Bad) -> (In, Result[Int, ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_u64(r: take In, bad: Bad) -> (In, Result[u64, ReadError]) ! alloc {
+fn failed_u64(r: take In, bad: Bad) -> (In, Result[u64, ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_str(r: take In, bad: Bad) -> (In, Result[str, ReadError]) ! alloc {
+fn failed_str(r: take In, bad: Bad) -> (In, Result[str, ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_bytes(r: take In, bad: Bad) -> (In, Result[Slice[Byte], ReadError]) ! alloc {
+fn failed_bytes(r: take In, bad: Bad) -> (In, Result[Slice[Byte], ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_unit(r: take In, bad: Bad) -> (In, Result[(), ReadError]) ! alloc {
+fn failed_unit(r: take In, bad: Bad) -> (In, Result[(), ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
-fn failed_name(r: take In, bad: Bad) -> (In, Result[Option[str], ReadError]) ! alloc {
+fn failed_name(r: take In, bad: Bad) -> (In, Result[Option[str], ReadError]) <alloc> {
   (r, Result.err(read_error(r.bytes, bad)))
 }
 
@@ -1269,7 +1269,7 @@ fn ends_value(c: Byte) -> bool {
 // Where the value that is asked for starts, past what comes before it: the
 // `,` between two elements of a tuple, and the `"value":` of a case that holds
 // a value and is written with a tag.
-fn value_start(r: In) -> Result[Nat, Bad] ! alloc {
+fn value_start(r: In) -> Result[Nat, Bad] <alloc> {
   b = r.bytes
   a = skip_space(b, r.at)
   c = byte(b, a)
@@ -1361,14 +1361,14 @@ fn whole(b: Slice[Byte], a: Nat, of: str) -> Result[Whole, Bad] {
   }
 }
 
-fn literal(r: take In, a: Nat, w: str, wanted: str) -> (In, Result[(), ReadError]) ! alloc {
+fn literal(r: take In, a: Nat, w: str, wanted: str) -> (In, Result[(), ReadError]) <alloc> {
   match word(r.bytes, a, w) {
     .ok(e) { (moved(r, e, a), Result.ok(())) }
     .err(e) { failed_unit(moved(r, r.at, a), wrong(r.bytes, a, wanted)) }
   }
 }
 
-fn pushed(r: take In, form: u64) -> Result[In, Bad] ! alloc {
+fn pushed(r: take In, form: u64) -> Result[In, Bad] <alloc> {
   var w = r
   n = w.cases
   if n < 64 {
@@ -1391,7 +1391,7 @@ struct Found {
 // Looks for the member named `tag` among the members of the object that opens
 // at `open`, in any place, passing over the others. It gives the `missing` of
 // the tag at the `}` that ends an object that has none.
-fn find_tag(b: Slice[Byte], open: Nat, tag: str) -> Result[Found, Bad] ! alloc {
+fn find_tag(b: Slice[Byte], open: Nat, tag: str) -> Result[Found, Bad] <alloc> {
   var at = skip_space(b, saturating_add(open, 1))
   var first = true
   loop k in 0..saturating_add(b.size, 1) {
@@ -1428,7 +1428,7 @@ fn find_tag(b: Slice[Byte], open: Nat, tag: str) -> Result[Found, Bad] ! alloc {
 }
 
 impl Reader[In] {
-  fn boolean(r: take In) -> (In, Result[bool, ReadError]) ! alloc {
+  fn boolean(r: take In) -> (In, Result[bool, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_bool(r, e) }
       .ok(a) {
@@ -1449,7 +1449,7 @@ impl Reader[In] {
       }
     }
   }
-  fn signed(r: take In) -> (In, Result[Int, ReadError]) ! alloc {
+  fn signed(r: take In) -> (In, Result[Int, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_i64(r, e) }
       .ok(a) {
@@ -1476,7 +1476,7 @@ impl Reader[In] {
       }
     }
   }
-  fn unsigned(r: take In) -> (In, Result[u64, ReadError]) ! alloc {
+  fn unsigned(r: take In) -> (In, Result[u64, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_u64(r, e) }
       .ok(a) {
@@ -1494,7 +1494,7 @@ impl Reader[In] {
       }
     }
   }
-  fn text(r: take In) -> (In, Result[str, ReadError]) ! alloc {
+  fn text(r: take In) -> (In, Result[str, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_str(r, e) }
       .ok(a) {
@@ -1509,13 +1509,13 @@ impl Reader[In] {
       }
     }
   }
-  fn nothing(r: take In) -> (In, Result[(), ReadError]) ! alloc {
+  fn nothing(r: take In) -> (In, Result[(), ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_unit(r, e) }
       .ok(a) { literal(r, a, "null", "null") }
     }
   }
-  fn present(r: take In) -> (In, Result[bool, ReadError]) ! alloc {
+  fn present(r: take In) -> (In, Result[bool, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_bool(r, e) }
       .ok(a) {
@@ -1530,7 +1530,7 @@ impl Reader[In] {
       }
     }
   }
-  fn sequence(r: take In) -> (In, Result[(), ReadError]) ! alloc {
+  fn sequence(r: take In) -> (In, Result[(), ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_unit(r, e) }
       .ok(a) {
@@ -1542,7 +1542,7 @@ impl Reader[In] {
       }
     }
   }
-  fn more(r: take In) -> (In, Result[bool, ReadError]) ! alloc {
+  fn more(r: take In) -> (In, Result[bool, ReadError]) <alloc> {
     b = r.bytes
     a = skip_space(b, r.at)
     c = byte(b, a)
@@ -1556,7 +1556,7 @@ impl Reader[In] {
       failed_bool(moved(r, r.at, a), malformed(a))
     }
   }
-  fn tuple(r: take In, size: Nat) -> (In, Result[(), ReadError]) ! alloc {
+  fn tuple(r: take In, size: Nat) -> (In, Result[(), ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_unit(r, e) }
       .ok(a) {
@@ -1568,7 +1568,7 @@ impl Reader[In] {
       }
     }
   }
-  fn end_tuple(r: take In) -> (In, Result[(), ReadError]) ! alloc {
+  fn end_tuple(r: take In) -> (In, Result[(), ReadError]) <alloc> {
     a = skip_space(r.bytes, r.at)
     c = byte(r.bytes, a)
     if c == ']' {
@@ -1579,7 +1579,7 @@ impl Reader[In] {
       failed_unit(moved(r, r.at, a), malformed(a))
     }
   }
-  fn structure(r: take In, name: str) -> (In, Result[(), ReadError]) ! alloc {
+  fn structure(r: take In, name: str) -> (In, Result[(), ReadError]) <alloc> {
     if r.pending {
       w = top_not_closing(moved(r, r.at, r.mark))
       (w, Result.ok(()))
@@ -1596,7 +1596,7 @@ impl Reader[In] {
       }
     }
   }
-  fn field(r: take In) -> (In, Result[Option[str], ReadError]) ! alloc {
+  fn field(r: take In) -> (In, Result[Option[str], ReadError]) <alloc> {
     b = r.bytes
     tag = tag_at(r)
     var at = r.at
@@ -1632,7 +1632,7 @@ impl Reader[In] {
     }
     failed_name(moved(r, r.at, at), malformed(at))
   }
-  fn unknown(r: take In, name: str) -> (In, Result[(), ReadError]) ! alloc {
+  fn unknown(r: take In, name: str) -> (In, Result[(), ReadError]) <alloc> {
     // The member as the text has it, which is not `name` when that was made
     // from it.
     given = match quoted(r.bytes, r.mark) {
@@ -1655,7 +1655,7 @@ impl Reader[In] {
       }
     }
   }
-  fn case(r: take In, of: str) -> (In, Result[str, ReadError]) ! alloc {
+  fn case(r: take In, of: str) -> (In, Result[str, ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_str(r, e) }
       .ok(a) {
@@ -1721,7 +1721,7 @@ impl Reader[In] {
       }
     }
   }
-  fn end_case(r: take In) -> (In, Result[(), ReadError]) ! alloc {
+  fn end_case(r: take In) -> (In, Result[(), ReadError]) <alloc> {
     var w = r
     closes = top_closes(w)
     empty = w.pending
@@ -1772,7 +1772,7 @@ impl Reader[In] {
       failed_unit(moved(w, w.at, at), malformed(at))
     }
   }
-  fn raw(r: take In, of: str) -> (In, Result[Slice[Byte], ReadError]) ! alloc {
+  fn raw(r: take In, of: str) -> (In, Result[Slice[Byte], ReadError]) <alloc> {
     match value_start(r) {
       .err(e) { failed_bytes(r, e) }
       .ok(a) {
@@ -1807,14 +1807,14 @@ impl Reader[In] {
       }
     }
   }
-  fn fail(r: take In, problem: Problem) -> (In, ReadError) ! alloc {
+  fn fail(r: take In, problem: Problem) -> (In, ReadError) <alloc> {
     (r, read_error(r.bytes, Bad(at: r.mark, problem: problem)))
   }
 }
 
 // Looks in the members of the object from `from`, after the value of a member
 // named `name`, for another of that name, and gives it as `twice` at its name.
-fn again(b: Slice[Byte], from: Nat, name: str) -> Option[Bad] ! alloc {
+fn again(b: Slice[Byte], from: Nat, name: str) -> Option[Bad] <alloc> {
   var at = from
   loop k in 0..b.size {
     at = skip_space(b, at)
@@ -1849,7 +1849,7 @@ pub fn json_in(text: str) -> In {
 
 // Whether the reader is at the end of its text, as one value is read from
 // it, with nothing but space after.
-pub fn json_ended(r: In) -> Result[(), ReadError] ! alloc {
+pub fn json_ended(r: In) -> Result[(), ReadError] <alloc> {
   a = skip_space(r.bytes, r.at)
   if a < r.bytes.size {
     Result.err(read_error(r.bytes, malformed(a)))
@@ -1859,15 +1859,15 @@ pub fn json_ended(r: In) -> Result[(), ReadError] ! alloc {
 }
 
 pub trait FromJson[T] {
-  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] ! alloc
-  fn from_json(text: str) -> Result[T, ReadError] ! alloc
+  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] <alloc>
+  fn from_json(text: str) -> Result[T, ReadError] <alloc>
 }
 
 impl[T] FromJson[T]
   requires Deserialize[T]
   requires Discard[T]
 {
-  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] ! alloc {
+  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] <alloc> {
     bytes = text.bytes
     r = In(bytes: bytes, at: 0, mark: 0, json: json, forms: 0, deep: [], cases: 0, pending: false, tags: [])
     (w, result): (In, Result[T, ReadError]) = read(r)
@@ -1883,7 +1883,7 @@ impl[T] FromJson[T]
       }
     }
   }
-  fn from_json(text: str) -> Result[T, ReadError] ! alloc {
+  fn from_json(text: str) -> Result[T, ReadError] <alloc> {
     from_json_as(text, Json(cases: .key, names: .written))
   }
 }
@@ -1899,7 +1899,7 @@ pub fn raw_text(raw: RawJson) -> str { raw.text }
 
 // The text of one whole JSON value, with the space round it left out, or where
 // the bytes are not one.
-fn whole_value(bytes: Slice[Byte]) -> Result[str, Bad] ! alloc {
+fn whole_value(bytes: Slice[Byte]) -> Result[str, Bad] <alloc> {
   a = skip_space(bytes, 0)
   match scan(bytes, a) {
     .err(e) { Result.err(e) }
@@ -1922,7 +1922,7 @@ fn whole_value(bytes: Slice[Byte]) -> Result[str, Bad] ! alloc {
 // A `RawJson` of the text, which is checked to be one whole JSON value, with
 // the space round it left out, as it is when it is read. A text that is not
 // gives the error that reading it gives.
-pub fn raw_json(text: str) -> Result[RawJson, ReadError] ! alloc {
+pub fn raw_json(text: str) -> Result[RawJson, ReadError] <alloc> {
   bytes = text.bytes
   match whole_value(bytes) {
     .ok(t) { Result.ok(RawJson(text: t)) }
@@ -1931,13 +1931,13 @@ pub fn raw_json(text: str) -> Result[RawJson, ReadError] ! alloc {
 }
 
 impl Serialize[RawJson] {
-  fn write[W: Writer](value: RawJson, to: take W) -> W ! alloc {
+  fn write[W: Writer](value: RawJson, to: take W) -> W <alloc> {
     Writer.raw(to, "json", value.text.bytes)
   }
 }
 
 impl Deserialize[RawJson] {
-  fn read[R: Reader](from: take R) -> (R, Result[RawJson, ReadError]) ! alloc {
+  fn read[R: Reader](from: take R) -> (R, Result[RawJson, ReadError]) <alloc> {
     (r, got) = Reader.raw(from, "json")
     match got {
       .err(e) { (r, Result.err(e)) }
@@ -1958,7 +1958,7 @@ impl Deserialize[RawJson] {
 // What the error says, as `1:57: tools[2].timeout: expected a whole number,
 // found a text`: the line and the column, the path when there is one, and the
 // problem.
-pub fn describe(e: ReadError) -> str ! alloc {
+pub fn describe(e: ReadError) -> str <alloc> {
   what = match e.problem {
     .malformed { "not valid JSON" }
     .missing(n) { "missing `{n}`" }

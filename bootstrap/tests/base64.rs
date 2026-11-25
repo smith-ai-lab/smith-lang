@@ -85,28 +85,28 @@ fn program(calls: &[String]) -> String {
     let mut helpers = String::new();
     if used("enc(") {
         imports.push("encode");
-        helpers += "fn enc(b: take List[Byte]) ! console, alloc {\n  print(encode(freeze(b)))\n}\n\n";
+        helpers += "fn enc(b: take List[Byte]) <console, alloc> {\n  print(encode(freeze(b)))\n}\n\n";
     }
     if used("enc_url(") {
         imports.push("encode_url");
-        helpers += "fn enc_url(b: take List[Byte]) ! console, alloc {\n  print(encode_url(freeze(b)))\n}\n\n";
+        helpers += "fn enc_url(b: take List[Byte]) <console, alloc> {\n  print(encode_url(freeze(b)))\n}\n\n";
     }
     if used("dec(") {
         imports.push("decode");
-        helpers += "fn dec(s: str) ! console, alloc {\n  show(decode(s))\n}\n\n";
+        helpers += "fn dec(s: str) <console, alloc> {\n  show(decode(s))\n}\n\n";
     }
     if used("dec_url(") {
         imports.push("decode_url");
-        helpers += "fn dec_url(s: str) ! console, alloc {\n  show(decode_url(s))\n}\n\n";
+        helpers += "fn dec_url(s: str) <console, alloc> {\n  show(decode_url(s))\n}\n\n";
     }
     if used("dec") {
         helpers = format!(
-            "fn show(o: Option[List[Byte]]) ! console, alloc {{\n  match o {{\n    .none {{ print(\"none\") }}\n    .some(l) {{\n      print(\"some {{l.size}}\")\n      loop v in l {{ print(\"{{v}}\") }}\n    }}\n  }}\n}}\n\n{helpers}"
+            "fn show(o: Option[List[Byte]]) <console, alloc> {{\n  match o {{\n    .none {{ print(\"none\") }}\n    .some(l) {{\n      print(\"some {{l.size}}\")\n      loop v in l {{ print(\"{{v}}\") }}\n    }}\n  }}\n}}\n\n{helpers}"
         );
     }
     imports.sort();
     format!(
-        "use std.base64 ({})\nuse std.console (console, print)\nuse std.list (freeze)\n\n{helpers}fn main() ! console, alloc {{\n{body}}}\n",
+        "use std.base64 ({})\nuse std.console (console, print)\nuse std.list (freeze)\n\n{helpers}fn main() <console, alloc> {{\n{body}}}\n",
         imports.join(", ")
     )
 }
@@ -147,7 +147,7 @@ fn bytes_of(g: &mut Gen, most: usize) -> Vec<u8> {
 }
 
 fn the_examples_of_the_page_and_the_vectors_of_rfc_4648_give_what_they_say() {
-    let source = "use std.base64 (decode, decode_url, encode, encode_url)\nuse std.console (console, print)\n\nfn show(o: Option[List[Byte]]) ! console, alloc {\n  match o {\n    .none { print(\"none\") }\n    .some(l) {\n      print(\"some {l.size}\")\n      loop v in l { print(\"{v}\") }\n    }\n  }\n}\n\nfn main() ! console, alloc {\n  print(encode(\"hi?\".bytes))\n  print(encode_url(\"hi?\".bytes))\n  print(encode(\"hi\".bytes))\n  print(encode_url(\"hi\".bytes))\n  show(decode(\"aGk/\"))\n}\n";
+    let source = "use std.base64 (decode, decode_url, encode, encode_url)\nuse std.console (console, print)\n\nfn show(o: Option[List[Byte]]) <console, alloc> {\n  match o {\n    .none { print(\"none\") }\n    .some(l) {\n      print(\"some {l.size}\")\n      loop v in l { print(\"{v}\") }\n    }\n  }\n}\n\nfn main() <console, alloc> {\n  print(encode(\"hi?\".bytes))\n  print(encode_url(\"hi?\".bytes))\n  print(encode(\"hi\".bytes))\n  print(encode_url(\"hi\".bytes))\n  show(decode(\"aGk/\"))\n}\n";
     let mut expected: Vec<String> = ["aGk/", "aGk_", "aGk=", "aGk"].map(String::from).to_vec();
     expected.extend(shown(Some(b"hi?".to_vec())));
     assert_eq!(printed(source), expected);
@@ -171,7 +171,7 @@ fn the_examples_of_the_page_and_the_vectors_of_rfc_4648_give_what_they_say() {
         expected.extend(shown(Some(plain.as_bytes().to_vec())));
     }
     let body: String = calls.iter().map(|c| format!("  {c}\n")).collect();
-    let source = format!("use std.base64 (decode, encode)\nuse std.console (console, print)\n\nfn show(o: Option[List[Byte]]) ! console, alloc {{\n  match o {{\n    .none {{ print(\"none\") }}\n    .some(l) {{\n      print(\"some {{l.size}}\")\n      loop v in l {{ print(\"{{v}}\") }}\n    }}\n  }}\n}}\n\nfn main() ! console, alloc {{\n{body}}}\n");
+    let source = format!("use std.base64 (decode, encode)\nuse std.console (console, print)\n\nfn show(o: Option[List[Byte]]) <console, alloc> {{\n  match o {{\n    .none {{ print(\"none\") }}\n    .some(l) {{\n      print(\"some {{l.size}}\")\n      loop v in l {{ print(\"{{v}}\") }}\n    }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n");
     assert_eq!(printed(&source), expected);
 }
 

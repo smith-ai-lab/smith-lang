@@ -14,10 +14,10 @@ impl Named[str] {
   }
 }
 
-fn main() ! console {
+fn main() <console> {
   print(f1("", Box(item: "")))
 }
 
-fn f1[T: str](a: T, b: Box[str]) -> T ! console {
+fn f1[T: str](a: T, b: Box[str]) -> T <console> {
   Box(item: pass_on(a)).item
 }

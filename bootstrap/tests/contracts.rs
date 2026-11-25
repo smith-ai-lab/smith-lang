@@ -138,7 +138,7 @@ fn call(g: &mut Gen) -> Call {
     };
     Call {
         source: with_header(format!(
-            "fn needs(i: {t}) -> {t}\n{lines}{{\n  i\n}}\n\nfn main() ! console, alloc {{\n{bind}  print(\"{{needs({passed})}}\")\n}}\n"
+            "fn needs(i: {t}) -> {t}\n{lines}{{\n  i\n}}\n\nfn main() <console, alloc> {{\n{bind}  print(\"{{needs({passed})}}\")\n}}\n"
         )),
         holds,
         arg,
@@ -206,7 +206,7 @@ fn predicates(g: &mut Gen) -> Call {
     };
     Call {
         source: with_header(format!(
-            "{defs}fn needs(i: {t}) -> {t}\n{lines}{{\n  i\n}}\n\nfn main() ! console, alloc {{\n{bind}  print(\"{{needs({passed})}}\")\n}}\n"
+            "{defs}fn needs(i: {t}) -> {t}\n{lines}{{\n  i\n}}\n\nfn main() <console, alloc> {{\n{bind}  print(\"{{needs({passed})}}\")\n}}\n"
         )),
         holds,
         arg,
@@ -273,7 +273,7 @@ fn inside(g: &mut Gen) -> Inside {
     };
     Inside {
         source: with_header(format!(
-            "fn f(i: {t}) -> {t}\n  requires {lo} <= i\n  requires {upper}\n{{\n  {written}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f({lo})}}\")\n}}\n"
+            "fn f(i: {t}) -> {t}\n  requires {lo} <= i\n  requires {upper}\n{{\n  {written}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({lo})}}\")\n}}\n"
         )),
         fits,
         written,
@@ -325,7 +325,7 @@ fn gives(g: &mut Gen) -> Gives {
     }
     Gives {
         source: with_header(format!(
-            "fn lift(i: {t}) -> r: {t}\n  requires i <= {top}\n{lines}{{\n  if i < {split} {{\n    i + {c1}\n  }} else {{\n    i + {c2}\n  }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{lift({})}}\")\n}}\n",
+            "fn lift(i: {t}) -> r: {t}\n  requires i <= {top}\n{lines}{{\n  if i < {split} {{\n    i + {c1}\n  }} else {{\n    i + {c2}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{lift({})}}\")\n}}\n",
             ty.min()
         )),
         holds,
@@ -375,7 +375,7 @@ fn chain(g: &mut Gen) -> Chain {
     }
     Chain {
         source: with_header(format!(
-            "fn next(i: {t}) -> r: {t}\n  requires i < {max}\n  ensures r == i + 1\n{{\n  i + 1\n}}\n\nfn many(i: {t}) -> {t}\n  requires i <= {bound}\n{{\n  {call}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{many({start})}}\")\n}}\n",
+            "fn next(i: {t}) -> r: {t}\n  requires i < {max}\n  ensures r == i + 1\n{{\n  i + 1\n}}\n\nfn many(i: {t}) -> {t}\n  requires i <= {bound}\n{{\n  {call}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{many({start})}}\")\n}}\n",
             max = ty.max()
         )),
         fits: bound + depth <= ty.max(),
@@ -417,7 +417,7 @@ fn an_ensures_on_a_function_that_does_not_name_its_result_is_an_error_that_says_
     for ty in INTS {
         let t = ty.name;
         let unnamed = with_header(format!(
-            "fn same(i: {t}) -> {t}\n  ensures i == i\n{{\n  i\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{same(1)}}\")\n}}\n"
+            "fn same(i: {t}) -> {t}\n  ensures i == i\n{{\n  i\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{same(1)}}\")\n}}\n"
         ));
         let errors = check(unnamed.as_bytes()).expect_err("a result with no name");
         assert!(
@@ -455,7 +455,7 @@ fn guarded(g: &mut Gen) -> (String, String) {
         "  if i < {} {{\n    i + 1\n  }} else {{\n    i\n  }}\n",
         ty.max()
     );
-    let main = format!("fn main() ! console, alloc {{\n  print(\"{{f({at})}}\")\n}}\n");
+    let main = format!("fn main() <console, alloc> {{\n  print(\"{{f({at})}}\")\n}}\n");
     let with = format!("fn f(i: {t}) -> r: {t}\n{requires}{ensures}{{\n{body}}}\n\n{main}");
     let without = format!("fn f(i: {t}) -> {t} {{\n{body}}}\n\n{main}");
     let (with, without) = (with_header(with), with_header(without));
@@ -498,7 +498,7 @@ fn a_function_with_a_requires_is_refused_wherever_it_is_used_as_a_value() {
                 let source = with_header(format!(
                     "fn lift(i: {t}) -> r: {t}\n{line}  ensures r >= i\n{{\n  if i < {max} {{ i + 1 }} else {{ i }}\n}}\n\n\
                      fn apply(x: {t}, f: fn({t}) -> {t}) -> {t} {{\n  f(x)\n}}\n\n\
-                     fn main() ! console, alloc {{\n  print(\"{{{usage}}}\")\n}}\n"
+                     fn main() <console, alloc> {{\n  print(\"{{{usage}}}\")\n}}\n"
                 ));
                 match check(source.as_bytes()) {
                     Ok(_) => assert!(

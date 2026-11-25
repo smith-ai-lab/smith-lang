@@ -30,7 +30,7 @@ Described to the `Describer` of JSON Schema, `Note` is an object with a `title` 
 
 ```
 trait Describe[T] {
-  fn describe[D: Describer](to: take D) -> D ! alloc
+  fn describe[D: Describer](to: take D) -> D <alloc>
 }
 ```
 
@@ -42,25 +42,25 @@ A format for descriptions is a type that has `Describer`, which has a function f
 
 ```
 trait Describer[D] {
-  fn boolean(d: take D) -> D ! alloc
-  fn signed(d: take D, least: Int, greatest: Int) -> D ! alloc
-  fn unsigned(d: take D, least: u64, greatest: u64) -> D ! alloc
-  fn text(d: take D) -> D ! alloc
-  fn nothing(d: take D) -> D ! alloc
-  fn optional(d: take D) -> D ! alloc
-  fn end_optional(d: take D) -> D ! alloc
-  fn sequence(d: take D) -> D ! alloc
-  fn end_sequence(d: take D) -> D ! alloc
-  fn tuple(d: take D, size: Nat) -> D ! alloc
-  fn end_tuple(d: take D) -> D ! alloc
-  fn structure(d: take D, name: str, about: str, fields: Nat) -> D ! alloc
-  fn field(d: take D, name: str, about: str, optional: bool) -> D ! alloc
-  fn end_structure(d: take D) -> D ! alloc
-  fn enumeration(d: take D, name: str, about: str, cases: Nat) -> D ! alloc
-  fn case(d: take D, name: str, about: str, holds: bool) -> D ! alloc
-  fn end_case(d: take D) -> D ! alloc
-  fn end_enumeration(d: take D) -> D ! alloc
-  fn map(d: take D) -> D ! alloc
+  fn boolean(d: take D) -> D <alloc>
+  fn signed(d: take D, least: Int, greatest: Int) -> D <alloc>
+  fn unsigned(d: take D, least: u64, greatest: u64) -> D <alloc>
+  fn text(d: take D) -> D <alloc>
+  fn nothing(d: take D) -> D <alloc>
+  fn optional(d: take D) -> D <alloc>
+  fn end_optional(d: take D) -> D <alloc>
+  fn sequence(d: take D) -> D <alloc>
+  fn end_sequence(d: take D) -> D <alloc>
+  fn tuple(d: take D, size: Nat) -> D <alloc>
+  fn end_tuple(d: take D) -> D <alloc>
+  fn structure(d: take D, name: str, about: str, fields: Nat) -> D <alloc>
+  fn field(d: take D, name: str, about: str, optional: bool) -> D <alloc>
+  fn end_structure(d: take D) -> D <alloc>
+  fn enumeration(d: take D, name: str, about: str, cases: Nat) -> D <alloc>
+  fn case(d: take D, name: str, about: str, holds: bool) -> D <alloc>
+  fn end_case(d: take D) -> D <alloc>
+  fn end_enumeration(d: take D) -> D <alloc>
+  fn map(d: take D) -> D <alloc>
 }
 ```
 

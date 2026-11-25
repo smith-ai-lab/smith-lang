@@ -40,7 +40,7 @@ use std.console (console, print)
 use std.list (push)
 use std.task (join, spawn, test_ready_by, test_scheduler)
 
-fn eat() -> u64 ! alloc {{
+fn eat() -> u64 <alloc> {{
   var xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
     xs = push(xs, i)
@@ -48,13 +48,13 @@ fn eat() -> u64 ! alloc {{
   0
 }}
 
-fn run() ! console, alloc, diverge {{
+fn run() <console, alloc, diverge> {{
   with test_scheduler(3)
   child = spawn {{ eat() }}
 {joins}  print(\"the parent went on\")
 }}
 
-fn main() ! console, alloc, diverge {{
+fn main() <console, alloc, diverge> {{
   run()
 }}
 "
@@ -90,7 +90,7 @@ fn the_outcome_of_a_child_that_returns_a_value_is_that_value() {
 use std.console (console, print)
 use std.task (outcome, spawn, test_scheduler)
 
-fn run() ! console, alloc, diverge {
+fn run() <console, alloc, diverge> {
   with test_scheduler(3)
   child = spawn { 41 }
   match outcome(child) {
@@ -100,7 +100,7 @@ fn run() ! console, alloc, diverge {
   }
 }
 
-fn main() ! console, alloc, diverge {
+fn main() <console, alloc, diverge> {
   run()
 }
 ";
@@ -116,7 +116,7 @@ use std.console (console, print)
 use std.list (push)
 use std.task (join, outcome, spawn, task, test_scheduler)
 
-fn eat() -> u64 ! alloc {
+fn eat() -> u64 <alloc> {
   var xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     xs = push(xs, i)
@@ -124,14 +124,14 @@ fn eat() -> u64 ! alloc {
   0
 }
 
-fn middle() -> u64 ! alloc, task, console {
+fn middle() -> u64 <alloc, task, console> {
   child = spawn { eat() }
   n = join(child)
   print(\"the middle task went on\")
   n
 }
 
-fn run() ! console, alloc, diverge {
+fn run() <console, alloc, diverge> {
   with test_scheduler(3)
   child = spawn { middle() }
   match outcome(child) {
@@ -141,7 +141,7 @@ fn run() ! console, alloc, diverge {
   }
 }
 
-fn main() ! console, alloc, diverge {
+fn main() <console, alloc, diverge> {
   run()
 }
 ";

@@ -23,9 +23,9 @@ Concurrent work runs in tasks, and there are no raw threads or locks. Data is im
 ```
 use std.task (join, spawn, tasks)
 
-fn fetch(url: str) -> Result[List[Byte], NetError] ! net, alloc
+fn fetch(url: str) -> Result[List[Byte], NetError] <net, alloc>
 
-fn fetch_one(url: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn fetch_one(url: str) -> Result[List[Byte], NetError] <net, alloc> {
   with tasks()
   t = spawn { fetch(url) }
   join(t)
@@ -41,7 +41,7 @@ A child runs at the same time as its parent, so two spawns run two children toge
 ```
 use std.task (join, spawn, tasks)
 
-fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! net, alloc {
+fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
@@ -60,7 +60,7 @@ fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] ! ne
 ```
 use std.task (join, spawn, tasks)
 
-fn quickest(a: str, b: str, c: str) -> Result[List[Byte], NetError] ! net, alloc {
+fn quickest(a: str, b: str, c: str) -> Result[List[Byte], NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
@@ -82,7 +82,7 @@ When the block of `with tasks()` ends, the children still running are cancelled,
 ```
 use std.task (join, spawn, tasks)
 
-fn warm(url: str) ! net, alloc {
+fn warm(url: str) <net, alloc> {
   with tasks()
   spawn { fetch(url) }
   ()
@@ -99,7 +99,7 @@ A function that spawns without opening its own group spawns into its caller's, a
 use std.bits (i32)
 use std.task (spawn, task, tasks)
 
-fn start(n: i32) ! task {
+fn start(n: i32) <task> {
   spawn { n * 2 }
   ()
 }
@@ -111,7 +111,7 @@ fn start_two() {
 }
 ```
 
-Leaving `task` out of `start` is refused, as is any effect left out of a signature: "`spawn` needs the `task` effect, which `start` does not declare", with the fix "write `fn start(n: i32) ! task`".
+Leaving `task` out of `start` is refused, as is any effect left out of a signature: "`spawn` needs the `task` effect, which `start` does not declare", with the fix "write `fn start(n: i32) <task>`".
 
 ## The forms
 
@@ -122,6 +122,6 @@ Leaving `task` out of `start` is refused, as is any effect left out of a signatu
 | `spawn { e }` | A child that runs `e`, in the nearest group |
 | `join(t)` | The value of the child `t`, after waiting for it |
 | `first(t, rest)` | The value of the first of `t` and the children in `rest` to finish |
-| `! task` | A function that spawns into its caller's group |
+| `<task>` | A function that spawns into its caller's group |
 
 Next: [What a spawned task may use](task-sharing.md)

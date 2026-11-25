@@ -26,7 +26,7 @@ struct Pair {
   right: Expr
 }
 
-fn eval(e: Expr) -> f64 ! alloc {
+fn eval(e: Expr) -> f64 <alloc> {
   match e {
     .num(v) { v }
     .neg(x) { -eval(x) }
@@ -60,7 +60,7 @@ Nodes are bumped into the [arena](arenas.md) and dropped with it, so there is no
 Changing a tree builds new nodes and leaves the old ones until the arena is dropped.
 
 ```
-fn negate_all(e: Expr) -> Expr ! alloc {
+fn negate_all(e: Expr) -> Expr <alloc> {
   match e {
     .num(v) { .num(-v) }
     .neg(x) { x }
@@ -72,7 +72,7 @@ fn negate_all(e: Expr) -> Expr ! alloc {
 A pass that rewrites a tree many times runs in its own arena and builds its result in the parent's.
 
 ```
-fn rewritten(e: Expr) -> Expr ! alloc {
+fn rewritten(e: Expr) -> Expr <alloc> {
   with arena()
   negate_all(negate_all(e))
 }

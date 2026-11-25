@@ -24,7 +24,7 @@ enum Stream {
 
 effect console {
   fn print(text: str, end: str = "\n", to: Stream = .stdout)
-  fn input(prompt: str = "") -> Option[str] ! alloc
+  fn input(prompt: str = "") -> Option[str] <alloc>
 }
 ```
 
@@ -47,7 +47,7 @@ print("could not open the file", to: .stderr)
 ```
 use std.console (console, input, print)
 
-fn greet() ! console, alloc {
+fn greet() <console, alloc> {
   match input("name: ") {
     .some(name) { print("hello {name}") }
     .none { print("hello") }
@@ -61,7 +61,7 @@ A handler supplies both operations. This one keeps everything printed to standar
 use std.console (console, input)
 use std.list (push)
 
-fn capture[T](body: fn() -> T ! console) -> (T, List[str]) ! console, alloc {
+fn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {
   var seen: List[str] = []
   r = console(
     print: fn(text, end, to) {

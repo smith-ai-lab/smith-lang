@@ -115,13 +115,13 @@ fn texts(r: &Range) -> Vec<String> {
 fn a_whole_number_is_read_from_its_digits_exactly_when_it_is_in_its_range() {
     generate::check(8101, 6, range, |r| {
         let mut source = format!(
-            "{USES}fn show(text: str) -> str ! alloc {{\n  \
+            "{USES}fn show(text: str) -> str <alloc> {{\n  \
              got: Result[{}..{}, ReadError] = from_text(\"n\", text)\n  match got {{\n    \
              .ok(v) {{ \"{{v}}\" }}\n    .err(e) {{\n      match e.problem {{\n        \
              .range(t) {{ \"range\" }}\n        .shape(p) {{ \"shape\" }}\n        \
              .malformed {{ \"other\" }}\n        .missing(n) {{ \"other\" }}\n        \
              .case(n) {{ \"other\" }}\n        .unknown(n) {{ \"other\" }}\n        \
-             .twice(n) {{ \"other\" }}\n      }}\n    }}\n  }}\n}}\n\nfn main() ! console, alloc {{\n",
+             .twice(n) {{ \"other\" }}\n      }}\n    }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n",
             r.least, r.end
         );
         let mut said = String::new();
@@ -149,10 +149,10 @@ fn the_sizes_of_whole_numbers_are_read_to_their_ends_and_refused_one_past() {
     ];
     for (ty, least, greatest, below, above) in sizes {
         let source = format!(
-            "use std.bits (i8, i16, i32, u8, u16, u32, u64)\n{USES}fn show(text: str) -> str ! alloc {{\n  \
+            "use std.bits (i8, i16, i32, u8, u16, u32, u64)\n{USES}fn show(text: str) -> str <alloc> {{\n  \
              got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    \
              .ok(v) {{ \"{{v}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-             fn main() ! console, alloc {{\n  print(show(\"{least}\"))\n  print(show(\"{greatest}\"))\n  \
+             fn main() <console, alloc> {{\n  print(show(\"{least}\"))\n  print(show(\"{greatest}\"))\n  \
              print(show(\"{below}\"))\n  print(show(\"{above}\"))\n}}\n"
         );
         let said = format!("{least}\n{greatest}\nerr\nerr\n");
@@ -162,11 +162,11 @@ fn the_sizes_of_whole_numbers_are_read_to_their_ends_and_refused_one_past() {
 
 fn a_bool_and_a_text_are_read_as_they_are_written() {
     let source = format!(
-        "{USES}fn truth(text: str) -> str ! alloc {{\n  got: Result[bool, ReadError] = from_text(\"flag\", text)\n  \
+        "{USES}fn truth(text: str) -> str <alloc> {{\n  got: Result[bool, ReadError] = from_text(\"flag\", text)\n  \
          match got {{\n    .ok(v) {{ \"{{v}}\" }}\n    .err(e) {{ \"{{e.path}} err\" }}\n  }}\n}}\n\n\
-         fn words(text: str) -> str ! alloc {{\n  got: Result[str, ReadError] = from_text(\"w\", text)\n  \
+         fn words(text: str) -> str <alloc> {{\n  got: Result[str, ReadError] = from_text(\"w\", text)\n  \
          match got {{\n    .ok(v) {{ \"<{{v}}>\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(truth(\"true\"))\n  print(truth(\"false\"))\n  \
+         fn main() <console, alloc> {{\n  print(truth(\"true\"))\n  print(truth(\"false\"))\n  \
          print(truth(\"True\"))\n  print(truth(\"\"))\n  print(truth(\"truee\"))\n  \
          print(words(\"\"))\n  print(words(\"a b\"))\n}}\n"
     );
@@ -184,12 +184,12 @@ fn a_type_with_an_impl_of_its_own_is_read_by_it() {
          impl FromText[Level] {{\n  fn parse(text: str) -> Option[Level] {{\n    if text == \"low\" {{ Option.some(Level.low) }} \
          else if text == \"high\" {{ Option.some(Level.high) }} else {{ Option.none }}\n  }}\n  \
          fn expects() -> str {{ \"low or high\" }}\n}}\n\n\
-         fn show(text: str) -> str ! alloc {{\n  got: Result[Level, ReadError] = from_text(\"level\", text)\n  \
+         fn show(text: str) -> str <alloc> {{\n  got: Result[Level, ReadError] = from_text(\"level\", text)\n  \
          match got {{\n    .ok(v) {{ match v {{\n      .low {{ \"low\" }}\n      .high {{ \"high\" }}\n    }} }}\n    \
          .err(e) {{ match e.problem {{\n      .shape((wanted, found)) {{ \"{{e.path}}: wanted {{wanted}}\" }}\n      \
          .range(t) {{ \"range\" }}\n      .malformed {{ \"other\" }}\n      .missing(n) {{ \"other\" }}\n      \
          .case(n) {{ \"other\" }}\n      .unknown(n) {{ \"other\" }}\n      .twice(n) {{ \"other\" }}\n    }} }}\n  }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(show(\"low\"))\n  print(show(\"high\"))\n  print(show(\"mid\"))\n}}\n",
+         fn main() <console, alloc> {{\n  print(show(\"low\"))\n  print(show(\"high\"))\n  print(show(\"mid\"))\n}}\n",
         USES.replace("(ReadText, from_text)", "(FromText, ReadText, from_text)")
     );
     assert_eq!(printed(&source), "low\nhigh\nlevel: wanted low or high\n");
@@ -198,7 +198,7 @@ fn a_type_with_an_impl_of_its_own_is_read_by_it() {
 /// A struct has no reading from a text, so reading one is refused, naming it.
 fn a_type_with_no_reading_from_a_text_is_refused_where_it_is_read() {
     let source = format!(
-        "{USES}struct Note {{\n  title: str\n}}\n\nfn main() ! console, alloc {{\n  \
+        "{USES}struct Note {{\n  title: str\n}}\n\nfn main() <console, alloc> {{\n  \
          got: Result[Note, ReadError] = from_text(\"n\", \"x\")\n  print(\"done\")\n}}\n"
     );
     let Err(found) = check(source.as_bytes()) else {
@@ -212,12 +212,12 @@ fn a_type_with_no_reading_from_a_text_is_refused_where_it_is_read() {
 
 fn every_executable_reads_a_text_as_the_evaluator_does() {
     let source = format!(
-        "use std.bits (i8, u64)\n{USES}fn show(text: str) -> str ! alloc {{\n  \
+        "use std.bits (i8, u64)\n{USES}fn show(text: str) -> str <alloc> {{\n  \
          got: Result[-5..200, ReadError] = from_text(\"n\", text)\n  match got {{\n    \
          .ok(v) {{ \"{{v}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-         fn wide(text: str) -> str ! alloc {{\n  got: Result[u64, ReadError] = from_text(\"n\", text)\n  \
+         fn wide(text: str) -> str <alloc> {{\n  got: Result[u64, ReadError] = from_text(\"n\", text)\n  \
          match got {{\n    .ok(v) {{ \"{{v}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(show(\"-5\"))\n  print(show(\"-6\"))\n  print(show(\"199\"))\n  \
+         fn main() <console, alloc> {{\n  print(show(\"-5\"))\n  print(show(\"-6\"))\n  print(show(\"199\"))\n  \
          print(show(\"200\"))\n  print(show(\"x\"))\n  print(wide(\"18446744073709551615\"))\n  \
          print(wide(\"18446744073709551616\"))\n}}\n"
     );

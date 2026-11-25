@@ -109,7 +109,7 @@ impl Emit[u64] {{
   fn emit[W: Sink](value: u64, to: take W) -> W {{ put(to, value) }}
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   n: u64 = 7
   c = emit(n, Count(total: 1))
   l = emit(n, Log(last: 0))
@@ -424,7 +424,7 @@ impl Program {
     }
 
     fn main(&self, name: &dyn Fn(Of) -> String) -> (String, String) {
-        let mut main = "fn main() ! console, alloc {\n".to_string();
+        let mut main = "fn main() <console, alloc> {\n".to_string();
         let mut printed = String::new();
         for (at, call) in self.calls.iter().enumerate() {
             let (text, says) = self.call(at, call, name);
@@ -476,7 +476,7 @@ fn all[T: Emit, W: Sink](xs: List[T], to: take W) -> W {{
   w
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   xs: List[{ty}] = [{}]
   r = all(xs, {})
   print(\"{{r.{}}}\")
@@ -510,7 +510,7 @@ fn a_call_with_a_type_that_lacks_the_bound_is_one_error_at_the_call() {
             _ => ("", keep),
         };
         let mut source = format!(
-            "{SINKS}{WEIGH}trait Emit[T] {{\n  {}\n}}\n\nimpl Emit[{ty}] {{\n  {} {{ {} }}\n}}\n\nfn main() ! console, alloc {{\n  v: {ty} = {}\n  r = ",
+            "{SINKS}{WEIGH}trait Emit[T] {{\n  {}\n}}\n\nimpl Emit[{ty}] {{\n  {} {{ {} }}\n}}\n\nfn main() <console, alloc> {{\n  v: {ty} = {}\n  r = ",
             shape.function("emit", "T"),
             shape.function("emit", ty),
             shape.body(),
@@ -572,7 +572,7 @@ fn an_implementation_with_other_type_parameters_than_the_trait_is_one_error_at_t
             at
         };
         source.push_str(&format!(
-            "{wrong}(value: u64{rest}) -> {gives} {{ {} }}\n}}\n\nfn main() ! console, alloc {{\n  n: u64 = 1\n  r = emit(n, {})\n}}\n",
+            "{wrong}(value: u64{rest}) -> {gives} {{ {} }}\n}}\n\nfn main() <console, alloc> {{\n  n: u64 = 1\n  r = emit(n, {})\n}}\n",
             shape.body().replace("weigh(value)", "value"),
             match shape {
                 Shape::Plain => "1".to_string(),
@@ -610,7 +610,7 @@ impl Emit[u64] {{
 {body}  }}
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   n: u64 = 1
   c = emit(n, Count(total: 0))
   print(\"{{c.total}}\")
@@ -681,7 +681,7 @@ impl Pass[u64] {{
   fn pass[W: {bound}](value: u64, w: W) -> u64 {{ 1 }}
 }}
 
-fn end[T](x: take T) ! diverge {{
+fn end[T](x: take T) <diverge> {{
   loop {{
     n = 1
   }}
@@ -694,13 +694,13 @@ fn end[T](x: take T) ! diverge {{
         let (mut source, callee) = if *through {
             (format!("{head}fn via[T: Pass, W](x: T, w: W) -> u64 {{\n  "), "via")
         } else {
-            (format!("{head}fn main() ! diverge {{\n  n: u64 = 1\n  {make}\n  r = "), "pass")
+            (format!("{head}fn main() <diverge> {{\n  n: u64 = 1\n  {make}\n  r = "), "pass")
         };
         let at = pos_after(&source);
         if *through {
             // Inside `via`, `W` has only what `via` asks of it, which is nothing.
             source.push_str(&format!(
-                "pass(x, w)\n}}\n\nfn main() ! diverge {{\n  n: u64 = 1\n  {make}\n  r = via(n, v)\n  s = r\n  end(v)\n}}\n"
+                "pass(x, w)\n}}\n\nfn main() <diverge> {{\n  n: u64 = 1\n  {make}\n  r = via(n, v)\n  s = r\n  end(v)\n}}\n"
             ));
             let found = errors(&source);
             assert_eq!(found.len(), 1, "{found:?}\n{source}");

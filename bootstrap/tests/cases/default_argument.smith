@@ -2,7 +2,7 @@ use std.console (console, print)
 
 fn pick(first: str, second: str = "default") -> str { second }
 
-fn main() ! console {
+fn main() <console> {
   print(pick("a"))
   print(pick("a", "b"))
   print(pick("a", second: "c"))

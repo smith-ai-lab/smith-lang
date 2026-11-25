@@ -116,7 +116,7 @@ fn system_limit(ms: u64) { }
 // all wait and then waits for the system with `epoll`, so that a task that waits
 // holds no thread. Which it is, is known when the copy is built. It lists `task`
 // for the copy that is built, and no caller lists it for the group.
-pub fn tasks[T](body: take fn() -> T ! task) -> T ! task {
+pub fn tasks[T](body: take fn() -> T <task>) -> T <task> {
   if __scheduled() {
     task(
       // The frame is lent here, and is handed on by its number, which is the frame
@@ -133,11 +133,11 @@ pub fn tasks[T](body: take fn() -> T ! task) -> T ! task {
   }
 }
 
-pub fn spawn[T](work: take fn() -> T) -> Task[T] ! task {
+pub fn spawn[T](work: take fn() -> T) -> Task[T] <task> {
   Task(number: start(__frame(work)), gives: [])
 }
 
-pub fn join[T](child: take Task[T]) -> T ! task {
+pub fn join[T](child: take Task[T]) -> T <task> {
   f = finish(child.number)
   if has_failed(child.number) {
     // The child that failed made no value, so the task that joins it ends by the
@@ -157,7 +157,7 @@ pub enum Failure {
 }
 
 // The failure of a child, or what it gave, so that the task that asks goes on.
-pub fn outcome[T](child: take Task[T]) -> Result[T, Failure] ! task {
+pub fn outcome[T](child: take Task[T]) -> Result[T, Failure] <task> {
   f = finish(child.number)
   if has_failed(child.number) {
     kind = __word(child.number, 2)
@@ -484,7 +484,7 @@ fn ask_rest(first: u64, root: u64) {
 // the tasks that may run in an order that `seed` picks: one seed always gives
 // the same order. A task that waits for another is suspended, and runs again
 // when that one has ended. `body` is the first task.
-pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! diverge {
+pub fn test_scheduler[T](seed: u64, body: take fn() -> T <task>) -> T <diverge> {
   with test_scheduler_with_io(seed, [])
   body()
 }
@@ -494,7 +494,7 @@ pub fn test_scheduler[T](seed: u64, body: take fn() -> T ! task) -> T ! diverge 
 // tasks that wait for it with `test_ready`. A handle never becomes ready before
 // a task waits for it, and a task that waits for a handle that is not in `ready`
 // waits for ever, which ends the program as every task waiting does.
-pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T ! task) -> T ! diverge {
+pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T <task>) -> T <diverge> {
   var first: u64 = 0
   var anchor: u64 = 0
   var next: u64 = 0
@@ -629,38 +629,38 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
 
 // A task waits until the test says the handle is ready, as it does for a
 // connection of a socket under the scheduler of a program.
-pub fn test_ready(handle: u64) ! task {
+pub fn test_ready(handle: u64) <task> {
   __wait(.read(Handle(number: handle)))
 }
 
 // A task waits until the test says the handle is ready or the milliseconds have
 // gone, whichever comes first, in the time of the test, which goes forward only
 // when no task can run. It is told which: true when the handle was ready.
-pub fn test_ready_by(handle: u64, ms: u64) -> bool ! task {
+pub fn test_ready_by(handle: u64, ms: u64) -> bool <task> {
   wait_to_read_by(handle, ms)
 }
 
 // For the library: waits for the milliseconds, as a task that a scheduler runs.
-pub fn wait_for_time(ms: u64) ! task {
+pub fn wait_for_time(ms: u64) <task> {
   __wait(.time(ms))
 }
 
 // Waits until the descriptor can be read or the milliseconds have gone, whichever
 // comes first, and says which: true when it can be read.
-pub fn wait_to_read_by(handle: u64, ms: u64) -> bool ! task {
+pub fn wait_to_read_by(handle: u64, ms: u64) -> bool <task> {
   limit(ms)
   __wait(.read_by(Handle(number: handle)))
   not timed_out()
 }
 
-pub fn wait_to_write_by(handle: u64, ms: u64) -> bool ! task {
+pub fn wait_to_write_by(handle: u64, ms: u64) -> bool <task> {
   limit(ms)
   __wait(.write_by(Handle(number: handle)))
   not timed_out()
 }
 
 // Bytes of a number of 32 bits, lowest first.
-fn le32(list: take List[Byte], n: u64) -> List[Byte] ! alloc {
+fn le32(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
   b0: Byte = bit_and(n, 255)
   b1: Byte = bit_and(shift_right(n, 8), 255)
   b2: Byte = bit_and(shift_right(n, 16), 255)
@@ -671,7 +671,7 @@ fn le32(list: take List[Byte], n: u64) -> List[Byte] ! alloc {
 // Asks `epoll` to say once when the descriptor can be read or written. The event
 // is the same twelve bytes of data on every machine that has `epoll`, since the
 // descriptor is written where each machine reads it.
-fn register(ep: i64, fd: u64, write: bool) -> i64 ! alloc {
+fn register(ep: i64, fd: u64, write: bool) -> i64 <alloc> {
   var events: u64 = 1073741825
   if write { events = 1073741828 }
   var event: List[Byte] = []
@@ -691,7 +691,7 @@ fn on_macos() -> bool {
 }
 
 // Bytes of a number of 64 bits, lowest first.
-fn le64(list: take List[Byte], n: u64) -> List[Byte] ! alloc {
+fn le64(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
   low: u64 = bit_and(n, 4294967295)
   high: u64 = shift_right(n, 32)
   le32(le32(list, low), high)
@@ -713,7 +713,7 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
 
 // The milliseconds the clock of the system says, which only goes forward: the
 // monotonic clock, 1 on Linux and 6 on macOS.
-fn read_clock() -> u64 ! alloc {
+fn read_clock() -> u64 <alloc> {
   var stamp: List[Byte] = []
   stamp = le64(le64(stamp, 0), 0)
   var clock: i64 = 1
@@ -730,7 +730,7 @@ fn read_clock() -> u64 ! alloc {
 // would otherwise be woken up to a millisecond before the time it asked for. It
 // is the largest number when the sum is more, so a wait that long never ends by
 // its time, where a sum that wrapped would be a moment that has gone.
-fn moment(t: u64) -> u64 ! alloc {
+fn moment(t: u64) -> u64 <alloc> {
   saturating_add(saturating_add(read_clock(), 1), t)
 }
 
@@ -749,7 +749,7 @@ fn make_queue() -> i64 {
 // Asks `kqueue` to say once when the descriptor can be read or written: one
 // `kevent` of 32 bytes, which is the descriptor, the filter (-1 to read and -2 to
 // write), the flags that add it and drop it once it has said so, and zeros.
-fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 ! alloc {
+fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 <alloc> {
   var word: u64 = 1179647
   if write { word = 1179646 }
   var change: List[Byte] = []
@@ -766,7 +766,7 @@ fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 ! alloc {
 
 // The descriptor that `kqueue` says is ready, waiting for it when the time is
 // negative, and none when it says nothing.
-fn ready_kqueue(kq: i64, time: i64) -> Option[u64] ! alloc {
+fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
   buffer: List[Byte] = __reserve(32)
   var got: i64 = 0
   if time < 0 {
@@ -790,18 +790,18 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] ! alloc {
 }
 
 // Asks the system's queue to say once when the descriptor can be read or written.
-fn register_wait(queue: i64, fd: u64, write: bool) -> i64 ! alloc {
+fn register_wait(queue: i64, fd: u64, write: bool) -> i64 <alloc> {
   if on_macos() { register_kqueue(queue, fd, write) } else { register(queue, fd, write) }
 }
 
 // The descriptor the system's queue says is ready, as below.
-fn ready(queue: i64, time: i64) -> Option[u64] ! alloc {
+fn ready(queue: i64, time: i64) -> Option[u64] <alloc> {
   if on_macos() { ready_kqueue(queue, time) } else { ready_descriptor(queue, time) }
 }
 
 // The descriptor that `epoll` says is ready, waiting for it when the time is
 // negative, and none when it says nothing.
-fn ready_descriptor(ep: i64, time: i64) -> Option[u64] ! alloc {
+fn ready_descriptor(ep: i64, time: i64) -> Option[u64] <alloc> {
   buffer: List[Byte] = __reserve(16)
   got = __system(15, ep, buffer, 1, time, 0, 0)
   if got != 1 { return .none }
@@ -818,7 +818,7 @@ fn ready_descriptor(ep: i64, time: i64) -> Option[u64] ! alloc {
 // run in turn, each until it waits, and when every one waits for the system the
 // group waits for the system, in `epoll` or in `kqueue`, for a descriptor to be ready. It holds
 // numbers and nothing else, as every scheduler does.
-fn group[T](body: take fn() -> T ! task) -> T ! alloc {
+fn group[T](body: take fn() -> T <task>) -> T <alloc> {
   var first: u64 = 0
   var anchor: u64 = 0
   var parked: u64 = 0

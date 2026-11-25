@@ -75,10 +75,10 @@ fn try_in_a_loop_reads_the_elements_up_to_the_first_failure_and_no_more() {
             .map(|i| if i == bad { "Result.err(\"x\")".to_string() } else { format!("Result.ok({})", i + 1) })
             .collect();
         let source = with_uses(&format!(
-            "fn read(r: Result[u64, str]) -> Result[u64, str] ! console {{\n  print(\"read\")\n  r\n}}\n\n\
-             fn first_bad(xs: List[Result[u64, str]]) -> Result[u64, str] ! console {{\n  var total: u64 = 0\n  \
+            "fn read(r: Result[u64, str]) -> Result[u64, str] <console> {{\n  print(\"read\")\n  r\n}}\n\n\
+             fn first_bad(xs: List[Result[u64, str]]) -> Result[u64, str] <console> {{\n  var total: u64 = 0\n  \
              loop i in 0..xs.size {{\n    v = try read(xs[i])\n    total = wrapping_add(total, v)\n  }}\n  .ok(total)\n}}\n\n\
-             fn main() ! console, alloc {{\n  xs: List[Result[u64, str]] = [{}]\n  match first_bad(xs) {{\n    \
+             fn main() <console, alloc> {{\n  xs: List[Result[u64, str]] = [{}]\n  match first_bad(xs) {{\n    \
              .ok(t) {{ print(\"ok {{t}}\") }}\n    .err(e) {{ print(\"err {{e}}\") }}\n  }}\n}}\n",
             elements.join(", ")
         ));
@@ -249,8 +249,8 @@ fn body_of(family: &Family, place: &Place, matched: bool) -> String {
         "{extra}fn step(n: u64, cut: u64) -> {ty} {{\n  if n < cut {{ {go} }} else {{ {stop} }}\n}}\n\n\
          fn split(c: take {ty}) -> Flow[u64, {ty}] {{ Try.split(c) }}\n\n\
          fn f(cut: u64) -> {ty} {{\n{body}  {ok}({last})\n}}\n\n\
-         fn show(r: {ty}) ! console, alloc {{\n  match r {{\n    {arms}\n  }}\n}}\n\n\
-         fn main() ! console, alloc {{\n{cuts}}}\n",
+         fn show(r: {ty}) <console, alloc> {{\n  match r {{\n    {arms}\n  }}\n}}\n\n\
+         fn main() <console, alloc> {{\n{cuts}}}\n",
         extra = family.extra,
         go = family.go,
         stop = family.stop,
@@ -335,7 +335,7 @@ fn a_case_that_holds_nothing_is_the_case_that_holds_unit_in_building_and_in_a_pa
                 format!(
                     "use std.console (console, print)\n\nenum Step[T] {{\n  more: T\n  done\n}}\n\n\
                  fn make(more: bool) -> Step[()] {{\n  if more {{ {built} }} else {{ .done }}\n}}\n\n\
-                 fn main() ! console {{\n  match make({more}) {{\n    {matched} {{ print(\"more\") }}\n    .done {{ print(\"done\") }}\n  }}\n}}\n"
+                 fn main() <console> {{\n  match make({more}) {{\n    {matched} {{ print(\"more\") }}\n    .done {{ print(\"done\") }}\n  }}\n}}\n"
             )
         };
         let short = program(".more", ".more");
@@ -353,14 +353,14 @@ fn a_case_that_holds_nothing_is_the_case_that_holds_unit_in_building_and_in_a_pa
 /// `then` is not a function of `Try`, and a `try` in a lambda returns from
 /// the lambda, whose result is the one that is split into.
 fn try_has_no_then_to_write_and_a_try_in_a_lambda_returns_from_the_lambda() {
-    let source = "use std.console (console)\n\nfn main() ! console, alloc {\n  r: Option[Byte] = Try.then(Option.some(1))\n}\n";
+    let source = "use std.console (console)\n\nfn main() <console, alloc> {\n  r: Option[Byte] = Try.then(Option.some(1))\n}\n";
     let found = errors(source);
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].message.contains("`then`"), "{}", found[0]);
     let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\n\
                   fn apply(f: fn(Byte) -> Option[Byte]) -> Option[Byte] { f(1) }\n\n\
                   fn go(o: Option[Byte]) -> Option[Byte] {\n  r = apply() fn(v) {\n    x = try o\n    .some(wrapping_add(x, v))\n  }\n  r\n}\n\n\
-                  fn main() ! console, alloc {\n  match go(.some(2)) {\n    .some(v) { print(\"{v}\") }\n    .none { print(\"none\") }\n  }\n  \
+                  fn main() <console, alloc> {\n  match go(.some(2)) {\n    .some(v) { print(\"{v}\") }\n    .none { print(\"none\") }\n  }\n  \
                   match go(.none) {\n    .some(v) { print(\"{v}\") }\n    .none { print(\"none\") }\n  }\n}\n";
     assert_eq!(run(source), says(&["3".to_string(), "none".to_string()]), "{source}");
 }

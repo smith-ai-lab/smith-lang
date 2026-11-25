@@ -214,7 +214,7 @@ pub fn batch_source(cases: &[Program]) -> String {
         .iter()
         .map(|c| format!("  print(\"{{{}({}, {})}}\")\n", c.name(), c.a, c.b))
         .collect();
-    with_header(format!("{defs}fn main() ! console, alloc {{\n{prints}}}\n"))
+    with_header(format!("{defs}fn main() <console, alloc> {{\n{prints}}}\n"))
 }
 
 fn number(g: &mut Gen) -> i128 {
@@ -329,7 +329,7 @@ fn worked_out(cases: &[Program]) -> bool {
 
 fn a_sum_a_difference_and_a_product_are_calls_of_operators_with_the_exact_range() {
     let source = with_header(
-        "fn f(a: Byte) -> Int\n  requires a < 100\n{\n  a * 2 + 1 - a\n}\n\nfn main() ! console, alloc {\n  print(\"{f(7)}\")\n}\n"
+        "fn f(a: Byte) -> Int\n  requires a < 100\n{\n  a * 2 + 1 - a\n}\n\nfn main() <console, alloc> {\n  print(\"{f(7)}\")\n}\n"
             .to_string(),
     );
     let all = core_terms(source.as_bytes()).expect("checks");
@@ -355,7 +355,7 @@ fn a_sum_a_difference_and_a_product_are_calls_of_operators_with_the_exact_range(
 
 fn a_function_with_anything_else_in_it_has_no_core_term() {
     let source = with_header(
-        "fn later(a: Byte) -> Byte {\n  var x: Byte = 0\n  if a > 1 {\n    x = 2\n  }\n  x\n}\n\nfn plain(a: Byte) -> Byte { a }\n\nfn main() ! console, alloc {\n  print(\"{later(1)}\")\n  print(\"{plain(2)}\")\n}\n"
+        "fn later(a: Byte) -> Byte {\n  var x: Byte = 0\n  if a > 1 {\n    x = 2\n  }\n  x\n}\n\nfn plain(a: Byte) -> Byte { a }\n\nfn main() <console, alloc> {\n  print(\"{later(1)}\")\n  print(\"{plain(2)}\")\n}\n"
             .to_string(),
     );
     let all = core_terms(source.as_bytes()).expect("checks");
@@ -410,7 +410,7 @@ fn data_source(cases: &[Data]) -> String {
             "fn size{at}(s: S, a: i32, b: i32) -> i32 {{\n  match s {{\n    .dot {{ {pick} }}\n    .circle(r) {{ r }}\n    .rect(p) {{ if p.x {order} p.y {{ {first} }} else {{ p.y }} }}\n  }}\n}}\n\nfn f{at}(k: i32, a: i32, b: i32) -> i32 {{\n  pair(size{at}(make(k, a, b), a, b), a)\n}}\n\n"
         ));
     }
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     for c in cases {
         source.push_str(&format!(
             "  print(\"{{f{}({}, {}, {})}}\")\n",
@@ -497,10 +497,10 @@ fn lambda_source(cases: &[Lambda]) -> String {
     let mut source = String::from("fn twice(f: fn(i32) -> i32, x: i32) -> i32 { f(f(x)) }\n\n");
     for Lambda { at, lo, hi, order, pivot, .. } in cases {
         source.push_str(&format!(
-            "fn f{at}(a: i32) -> i32 ! alloc {{\n  xs: List[i32] = [a, {lo}, {hi}]\n  twice(fn(v) {{ if v {order} {pivot} {{ {lo} }} else if v > {hi} {{ {hi} }} else {{ v }} }}, a)\n}}\n\n"
+            "fn f{at}(a: i32) -> i32 <alloc> {{\n  xs: List[i32] = [a, {lo}, {hi}]\n  twice(fn(v) {{ if v {order} {pivot} {{ {lo} }} else if v > {hi} {{ {hi} }} else {{ v }} }}, a)\n}}\n\n"
         ));
     }
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     for c in cases {
         source.push_str(&format!("  print(\"{{f{}({})}}\")\n", c.at, c.a));
     }

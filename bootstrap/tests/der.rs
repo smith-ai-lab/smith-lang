@@ -209,7 +209,7 @@ fn reading_the_parts_of_a_value_asks_for_memory_that_does_not_depend_on_their_by
     let sequence = |len: usize| Node::Parts(0x30, (0..3).map(|i| Node::Leaf(4, vec![i; len])).collect()).encode();
     let requests = |input: Vec<u8>| {
         let source = format!(
-            "use std.console (console, print)\nuse std.der (children, value)\n\nfn input() -> Slice[Byte] {{ {} }}\n\nfn main() ! console, alloc {{\n  match value(input()) {{\n    .ok((v, rest)) {{\n      match children(v) {{\n        .ok(cs) {{\n          if cs.size > 0 {{ print(\"{{cs.size}} {{cs[0].bytes.size}}\") }}\n        }}\n        .err(e) {{ print(e) }}\n      }}\n    }}\n    .err(e) {{ print(e) }}\n  }}\n}}\n",
+            "use std.console (console, print)\nuse std.der (children, value)\n\nfn input() -> Slice[Byte] {{ {} }}\n\nfn main() <console, alloc> {{\n  match value(input()) {{\n    .ok((v, rest)) {{\n      match children(v) {{\n        .ok(cs) {{\n          if cs.size > 0 {{ print(\"{{cs.size}} {{cs[0].bytes.size}}\") }}\n        }}\n        .err(e) {{ print(e) }}\n      }}\n    }}\n    .err(e) {{ print(e) }}\n  }}\n}}\n",
             literal(&input)
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
@@ -267,12 +267,12 @@ fn a_bit_string_gives_its_bytes_and_the_bits_left_over_and_each_fault_in_one_is_
         },
         |cases| {
             let mut source = String::from(
-                "use std.console (console, print)\nuse std.der (bits, value)\n\nfn show(b: Slice[Byte]) ! console, alloc {\n  match value(b) {\n    .err(e) { print(\"err\") }\n    .ok((v, rest)) {\n      match bits(v) {\n        .ok((bytes, left)) { print(\"ok {bytes.size} {left}\") }\n        .err(e) { print(\"err\") }\n      }\n    }\n  }\n}\n\n",
+                "use std.console (console, print)\nuse std.der (bits, value)\n\nfn show(b: Slice[Byte]) <console, alloc> {\n  match value(b) {\n    .err(e) { print(\"err\") }\n    .ok((v, rest)) {\n      match bits(v) {\n        .ok((bytes, left)) { print(\"ok {bytes.size} {left}\") }\n        .err(e) { print(\"err\") }\n      }\n    }\n  }\n}\n\n",
             );
             for (i, (id, c)) in cases.iter().enumerate() {
                 source += &format!("fn input{i}() -> Slice[Byte] {{ {} }}\n\n", literal(&tlv(*id, c)));
             }
-            source += "fn main() ! console, alloc {\n";
+            source += "fn main() <console, alloc> {\n";
             for i in 0..cases.len() {
                 source += &format!("  show(input{i}())\n");
             }

@@ -59,7 +59,7 @@ pub const MACHINE: &[Test] = &[
 ];
 
 /// The source of `squares` and `sum_of_squares`, as `arenas.md` writes them.
-const SQUARES: &str = "fn squares(n: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 ! alloc {\n  xs = squares(n)\n  var total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
+const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  var total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
 
 /// How many times the program asks the system for memory, and what it
 /// printed.
@@ -73,7 +73,7 @@ fn asks(source: &str) -> (usize, Vec<u8>) {
 /// A program that calls `sum_of_squares` of `n` as many times as it is told to.
 fn calling(calls: u64, n: u64) -> String {
     with_imports(&format!(
-        "{SQUARES}fn main() ! console, alloc {{\n  var sum = 0\n  loop i in 0..{calls} {{ sum = wrapping_add(sum, sum_of_squares({n})) }}\n  print(\"{{sum}}\")\n}}\n"
+        "{SQUARES}fn main() <console, alloc> {{\n  var sum = 0\n  loop i in 0..{calls} {{ sum = wrapping_add(sum, sum_of_squares({n})) }}\n  print(\"{{sum}}\")\n}}\n"
     ))
 }
 
@@ -116,14 +116,14 @@ fn a_list_returned_through_calls_is_written_once() {
         |&(items, depth)| {
             let list: Vec<String> = (0..items).map(|k| (k * 3 + 1).to_string()).collect();
             let mut source = format!(
-                "fn r0() -> List[u64] ! alloc {{ [{}] }}\n\n",
+                "fn r0() -> List[u64] <alloc> {{ [{}] }}\n\n",
                 list.join(", ")
             );
             for k in 1..=depth {
-                source += &format!("fn r{k}() -> List[u64] ! alloc {{ r{}() }}\n\n", k - 1);
+                source += &format!("fn r{k}() -> List[u64] <alloc> {{ r{}() }}\n\n", k - 1);
             }
             source += &format!(
-                "fn main() ! alloc {{\n  ys = r{depth}()\n  if ys.size == {items} {{ }}\n}}\n"
+                "fn main() <alloc> {{\n  ys = r{depth}()\n  if ys.size == {items} {{ }}\n}}\n"
             );
             let source = with_imports(&source);
             let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
@@ -176,7 +176,7 @@ enum Level {
 
 /// The items every program has: what a level returns, and the functions that
 /// take it apart or build a list.
-const ITEMS: &str = "use std.list (copy)\n\nstruct Pack {\n  xs: List[u64]\n  label: str\n}\n\nenum Held {\n  one: Pack\n  two: (List[u64], str)\n}\n\nfn first(t: (List[u64], str)) -> List[u64] ! alloc {\n  match t {\n    (xs, s) { copy(xs) }\n  }\n}\n\nfn second(t: (List[u64], str)) -> str {\n  match t {\n    (xs, s) { s }\n  }\n}\n\nfn xs_of(h: Held) -> List[u64] ! alloc {\n  match h {\n    .one(p) { copy(p.xs) }\n    .two(t) { first(t) }\n  }\n}\n\nfn label_of(h: Held) -> str {\n  match h {\n    .one(p) { p.label }\n    .two(t) { second(t) }\n  }\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
+const ITEMS: &str = "use std.list (copy)\n\nstruct Pack {\n  xs: List[u64]\n  label: str\n}\n\nenum Held {\n  one: Pack\n  two: (List[u64], str)\n}\n\nfn first(t: (List[u64], str)) -> List[u64] <alloc> {\n  match t {\n    (xs, s) { copy(xs) }\n  }\n}\n\nfn second(t: (List[u64], str)) -> str {\n  match t {\n    (xs, s) { s }\n  }\n}\n\nfn xs_of(h: Held) -> List[u64] <alloc> {\n  match h {\n    .one(p) { copy(p.xs) }\n    .two(t) { first(t) }\n  }\n}\n\nfn label_of(h: Held) -> str {\n  match h {\n    .one(p) { p.label }\n    .two(t) { second(t) }\n  }\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
 
 fn built(n: u64, seed: u64) -> Vec<u64> {
     (0..n)
@@ -224,7 +224,7 @@ fn level(k: usize, what: &Level) -> String {
     let below = k - 1;
     match what {
         Level::Pass { temp } => format!(
-            "fn f{k}(a: u64) -> Held ! alloc {{\n  t = build({temp}, a)\n  r = f{below}(wrapping_add(a, t.size))\n  r\n}}\n\n"
+            "fn f{k}(a: u64) -> Held <alloc> {{\n  t = build({temp}, a)\n  r = f{below}(wrapping_add(a, t.size))\n  r\n}}\n\n"
         ),
         Level::Combine {
             temp,
@@ -251,7 +251,7 @@ fn level(k: usize, what: &Level) -> String {
             } else {
                 "  .one(Pack(xs: acc, label: label))\n"
             };
-            format!("fn f{k}(a: u64) -> Held ! alloc {{\n{body}}}\n\n")
+            format!("fn f{k}(a: u64) -> Held <alloc> {{\n{body}}}\n\n")
         }
     }
 }
@@ -281,7 +281,7 @@ fn program(g: &mut Gen) -> Case {
         .collect();
     let mut source = ITEMS.to_string();
     source += &format!(
-        "fn f0(a: u64) -> Held ! alloc {{\n  xs = build({}, a)\n  label = \"b{{a}}\"\n  {}\n}}\n\n",
+        "fn f0(a: u64) -> Held <alloc> {{\n  xs = build({}, a)\n  label = \"b{{a}}\"\n  {}\n}}\n\n",
         base.0,
         if base.1 {
             ".two((xs, label))"
@@ -293,7 +293,7 @@ fn program(g: &mut Gen) -> Case {
         source += &level(k + 1, what);
     }
     let calls: Vec<u64> = (0..1 + g.below(3)).map(|_| g.below(9) as u64).collect();
-    source += "fn main() ! console, alloc {\n";
+    source += "fn main() <console, alloc> {\n";
     for (j, seed) in calls.iter().enumerate() {
         source += &format!("  r{j} = f{depth}({seed})\n");
     }
@@ -355,7 +355,7 @@ fn called_by(program: &Program, from: usize) -> Vec<usize> {
 /// request is its result takes the stack for results and no other, and gives
 /// it back, as a function that has a temporary takes both.
 fn a_function_takes_the_stacks_it_uses_and_no_others() {
-    let source = "use std.bits (u64)\nuse std.int (wrapping_add)\n\nfn plain(n: u64) -> u64 { wrapping_add(n, 1) }\n\nfn result() -> List[u64] ! alloc { [1, 2, 3] }\n\nfn temporary() -> Nat ! alloc {\n  xs: List[u64] = [1, 2, 3]\n  xs.size\n}\n\nfn main() ! alloc {\n  a = plain(1)\n  b = result()\n  c = temporary()\n}\n";
+    let source = "use std.bits (u64)\nuse std.int (wrapping_add)\n\nfn plain(n: u64) -> u64 { wrapping_add(n, 1) }\n\nfn result() -> List[u64] <alloc> { [1, 2, 3] }\n\nfn temporary() -> Nat <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  xs.size\n}\n\nfn main() <alloc> {\n  a = plain(1)\n  b = result()\n  c = temporary()\n}\n";
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     // What the program starts with calls `main`.
     let main = called_by(&program, program.main)[0];
@@ -391,7 +391,7 @@ enum Read {
 }
 
 /// The items of the programs that read what was returned.
-const READS: &str = "struct Cell {\n  xs: List[u64]\n  k: u64\n}\n\nfn squares(n: u64) -> List[u64] ! alloc {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var t = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn sum_sq(n: u64) -> u64 ! alloc { total(squares(n)) }\n\n";
+const READS: &str = "struct Cell {\n  xs: List[u64]\n  k: u64\n}\n\nfn squares(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var t = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn sum_sq(n: u64) -> u64 <alloc> { total(squares(n)) }\n\n";
 
 fn squares(n: u64) -> Vec<u64> {
     (0..n).map(|i| i.wrapping_mul(i)).collect()
@@ -421,22 +421,22 @@ fn read(k: usize, what: Read) -> Part {
     };
     match what {
         Read::Element { n, at } => list(
-            format!("fn read{k}(n: u64, at: Nat) -> List[u64] ! alloc {{\n  var all: List[List[u64]] = []\n  loop i in 0..n {{ all = push(all, squares(wrapping_add(i, 1))) }}\n  junk = squares(50)\n  if at < all.size {{ all[at] }} else {{ squares(1) }}\n}}\n\n"),
+            format!("fn read{k}(n: u64, at: Nat) -> List[u64] <alloc> {{\n  var all: List[List[u64]] = []\n  loop i in 0..n {{ all = push(all, squares(wrapping_add(i, 1))) }}\n  junk = squares(50)\n  if at < all.size {{ all[at] }} else {{ squares(1) }}\n}}\n\n"),
             format!("  r{k} = read{k}({n}, {at})\n"),
             both(&if at < n { squares(at + 1) } else { squares(1) }),
         ),
         Read::Field { n, at } => list(
-            format!("fn read{k}(n: u64, at: Nat) -> List[u64] ! alloc {{\n  var cells: List[Cell] = []\n  loop i in 0..n {{ cells = push(cells, Cell(xs: squares(wrapping_add(i, 1)), k: i)) }}\n  junk = squares(50)\n  if at < cells.size {{ cells[at].xs }} else {{ squares(1) }}\n}}\n\n"),
+            format!("fn read{k}(n: u64, at: Nat) -> List[u64] <alloc> {{\n  var cells: List[Cell] = []\n  loop i in 0..n {{ cells = push(cells, Cell(xs: squares(wrapping_add(i, 1)), k: i)) }}\n  junk = squares(50)\n  if at < cells.size {{ cells[at].xs }} else {{ squares(1) }}\n}}\n\n"),
             format!("  r{k} = read{k}({n}, {at})\n"),
             both(&if at < n { squares(at + 1) } else { squares(1) }),
         ),
         Read::Chosen { n } => list(
-            format!("fn read{k}(n: u64) -> List[u64] ! alloc {{\n  a = squares(n)\n  b = squares(wrapping_add(n, 2))\n  junk = squares(40)\n  if n < 4 {{ a }} else {{ b }}\n}}\n\n"),
+            format!("fn read{k}(n: u64) -> List[u64] <alloc> {{\n  a = squares(n)\n  b = squares(wrapping_add(n, 2))\n  junk = squares(40)\n  if n < 4 {{ a }} else {{ b }}\n}}\n\n"),
             format!("  r{k} = read{k}({n})\n"),
             both(&if n < 4 { squares(n) } else { squares(n + 2) }),
         ),
         Read::Pair { n } => Part {
-            item: format!("fn read{k}(n: u64) -> List[List[u64]] ! alloc {{\n  a = squares(n)\n  b = squares(wrapping_add(n, 1))\n  junk = squares(40)\n  [a, b]\n}}\n\n"),
+            item: format!("fn read{k}(n: u64) -> List[List[u64]] <alloc> {{\n  a = squares(n)\n  b = squares(wrapping_add(n, 1))\n  junk = squares(40)\n  [a, b]\n}}\n\n"),
             call: format!("  r{k} = read{k}({n})\n"),
             show: format!("  if 1 < r{k}.size {{\n    print(\"{{total(r{k}[0])}} {{r{k}[0].size}} {{total(r{k}[1])}} {{r{k}[1].size}}\")\n  }}\n"),
             line: format!("{} {}", both(&squares(n)), both(&squares(n + 1))),
@@ -445,7 +445,7 @@ fn read(k: usize, what: Read) -> Part {
             let bytes: Vec<String> = (0..letters).map(|i| (97 + i).to_string()).collect();
             let text: String = (0..letters).map(|i| char::from(97 + i as u8)).collect();
             Part {
-                item: format!("fn read{k}() -> Result[str, Utf8Error] ! alloc {{\n  b: List[Byte] = [{}]\n  junk = squares(40)\n  utf8(freeze(b))\n}}\n\n", bytes.join(", ")),
+                item: format!("fn read{k}() -> Result[str, Utf8Error] <alloc> {{\n  b: List[Byte] = [{}]\n  junk = squares(40)\n  utf8(freeze(b))\n}}\n\n", bytes.join(", ")),
                 call: format!("  r{k} = read{k}()\n"),
                 show: format!("  match r{k} {{\n    .ok(t) {{ print(\"{{t}}\") }}\n    .err(e) {{ print(\"err\") }}\n  }}\n"),
                 line: text,
@@ -477,7 +477,7 @@ fn reads(g: &mut Gen) -> Case {
         stdout.extend(format!("{}\n", part.line).bytes());
     }
     source += &format!(
-        "fn main() ! console, alloc {{\n{calls}  z = sum_sq({})\n{shows}}}\n",
+        "fn main() <console, alloc> {{\n{calls}  z = sum_sq({})\n{shows}}}\n",
         150 + g.below(150)
     );
     Case { source: with_imports(&source), stdout }

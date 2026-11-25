@@ -71,7 +71,7 @@ use std.int (saturating_add)
 use std.list (push)
 
 // How many addresses the message holds, and 99 when it is not believed.
-fn read(m: List[Byte], kind: u16) -> Nat ! alloc {{
+fn read(m: List[Byte], kind: u16) -> Nat <alloc> {{
   match read_reply(m, 4660, \"a.test\", kind) {{
     .some(r) {{ r.addresses.size }}
     .none {{ 99 }}
@@ -79,7 +79,7 @@ fn read(m: List[Byte], kind: u16) -> Nat ! alloc {{
 }}
 
 // The message with the byte at `at` made `value`.
-fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] ! alloc {{
+fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] <alloc> {{
   var made: List[Byte] = []
   loop i in 0..m.size {{
     if i == at {{ made = push(made, value) }} else {{ made = push(made, m[i]) }}
@@ -88,7 +88,7 @@ fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] ! alloc {{
 }}
 
 // The message whose first bytes are the first `n`.
-fn first(m: List[Byte], n: Nat) -> List[Byte] ! alloc {{
+fn first(m: List[Byte], n: Nat) -> List[Byte] <alloc> {{
   var made: List[Byte] = []
   loop i in 0..m.size {{
     if i < n {{ made = push(made, m[i]) }}
@@ -96,7 +96,7 @@ fn first(m: List[Byte], n: Nat) -> List[Byte] ! alloc {{
   made
 }}
 
-fn survey(m: List[Byte], kind: u16) ! console, alloc {{
+fn survey(m: List[Byte], kind: u16) <console, alloc> {{
   var believed: Nat = 0
   loop n in 0..m.size {{
     if read(first(m, n), kind) != 99 {{ believed = saturating_add(believed, 1) }}
@@ -115,7 +115,7 @@ fn survey(m: List[Byte], kind: u16) ! console, alloc {{
   print(\"{{read(m, kind)}} {{believed}} {{corrupted}}\")
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
 {calls}}}
 "
     );

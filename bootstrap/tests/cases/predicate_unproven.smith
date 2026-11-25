@@ -8,4 +8,4 @@ fn at(i: Byte, n: Byte) -> Byte
   n - i
 }
 
-fn main() ! console, alloc { print("{at(9, 3)}") }
+fn main() <console, alloc> { print("{at(9, 3)}") }

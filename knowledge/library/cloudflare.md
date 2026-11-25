@@ -16,12 +16,12 @@ use std.project (Package, build)
 
 package: Package = Package(name: "notes")
 
-pub fn cloud() ! http, alloc {
+pub fn cloud() <http, alloc> {
   with durable()
   main()
 }
 
-pub fn deploy() -> Result[(), DeployError] ! fs, alloc {
+pub fn deploy() -> Result[(), DeployError] <fs, alloc> {
   module = try build(package, start: cloud, target: .wasm)
   try worker(module, to: "dist")
 }

@@ -104,7 +104,7 @@ fn a_task_built_with_its_name_answers_a_client_that_starts_it_and_a_build_with_n
 
     // A build with no name starts at `main`, whether or not a `project.smith`
     // is beside it, and writes the same bytes.
-    let program = "use std.console (console, print)\n\nfn main() ! console {\n  print(\"hello\")\n}\n";
+    let program = "use std.console (console, print)\n\nfn main() <console> {\n  print(\"hello\")\n}\n";
     let with = project("start-with", &[("main.smith", program), ("project.smith", "use std.project (Package)\n\npackage = Package(name: \"hi\")\n")]);
     let without = project("start-without", &[("main.smith", program)]);
     for dir in [&with, &without] {
@@ -116,9 +116,9 @@ fn a_task_built_with_its_name_answers_a_client_that_starts_it_and_a_build_with_n
     assert_eq!(first.unwrap(), second.unwrap());
 }
 
-const TASKS_MAIN: &str = "use std.console (console, print)\n\npub fn main() ! console {\n  print(\"main\")\n}\n";
+const TASKS_MAIN: &str = "use std.console (console, print)\n\npub fn main() <console> {\n  print(\"main\")\n}\n";
 
-const TASKS: &str = "use std.console (console, print)\nuse std.project (Package)\n\npackage = Package(name: \"tasks\")\n\npub fn deploy(env: str, verbose: bool, note: Option[str], region: str = \"eu\", count: 1..100 = 3) -> Result[(), str] ! console, alloc {\n  print(\"deploy {env} {verbose} {region} {count}\")\n  match note {\n    .some(n) { print(\"note {n}\") }\n    .none { }\n  }\n  .ok(())\n}\n\npub fn fail() -> Result[(), str] ! console {\n  .err(\"it broke\")\n}\n";
+const TASKS: &str = "use std.console (console, print)\nuse std.project (Package)\n\npackage = Package(name: \"tasks\")\n\npub fn deploy(env: str, verbose: bool, note: Option[str], region: str = \"eu\", count: 1..100 = 3) -> Result[(), str] <console, alloc> {\n  print(\"deploy {env} {verbose} {region} {count}\")\n  match note {\n    .some(n) { print(\"note {n}\") }\n    .none { }\n  }\n  .ok(())\n}\n\npub fn fail() -> Result[(), str] <console> {\n  .err(\"it broke\")\n}\n";
 
 /// The executable of the task `deploy`, built once for a test.
 fn deploy() -> PathBuf {
@@ -262,10 +262,10 @@ fn a_task_is_run_by_its_name_and_one_that_gives_an_error_prints_it_and_fails() {
 
 const STORE: &str = "pub effect store {\n  pub fn get(key: str) -> Option[str]\n}\n";
 
-const STORE_MAIN: &str = "use std.console (console, print)\nuse store (get, store)\n\npub fn main() ! store, console {\n  match get(\"a\") {\n    .some(v) { print(v) }\n    .none { print(\"none\") }\n  }\n}\n";
+const STORE_MAIN: &str = "use std.console (console, print)\nuse store (get, store)\n\npub fn main() <store, console> {\n  match get(\"a\") {\n    .some(v) { print(v) }\n    .none { print(\"none\") }\n  }\n}\n";
 
 fn a_deployment_that_leaves_an_effect_of_main_unanswered_is_refused_for_a_native_target() {
-    let project_text = "use main (main)\nuse store (store)\nuse std.console (console)\n\npub fn forgot() ! console {\n  main()\n}\n\npub fn carries() ! store, console {\n  main()\n}\n";
+    let project_text = "use main (main)\nuse store (store)\nuse std.console (console)\n\npub fn forgot() <console> {\n  main()\n}\n\npub fn carries() <store, console> {\n  main()\n}\n";
     let dir = project(
         "store",
         &[("store.smith", STORE), ("main.smith", STORE_MAIN), ("project.smith", project_text)],
@@ -280,9 +280,9 @@ fn a_deployment_that_leaves_an_effect_of_main_unanswered_is_refused_for_a_native
 }
 
 fn a_task_named_as_a_command_is_refused_where_it_is_written() {
-    let main = "use std.console (console, print)\n\npub fn main() ! console {\n  print(\"main\")\n}\n";
+    let main = "use std.console (console, print)\n\npub fn main() <console> {\n  print(\"main\")\n}\n";
     for name in ["build", "run", "check"] {
-        let text = format!("use std.console (console)\n\npub fn {name}() ! console {{\n}}\n");
+        let text = format!("use std.console (console)\n\npub fn {name}() <console> {{\n}}\n");
         let dir = project(&format!("reserved-{name}"), &[("main.smith", main), ("project.smith", &text)]);
         let built = smith(&dir, &["build", name]);
         assert!(!built.status.success());
@@ -294,10 +294,10 @@ fn a_task_named_as_a_command_is_refused_where_it_is_written() {
 }
 
 fn main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_without_a_name() {
-    let project_text = "use main (main)\nuse std.console (console)\n\npub fn local() ! console {\n  main()\n}\n";
+    let project_text = "use main (main)\nuse std.console (console)\n\npub fn local() <console> {\n  main()\n}\n";
     let private = project(
         "main-private",
-        &[("main.smith", "use std.console (console, print)\n\nfn main() ! console {\n  print(\"main\")\n}\n"), ("project.smith", project_text)],
+        &[("main.smith", "use std.console (console, print)\n\nfn main() <console> {\n  print(\"main\")\n}\n"), ("project.smith", project_text)],
     );
     let refused = smith(&private, &["build", "local"]);
     assert!(!refused.status.success());
@@ -312,7 +312,7 @@ fn main_is_listed_by_project_smith_only_when_it_is_pub_and_a_pub_main_is_built_w
 
 fn an_error_of_a_task_is_at_a_line_of_project_smith() {
     // `console` is listed by the task and not imported.
-    let text = "use main (main)\n\npub fn hi() ! console {\n  main()\n}\n";
+    let text = "use main (main)\n\npub fn hi() <console> {\n  main()\n}\n";
     let dir = project("unimported", &[("main.smith", TASKS_MAIN), ("project.smith", text)]);
     let built = smith(&dir, &["build", "hi"]);
     assert!(!built.status.success());
@@ -332,6 +332,6 @@ fn an_error_of_a_task_is_at_a_line_of_project_smith() {
     // The missing import is said once, where the task lists the effect, and not
     // again at the task's name.
     assert_eq!(err.matches("does not import it").count(), 1, "{err}");
-    let (line, col) = (3, "pub fn hi() ! ".len() + 1);
+    let (line, col) = (3, "pub fn hi() <".len() + 1);
     assert!(err.contains(&format!("project.smith:{line}:{col}")), "{err}");
 }

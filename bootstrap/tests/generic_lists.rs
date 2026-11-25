@@ -173,7 +173,7 @@ fn function(k: usize, name: &str, generics: &str, t: &str, u: &str, mistake: boo
             ),
         ),
     };
-    let effects = if matches!(k, 2 | 5) { "" } else { " ! alloc" };
+    let effects = if matches!(k, 2 | 5) { "" } else { " <alloc>" };
     // Nothing is known of a type parameter but what its bounds say, so each
     // is asked for `Copy` and `Discard`, as the body copies and drops.
     let asks: String = (generics.trim_matches(['[', ']']).split(", "))
@@ -272,7 +272,7 @@ impl Case {
         let mut s = STRUCT.to_string();
         s += &function(self.shape, "generic", &generics, "T", "U", false);
         s += &function(self.shape, "written", "", t, if two { u } else { t }, false);
-        s += "fn main() ! console, alloc {\n";
+        s += "fn main() <console, alloc> {\n";
         s += &self.declare(1);
         s += &self.show("generic", 1);
         s += &self.declare(2);
@@ -290,10 +290,10 @@ fn stdout(source: &str) -> String {
 }
 
 fn the_generic_functions_that_take_and_give_a_list_compile_and_give_what_they_say() {
-    let append = "fn ap[T](a: take List[T], b: List[T]) -> List[T] ! alloc {\n  var r = a\n  loop i in 0..b.size { r = push(r, b[i]) }\n  r\n}\n\n";
+    let append = "fn ap[T](a: take List[T], b: List[T]) -> List[T] <alloc> {\n  var r = a\n  loop i in 0..b.size { r = push(r, b[i]) }\n  r\n}\n\n";
     let eq = "fn e[T: Eq](x: List[T], y: T) -> bool { x.size > 0 and x[0] == y }\n\n";
     let n = "fn n[T](x: List[T]) -> Nat { x.size }\n\n";
-    let main = "fn main() ! console, alloc {\n  a: List[Byte] = [1, 2]\n  b: List[Byte] = [3]\n  loop i in 0..ap(a, b).size { print(\"x\") }\n  c: List[Byte] = [5]\n  d: List[Byte] = [1, 2]\n  l: List[Byte] = ap(c, d)\n  loop i in 0..l.size { print(\"{l[i]}\") }\n  e1: List[Byte] = [7, 8]\n  e2: List[Byte] = [7]\n  print(\"{e(e1, 7)} {e(e2, 9)}\")\n  print(\"{n(\"abc\")}\")\n  f: List[Byte] = [9]\n  g: List[Byte] = ap([4, 5], f)\n  print(\"{g.size}\")\n}\n";
+    let main = "fn main() <console, alloc> {\n  a: List[Byte] = [1, 2]\n  b: List[Byte] = [3]\n  loop i in 0..ap(a, b).size { print(\"x\") }\n  c: List[Byte] = [5]\n  d: List[Byte] = [1, 2]\n  l: List[Byte] = ap(c, d)\n  loop i in 0..l.size { print(\"{l[i]}\") }\n  e1: List[Byte] = [7, 8]\n  e2: List[Byte] = [7]\n  print(\"{e(e1, 7)} {e(e2, 9)}\")\n  print(\"{n(\"abc\")}\")\n  f: List[Byte] = [9]\n  g: List[Byte] = ap([4, 5], f)\n  print(\"{g.size}\")\n}\n";
     assert_eq!(stdout(&format!("{append}{eq}{n}{main}")), "x\nx\nx\n5\n1\n2\ntrue false\n3\n3\n");
 }
 
@@ -347,7 +347,7 @@ fn a_text_given_where_a_function_lends_a_list_is_a_list_of_bytes() {
         let as_text = shown(&format!("f({})", args(&a, &b)));
         let declare = format!("  xs: List[Byte] = {}\n  ys: List[Byte] = {}\n", bytes(&c.a), bytes(&c.b));
         let as_list = shown(&format!("f({})", args("xs", "ys")));
-        let one = |declare: &str, body: &str| format!("{f}fn main() ! console, alloc {{\n{declare}{body}}}\n");
+        let one = |declare: &str, body: &str| format!("{f}fn main() <console, alloc> {{\n{declare}{body}}}\n");
         assert_eq!(stdout(&one("", &as_text)), stdout(&one(&declare, &as_list)), "for {c:?}");
     });
 }
@@ -363,7 +363,7 @@ fn mistake(g: &mut Gen) -> Mistake {
     let other = g.pick(&["u16", "Int", "bool"]);
     let words = ["ab", "", "xyz"];
     let word = g.pick(&words);
-    let main = |body: &str| format!("fn main() ! console, alloc {{\n{body}}}\n");
+    let main = |body: &str| format!("fn main() <console, alloc> {{\n{body}}}\n");
     let append = |generic: bool, wrong: bool| {
         function(0, "ap", if generic { "[T]" } else { "" }, if generic { "T" } else { ty }, "U", wrong)
     };
@@ -443,7 +443,7 @@ fn a_call_of_a_generic_function_on_a_list_of_bytes_is_the_code_of_the_function_f
         };
         let program = |function: String, name: &str| {
             format!(
-                "{function}fn main() ! console, alloc {{\n  xs: List[Byte] = [1, 2]\n  ys: List[Byte] = [3]\n  r = {name}({args})\n  print(\"{{r.size}}\")\n}}\n"
+                "{function}fn main() <console, alloc> {{\n  xs: List[Byte] = [1, 2]\n  ys: List[Byte] = [3]\n  r = {name}({args})\n  print(\"{{r.size}}\")\n}}\n"
             )
         };
         let generic = program(function(shape, "f", &format!("[T{bound}]"), "T", "T", false), "f");

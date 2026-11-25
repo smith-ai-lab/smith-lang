@@ -77,13 +77,13 @@ A part is found where it first begins, so `find("abab", "ab")` is `.some(0)`. A 
 `append` gives a list of the elements of `a` and then those of `b`. It needs no `Eq`, as it compares nothing, and it allocates, as [`push`](list.md) does.
 
 ```
-fn append[T: Copy](a: take List[T], b: List[T]) -> List[T] ! alloc
+fn append[T: Copy](a: take List[T], b: List[T]) -> List[T] <alloc>
 ```
 
 ```
 use std.list (append)
 
-fn demo() ! alloc {
+fn demo() <alloc> {
   append([1, 2], [3])
   append([], [3])
 }

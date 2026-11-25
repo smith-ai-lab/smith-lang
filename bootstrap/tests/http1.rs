@@ -152,13 +152,13 @@ fn list(bytes: &[u8]) -> String {
     format!("[{}]", items.join(", "))
 }
 
-const SHOW: &str = "fn show_request(b: take List[Byte]) ! console, alloc {\n  match request_head(freeze(b)) {\n    .complete((h, used)) {\n      ver = match h.version {\n        .http10 { \"1.0\" }\n        .http11 { \"1.1\" }\n      }\n      print(\"request {h.method} {h.target} {ver} {used}\")\n      loop kv in h.headers {\n        match kv {\n          (n, v) { print(\"{n}|{v}|\") }\n        }\n      }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\nfn show_response(b: take List[Byte]) ! console, alloc {\n  match response_head(freeze(b)) {\n    .complete((h, used)) {\n      print(\"response {h.status} {h.reason}| {used}\")\n      loop kv in h.headers {\n        match kv {\n          (n, v) { print(\"{n}|{v}|\") }\n        }\n      }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\n";
+const SHOW: &str = "fn show_request(b: take List[Byte]) <console, alloc> {\n  match request_head(freeze(b)) {\n    .complete((h, used)) {\n      ver = match h.version {\n        .http10 { \"1.0\" }\n        .http11 { \"1.1\" }\n      }\n      print(\"request {h.method} {h.target} {ver} {used}\")\n      loop kv in h.headers {\n        match kv {\n          (n, v) { print(\"{n}|{v}|\") }\n        }\n      }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\nfn show_response(b: take List[Byte]) <console, alloc> {\n  match response_head(freeze(b)) {\n    .complete((h, used)) {\n      print(\"response {h.status} {h.reason}| {used}\")\n      loop kv in h.headers {\n        match kv {\n          (n, v) { print(\"{n}|{v}|\") }\n        }\n      }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\n";
 
 /// A program that runs each of `calls` and prints what each gives.
 fn program(imports: &str, helpers: &str, calls: &[String]) -> String {
     let body: String = calls.iter().map(|c| format!("  {c}\n")).collect();
     format!(
-        "use std.console (console, print)\nuse std.http1 ({imports})\nuse std.list (freeze)\n\n{helpers}fn main() ! console, alloc {{\n{body}}}\n"
+        "use std.console (console, print)\nuse std.http1 ({imports})\nuse std.list (freeze)\n\n{helpers}fn main() <console, alloc> {{\n{body}}}\n"
     )
 }
 
@@ -196,7 +196,7 @@ fn call(h: &Head, bytes: &[u8]) -> String {
 }
 
 fn the_example_of_the_page_gives_what_it_says_for_the_whole_head_and_for_one_byte_short() {
-    let helpers = "fn first_line(bytes: Slice[Byte]) -> str ! alloc {\n  match request_head(bytes) {\n    .complete((head, used)) { \"{head.method} {head.target}\" }\n    .incomplete { \"more bytes are needed\" }\n    .refused(why) { why }\n  }\n}\n\nfn say(b: take List[Byte]) ! console, alloc {\n  print(first_line(freeze(b)))\n}\n\n";
+    let helpers = "fn first_line(bytes: Slice[Byte]) -> str <alloc> {\n  match request_head(bytes) {\n    .complete((head, used)) { \"{head.method} {head.target}\" }\n    .incomplete { \"more bytes are needed\" }\n    .refused(why) { why }\n  }\n}\n\nfn say(b: take List[Byte]) <console, alloc> {\n  print(first_line(freeze(b)))\n}\n\n";
     let whole = b"GET /notes?limit=3 HTTP/1.1\r\nhost: example.com\r\n\r\n";
     let source = program(
         "Read, request_head",
@@ -403,7 +403,7 @@ fn a_head_longer_than_the_limit_is_refused_at_the_limit_however_the_bytes_go_on(
 }
 
 fn body_of_says_how_the_body_is_framed_from_the_headers() {
-    let helpers = "fn show(h: List[(str, str)]) ! console, alloc {\n  match body_of(h) {\n    .ok(b) {\n      match b {\n        .none { print(\"none\") }\n        .length(n) { print(\"length {n}\") }\n        .chunked { print(\"chunked\") }\n      }\n    }\n    .err(why) { print(\"err\") }\n  }\n}\n\n";
+    let helpers = "fn show(h: List[(str, str)]) <console, alloc> {\n  match body_of(h) {\n    .ok(b) {\n      match b {\n        .none { print(\"none\") }\n        .length(n) { print(\"length {n}\") }\n        .chunked { print(\"chunked\") }\n      }\n    }\n    .err(why) { print(\"err\") }\n  }\n}\n\n";
     let cases: Vec<(&str, String)> = vec![
         ("[]", "none".into()),
         ("[(\"host\", \"a\")]", "none".into()),
@@ -438,7 +438,7 @@ fn body_of_says_how_the_body_is_framed_from_the_headers() {
 }
 
 /// What `chunk` is read as, in the helper of the programs below.
-const CHUNK: &str = "fn show_chunk(b: take List[Byte]) ! console, alloc {\n  match chunk(freeze(b)) {\n    .complete((bytes, used)) {\n      print(\"chunk {bytes.size} {used}\")\n      loop v in bytes { print(\"{v}\") }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\n";
+const CHUNK: &str = "fn show_chunk(b: take List[Byte]) <console, alloc> {\n  match chunk(freeze(b)) {\n    .complete((bytes, used)) {\n      print(\"chunk {bytes.size} {used}\")\n      loop v in bytes { print(\"{v}\") }\n    }\n    .incomplete { print(\"incomplete\") }\n    .refused(why) { print(\"refused\") }\n  }\n}\n\n";
 
 /// A chunk of the bytes, written as RFC 9112 says, with the extension and
 /// the hexadecimal letters the generator chose.
@@ -516,7 +516,7 @@ fn a_chunk_is_read_as_its_bytes_with_what_it_took_and_a_chunk_of_no_bytes_is_the
 }
 
 fn write_chunk_writes_a_chunk_that_chunk_reads_back() {
-    let helpers = format!("{CHUNK}fn show_written(data: Slice[Byte]) ! console, alloc {{\n  empty: List[Byte] = []\n  w = write_chunk(empty, data)\n  loop v in w {{ print(\"{{v}}\") }}\n  show_chunk(w)\n}}\n\n");
+    let helpers = format!("{CHUNK}fn show_written(data: Slice[Byte]) <console, alloc> {{\n  empty: List[Byte] = []\n  w = write_chunk(empty, data)\n  loop v in w {{ print(\"{{v}}\") }}\n  show_chunk(w)\n}}\n\n");
     generate::check(
         5955,
         3,

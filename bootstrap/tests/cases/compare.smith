@@ -8,12 +8,12 @@ fn word(same: bool) -> str {
   if same { "same" } else { "different" }
 }
 
-fn loud(text: str) -> bool ! console {
+fn loud(text: str) -> bool <console> {
   print(text)
   true
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   tom = Cat(name: "tom")
   print(word(tom == Cat(name: "tom")))
   print(word((tom, "a") == (Cat(name: "tim"), "a")))

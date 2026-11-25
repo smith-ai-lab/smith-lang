@@ -612,10 +612,16 @@ impl<'a> Checker<'a> {
         for (effect, pos) in effects {
             let effect = effect.as_str();
             if listed.contains(&effect) {
-                self.errors.push(Error::new(
-                    *pos,
-                    format!("the `{effect}` effect is already listed"),
-                ));
+                let mut once: Vec<&str> = Vec::new();
+                for (e, _) in effects {
+                    if !once.contains(&e.as_str()) {
+                        once.push(e);
+                    }
+                }
+                self.errors.push(
+                    Error::new(*pos, format!("the `{effect}` effect is already listed"))
+                        .with_fix(format!("write `<{}>`", once.join(", "))),
+                );
                 continue;
             }
             listed.push(effect);

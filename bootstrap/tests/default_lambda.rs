@@ -85,9 +85,9 @@ fn source(calls: &[Call]) -> String {
     let mut text = String::from(
         "use std.console (console, print)\n\n\
          effect markup {\n  fn emit(text: str)\n}\n\n\
-         fn p(inside: str = \"i\", class: str = \"c\", body: fn() ! markup = { emit(\"D\") }) ! markup {\n  \
+         fn p(inside: str = \"i\", class: str = \"c\", body: fn() <markup> = { emit(\"D\") }) <markup> {\n  \
          emit(class)\n  emit(inside)\n  body()\n}\n\n\
-         fn page() ! markup {\n",
+         fn page() <markup> {\n",
     );
     for call in calls {
         let mut args = Vec::new();
@@ -104,7 +104,7 @@ fn source(calls: &[Call]) -> String {
         text += "\n";
     }
     text + "}\n\n\
-        fn main() ! console {\n  markup(emit: fn(t) { print(t) }, body: { page() })\n}\n"
+        fn main() <console> {\n  markup(emit: fn(t) { print(t) }, body: { page() })\n}\n"
 }
 
 fn prints(calls: &[Call]) -> Vec<u8> {
@@ -135,8 +135,8 @@ fn a_default_lambda_that_uses_a_parameter_or_carries_an_effect_the_type_does_not
         format!(
             "use std.console (console, print)\n\n\
              effect markup {{\n  fn emit(text: str)\n}}\n\n\
-             fn p(inside: str, body: fn() ! markup = {default}) ! markup {{\n  body()\n}}\n\n\
-             fn main() ! console {{\n  markup(emit: fn(t) {{ print(t) }}, body: {{ p(\"x\") }})\n}}\n"
+             fn p(inside: str, body: fn() <markup> = {default}) <markup> {{\n  body()\n}}\n\n\
+             fn main() <console> {{\n  markup(emit: fn(t) {{ print(t) }}, body: {{ p(\"x\") }})\n}}\n"
         )
     };
     assert!(errors(&program("{ emit(\"D\") }")).is_empty());
@@ -162,7 +162,7 @@ fn a_parameter_with_a_default_lambda_still_comes_after_those_without_one_unless_
         format!(
             "use std.bits (i32)\nuse std.console (console, print)\n\n\
              fn f({params}) -> i32 {{ body() }}\n\n\
-             fn main() ! console, alloc {{\n  print(\"{{f(1)}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  print(\"{{f(1)}}\")\n}}\n"
         )
     };
     let after = errors(&program("body: fn() -> i32 = { 1 }, n: i32"));
@@ -195,9 +195,9 @@ fn a_call_that_leaves_the_function_out_is_the_instructions_of_the_call_that_writ
             format!(
                 "use std.console (console, print)\n\n\
                  effect markup {{\n  fn emit(text: str)\n}}\n\n\
-                 fn p(inside: str, body: fn() ! markup = {{ emit(\"{default}\") }}) ! markup {{\n  \
+                 fn p(inside: str, body: fn() <markup> = {{ emit(\"{default}\") }}) <markup> {{\n  \
                  emit(inside)\n  body()\n}}\n\n\
-                 fn main() ! console {{\n  markup(emit: fn(t) {{ print(t) }}, body: {{ {call} }})\n}}\n"
+                 fn main() <console> {{\n  markup(emit: fn(t) {{ print(t) }}, body: {{ {call} }})\n}}\n"
             )
         };
         let left_out = program(&format!("p(\"{inside}\")"));
@@ -215,7 +215,7 @@ fn a_function_with_a_default_lambda_is_passed_as_a_value_exactly_as_one_without_
             "use std.bits (i32)\nuse std.console (console, print)\n\n\
              fn r(a: i32, body: fn(i32) -> i32{default}) -> i32 {{ body(a) }}\n\n\
              fn apply(f: fn(i32, fn(i32) -> i32) -> i32, v: i32) -> i32 {{ v }}\n\n\
-             fn main() ! console, alloc {{\n  print(\"{{apply(r, 3)}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  print(\"{{apply(r, 3)}}\")\n}}\n"
         )
     };
     let with = errors(&program(" = fn(x) { x }"));

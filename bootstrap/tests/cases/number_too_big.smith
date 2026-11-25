@@ -1,6 +1,6 @@
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   small: Byte = 256
   print("done")
 }

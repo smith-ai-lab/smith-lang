@@ -366,7 +366,7 @@ const ARGUMENTS: [i64; 4] = [0, 1, 2, 5];
 fn program(function: &str) -> String {
     let calls: Vec<String> = ARGUMENTS.iter().map(|x| format!("{{f({x})}}")).collect();
     with_header(format!(
-        "fn f(x: Int) -> Int {{\n{function}}}\n\nfn main() ! console, alloc {{\n  print(\"{}\")\n}}\n",
+        "fn f(x: Int) -> Int {{\n{function}}}\n\nfn main() <console, alloc> {{\n  print(\"{}\")\n}}\n",
         calls.join(" ")
     ))
 }
@@ -437,7 +437,7 @@ fn lambda_program(lines: &[Item]) -> String {
     with_header(format!(
         "fn call(x: Int, f: fn(Int) -> Int) -> Int {{\n  a = f(x)\n  b = f(wrapping_add(x, 1))\n  wrapping_add(wrapping_mul(a, 3), b)\n}}\n\n\
          fn caller(x: Int) -> Int {{\n  r = call(x) fn(v) {{\n{}  }}\n  wrapping_add(r, 7)\n}}\n\n\
-         fn main() ! console, alloc {{\n  print(\"{}\")\n}}\n",
+         fn main() <console, alloc> {{\n  print(\"{}\")\n}}\n",
         body(lines, "v"),
         calls.join(" ")
     ))
@@ -470,8 +470,8 @@ fn a_return_in_a_lambda_leaves_the_lambda_and_the_caller_goes_on() {
 fn a_return_in_the_rest_of_a_block_after_try_leaves_with_its_value() {
     let source = "use std.console (console, print)\n\nfn find(name: str, have: Option[str]) -> Result[str, str] {\n  match have {\n    .some(value) { .ok(value) }\n    .none { .err(name) }\n  }\n}\n\n\
         fn both(a: Option[str], b: Option[str]) -> Result[str, str] {\n  x = try find(\"a\", a)\n  if x == \"stop\" { return .err(\"stopped\") }\n  y = try find(\"b\", b)\n  .ok(y)\n}\n\n\
-        fn show(r: Result[str, str]) -> str ! alloc {\n  match r {\n    .ok(v) { \"ok {v}\" }\n    .err(e) { \"err {e}\" }\n  }\n}\n\n\
-        fn main() ! console, alloc {\n  print(show(both(.some(\"1\"), .some(\"2\"))))\n  print(show(both(.some(\"stop\"), .some(\"2\"))))\n  print(show(both(.none, .some(\"2\"))))\n  print(show(both(.some(\"1\"), .none)))\n}\n";
+        fn show(r: Result[str, str]) -> str <alloc> {\n  match r {\n    .ok(v) { \"ok {v}\" }\n    .err(e) { \"err {e}\" }\n  }\n}\n\n\
+        fn main() <console, alloc> {\n  print(show(both(.some(\"1\"), .some(\"2\"))))\n  print(show(both(.some(\"stop\"), .some(\"2\"))))\n  print(show(both(.none, .some(\"2\"))))\n  print(show(both(.some(\"1\"), .none)))\n}\n";
     prints(source, &["ok 2", "err stopped", "err a", "err b"]);
 }
 
@@ -479,15 +479,15 @@ fn a_return_in_the_rest_of_a_block_after_try_leaves_with_its_value() {
 fn the_examples_of_the_page_give_what_it_says() {
     let classify = "use std.console (console, print)\n\nfn classify(b: Byte) -> str {\n  if b >= '0' and b <= '9' { return \"digit\" }\n  if b == ' ' { return \"space\" }\n  \"other\"\n}\n\n\
         fn classified(b: Byte) -> str {\n  if b >= '0' and b <= '9' { \"digit\" } else if b == ' ' { \"space\" } else { \"other\" }\n}\n\n\
-        fn main() ! console, alloc {\n  print(classify('7'))\n  print(classify(' '))\n  print(classify('x'))\n  print(classified('7'))\n  print(classified(' '))\n  print(classified('x'))\n}\n";
+        fn main() <console, alloc> {\n  print(classify('7'))\n  print(classify(' '))\n  print(classify('x'))\n  print(classified('7'))\n  print(classified(' '))\n  print(classified('x'))\n}\n";
     prints(
         classify,
         &["digit", "space", "other", "digit", "space", "other"],
     );
-    let log = "use std.console (console, print)\n\nfn log_if(verbose: bool, text: str) ! console {\n  if not verbose { return }\n  print(text)\n}\n\n\
-        fn main() ! console, alloc {\n  log_if(false, \"x\")\n  log_if(true, \"y\")\n}\n";
+    let log = "use std.console (console, print)\n\nfn log_if(verbose: bool, text: str) <console> {\n  if not verbose { return }\n  print(text)\n}\n\n\
+        fn main() <console, alloc> {\n  log_if(false, \"x\")\n  log_if(true, \"y\")\n}\n";
     prints(log, &["y"]);
-    let refused_classify = "use std.console (console, print)\n\nfn classify(b: Byte) -> str {\n  if b == ' ' { return 1 }\n  \"other\"\n}\n\nfn main() ! console, alloc {\n  print(classify('x'))\n}\n";
+    let refused_classify = "use std.console (console, print)\n\nfn classify(b: Byte) -> str {\n  if b == ' ' { return 1 }\n  \"other\"\n}\n\nfn main() <console, alloc> {\n  print(classify('x'))\n}\n";
     assert_eq!(refused(refused_classify).len(), 1);
 }
 
@@ -502,7 +502,7 @@ fn placed(before: &str, after: &str) -> (String, smith::diag::Pos) {
 }
 
 fn a_return_is_refused_exactly_where_its_value_does_not_fit_or_a_line_cannot_run() {
-    let main = "\nfn main() ! console, alloc {\n  print(\"{f(1)}\")\n}\n";
+    let main = "\nfn main() <console, alloc> {\n  print(\"{f(1)}\")\n}\n";
     let cases = [
         // A value of another type than the result.
         placed("fn f(x: Int) -> Int {\n  if x > 1 { return ", &format!("\"no\" }}\n  x\n}}\n{main}")),
@@ -510,8 +510,8 @@ fn a_return_is_refused_exactly_where_its_value_does_not_fit_or_a_line_cannot_run
         placed("fn f(x: Int) -> Int {\n  if x > 1 { ", &format!("return }}\n  x\n}}\n{main}")),
         // A value, where the function gives nothing.
         placed(
-            "fn f(x: Int) ! console {\n  if x > 1 { return ",
-            "x }\n  print(\"a\")\n}\n\nfn main() ! console, alloc {\n  f(1)\n}\n",
+            "fn f(x: Int) <console> {\n  if x > 1 { return ",
+            "x }\n  print(\"a\")\n}\n\nfn main() <console, alloc> {\n  f(1)\n}\n",
         ),
         // A line after a `return` in its block, at its first line.
         placed(
@@ -543,7 +543,7 @@ fn after_an_if_that_returns_arith_knows_the_condition_is_false() {
         let t = ty.name;
         let program = |early: &str, result: &str| {
             with_header(format!(
-                "fn f(a: {t}, b: {t}) -> {t} {{\n  {early}\n  {result}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1, 0)}}\")\n}}\n"
+                "fn f(a: {t}, b: {t}) -> {t} {{\n  {early}\n  {result}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 0)}}\")\n}}\n"
             ))
         };
         // `a < b` is false after the `if`, as in its `else`.
@@ -623,7 +623,7 @@ fn a_return_costs_a_jump_and_a_last_return_is_the_value_it_gives() {
 fn a_value_without_copy_is_given_away_by_a_return_and_a_lent_value_is_not_returned() {
     let program = |function: &str| {
         with_header(format!(
-            "struct Box {{\n  name: str\n}}\n\nwithout Copy for Box\n\n{function}\nfn main() ! console, alloc {{\n  b = pick(Box(name: \"a\"), true)\n  print(b.name)\n}}\n"
+            "struct Box {{\n  name: str\n}}\n\nwithout Copy for Box\n\n{function}\nfn main() <console, alloc> {{\n  b = pick(Box(name: \"a\"), true)\n  print(b.name)\n}}\n"
         ))
     };
     // A value given away by a `return` is gone only on the path it ends, so

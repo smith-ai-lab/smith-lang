@@ -22,7 +22,7 @@ struct Point {
   y: Int
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(to_json(Point(x: 3, y: 4)))
 }
 ```
@@ -35,13 +35,13 @@ This prints `{"x":3,"y":4}`. `Point` has `Serialize` without a line written for 
 
 ```
 trait Serialize[T] {
-  fn write[W: Writer](value: T, to: take W) -> W ! alloc
+  fn write[W: Writer](value: T, to: take W) -> W <alloc>
 }
 ```
 
 The writer is [taken](../language/take.md) and given back, so a value is written straight to where it goes, and nothing is built in between.
 
-Every function of `Serialize` and of `Writer` has the effect `alloc` and no other. A format writes into memory, and what is done with the bytes, sending them to a file or over a network, is done by whoever asked for them, with their own effects, so a writer does no input or output. A writer that asks for no memory writes `! alloc` on its functions as its trait does, since an `impl` has the effects of its trait's function, and asks for none when it runs.
+Every function of `Serialize` and of `Writer` has the effect `alloc` and no other. A format writes into memory, and what is done with the bytes, sending them to a file or over a network, is done by whoever asked for them, with their own effects, so a writer does no input or output. A writer that asks for no memory writes `<alloc>` on its functions as its trait does, since an `impl` has the effects of its trait's function, and asks for none when it runs.
 
 ## The shapes
 
@@ -64,28 +64,28 @@ A value describes itself with twelve shapes and no others. A format is a type th
 
 ```
 trait Writer[W] {
-  fn boolean(w: take W, value: bool) -> W ! alloc
-  fn signed(w: take W, value: Int) -> W ! alloc
-  fn unsigned(w: take W, value: u64) -> W ! alloc
-  fn text(w: take W, value: str) -> W ! alloc
-  fn nothing(w: take W) -> W ! alloc
-  fn absent(w: take W) -> W ! alloc
-  fn present(w: take W) -> W ! alloc
-  fn sequence(w: take W, size: Nat) -> W ! alloc
-  fn end_sequence(w: take W) -> W ! alloc
-  fn tuple(w: take W, size: Nat) -> W ! alloc
-  fn end_tuple(w: take W) -> W ! alloc
-  fn structure(w: take W, name: str, fields: Nat) -> W ! alloc
-  fn field(w: take W, name: str) -> W ! alloc
-  fn end_structure(w: take W) -> W ! alloc
-  fn case(w: take W, of: str, name: str, holds: bool) -> W ! alloc
-  fn map(w: take W, size: Nat) -> W ! alloc
-  fn end_map(w: take W) -> W ! alloc
-  fn raw(w: take W, of: str, bytes: Slice[Byte]) -> W ! alloc
+  fn boolean(w: take W, value: bool) -> W <alloc>
+  fn signed(w: take W, value: Int) -> W <alloc>
+  fn unsigned(w: take W, value: u64) -> W <alloc>
+  fn text(w: take W, value: str) -> W <alloc>
+  fn nothing(w: take W) -> W <alloc>
+  fn absent(w: take W) -> W <alloc>
+  fn present(w: take W) -> W <alloc>
+  fn sequence(w: take W, size: Nat) -> W <alloc>
+  fn end_sequence(w: take W) -> W <alloc>
+  fn tuple(w: take W, size: Nat) -> W <alloc>
+  fn end_tuple(w: take W) -> W <alloc>
+  fn structure(w: take W, name: str, fields: Nat) -> W <alloc>
+  fn field(w: take W, name: str) -> W <alloc>
+  fn end_structure(w: take W) -> W <alloc>
+  fn case(w: take W, of: str, name: str, holds: bool) -> W <alloc>
+  fn map(w: take W, size: Nat) -> W <alloc>
+  fn end_map(w: take W) -> W <alloc>
+  fn raw(w: take W, of: str, bytes: Slice[Byte]) -> W <alloc>
 }
 ```
 
-`Writer` has a `float(w, value: f64) -> W ! alloc` for the shape of a float, which is written once `f64` is built. `of` names the format that `bytes` are in, as `"json"` does for the text of a [`RawJson`](json.md#a-part-of-the-text-that-is-read-later). A writer of that format writes the bytes where they go, as one value, with nothing copied but the bytes into its output. Any other writer writes them as a text, as `text` does, so bytes are never put into a format they are not in. The bytes are a text until there is a format that is not text and a shape for bytes, so a writer is not given bytes that are not UTF-8. How a shape looks in the output is the format's to say: whether a case of an enum is a text or an object in JSON is said by `std.json`, and `Serialize` says only that it is a case.
+`Writer` has a `float(w, value: f64) -> W <alloc>` for the shape of a float, which is written once `f64` is built. `of` names the format that `bytes` are in, as `"json"` does for the text of a [`RawJson`](json.md#a-part-of-the-text-that-is-read-later). A writer of that format writes the bytes where they go, as one value, with nothing copied but the bytes into its output. Any other writer writes them as a text, as `text` does, so bytes are never put into a format they are not in. The bytes are a text until there is a format that is not text and a shape for bytes, so a writer is not given bytes that are not UTF-8. How a shape looks in the output is the format's to say: whether a case of an enum is a text or an object in JSON is said by `std.json`, and `Serialize` says only that it is a case.
 
 ## Given automatically
 
@@ -95,7 +95,7 @@ A struct, an enum, a tuple, a list, a slice, and an `Option` have `Serialize` wh
 use std.serialize (Serialize, Writer)
 
 impl Serialize[Point] {
-  fn write[W: Writer](value: Point, to: take W) -> W ! alloc {
+  fn write[W: Writer](value: Point, to: take W) -> W <alloc> {
     var w = structure(to, "Point", 2)
     w = field(w, "x")
     w = write(value.x, w)
@@ -134,7 +134,7 @@ struct Celsius {
 }
 
 impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W ! alloc { signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { signed(to, value.degrees) }
 }
 ```
 

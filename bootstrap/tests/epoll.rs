@@ -39,7 +39,7 @@ use std.list (freeze)
 use std.net (Connection, NetError, accept, close, listen, net, read, write)
 use std.task (join, spawn, tasks)
 
-fn turn(c: take Connection) -> u64 ! net, alloc {
+fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
     .ok(bytes) {
@@ -52,7 +52,7 @@ fn turn(c: take Connection) -> u64 ! net, alloc {
   size
 }
 
-fn pair(port: 0..65536) -> Result[u64, NetError] ! console, net, alloc {
+fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
   with tasks()
   with l = listen("127.0.0.1", port)
   print("ready")
@@ -63,7 +63,7 @@ fn pair(port: 0..65536) -> Result[u64, NetError] ! console, net, alloc {
   .ok(wrapping_add(join(ta), join(tb)))
 }
 
-fn main(args: List[str]) ! console, net, alloc {
+fn main(args: List[str]) <console, net, alloc> {
   if args.size == 0 { return }
   port_word = args[0]
   number: Result[0..65536, ReadError] = from_text("port", port_word)
@@ -90,7 +90,7 @@ use std.list (freeze)
 use std.net (Connection, NetError, accept, close, listen, net, read, write)
 use std.task (join, spawn, task, tasks)
 
-fn turn(c: take Connection) -> u64 ! net, alloc {
+fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
     .ok(bytes) {
@@ -103,14 +103,14 @@ fn turn(c: take Connection) -> u64 ! net, alloc {
   size
 }
 
-fn inner(a: take Connection, b: take Connection) -> u64 ! net, alloc, task {
+fn inner(a: take Connection, b: take Connection) -> u64 <net, alloc, task> {
   with tasks()
   ta = spawn { turn(a) }
   tb = spawn { turn(b) }
   wrapping_add(join(ta), join(tb))
 }
 
-fn pair(port: 0..65536) -> Result[u64, NetError] ! console, net, alloc {
+fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
   with tasks()
   with l = listen("127.0.0.1", port)
   print("ready")
@@ -135,7 +135,7 @@ fn pair(port: 0..65536) -> Result[u64, NetError] ! console, net, alloc {
   .ok(wrapping_add(join(outer), join(other)))
 }
 
-fn main(args: List[str]) ! console, net, alloc {
+fn main(args: List[str]) <console, net, alloc> {
   if args.size == 0 { return }
   port_word = args[0]
   number: Result[0..65536, ReadError] = from_text("port", port_word)

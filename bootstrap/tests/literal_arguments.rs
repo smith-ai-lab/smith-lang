@@ -161,7 +161,7 @@ const SAME: &str = "fn same[T](x: take T) -> T { x }\n\n";
 fn picking(case: &Call, literals: bool) -> String {
     let (binds, args) = case.arguments(literals);
     format!(
-        "{USES}{SAME}fn pick{} -> {} {{ {} }}\n\nfn main() ! console, alloc {{\n{binds}  print(\"{{pick({args})}}\")\n}}\n",
+        "{USES}{SAME}fn pick{} -> {} {{ {} }}\n\nfn main() <console, alloc> {{\n{binds}  print(\"{{pick({args})}}\")\n}}\n",
         case.giving_back(),
         NAMES[case.chosen],
         PARAMS[case.chosen],
@@ -170,7 +170,7 @@ fn picking(case: &Call, literals: bool) -> String {
 
 fn a_literal_for_a_type_parameter_is_an_i64_as_a_binding_of_it_is() {
     // The program of the issue.
-    let issue = "use std.console (console, print)\n\nfn f[A, B](a: A, b: B) -> Byte { 1 }\n\nfn main() ! console, alloc { print(\"{f(1, 1)}\") }\n";
+    let issue = "use std.console (console, print)\n\nfn f[A, B](a: A, b: B) -> Byte { 1 }\n\nfn main() <console, alloc> { print(\"{f(1, 1)}\") }\n";
     let program = lower(issue.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(scalar::run(&program).stdout, b"1\n");
 
@@ -236,7 +236,7 @@ fn a_literal_for_a_type_parameter_that_needs_a_trait_compiles_when_i64_has_it() 
             params.join(", "),
             PARAMS[call.chosen],
         ));
-        source.push_str("fn main() ! console, alloc {\n");
+        source.push_str("fn main() <console, alloc> {\n");
         source.push_str(&binds);
         let line = source.lines().count() + 1;
         source.push_str(&format!("  print(named({args}))\n}}\n"));
@@ -288,7 +288,7 @@ fn two_literals_for_the_functions_of_a_trait_with_an_out_type_are_i64() {
                  fn plus(a: Int, b: Int) -> Int { wrapping_add(a, b) }\n}\n\n",
             );
         }
-        source.push_str("fn main() ! console, alloc {\n");
+        source.push_str("fn main() <console, alloc> {\n");
         let line = source.lines().count() + 1;
         source.push_str(&format!(
             "  print(\"{{plus({}, {})}}\")\n}}\n",
@@ -343,7 +343,7 @@ fn anything(g: &mut Gen) -> String {
          fn both[A, B](a: take A, b: take B) -> (A, B) {{ (a, b) }}\n\n\
          fn f[A, B: Discard, C: Discard](a: take A, b: take B, c: take C, s: str) -> A {{ a }}\n\n\
          fn takes(n: Byte) -> Byte {{ n }}\n\n\
-         fn main() ! console, alloc {{\n  x: Byte = 1\n  {place}\n}}\n"
+         fn main() <console, alloc> {{\n  x: Byte = 1\n  {place}\n}}\n"
     )
 }
 
@@ -496,7 +496,7 @@ impl Placed {
             &[("std.console", &["console", "print"]), ("std.int", &int[..])],
             ty,
         );
-        format!("{uses}{SHAPES}{items}fn main() ! console, alloc {{\n{main}}}\n")
+        format!("{uses}{SHAPES}{items}fn main() <console, alloc> {{\n{main}}}\n")
     }
 }
 
@@ -504,7 +504,7 @@ fn a_literal_for_a_type_parameter_takes_the_type_the_place_of_the_result_needs()
     // The program of the issue.
     let issue = "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn id[A](a: take A) -> A { a }\n\nfn takes(n: Byte) -> Byte { n }\n\n\
         fn pair[A, B](a: take A, b: take B) -> (A, B) { (a, b) }\n\n\
-        fn main() ! console, alloc {\n  y: Byte = id(7)\n  (r, s): (Byte, i32) = pair(3, 4)\n  \
+        fn main() <console, alloc> {\n  y: Byte = id(7)\n  (r, s): (Byte, i32) = pair(3, 4)\n  \
         k: Byte = 200\n  print(\"{y} {r} {s} {takes(id(7))} {wrapping_add(k, id(5))}\")\n}\n";
     let program = lower(issue.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(scalar::run(&program).stdout, b"7 3 4 7 205\n");

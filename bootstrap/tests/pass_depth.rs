@@ -56,7 +56,7 @@ fn s(bytes: take List[Byte]) -> str {{
   }}
 }}
 
-{types}fn main() ! console, alloc {{
+{types}fn main() <console, alloc> {{
   v: E0 = {value}
   k = Json(cases: .key, names: .written)
   r: Result[E0, ReadError] = from_json_as(s([{}]), k)

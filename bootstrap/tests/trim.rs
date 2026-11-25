@@ -197,7 +197,7 @@ impl Chain {
                 s.push_str(&format!("  g{}(t)\n}}\n", l - 1));
             }
         }
-        s.push_str("\nfn main() ! console, alloc {\n");
+        s.push_str("\nfn main() <console, alloc> {\n");
         let depth = self.changed.len();
         for (n, start) in self.starts.iter().enumerate() {
             let function = if n < depth { n } else { depth - 1 };
@@ -317,7 +317,7 @@ fn pick(a: Int, b: Int, c: Int) -> Int {
   r
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print(\"{pick(1, 10, 100)}\")
   print(\"{pick(0, 10, 100)}\")
   print(\"{pick(1, 20, 7)}\")
@@ -343,7 +343,7 @@ fn step(p: P) -> P {
 {pad}  if p.x > 5 { p } else { P(x: wrapping_mul(wrapping_add(p.x, 1), 515151), y: p.y) }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a = step(P(x: 1, y: 9))
   b = step(P(x: 7, y: 4))
   c = step(step(P(x: 0, y: 3)))
@@ -376,7 +376,7 @@ fn step(s: S) -> S {
   t
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var s = S(a: 2, b: 3, c: 5)
   loop i in 0..4 { s = step(s) }
   print(\"{s.a} {s.b} {s.c}\")
@@ -410,7 +410,7 @@ fn bump(s: S) -> S {
   t
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var x = S(a: 1, b: 2, c: 3)
   var y = S(a: 10, b: 20, c: 30)
   x = bump(x)
@@ -434,7 +434,7 @@ use std.console (console, print)
 use std.int (wrapping_add)
 use std.list (push)
 
-fn make(n: u64) -> List[u64] ! alloc {
+fn make(n: u64) -> List[u64] <alloc> {
   var xs: List[u64] = []
   if n > 3 {
     xs = push(xs, wrapping_add(n, 8888))
@@ -443,7 +443,7 @@ fn make(n: u64) -> List[u64] ! alloc {
   xs
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var first: List[u64] = []
   first = push(first, 11)
   a = make(5)
@@ -479,7 +479,7 @@ fn swap(t: T) -> T {
 {pad}  T(x: t.y, y: t.x, z: wrapping_mul(wrapping_add(t.z, 3), 818181))
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   p = swap(T(x: 1, y: 2, z: 3))
   q = swap(T(x: 10, y: 20, z: 30))
   print(\"{p.x} {p.y} {p.z}\")
@@ -507,7 +507,7 @@ fn twice(t: T) -> T {
 {pad}  T(x: t.x, y: t.x, z: wrapping_mul(wrapping_add(t.z, 3), 929292))
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   p = twice(T(x: 5, y: 6, z: 7))
   q = twice(T(x: -8, y: 1, z: 0))
   print(\"{p.x} {p.y} {p.z}\")
@@ -711,7 +711,7 @@ fn a_main_that_reads_nothing_it_is_given_is_still_given_it() {
     assert!(scalar::trim(program.clone()).takes_arguments());
     assert!(scalar::passes(&program).takes_arguments());
 
-    let source = "use std.console (console, print)\n\nfn main(args: List[str]) ! console, alloc { print(\"done\") }\n";
+    let source = "use std.console (console, print)\n\nfn main(args: List[str]) <console, alloc> { print(\"done\") }\n";
     let program = built(source);
     assert!(program.takes_arguments(), "{program:?}");
     let after = scalar::passes(&program);

@@ -10,7 +10,7 @@ status: planned
 A foreign declaration states a C signature by hand and carries the `foreign` effect. It is the one door out of the language, and no code is privileged to use another.
 
 ```
-foreign "libSystem" fn write(fd: i32, buf: Ptr[u8], len: usize) -> isize ! foreign
+foreign "libSystem" fn write(fd: i32, buf: Ptr[u8], len: usize) -> isize <foreign>
 ```
 
 The declaration names the library, `"libSystem"`, then the function with its C signature. The standard library goes through this door like any program: a system call on Linux is declared the same way, with the kernel as the library.
@@ -20,7 +20,7 @@ The declaration names the library, `"libSystem"`, then the function with its C s
 `Ptr[T]`, `usize`, and `isize` exist for foreign signatures and are not used in ordinary code.
 
 ```
-fn write_bytes(buf: Ptr[Byte], len: usize) -> isize ! foreign {
+fn write_bytes(buf: Ptr[Byte], len: usize) -> isize <foreign> {
   write(1, buf, len)
 }
 ```
@@ -43,7 +43,7 @@ Foreign calls reach the operating system and its libraries only. A Smith program
 
 | Written | Is |
 | --- | --- |
-| `foreign "lib" fn f(...) -> T ! foreign` | A foreign function `f` of the library `lib` |
+| `foreign "lib" fn f(...) -> T <foreign>` | A foreign function `f` of the library `lib` |
 | `Ptr[T]`, `usize`, `isize` | Types for foreign signatures |
 
 Next: [The foreign effect](foreign-effect.md)

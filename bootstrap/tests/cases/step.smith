@@ -2,7 +2,7 @@ use std.console (console, print)
 
 fn step(word: str) -> (str, str) { ("two", word) }
 
-fn main() ! console {
+fn main() <console> {
   var word = "one"
   (word, before) = step(word)
   print(before)

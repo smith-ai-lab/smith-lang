@@ -28,7 +28,7 @@ use std.console (console, print)
 
 fn shout() -> str { "hey" }
 
-fn main() ! console {
+fn main() <console> {
   word = shout()
   same = word
   print(same)
@@ -44,7 +44,7 @@ A binding may state its type, written as a parameter's is, with a colon after th
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   word: str = "typed"
   print(word)
 }
@@ -55,7 +55,7 @@ This prints `typed`. Most bindings do not state their type, because the type of 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   word: str = 5
   print(word)
 }
@@ -70,7 +70,7 @@ A name is never defined where it can already be used, so there is no shadowing, 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   word = "first"
   word = "second"
   print(word)
@@ -95,7 +95,7 @@ A name can be used only after the line that defines it.
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print(word)
   word = "late"
 }
@@ -108,7 +108,7 @@ A name defined inside a block, such as the block of an [`if`](if.md), can be use
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   if true { inner = "here" }
   print(inner)
 }

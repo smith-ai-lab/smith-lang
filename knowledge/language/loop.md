@@ -36,7 +36,7 @@ A range `a..b` is a `Range` value, as [Ranges and slices](ranges.md) says. It ru
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in 5..2 { print("{i}") }
   print("done")
 }
@@ -51,7 +51,7 @@ The counter is a range: from the least value the first end can have to the great
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop j in 0..3 {
     x: Byte = 250
     print("{x + j}")
@@ -92,7 +92,7 @@ fn last_index(n: 0..11) -> 0..10 {
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in 0..10 {
     if i == 3 { break }
     print("{i}")
@@ -107,7 +107,7 @@ This prints `0`, `1`, and `2`. When `i` is `3` the loop ends, and the rounds for
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in 0..3 {
     loop j in 0..3 {
       if j == 1 { break }
@@ -126,7 +126,7 @@ use std.console (console)
 
 fn twice(body: fn()) { body() }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in 0..3 {
     twice { break }
   }
@@ -144,7 +144,7 @@ use std.bits (u64)
 use std.console (console, print)
 use std.int (wrapping_add)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var n: u64 = 3
   loop i in 0..n {
     n = wrapping_add(n, 1)
@@ -227,7 +227,7 @@ A range goes up, and `loop i in 5..0` is a range with no numbers, so it runs no 
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   loop i in reversed(0..3) { print("{i}") }
 }
 ```

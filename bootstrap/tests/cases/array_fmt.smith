@@ -5,7 +5,7 @@ struct P {
   s: str
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   xs: [3]Nat = [1, 2, 3]
   print("{xs}")
   print("{repr(xs)}")

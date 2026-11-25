@@ -49,13 +49,13 @@ pub const ONCE: &[Test] = &[
     ),
 ];
 
-const HELLO: &str = "use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &str = "use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 /// The program of the issue that asked for warnings: a function nothing
 /// calls, and a binding nothing reads.
 const TWO_WARNINGS: &str = "use std.console (console, print)\n\nfn unused() -> str { \"never called\" }
 
-fn main() ! console {
+fn main() <console> {
   word = \"never read\"
   print(\"hello\")
 }
@@ -339,14 +339,14 @@ fn linted(g: &mut Gen) -> Linted {
         main.insert(at, format!("spare = {}", literal(g)));
         at
     });
-    items.push(function("fn main() ! console".to_string(), &main, unread));
+    items.push(function("fn main() <console>".to_string(), &main, unread));
     let dead = match place {
         Place::Nothing | Place::UnreadBinding => None,
         Place::DeadFunction => Some(Item {
             text: g
                 .pick(&[
                     "fn spare() -> str { \"a\" }",
-                    "fn spare(p1: str) ! console { print(p1) }",
+                    "fn spare(p1: str) <console> { print(p1) }",
                 ])
                 .to_string(),
             marks: vec![(3, "dead code")],

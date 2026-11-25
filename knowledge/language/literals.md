@@ -32,7 +32,7 @@ A whole number is written in digits. It is the range that holds it alone, so `5`
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   small: 0..256 = 200
   wide: 0..100000 = 70000
   print("{small} {wide}")
@@ -46,7 +46,7 @@ A whole number may also be written in hexadecimal, with `0x`, and in binary, wit
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a = 1_000_000
   b = 0xff
   c = 0b1010
@@ -74,7 +74,7 @@ A `-` directly before a number is part of the literal, so `-128` is the range `-
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   low: -128..128 = -128
   print("{low}")
 }
@@ -89,7 +89,7 @@ A literal is a range of its own, so a number that a stated range cannot hold is 
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   small: 0..256 = 256
   print("done")
 }
@@ -108,7 +108,7 @@ fn byte(n: 0..256) -> 0..256 { n }
 
 fn word(n: 0..65536) -> 0..65536 { n }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x = 10
   print("{byte(x)} {word(x)}")
 }
@@ -121,7 +121,7 @@ use std.console (console)
 
 fn byte(n: 0..256) -> 0..256 { n }
 
-fn main() ! console {
+fn main() <console> {
   x = 300
   byte(x)
 }
@@ -136,7 +136,7 @@ use std.console (console, print)
 
 fn first[A, B](a: A, b: B) -> A { a }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{first(1, 2)}")
 }
 ```
@@ -150,7 +150,7 @@ A literal beside another number is a range of its own, and the operator gives th
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x: 0..256 = 7
   print("{x == 5} {x < 'a'} {x == 300}")
 }
@@ -184,7 +184,7 @@ use std.console (console, print)
 
 fn is_digit(b: Byte) -> bool { b >= '0' and b <= '9' }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{is_digit('7')} {is_digit('x')}")
   print("{'a'} {'\''} {'\\'} {'\n'} {'\t'}")
 }
@@ -203,7 +203,7 @@ This is refused, as `'é'` is not ASCII, so it takes more than one byte and is n
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x: 0..1114112 = 'é'
   print("{x}")
 }
@@ -218,7 +218,7 @@ A string in double quotes is a `str`, which [Text and bytes](text.md) describes.
 ```
 use std.console (console, print)
 
-fn main() ! console {
+fn main() <console> {
   print("hi")
 }
 ```
@@ -235,7 +235,7 @@ fn flip(b: bool) -> bool {
   }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   print("{flip(true)} {flip(false)}")
 }
 ```

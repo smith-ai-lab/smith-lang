@@ -16,6 +16,6 @@ fn show_both[A, B](a: A, b: B) -> str
   join(a, b)
 }
 
-fn main() ! console {
+fn main() <console> {
   print(show_both("a", one()))
 }

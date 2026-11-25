@@ -29,8 +29,8 @@ enum Frame {
   unknown: Nat
 }
 
-fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] ! alloc
-fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] ! alloc
+fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc>
+fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc>
 ```
 
 - `frame` reads one frame and gives it with how many bytes it took, in the [`Read`](http1.md#reading) of `std.http1`. A frame's bytes, as the data of `data`, are a piece of what was given.
@@ -64,10 +64,10 @@ struct Decoder
 struct Encoder
 
 fn decoder(table: Nat = 4096) -> Decoder
-fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) ! alloc
+fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc>
 
 fn encoder(table: Nat = 4096) -> Encoder
-fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) ! alloc
+fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) <alloc>
 ```
 
 - A `Decoder` and an `Encoder` hold the table of headers that HPACK builds up over a connection, so each is [taken](../language/take.md) and given back, and one is kept for each direction of each connection.

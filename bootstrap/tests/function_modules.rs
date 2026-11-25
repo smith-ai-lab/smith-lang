@@ -77,8 +77,8 @@ fn a_function_of_another_module_is_given_its_name_and_its_comment_by_function() 
             "use app.fns ({})\nuse std.console (console, print)\n\n",
             names.join(", ")
         );
-        source += "fn told[F: Function](f: F) -> str ! alloc {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n\n";
-        source += "fn main() ! console, alloc {\n";
+        source += "fn told[F: Function](f: F) -> str <alloc> {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n\n";
+        source += "fn main() <console, alloc> {\n";
         for name in &names {
             source += &format!("  print(told({name}))\n");
         }
@@ -95,8 +95,8 @@ fn a_function_of_another_module_is_given_its_name_and_its_comment_by_function() 
 fn call_runs_a_function_of_another_module_with_the_arguments_read_from_json() {
     let module = "use std.bits (i32)\n\npub fn pick(a: i32, b: i32 = 7) -> i32 { b }\n";
     let source = "use app.m (pick)\nuse std.console (console, print)\nuse std.json (from_json)\nuse std.deserialize (Deserialize, ReadError)\n\n\
-fn run[F, A, R](f: F, text: str) -> str ! alloc\n  requires Function[F, A, R]\n  requires Deserialize[A]\n  requires Discard[A]\n  requires Fmt[R]\n  requires Discard[R]\n{\n  r: Result[A, ReadError] = from_json(text)\n  match r {\n    .ok(args) { \"{Function.call(f, args)}\" }\n    .err(e) { \"err\" }\n  }\n}\n\n\
-fn main() ! console, alloc {\n  print(run(pick, \"\\{\\\"a\\\": 1\\}\"))\n  print(run(pick, \"\\{\\\"a\\\": 1, \\\"b\\\": 3\\}\"))\n  print(run(pick, \"\\{\\}\"))\n}\n";
+fn run[F, A, R](f: F, text: str) -> str <alloc>\n  requires Function[F, A, R]\n  requires Deserialize[A]\n  requires Discard[A]\n  requires Fmt[R]\n  requires Discard[R]\n{\n  r: Result[A, ReadError] = from_json(text)\n  match r {\n    .ok(args) { \"{Function.call(f, args)}\" }\n    .err(e) { \"err\" }\n  }\n}\n\n\
+fn main() <console, alloc> {\n  print(run(pick, \"\\{\\\"a\\\": 1\\}\"))\n  print(run(pick, \"\\{\\\"a\\\": 1, \\\"b\\\": 3\\}\"))\n  print(run(pick, \"\\{\\}\"))\n}\n";
     assert_eq!(said(source, &[("app.m", module)]), "7\n3\nerr\n");
 }
 
@@ -105,8 +105,8 @@ fn two_modules_with_a_function_of_one_name_are_each_given_their_own_comment() {
     let a = "// In a.\npub fn go(x: Int) -> Int { x }\n";
     let b = "// In b.\npub fn go(x: Int) -> Int { x }\n";
     let source = "use app.a\nuse app.b\nuse std.console (console, print)\n\n\
-fn told[F: Function](f: F) -> str ! alloc {\n  Function.about(f)\n}\n\n\
-fn main() ! console, alloc {\n  print(told(a.go))\n  print(told(b.go))\n}\n";
+fn told[F: Function](f: F) -> str <alloc> {\n  Function.about(f)\n}\n\n\
+fn main() <console, alloc> {\n  print(told(a.go))\n  print(told(b.go))\n}\n";
     assert_eq!(said(source, &[("app.a", a), ("app.b", b)]), "In a.\nIn b.\n");
 }
 
@@ -114,8 +114,8 @@ fn main() ! console, alloc {\n  print(told(a.go))\n  print(told(b.go))\n}\n";
 /// reached.
 fn a_function_of_the_standard_library_is_given_its_name_by_function() {
     let source = "use std.console (console, print)\nuse std.ascii (is_digit)\n\n\
-fn told[F: Function](f: F) -> str ! alloc {\n  Function.name(f)\n}\n\n\
-fn main() ! console, alloc {\n  print(told(is_digit))\n}\n";
+fn told[F: Function](f: F) -> str <alloc> {\n  Function.name(f)\n}\n\n\
+fn main() <console, alloc> {\n  print(told(is_digit))\n}\n";
     assert_eq!(said(source, &[]), "is_digit\n");
 }
 
@@ -123,7 +123,7 @@ fn main() ! console, alloc {\n  print(told(is_digit))\n}\n";
 /// for a function of a module.
 fn a_module_that_the_file_does_not_write_function_for_holds_no_struct_of_arguments() {
     let module = "pub fn go(x: Int) -> Int { x }\n";
-    let source = "use app.m (go)\nuse std.console (console, print)\n\nfn main() ! console, alloc {\n  print(\"{go(1)}\")\n}\n";
+    let source = "use app.m (go)\nuse std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"{go(1)}\")\n}\n";
     let program = lower_project(source.as_bytes(), &[("app.m", module)]).expect("builds");
     assert!(!format!("{program:?}").contains("Args"));
 }
@@ -131,7 +131,7 @@ fn a_module_that_the_file_does_not_write_function_for_holds_no_struct_of_argumen
 /// A file that does not write `Function` has it given to its functions when a
 /// module it lists writes it, as it is for what the module takes.
 fn a_function_of_the_file_is_given_function_when_a_module_it_lists_writes_it() {
-    let module = "pub fn told[F: Function](f: F) -> str ! alloc {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n";
-    let source = "use app.tools (told)\nuse std.console (console, print)\n\n// Says hello.\nfn hello() -> str { \"hi\" }\n\nfn main() ! console, alloc {\n  print(told(hello))\n}\n";
+    let module = "pub fn told[F: Function](f: F) -> str <alloc> {\n  \"{Function.name(f)}|{Function.about(f)}\"\n}\n";
+    let source = "use app.tools (told)\nuse std.console (console, print)\n\n// Says hello.\nfn hello() -> str { \"hi\" }\n\nfn main() <console, alloc> {\n  print(told(hello))\n}\n";
     assert_eq!(said(source, &[("app.tools", module)]), "hello|Says hello.\n");
 }

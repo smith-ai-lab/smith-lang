@@ -16,7 +16,7 @@ status: built
 ```
 use std.console (console, print)
 
-fn main(args: List[str]) ! console, alloc {
+fn main(args: List[str]) <console, alloc> {
   print("started with {args.size} arguments")
 }
 ```
@@ -31,7 +31,7 @@ What `main` returns decides the status the program ends with. `main` may return 
 
 ```
 trait Exit[T] {
-  fn exit(value: T) -> Byte ! console, alloc
+  fn exit(value: T) -> Byte <console, alloc>
 }
 ```
 
@@ -41,7 +41,7 @@ trait Exit[T] {
 ```
 use std.console (console, print)
 
-fn main() -> Result[(), str] ! console, alloc {
+fn main() -> Result[(), str] <console, alloc> {
   print("started")
   .err("could not finish")
 }
@@ -60,7 +60,7 @@ enum Outcome {
 }
 
 impl Exit[Outcome] {
-  fn exit(value: Outcome) -> Byte ! console, alloc {
+  fn exit(value: Outcome) -> Byte <console, alloc> {
     match value {
       .done { 0 }
       .usage { 2 }
@@ -68,7 +68,7 @@ impl Exit[Outcome] {
   }
 }
 
-fn main() -> Outcome ! console, alloc { .usage }
+fn main() -> Outcome <console, alloc> { .usage }
 ```
 
 This program ends with status 2.

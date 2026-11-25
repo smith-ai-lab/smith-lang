@@ -261,7 +261,7 @@ pub const MACHINE: &[Test] = &[
     ),
 ];
 
-const HELLO: &str = "use std.console (console, print)\n\nfn main() ! console { print(\"hello world\") }\n";
+const HELLO: &str = "use std.console (console, print)\n\nfn main() <console> { print(\"hello world\") }\n";
 
 thread_local! {
     /// The one target a fingerprint is being made for, if it is made for one.
@@ -976,7 +976,7 @@ fn a_program_the_system_refuses_memory_ends_with_a_failing_status_and_does_nothi
 
 fn a_long_literal_is_printed_whole() {
     let text = "abcdefghij".repeat(100_000);
-    let source = format!("use std.console (console, print)\n\nfn main() ! console {{ print(\"{text}\") }}\n");
+    let source = format!("use std.console (console, print)\n\nfn main() <console> {{ print(\"{text}\") }}\n");
     let said = scalar::run(&after_the_pass(source.as_bytes()));
     assert_eq!(said.stdout, format!("{text}\n").into_bytes());
     for target in runnable() {
@@ -1236,10 +1236,10 @@ fn elf_segment_kinds(bytes: &[u8]) -> Vec<usize> {
 }
 
 /// A program that asks the system for memory.
-const JOIN: &str = "use std.console (console, print)\n\nfn main() ! console, alloc {\n  x = \"a\"\n  print(\"{x}{x}\")\n}\n";
+const JOIN: &str = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  x = \"a\"\n  print(\"{x}{x}\")\n}\n";
 
 /// A program that takes the words it was started with.
-const WORDS: &str = "use std.console (console, print)\n\nfn main(args: List[str]) ! console, alloc {\n  print(\"{args.size}\")\n}\n";
+const WORDS: &str = "use std.console (console, print)\n\nfn main(args: List[str]) <console, alloc> {\n  print(\"{args.size}\")\n}\n";
 
 fn every_executable_uses_only_thin_wrappers_over_the_kernel() {
     const PT_DYNAMIC: usize = 2;
@@ -1355,7 +1355,7 @@ fn a_test_that_does_not_depend_on_the_machine_may_not_run_an_executable_the_fing
 /// system in `kqueue` on macOS, so it imports `_kqueue` and `_kevent`, and no
 /// other target is refused it for the calls it does not have.
 fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without() {
-    let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() ! console, alloc {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() <console, alloc> {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
     for target in buildable() {
         let bytes = compile(source.as_bytes(), target).unwrap_or_else(|e| panic!("{}: {e:?}", target.name()));
         if target.name().starts_with("macos") {
@@ -1422,8 +1422,8 @@ fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_on
 /// that carries `net` has the call only where `connect` can reach a lookup: one
 /// that only listens has no such call, and neither has a program with no `net`.
 fn a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup() {
-    let connects = "use std.console (console, print)\nuse std.net (NetError, connect, net)\n\nfn go(host: str) -> Result[(), NetError] ! net, alloc {\n  with c = connect(host, 80)\n  .ok(())\n}\n\nfn main() ! console, net, alloc {\n  match go(\"a.test\") {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
-    let listens = "use std.console (console, print)\nuse std.net (NetError, listen, net)\n\nfn go() -> Result[(), NetError] ! net, alloc {\n  with l = listen(\"127.0.0.1\", 8080)\n  .ok(())\n}\n\nfn main() ! console, net, alloc {\n  match go() {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
+    let connects = "use std.console (console, print)\nuse std.net (NetError, connect, net)\n\nfn go(host: str) -> Result[(), NetError] <net, alloc> {\n  with c = connect(host, 80)\n  .ok(())\n}\n\nfn main() <console, net, alloc> {\n  match go(\"a.test\") {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
+    let listens = "use std.console (console, print)\nuse std.net (NetError, listen, net)\n\nfn go() -> Result[(), NetError] <net, alloc> {\n  with l = listen(\"127.0.0.1\", 8080)\n  .ok(())\n}\n\nfn main() <console, net, alloc> {\n  match go() {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
     // `mov eax, 318` and `syscall` on x86-64, and `mov w8, 278` and `svc 0` on arm64.
     let has = |bytes: &[u8], call: &[u8]| bytes.windows(call.len()).any(|w| w == call);
     let linux: Vec<Target> = buildable().into_iter().filter(|t| t.name().starts_with("linux")).collect();

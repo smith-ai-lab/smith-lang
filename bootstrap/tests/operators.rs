@@ -67,10 +67,10 @@ fn generic(g: &mut Gen) -> Generic {
     let t = ty.name;
     Generic {
         direct: with_header(format!(
-            "fn main() ! console, alloc {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{{wrapping}(x, y)}}\")\n}}\n"
+            "fn main() <console, alloc> {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{{wrapping}(x, y)}}\")\n}}\n"
         )),
         source: with_header(format!(
-            "fn apply[T: {tr}](x: T, y: T) -> T\n  requires {tr}.valid(x, y)\n{{\n  x {sign} y\n}}\n\nfn main() ! console, alloc {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{apply(x, y)}}\")\n}}\n"
+            "fn apply[T: {tr}](x: T, y: T) -> T\n  requires {tr}.valid(x, y)\n{{\n  x {sign} y\n}}\n\nfn main() <console, alloc> {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{apply(x, y)}}\")\n}}\n"
         )),
         answer,
         fits: ty.min() <= answer && answer <= ty.max(),
@@ -169,7 +169,7 @@ fn structs(g: &mut Gen) -> Structs {
             .collect();
         format!("{name}({})", parts.join(", "))
     };
-    source.push_str("fn main() ! console, alloc {\n");
+    source.push_str("fn main() <console, alloc> {\n");
     source.push_str(&format!("  x = {}\n  y = {}\n", build("A", &x), build(second, &y)));
     source.push_str(&format!("  by_operator = x {sign} y\n  by_name = {tr}.{function}(x, y)\n"));
     let mut prints = String::new();

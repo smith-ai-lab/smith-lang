@@ -46,7 +46,7 @@ fn a_whole_number_of_any_digits_is_read_as_its_value_when_the_type_holds_it() {
         expected += &line((i64::MIN as i128..=i64::MAX as i128).contains(n));
     }
     let source = format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.json (from_json)\n\nfn show_u(s: str) ! console, alloc {{\n  r: Result[u64, ReadError] = from_json(s)\n  match r {{\n    .ok(v) {{ print(\"ok {{v}}\") }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n\nfn show_i(s: str) ! console, alloc {{\n  r: Result[Int, ReadError] = from_json(s)\n  match r {{\n    .ok(v) {{ print(\"ok {{v}}\") }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n\nfn main() ! console, alloc {{\n{calls}}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.json (from_json)\n\nfn show_u(s: str) <console, alloc> {{\n  r: Result[u64, ReadError] = from_json(s)\n  match r {{\n    .ok(v) {{ print(\"ok {{v}}\") }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n\nfn show_i(s: str) <console, alloc> {{\n  r: Result[Int, ReadError] = from_json(s)\n  match r {{\n    .ok(v) {{ print(\"ok {{v}}\") }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{calls}}}\n"
     );
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(String::from_utf8(scalar::run(&program).stdout).unwrap(), expected);

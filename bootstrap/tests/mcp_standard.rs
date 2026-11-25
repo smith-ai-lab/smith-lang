@@ -224,7 +224,7 @@ fn every_page_of_the_mcp_specification_is_taken_or_left_out_with_a_reason() {
 const SHOW: &str = r#"use std.console (console, print)
 use std.jsonrpc
 
-fn show(s: str) ! console, alloc {
+fn show(s: str) <console, alloc> {
   print("--")
   match jsonrpc.read(s) {
     .ok(.one(m)) {
@@ -260,7 +260,7 @@ fn show(s: str) ! console, alloc {
 /// What a program that runs `show` on each text prints of each, as one line.
 fn reads(texts: &[String]) -> Vec<String> {
     let calls: String = texts.iter().map(|t| format!("  show({})\n", lit(t))).collect();
-    let source = format!("{SHOW}fn main() ! console, alloc {{\n{calls}}}\n");
+    let source = format!("{SHOW}fn main() <console, alloc> {{\n{calls}}}\n");
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&program);
     assert_eq!(outcome.status, 0, "for {source}");

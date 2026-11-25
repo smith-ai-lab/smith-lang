@@ -50,16 +50,16 @@ enum Shape {
   name: str
 }
 
-fn shape(n: u64, k: u64) -> Shape ! alloc {
+fn shape(n: u64, k: u64) -> Shape <alloc> {
   if bit_and(n, 1) == 0 { Shape.name(\"{k}\") } else { Shape.line(wrapping_narrow(k)) }
 }
 
-fn numbers(n: u64, k: u64) -> List[u64] ! alloc {
+fn numbers(n: u64, k: u64) -> List[u64] <alloc> {
   xs: List[u64] = []
   push(push(xs, n), k)
 }
 
-fn words(n: u64, k: u64) -> List[str] ! alloc {
+fn words(n: u64, k: u64) -> List[str] <alloc> {
   xs: List[str] = []
   push(push(xs, \"{n}\"), \"{k}\")
 }
@@ -99,7 +99,7 @@ const VALUES: &[(&str, &str)] = &[
 fn spread(values: &[(&str, &str)], count: u64, stride: u64, offset: u64) -> Vec<Vec<u64>> {
     let mut source = header(values);
     source.push_str(DECLARATIONS);
-    source.push_str("\nfn main() ! console, alloc {\n");
+    source.push_str("\nfn main() <console, alloc> {\n");
     for (ty, make) in values {
         source.push_str(&format!(
             "  loop i in 0..{count} {{\n    n: u64 = i\n    k: u64 = wrapping_add(wrapping_mul(n, {stride}), {offset})\n    x: {ty} = {make}\n    print(\"{{hash(x)}}\")\n  }}\n"
@@ -157,7 +157,7 @@ fn values_that_are_equal_have_the_same_hash() {
     generate::check(262, 3, a_stride_and_an_offset, |&(stride, offset)| {
         let mut source = header(VALUES);
         source.push_str(DECLARATIONS);
-        source.push_str("\nfn main() ! console, alloc {\n");
+        source.push_str("\nfn main() <console, alloc> {\n");
         for (ty, make) in VALUES {
             source.push_str(&format!(
                 "  loop i in 0..20 {{\n    n: u64 = i\n    k: u64 = wrapping_add(wrapping_mul(n, {stride}), {offset})\n    x: {ty} = {make}\n    y: {ty} = {make}\n    if hash(x) != hash(y) {{ print(\"{ty}\") }}\n    print(\"same\")\n  }}\n"
@@ -181,7 +181,7 @@ fn errors(source: &str) -> Vec<String> {
 
 fn a_type_has_no_hash_when_without_takes_it_or_a_part_lacks_it() {
     let key = "use std.console (console, print)\n\nstruct Key {\n  secret: str\n}\n\nwithout Hash for Key\n\nstruct Door {\n  key: Key\n}\n";
-    let main = |x: &str| format!("{key}\nfn main() ! console, alloc {{\n  print(\"{{hash({x})}}\")\n}}\n");
+    let main = |x: &str| format!("{key}\nfn main() <console, alloc> {{\n  print(\"{{hash({x})}}\")\n}}\n");
     let key_alone = errors(&main("Key(secret: \"a\")"));
     assert_eq!(key_alone.len(), 1, "{key_alone:?}");
     assert!(key_alone[0].contains("Hash") && key_alone[0].contains("Key"), "{key_alone:?}");
@@ -189,13 +189,13 @@ fn a_type_has_no_hash_when_without_takes_it_or_a_part_lacks_it() {
     assert_eq!(door.len(), 1, "{door:?}");
     assert!(door[0].contains("Hash") && door[0].contains("Door") && door[0].contains("Key"), "{door:?}");
     let in_list = errors(&format!(
-        "{key}\nfn main() ! console, alloc {{\n  xs: List[Key] = []\n  print(\"{{hash(xs)}}\")\n}}\n"
+        "{key}\nfn main() <console, alloc> {{\n  xs: List[Key] = []\n  print(\"{{hash(xs)}}\")\n}}\n"
     ));
     assert_eq!(in_list.len(), 1, "{in_list:?}");
     assert!(in_list[0].contains("Hash") && in_list[0].contains("Key"), "{in_list:?}");
     // Taking `Hash` from a type leaves it its `Eq`.
     let eq = errors(&format!(
-        "{key}\nfn main() ! console {{\n  a = Key(secret: \"a\")\n  if a == a {{ print(\"same\") }}\n}}\n"
+        "{key}\nfn main() <console> {{\n  a = Key(secret: \"a\")\n  if a == a {{ print(\"same\") }}\n}}\n"
     ));
     assert!(eq.is_empty(), "{eq:?}");
 }
@@ -203,7 +203,7 @@ fn a_type_has_no_hash_when_without_takes_it_or_a_part_lacks_it() {
 fn an_impl_of_hash_replaces_the_one_a_type_was_given() {
     generate::check(263, 8, |g| g.below(1000) as u64, |&n| {
         let source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Cat {{\n  name: str\n}}\n\nstruct Home {{\n  cat: Cat\n}}\n\nimpl Hash[Cat] {{\n  fn hash(value: Cat) -> u64 {{ {n} }}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{hash(Cat(name: \"tom\"))}}\")\n  print(\"{{hash(Home(cat: Cat(name: \"tim\")))}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Cat {{\n  name: str\n}}\n\nstruct Home {{\n  cat: Cat\n}}\n\nimpl Hash[Cat] {{\n  fn hash(value: Cat) -> u64 {{ {n} }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{hash(Cat(name: \"tom\"))}}\")\n  print(\"{{hash(Home(cat: Cat(name: \"tim\")))}}\")\n}}\n"
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in\n{source}"));
         let out = String::from_utf8(scalar::run(&program).stdout).unwrap();

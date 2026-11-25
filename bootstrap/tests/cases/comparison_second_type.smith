@@ -16,7 +16,7 @@ fn word(b: bool) -> str {
 
 fn wide(a: u8, b: i64) -> bool { a < b }
 
-fn main() ! console {
+fn main() <console> {
   tom = Cat(name: "Tom", age: 3)
   print(word(same(tom, Cat(name: "Tom", age: 3))))
   print(word(below(tom.age, 4)))

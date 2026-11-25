@@ -47,7 +47,7 @@ fn parser() -> &'static str {
 /// What a program that reads each input prints for it. Each input starts with a
 /// line `input`.
 const DRIVER: &str = r#"
-fn show(b: List[Byte]) -> str ! alloc {
+fn show(b: List[Byte]) -> str <alloc> {
   var s: str = ""
   loop i in 0..b.size {
     if i == 0 { s = "{b[i]}" } else { s = "{s},{b[i]}" }
@@ -55,11 +55,11 @@ fn show(b: List[Byte]) -> str ! alloc {
   s
 }
 
-fn show_name(what: str, n: Name) ! console, alloc {
+fn show_name(what: str, n: Name) <console, alloc> {
   print("{what} {n.pos.line} {n.pos.col} {show(n.text)}")
 }
 
-fn show_use(u: Use) ! console, alloc {
+fn show_use(u: Use) <console, alloc> {
   l = if u.listed { 1 } else { 0 }
   print("use {u.pos.line} {u.pos.col} {l}")
   loop i in 0..u.module.size { show_name("module", u.module[i]) }
@@ -147,7 +147,7 @@ fn punct_text(p: Punct) -> str {
   }
 }
 
-fn found(t: Tok) -> str ! alloc {
+fn found(t: Tok) -> str <alloc> {
   match t {
     .ident(s) { "text {show(s)}" }
     .keyword(k) { "text {show(keyword_text(k))}" }
@@ -160,7 +160,7 @@ fn found(t: Tok) -> str ! alloc {
   }
 }
 
-fn show_error(e: ParseError) ! console, alloc {
+fn show_error(e: ParseError) <console, alloc> {
   if e.wanted == 8 or e.wanted == 9 {
     print("error {e.pos.line} {e.pos.col} {e.wanted} -")
   } else {
@@ -168,7 +168,7 @@ fn show_error(e: ParseError) ! console, alloc {
   }
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   texts = inputs()
   loop k in 0..texts.size {
     print("input")
@@ -188,7 +188,7 @@ fn main() ! console, alloc {
 fn program(texts: &[String]) -> String {
     let mut out = String::from(parser());
     out.push_str(DRIVER);
-    out.push_str("\nfn inputs() -> List[List[Byte]] ! alloc {\n  [");
+    out.push_str("\nfn inputs() -> List[List[Byte]] <alloc> {\n  [");
     for (i, text) in texts.iter().enumerate() {
         if i > 0 {
             out.push_str(", ");
@@ -332,7 +332,7 @@ fn use_lines(g: &mut Gen) -> Written {
         w.expected.insert(head_at, format!("use {line} {col} {listed}"));
     }
     w.newline();
-    w.put("fn main() ! console {");
+    w.put("fn main() <console> {");
     w.newline();
     w.put("}");
     w.newline();

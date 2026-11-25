@@ -48,7 +48,7 @@ fn hashing(bytes: &[u8]) -> String {
         format!("[{}]", items.join(", "))
     };
     with_header(format!(
-        "use std.sha2 (sha256)\n\nfn main() ! console, alloc {{\n  bytes: Slice[Byte] = {bytes}\n  digest = sha256(bytes)\n  loop x in digest {{ print(\"{{x}}\") }}\n}}\n"
+        "use std.sha2 (sha256)\n\nfn main() <console, alloc> {{\n  bytes: Slice[Byte] = {bytes}\n  digest = sha256(bytes)\n  loop x in digest {{ print(\"{{x}}\") }}\n}}\n"
     ))
 }
 
@@ -138,7 +138,7 @@ fn hashing_all(messages: &[Vec<u8>]) -> (String, Vec<u8>) {
         }
     }
     let source = with_header(format!(
-        "use std.sha2 (sha256)\n\nfn main() ! console, alloc {{\n{body}}}\n"
+        "use std.sha2 (sha256)\n\nfn main() <console, alloc> {{\n{body}}}\n"
     ));
     (source, said.into_bytes())
 }
@@ -168,7 +168,7 @@ fn every_executable_gives_the_digests_the_reference_gives() {
 /// for memory.
 fn sha256_carries_no_effect_and_its_program_never_calls_the_allocator() {
     let source = with_header(
-        "use std.sha2 (sha256)\n\nfn pure(bytes: Slice[Byte]) -> [32]Byte { sha256(bytes) }\n\nfn main() ! console {\n  bytes: Slice[Byte] = [1, 2, 3]\n  d = pure(bytes)\n  print(\"done\")\n}\n".to_string(),
+        "use std.sha2 (sha256)\n\nfn pure(bytes: Slice[Byte]) -> [32]Byte { sha256(bytes) }\n\nfn main() <console> {\n  bytes: Slice[Byte] = [1, 2, 3]\n  d = pure(bytes)\n  print(\"done\")\n}\n".to_string(),
     );
     assert!(check(source.as_bytes()).is_ok(), "for\n{source}");
     let program = lower(source.as_bytes()).unwrap();

@@ -22,7 +22,7 @@ pub const ONCE: &[Test] = &[
 /// `body` says, of type `to`.
 fn program(from: &str, to: &str, body: &str) -> String {
     let program = format!(
-        "fn f(x: {from}) -> {to} {{\n  {body}\n}}\n\nfn main() ! console, alloc {{\n  print(\"{{f(1)}}\")\n}}\n"
+        "fn f(x: {from}) -> {to} {{\n  {body}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1)}}\")\n}}\n"
     );
     header_for(&program) + &program
 }

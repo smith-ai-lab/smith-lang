@@ -23,7 +23,7 @@ fn sides(w: i32, h: i32) -> (i32, i32) { (w, h) }
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   (a, b) = sides(3, 4)
   print("{a} {b}")
 }
@@ -34,7 +34,7 @@ This prints `3 4`. The values may have different types, and a tuple may have any
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   (n, word, flag) = (1, "one", true)
   ((a, b), c) = ((1, 2), 3)
   print("{n} {word} {flag} {a} {b} {c}")
@@ -107,7 +107,7 @@ A name in a pattern is immutable, as any [binding](bindings.md) is. `var` before
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   (a, var b) = sides(3, 4)
   b = 9
   print("{a} {b}")
@@ -126,7 +126,7 @@ use std.console (console, print)
 
 fn split(n: i32) -> (i32, i32) { (n, 1) }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var total = 5
   (total, rest) = split(total)
   print("{total} {rest}")
@@ -138,7 +138,7 @@ This prints `5 1`. The elements of the tuple on the right are evaluated from lef
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   var a = 1
   var b = 2
   (a, b) = (b, a)
@@ -152,12 +152,12 @@ This prints `2 1`. The order of the elements is seen when they do something.
 use std.bits (i32)
 use std.console (console, print)
 
-fn tick(name: str, n: i32) -> i32 ! console {
+fn tick(name: str, n: i32) -> i32 <console> {
   print(name)
   n
 }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   (a, b) = (tick("first", 1), tick("second", 2))
   print("{a} {b}")
 }
@@ -174,9 +174,9 @@ The empty tuple `()` has no parts. It is what a function with no return type ret
 ```
 use std.console (console, print)
 
-fn greet() ! console { print("hi") }
+fn greet() <console> { print("hi") }
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   x = greet()
   y: () = x
 }

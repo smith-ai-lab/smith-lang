@@ -1,7 +1,7 @@
 use std.console (console, print)
 use std.time (now, sleep, time)
 
-fn main() ! console, time, alloc {
+fn main() <console, time, alloc> {
   before = now()
   sleep(150)
   after = now()

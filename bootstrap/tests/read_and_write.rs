@@ -67,7 +67,7 @@ struct P {{
   x: Int
 }}
 
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   r: Result[P, {error}] = from_json(\"\\{{\\\"x\\\":1\\}}\")
   match r {{
     .ok(t) {{ print(to_json(t)) }}
@@ -115,7 +115,7 @@ fn round_trip(g: &mut Gen) -> (String, usize) {
 use std.deserialize {list}
 use std.json (Json, from_json, from_json_as, to_json, to_json_as)
 
-{}fn main() ! console, alloc {{
+{}fn main() <console, alloc> {{
   v: {name} = {value}
   t = to_json(v)
   r: Result[{name}, {error}] = from_json(t)
@@ -230,7 +230,7 @@ struct P {{
 }}
 
 {defined}
-fn main() ! console, alloc {{
+fn main() <console, alloc> {{
   r: Result[P, {error}] = from_json(\"\\{{\\\"x\\\":1\\}}\")
   match r {{
     .ok(t) {{ print(to_json(t)) }}

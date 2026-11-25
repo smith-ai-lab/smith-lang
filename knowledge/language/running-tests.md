@@ -44,7 +44,7 @@ A test is a function like any other, and it declares its effects as one. What it
 use std.fs (fs, read_all)
 use std.test (Failed, expect)
 
-fn test_reads_the_cases() -> Result[(), Failed] ! fs, alloc {
+fn test_reads_the_cases() -> Result[(), Failed] <fs, alloc> {
   bytes = try read_all("cases/hello.smith")
   expect { bytes.size > 0 }
 }
@@ -53,7 +53,7 @@ fn test_reads_the_cases() -> Result[(), Failed] ! fs, alloc {
 Nothing is put in an effect's place without being written. A test that must not touch the machine handles the effect itself, as [Handlers](handlers.md) describes for `memory_fs`, and then it does not list the effect.
 
 ```
-fn test_config() -> Result[(), Failed] ! alloc {
+fn test_config() -> Result[(), Failed] <alloc> {
   with memory_fs(fixtures)
   cfg = try load("model.toml")
   expect { cfg.layers == 12 }
@@ -70,7 +70,7 @@ So the signature says which kind a test is: one that lists `fs`, `net`, or `time
 | `smith test <file>` | Runs the tests of that file |
 | `smith test --name <text>` | Runs the tests whose name matches |
 | `smith test --seed <n>` | Replays a run with that seed |
-| `fn test_x() ! e` | A test with the effects `e`, which are the real ones |
+| `fn test_x() <e>` | A test with the effects `e`, which are the real ones |
 | `with memory_fs(files)` in a test | The test handles `fs` itself, and does not list it |
 
 Next: [A transformer](transformer.md)

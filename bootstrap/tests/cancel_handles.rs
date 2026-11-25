@@ -51,14 +51,14 @@ use std.list (freeze, push)
 use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 {functions}
-fn run() -> u64 ! net, diverge, alloc {{
+fn run() -> u64 <net, diverge, alloc> {{
   with test_scheduler_with_io({seed}, [])
 {tasks}
   late = test_ready_by(99, 10)
   1
 }}
 
-fn main() ! console, alloc, diverge {{
+fn main() <console, alloc, diverge> {{
   r = net(
     listen_on: fn(host, port) {{ .err(.refused) }},
     accept: fn(l) {{ .err(.closed) }},
@@ -99,7 +99,7 @@ fn sorted(mut lines: Vec<String>) -> Vec<String> {
     lines
 }
 
-const HOLD: &str = "fn hold(n: u64) -> u64 ! net, task {
+const HOLD: &str = "fn hold(n: u64) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
   close(c)
@@ -123,7 +123,7 @@ const PAIR: &str = "struct Pair {
   b: Connection
 }
 
-fn hold_two(n: u64) -> u64 ! net, task {
+fn hold_two(n: u64) -> u64 <net, task> {
   p = Pair(a: connection(n), b: connection(wrapping_add(n, 1)))
   test_ready(n)
   close(p.a)
@@ -143,7 +143,7 @@ fn a_cancelled_task_closes_both_connections_of_a_struct_it_holds() {
     }
 }
 
-const GIVEN: &str = "fn parent(n: u64) -> u64 ! net, task {
+const GIVEN: &str = "fn parent(n: u64) -> u64 <net, task> {
   child = spawn { connection(n) }
   c = join(child)
   test_ready(n)
@@ -175,12 +175,12 @@ fn a_function_that_holds_a_connection_while_it_may_wait_and_does_not_carry_net_i
     let source = "use std.net (Connection, close, connection, net)
 use std.time (sleep, time)
 
-fn relay(c: take Connection) -> Connection ! time {
+fn relay(c: take Connection) -> Connection <time> {
   sleep(10)
   c
 }
 
-fn main() ! time, net {
+fn main() <time, net> {
   close(relay(connection(3)))
 }
 ";
@@ -195,7 +195,7 @@ fn main() ! time, net {
     assert!(errors.contains("add `net` to its effects"), "{errors}");
 }
 
-const FINISH: &str = "fn finish(n: u64) -> u64 ! net, task {
+const FINISH: &str = "fn finish(n: u64) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
   close(c)
@@ -211,7 +211,7 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
     assert_eq!(sorted(said(&source)), ["1", "closed 4"]);
 }
 
-const LIST: &str = "fn hold_list(n: u64) -> List[Connection] ! net, task, alloc {
+const LIST: &str = "fn hold_list(n: u64) -> List[Connection] <net, task, alloc> {
   var cs: List[Connection] = []
   cs = push(cs, connection(n))
   cs = push(cs, connection(wrapping_add(n, 1)))
@@ -231,7 +231,7 @@ fn a_cancelled_task_closes_each_connection_of_a_list_it_holds() {
     }
 }
 
-const SERVE: &str = "fn serve(c: take Connection) -> u64 ! net, task {
+const SERVE: &str = "fn serve(c: take Connection) -> u64 <net, task> {
   test_ready(1)
   close(c)
   3

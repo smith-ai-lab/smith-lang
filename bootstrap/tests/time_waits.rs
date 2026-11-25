@@ -122,7 +122,7 @@ use std.int (wrapping_sub)
 use std.task (join, spawn, task, tasks)
 use std.time (now, sleep, time)
 
-fn nap(ms: u64) -> u64 ! console, time, alloc, task {
+fn nap(ms: u64) -> u64 <console, time, alloc, task> {
   sleep(ms)
   print(\"woke {ms}\")
   ms
@@ -138,7 +138,7 @@ fn a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for() {
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
-fn main() ! console, alloc, time {
+fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
     t = spawn { sleep(1) }
@@ -165,7 +165,7 @@ fn a_thousand_groups_one_after_another_each_close_the_queue_they_made() {
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
-fn main() ! console, alloc, time {
+fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
     t = spawn { sleep(1) }
@@ -186,7 +186,7 @@ fn main() ! console, alloc, time {
 fn two_tasks_that_sleep_wake_in_the_order_of_their_times_and_the_program_takes_the_longer_of_them() {
     let source = format!(
         "{NAP}
-fn main() ! console, alloc, time {{
+fn main() <console, alloc, time> {{
   with tasks()
   a = spawn {{ nap(300) }}
   b = spawn {{ nap(100) }}
@@ -211,13 +211,13 @@ fn main() ! console, alloc, time {{
 fn a_thousand_tasks_that_each_sleep_wake_once_each_and_the_program_takes_the_time_of_one() {
     let source = format!(
         "{NAP}
-fn sleeper(i: u64) -> u64 ! console, time, alloc, task {{
+fn sleeper(i: u64) -> u64 <console, time, alloc, task> {{
   sleep(100)
   print(\"{{i}}\")
   i
 }}
 
-fn main() ! console, alloc, time {{
+fn main() <console, alloc, time> {{
   with tasks()
   loop i in 0..1000 {{
     t = spawn {{ sleeper(i) }}
@@ -252,13 +252,13 @@ use std.fromtext (from_text)
 use std.net (NetError, bind, handle, net)
 use std.task (join, spawn, task, tasks, wait_to_read_by)
 
-fn waiting(port: 0..65536, ms: u64) -> Result[bool, NetError] ! console, net, alloc, task {
+fn waiting(port: 0..65536, ms: u64) -> Result[bool, NetError] <console, net, alloc, task> {
   with s = bind(\"127.0.0.1\", port)
   print(\"ready\")
   .ok(wait_to_read_by(handle(s), ms))
 }
 
-fn main(args: List[str]) ! console, alloc, net {
+fn main(args: List[str]) <console, alloc, net> {
   if args.size < 2 { return }
   number: Result[0..65536, ReadError] = from_text(\"port\", args[0])
   limit: Result[u64, ReadError] = from_text(\"limit\", args[1])
@@ -309,13 +309,13 @@ use std.int (wrapping_sub)
 use std.task (join, spawn, task, test_scheduler)
 use std.time (now, sleep, time)
 
-fn sleeper(i: u64) -> u64 ! console, time, alloc, task {
+fn sleeper(i: u64) -> u64 <console, time, alloc, task> {
   sleep(i)
   print(\"{i}\")
   i
 }
 
-fn main(args: List[str]) ! console, alloc, time, diverge {
+fn main(args: List[str]) <console, alloc, time, diverge> {
   before = now()
   with test_scheduler(7)
   loop i in 1..1001 {
@@ -342,19 +342,19 @@ use std.console (console, print)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
-fn long() -> u64 ! console, time, alloc, task {
+fn long() -> u64 <console, time, alloc, task> {
   sleep(18446744073709551615)
   print(\"long woke\")
   0
 }
 
-fn short() -> u64 ! console, time, alloc, task {
+fn short() -> u64 <console, time, alloc, task> {
   sleep(10)
   print(\"short\")
   1
 }
 
-fn main() ! console, alloc, time {
+fn main() <console, alloc, time> {
   with tasks()
   a = spawn { long() }
   b = spawn { short() }
@@ -383,20 +383,20 @@ use std.console (console, print)
 use std.task (join, spawn, task, test_scheduler)
 use std.time (sleep, time)
 
-fn long() -> u64 ! console, time, alloc, task {{
+fn long() -> u64 <console, time, alloc, task> {{
   sleep(5)
   sleep(18446744073709551615)
   print(\"long woke\")
   0
 }}
 
-fn short() -> u64 ! console, time, alloc, task {{
+fn short() -> u64 <console, time, alloc, task> {{
   sleep(10)
   print(\"short\")
   1
 }}
 
-fn main() ! console, alloc, time, diverge {{
+fn main() <console, alloc, time, diverge> {{
   with test_scheduler({seed})
   a = spawn {{ long() }}
   b = spawn {{ short() }}
@@ -440,11 +440,11 @@ use std.deserialize (ReadError)
 use std.fromtext (from_text)
 use std.task (join, spawn, task, test_ready_by, test_scheduler_with_io)
 
-fn waits(handle: u64) -> bool ! task {
+fn waits(handle: u64) -> bool <task> {
   test_ready_by(handle, 20)
 }
 
-fn main(args: List[str]) ! console, alloc, diverge {
+fn main(args: List[str]) <console, alloc, diverge> {
   if args.size < 1 { return }
   which: Result[u64, ReadError] = from_text(\"handle\", args[0])
   match which {

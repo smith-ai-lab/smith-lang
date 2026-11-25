@@ -21,7 +21,7 @@ built:
 ```
 use std.console (console, print)
 
-fn main() ! console, alloc {
+fn main() <console, alloc> {
   a: Byte = 20
   b: Byte = 5
   print("{a * b}")

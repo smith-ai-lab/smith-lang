@@ -95,7 +95,7 @@ fn both(f: fn(str)) {
   f("b")
 }
 
-fn gather() -> str ! alloc {
+fn gather() -> str <alloc> {
   var page = text()
   both() fn(part) { page = append(page, part) }
   finish(page)
