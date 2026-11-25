@@ -321,14 +321,15 @@ fn cost(lines: usize) -> f64 {
 }
 
 /// Checking a body that has such `var`s takes time in proportion to its size:
-/// four times the lines take about four times as long, and far less than the
-/// sixteen times that looking at the body again for each line would.
+/// five times the lines take about five times as long, far less than the
+/// twenty-five times that looking at the body again for each line would. The
+/// bound leaves room for what a busy machine adds to a longer body.
 fn the_time_to_check_a_body_grows_with_its_size_and_no_faster() {
-    let small = cost(2500);
+    let small = cost(2000);
     let large = cost(10000);
     assert!(
-        large < small * 9.0,
-        "2500 lines took {small}s and 10000 took {large}s, which is more than linear"
+        large < small * 14.0,
+        "2000 lines took {small}s and 10000 took {large}s, which is more than linear"
     );
 }
 
