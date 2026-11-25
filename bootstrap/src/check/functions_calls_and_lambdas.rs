@@ -521,16 +521,56 @@ impl<'a> Checker<'a> {
         if !args[own..].iter().any(Ty::unknown) {
             self.probed.insert(s, args[own..].to_vec());
         }
-        let unknown = vec![Ty::Unknown; l.params.len() + 1];
+        let inferred = leaves_a_type_out(l);
+        // A lambda that leaves types out has the types the calls of it gave, as
+        // the look before found them.
+        let wanted = match defs.env_lambda(s) {
+            Some((_, items)) if inferred => {
+                let mut items = items.clone();
+                // What the body gives is the result, whatever the look before
+                // found it was.
+                if l.result.is_none() {
+                    *items.last_mut().expect("a result") = Ty::Unknown;
+                }
+                items
+            }
+            _ => vec![Ty::Unknown; l.params.len() + 1],
+        };
+        let mut refused = false;
+        if inferred && defs.env_unsettled.contains(&s) {
+            refused = true;
+            self.errors.push(Error::new(
+                l.pos,
+                "the parameters of this lambda are inferred from calls that pass what other calls of it give, so each look at them is wider than the one before, and they are written, as `fn(v: f32) -> f32 { ... }`",
+            ));
+        } else if inferred
+            && !self.probing
+            && (wanted[..l.params.len()].iter().any(Ty::unknown)
+                || defs.env_calls.get(&s).is_none_or(Vec::is_empty))
+        {
+            refused = true;
+            self.errors.push(Error::new(
+                l.pos,
+                "a lambda bound to a name writes the type of each parameter and of its result, as `fn(v: f32) -> f32 { ... }`, unless a call of it in the same body gives them",
+            ));
+        }
+        self.from_calls = defs.env_calls.get(&s).cloned().filter(|_| inferred);
         let listed = kept.then(|| std::mem::take(&mut body.listed));
         body.kept += usize::from(kept);
-        let checked = self.lambda(body, l, &unknown, false);
+        let checked = self.lambda(body, l, &wanted, false);
         body.kept -= usize::from(kept);
+        if inferred {
+            self.gave
+                .insert(s, std::mem::replace(&mut self.lambda_gave, Ty::Unknown));
+        }
         if let Some(listed) = listed {
             body.listed = listed;
         }
         match checked {
+            _ if refused => Ty::Unknown,
             Ty::Fn(_) if !lent => Ty::Struct(s, args),
+            // What the calls of it pass is not known yet, so it has no type.
+            _ if inferred && !lent => Ty::Struct(s, args),
             _ => Ty::Unknown,
         }
     }
@@ -576,6 +616,7 @@ impl<'a> Checker<'a> {
         let loops = body.loops;
         body.outer_loops += std::mem::take(&mut body.loops);
         let mut types = Vec::new();
+        let from_calls = self.from_calls.take();
         for (i, ((name, pos), ty)) in l.params.iter().zip(params).enumerate() {
             let twice = l.params[..i].iter().any(|(n, _)| n == name)
                 || body.names.iter().any(|(n, _)| n == name);
@@ -585,6 +626,11 @@ impl<'a> Checker<'a> {
             types.push(ty.clone());
             // The ownership check reads the type of a parameter from here.
             self.types.insert(addr(&l.params[i]), ty.clone());
+            if let Some(calls) = &from_calls
+                && l.types[i].is_none()
+            {
+                self.lambda_from.insert(body.names.len(), calls.clone());
+            }
             body.names.push((name.clone(), ty.clone()));
         }
         // A block whose type is not settled by the call it is passed to is
@@ -713,11 +759,13 @@ impl<'a> Checker<'a> {
             (End::Empty | End::Binding(_), _) => Ty::Nothing,
         };
         body.names.truncate(outer);
+        self.lambda_from.retain(|at, _| *at < outer);
         body.vars.truncate(vars);
         body.facts.reset(&known);
         self.forget(body, &assigned);
         body.outer_loops -= loops;
         body.loops = loops;
+        self.lambda_gave = gives.clone();
         types.push(gives);
         Ty::func(types)
     }
@@ -778,6 +826,8 @@ impl<'a> Checker<'a> {
         let (gives, params) = items.split_last().expect("a result");
         let name = &call.callee;
         let mut given = vec![false; params.len()];
+        let mut passed = vec![Ty::Unknown; params.len()];
+        let free = std::mem::take(&mut self.free_args);
         let mut next = 0;
         for arg in &call.args {
             let at = if arg.after {
@@ -825,9 +875,27 @@ impl<'a> Checker<'a> {
             }
             let i = at.expect("a parameter");
             given[i] = true;
-            let value = self.expr(body, &arg.value, &Want::Ty(params[i].clone()));
+            // What a call passes where nothing says the type is the smallest range
+            // that holds it, so that a number written out is its own range.
+            let free = free && params[i].unknown();
+            let want = if free {
+                Want::Any
+            } else {
+                Want::Ty(params[i].clone())
+            };
+            let mut value = self.expr(body, &arg.value, &want);
+            if free
+                && let Ty::Int(_) = value
+                && !matches!(arg.value, Expr::Name { .. })
+                && let Some((low, high)) = self.known_range(body, &arg.value)
+                && let Some(exact) = Int::between(low, high)
+            {
+                value = Ty::Int(exact);
+            }
             self.expect(body, &arg.value, &value, &params[i]);
+            passed[i] = value;
         }
+        self.last_args = passed;
         let missing = given.iter().filter(|g| !**g).count();
         if missing > 0 {
             self.errors.push(Error::new(
@@ -1028,7 +1096,20 @@ impl<'a> Checker<'a> {
             && call.qualifier.is_none()
             && let Some(items) = defs.env_items(*s, args)
         {
-            return self.value_call(body, call, &items);
+            let s = *s;
+            let untyped = defs
+                .env_lambda(s)
+                .is_some_and(|(l, _)| leaves_a_type_out(l));
+            self.free_args = untyped;
+            let given = self.value_call(body, call, &items);
+            if untyped {
+                let passed = std::mem::take(&mut self.last_args);
+                self.seen
+                    .entry(s)
+                    .or_default()
+                    .push((call.pos, written_call(call), passed));
+            }
+            return given;
         }
         if let Some((_, Ty::Fn(items))) = body.names.iter().rfind(|(n, _)| n == name) {
             let items = items.clone();
@@ -1303,6 +1384,21 @@ impl<'a> Checker<'a> {
     /// this signature, and gives the type each of its type parameters
     /// stands for, where the arguments say.
     pub(super) fn arguments(
+        &mut self,
+        body: &mut Body<'a>,
+        call: &Call,
+        signature: &Signature,
+        is_print: bool,
+        via: Option<(usize, &Want)>,
+        placed: Option<&Ty>,
+    ) -> Vec<Option<Ty>> {
+        let outer = self.using.replace(call.callee.clone());
+        let given = self.arguments_of(body, call, signature, is_print, via, placed);
+        self.using = outer;
+        given
+    }
+
+    fn arguments_of(
         &mut self,
         body: &mut Body<'a>,
         call: &Call,

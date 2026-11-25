@@ -69,6 +69,8 @@ struct Cx<'a> {
 enum Kept<'a> {
     No,
     Anywhere,
+    /// Bound directly to a name, which the calls of it may give the types of.
+    Bound,
     Like(&'a Type, &'a [Generic]),
 }
 
@@ -80,7 +82,14 @@ fn block(
 ) {
     for (i, stmt) in body.iter_mut().enumerate() {
         match stmt {
-            Stmt::Define { value, .. } => value_of(cx, value, Kept::Anywhere, out),
+            Stmt::Define { value, .. } => {
+                let kept = if matches!(value, Expr::Lambda(_)) {
+                    Kept::Bound
+                } else {
+                    Kept::Anywhere
+                };
+                value_of(cx, value, kept, out)
+            }
             Stmt::Expr(value) => {
                 let kept = match returned {
                     Some((at, Some(ty))) if at == i => Kept::Like(ty, &[]),
@@ -121,6 +130,12 @@ fn value_of(cx: &Cx, value: &mut Expr, kept: Kept, out: &mut Vec<Function>) {
                 out.push(f);
                 *value = Expr::Name { name, pos };
             } else if let Some(env) = env_lambda(cx, l, kept) {
+                cx.envs.borrow_mut().push(env);
+            } else if matches!(kept, Kept::Bound)
+                && !l.params.is_empty()
+                && (l.types.iter().any(Option::is_none) || l.result.is_none())
+                && let Some(env) = env_struct(cx, l, true)
+            {
                 cx.envs.borrow_mut().push(env);
             }
         }
@@ -315,7 +330,7 @@ fn env_lambda(cx: &Cx, l: &mut Lambda, kept: Kept) -> Option<Struct> {
     let mut written = l.clone();
     written.types = types.into_iter().map(Some).collect();
     written.result = result;
-    let env = env_struct(cx, &written)?;
+    let env = env_struct(cx, &written, false)?;
     *l = written;
     Some(env)
 }
@@ -324,9 +339,12 @@ fn env_lambda(cx: &Cx, l: &mut Lambda, kept: Kept) -> Option<Struct> {
 /// returned reads of the function it is written in: the type parameters of the function, then one for
 /// each name it reads, and a field for each name. No source writes it, and
 /// the checker gives it the types the names have. None when the lambda leaves a
-/// type out, assigns a name of its function, or reads none.
-fn env_struct(cx: &Cx, l: &Lambda) -> Option<Struct> {
-    if !l.generics.is_empty() || l.result.is_none() || l.types.iter().any(Option::is_none) {
+/// type out, assigns a name of its function, or reads none. A lambda that is
+/// `inferred` may leave types out, which the calls of it give, and may read
+/// nothing.
+fn env_struct(cx: &Cx, l: &Lambda, inferred: bool) -> Option<Struct> {
+    let written = l.result.is_some() && l.types.iter().all(Option::is_some);
+    if !l.generics.is_empty() || (!inferred && !written) {
         return None;
     }
     let mut mine: HashSet<&str> = l.params.iter().map(|(n, _)| n.as_str()).collect();
@@ -373,7 +391,7 @@ fn env_struct(cx: &Cx, l: &Lambda) -> Option<Struct> {
             _ => {}
         }
     }
-    if reads.is_empty() {
+    if reads.is_empty() && !inferred {
         return None;
     }
     let mut generics = cx.generic_list.to_vec();

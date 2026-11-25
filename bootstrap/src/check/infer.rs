@@ -613,6 +613,38 @@ impl<'a> Checker<'a> {
         let Some(at) = body.names.iter().rposition(|(n, _)| n == name) else {
             return;
         };
+        if let Some(calls) = self.lambda_from.get(&at)
+            && let Ty::Int(held) = &body.names[at].1
+        {
+            let spell = |r: Int| match r.ends() {
+                Some((low, high)) => format!("{low}..{}", high + 1),
+                None => r.name(),
+            };
+            let mut sources: Vec<String> = calls
+                .iter()
+                .map(|(p, text)| format!("the call `{text}` at line {}", p.line))
+                .collect();
+            sources.dedup();
+            let sources = match sources.len() {
+                0 | 1 => sources.concat(),
+                2 => sources.join(" and "),
+                n => format!("{}, and {}", sources[..n - 1].join(", "), sources[n - 1]),
+            };
+            let line = value.pos().line;
+            let uses = match &self.using {
+                Some(callee) => format!("`{callee}` at line {line}"),
+                None => format!("the use at line {line}"),
+            };
+            self.errors[from].message = format!(
+                "`{name}` is a `{}`, inferred from {sources}, and {uses} needs a `{}`",
+                spell(*held),
+                spell(needed)
+            );
+            self.errors[from].fix = Some(format!(
+                "pass a value that fits, or write the type of `{name}`"
+            ));
+            return;
+        }
         let Some(def) = self.inferred.get(&at).copied() else {
             return;
         };
