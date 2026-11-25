@@ -958,6 +958,12 @@ struct Defs<'a> {
     /// the signature of a function that gives the lambda is made with, found by
     /// checking the body of the function.
     env_types: Map<usize, Vec<Ty>>,
+    /// The calls that gave the parameters of each lambda that leaves types out,
+    /// by the struct that holds it, with where each is and how it is written.
+    env_calls: Map<usize, Vec<(Pos, String)>>,
+    /// The lambdas that leave types out whose calls pass what the lambda gives,
+    /// so that the types of its parameters do not settle.
+    env_unsettled: Set<usize>,
     enum_scopes: Vec<Scope>,
     /// The type each case of each enum holds, if it holds one, among the
     /// enum's type parameters.
@@ -2193,6 +2199,18 @@ fn written(f: &Function, effects: &[&str]) -> String {
     text
 }
 
+/// How a call is written in the source.
+fn written_call(call: &Call) -> String {
+    let args: Vec<String> = (call.args.iter())
+        .filter(|a| !a.after)
+        .map(|a| match &a.name {
+            Some((name, _)) => format!("{name}: {}", written_expr(&a.value)),
+            None => written_expr(&a.value),
+        })
+        .collect();
+    format!("{}({})", call.callee, args.join(", "))
+}
+
 /// How an expression is written in the source, with each text written with
 /// an escape for every character that needs one.
 fn written_expr(e: &Expr) -> String {
@@ -2915,6 +2933,8 @@ fn check_file(
         env_at: Map::default(),
         env_owner: Vec::new(),
         env_types: Map::default(),
+        env_calls: Map::default(),
+        env_unsettled: Set::default(),
         struct_scopes: Vec::new(),
         fields: Vec::new(),
         enum_scopes: Vec::new(),
@@ -7173,6 +7193,15 @@ impl<'a> Checker<'a> {
             defs,
             errors,
             probed: Map::default(),
+            seen: Map::default(),
+            gave: Map::default(),
+            lambda_gave: Ty::Unknown,
+            last_args: Vec::new(),
+            free_args: false,
+            lambda_from: HashMap::new(),
+            from_calls: None,
+            using: None,
+            probing: false,
             types: HashMap::new(),
             drops: ownership::Drops::default(),
             widened: HashMap::new(),
@@ -7218,6 +7247,29 @@ struct Checker<'a> {
     /// The types of the names each lambda that reads names read, as the body
     /// that was checked last gave them, by the struct that holds them.
     probed: Map<usize, Vec<Ty>>,
+    /// The types of the arguments of each call of a lambda that leaves types
+    /// out, in the look that was made last, by the struct that holds it, with
+    /// where each call is and how it is written.
+    seen: Map<usize, Vec<(Pos, String, Vec<Ty>)>>,
+    /// What each such lambda gave, in the look that was made last.
+    gave: Map<usize, Ty>,
+    /// What the lambda checked last gave.
+    lambda_gave: Ty,
+    /// The types of the arguments of the call that `value_call` checked last.
+    last_args: Vec<Ty>,
+    /// Whether the call being checked is of a lambda whose parameters are the
+    /// types of what its calls pass.
+    free_args: bool,
+    /// The parameters of lambdas in scope whose types are those of the calls of
+    /// them, by their place among the names, with the call that gave the first.
+    lambda_from: HashMap<usize, Vec<(Pos, String)>>,
+    /// The calls that gave the parameters of the lambda about to be checked.
+    from_calls: Option<Vec<(Pos, String)>>,
+    /// The function whose arguments are being checked.
+    using: Option<String>,
+    /// Whether this look is made to find the types of the lambdas that leave
+    /// some out, and its errors are thrown away.
+    probing: bool,
     /// The type of each expression checked, by its address.
     types: HashMap<usize, Ty>,
     /// Where the values that may hold a child task are dropped.
@@ -8349,6 +8401,9 @@ impl<'a> Checker<'a> {
             }
         }
         self.inferred.clear();
+        self.seen.clear();
+        self.gave.clear();
+        self.lambda_from.clear();
         let mut body = Body {
             f: Some(f),
             default: None,
@@ -10279,6 +10334,43 @@ fn is_proof(f: &Function) -> bool {
     f.result.as_ref().is_some_and(|t| t.statement.is_some())
 }
 
+impl Checker<'_> {
+    /// The types of the parameters and of the result of each lambda that leaves
+    /// some out, as the look that was made last gave them: each parameter is the
+    /// smallest range that holds what the calls of the lambda pass it, joined
+    /// before the lambda is checked, and the result is what the lambda gave.
+    fn inferred_items(&self) -> Map<usize, Vec<Ty>> {
+        let mut items = Map::default();
+        for (&s, gave) in &self.gave {
+            let Some((l, held)) = self.defs.env_lambda(s) else {
+                continue;
+            };
+            let mut found = held.clone();
+            if let Some(calls) = self.seen.get(&s) {
+                for (i, slot) in found[..l.params.len()].iter_mut().enumerate() {
+                    if l.types[i].is_some() {
+                        continue;
+                    }
+                    let mut joined = Ty::Unknown;
+                    for (_, _, passed) in calls {
+                        joined = match (joined, &passed[i]) {
+                            (Ty::Unknown, t) => t.clone(),
+                            (Ty::Int(a), Ty::Int(b)) => Ty::Int(a.hull(*b).unwrap_or(a)),
+                            (kept, _) => kept,
+                        };
+                    }
+                    *slot = joined;
+                }
+            }
+            if let Some(last) = found.last_mut() {
+                *last = gave.clone();
+            }
+            items.insert(s, found);
+        }
+        items
+    }
+}
+
 /// Finds the types of the names that a lambda reads and its function defines,
 /// as the body of the function gives them, for the signature of a function that
 /// gives the lambda, which is made before any body is checked. A function whose
@@ -10291,21 +10383,49 @@ fn settle_env_types(defs: &mut Defs) {
         let params = &defs.file.functions[f].params;
         let defined = (defs.file.structs[s].fields.iter())
             .any(|field| !params.iter().any(|p| p.name == field.name));
-        if defined && !owners.contains(&f) {
+        let inferred = defs
+            .env_lambda(s)
+            .is_some_and(|(l, _)| leaves_a_type_out(l));
+        if (defined || inferred) && !owners.contains(&f) {
             owners.push(f);
         }
     }
-    for _ in 0..owners.len() {
+    // The types a lambda that leaves some out is given by the calls of it are
+    // found a look after the types of what the calls pass, as often again as
+    // a call passes what another call gave.
+    for round in 0.. {
         let mut found: Map<usize, Vec<Ty>> = Map::default();
+        let mut inferred: Map<usize, Vec<Ty>> = Map::default();
+        let mut calls: Map<usize, Vec<(Pos, String)>> = Map::default();
         for &f in &owners {
             let mut probe = Checker::new(defs, Vec::new());
+            probe.probing = true;
             probe.body(Template::Free(f));
+            inferred.extend(probe.inferred_items());
+            for (s, seen) in &probe.seen {
+                calls.insert(*s, seen.iter().map(|(p, t, _)| (*p, t.clone())).collect());
+            }
             found.extend(probe.probed);
         }
-        if (found.iter()).all(|(s, types)| defs.env_types.get(s) == Some(types)) {
+        defs.env_calls = calls;
+        let same = (found.iter()).all(|(s, types)| defs.env_types.get(s) == Some(types))
+            && (inferred.iter())
+                .all(|(s, items)| defs.env_lambda(*s).is_some_and(|(_, held)| held == items));
+        if same {
+            break;
+        }
+        // Parameters that grow with each look are of calls that pass what other
+        // calls of the same lambda give, and have no range that holds them.
+        if round >= owners.len() + 8 {
+            defs.env_unsettled.extend(inferred.keys().copied());
             break;
         }
         defs.env_types.extend(found);
+        for (s, items) in inferred {
+            if let Some((_, held)) = defs.env_lambdas[s].as_mut() {
+                *held = items;
+            }
+        }
         for &f in &owners {
             defs.signatures[f] = defs.signature_of(&defs.file.functions[f]);
         }
@@ -10358,7 +10478,7 @@ fn env_lambdas<'a>(defs: &Defs<'a>) -> (Vec<EnvLambda<'a>>, Vec<Option<usize>>) 
             items.push(
                 l.result
                     .as_ref()
-                    .map_or(Ty::Nothing, |t| defs.quietly(t, scope)),
+                    .map_or(Ty::Unknown, |t| defs.quietly(t, scope)),
             );
             Some((l, items))
         })
