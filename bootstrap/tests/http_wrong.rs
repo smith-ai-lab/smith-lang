@@ -25,6 +25,10 @@ pub const ONCE: &[Test] = &[
         a_status_outside_the_range_of_statuses_is_refused_where_it_is_written,
     ),
     (
+        "a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number",
+        a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number,
+    ),
+    (
         "a_method_that_is_a_text_is_refused_for_a_request",
         a_method_that_is_a_text_is_refused_for_a_request,
     ),
@@ -106,6 +110,23 @@ fn a_status_outside_the_range_of_statuses_is_refused_where_it_is_written() {
     generate::check(9104, 10, inside, |status| {
         let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: \"\")"));
         assert!(messages(&source).is_empty(), "{:?} for\n{source}", messages(&source));
+    });
+}
+
+/// A place in a module is kept as a number that holds the module, and a
+/// message never shows it as one: it says the file of the library.
+fn a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number() {
+    let names = |g: &mut Gen| {
+        let name = *g.pick(RESERVED);
+        cased(g, name)
+    };
+    generate::check(9107, 6, names, |name| {
+        let source = program("header_name", &format!("x = header_name(\"{name}\")"));
+        let said = messages(&source);
+        let note = said.iter().find(|m| m.contains("last comparison")).expect("a note");
+        assert!(note.contains("std/http.smith:"), "{note}");
+        let long = note.split(|c: char| !c.is_ascii_digit()).any(|d| d.len() >= 8);
+        assert!(!long, "{note}");
     });
 }
 
