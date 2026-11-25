@@ -7,6 +7,11 @@
 //! evaluator for the small sizes, and natively, on Linux, for every size, and
 //! under `memory_fs` natively for the large ones, and compares what it printed
 //! with what the test works out in Rust from the numbers it chose.
+//!
+//! The tests make pipes and read modes, which only the systems of Unix have, and
+//! only Linux builds files so far, so the file is read on Unix alone.
+
+#![cfg(unix)]
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
