@@ -260,16 +260,34 @@ fn a_task_that_may_wait_in_a_loop_and_does_not_gives_what_it_holds_and_the_sched
 /// it is ready. The test says which handles are ready and in what order, so
 /// the order of the three is that, for every seed, and a task that waits for a
 /// handle the test never makes ready is waited for by none that is run.
-fn a_program_with_handles(ready: &str, seed: u64) -> String {
-    format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn say(handle: u64) -> u64 <task, console, alloc> {{\n  test_ready(handle)\n  print(\"{{handle}}\")\n  handle\n}}\n\nfn run() -> u64 <console, alloc, diverge> {{\n  with test_scheduler_with_io({seed}, {ready})\n  a = spawn {{ say(1) }}\n  b = spawn {{ say(2) }}\n  c = spawn {{ say(3) }}\n  wrapping_add(join(a), wrapping_add(join(b), join(c)))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
-    )
+fn a_program_with_handles(cases: &[(&str, u64)]) -> String {
+    let mut s = String::from("use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn say(handle: u64) -> u64 <task, console, alloc> {\n  test_ready(handle)\n  print(\"{handle}\")\n  handle\n}\n\n");
+    for (i, (ready, seed)) in cases.iter().enumerate() {
+        s += &format!("fn run{i}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler_with_io({seed}, {ready})\n  a = spawn {{ say(1) }}\n  b = spawn {{ say(2) }}\n  c = spawn {{ say(3) }}\n  wrapping_add(join(a), wrapping_add(join(b), join(c)))\n}}\n\n");
+    }
+    s += "fn main() <console, alloc, diverge> {\n";
+    for i in 0..cases.len() {
+        s += &format!("  print(\"{{run{i}()}}\")\n");
+    }
+    s + "}\n"
 }
 
+/// The twelve seeds and the two orders are run as one program, which is lowered
+/// once, as lowering the library of tasks takes the time of a case.
 fn tasks_that_wait_for_handles_run_in_the_order_the_test_makes_the_handles_ready_for_every_seed() {
+    let mut cases = Vec::new();
+    let mut wanted = Vec::new();
     for seed in 0..12u64 {
-        assert_eq!(run(&a_program_with_handles("[3, 1, 2]", seed)), "3\n1\n2\n6\n", "seed {seed}");
-        assert_eq!(run(&a_program_with_handles("[2, 3, 1]", seed)), "2\n3\n1\n6\n", "seed {seed}");
+        cases.push(("[3, 1, 2]", seed));
+        wanted.push("3\n1\n2\n6\n");
+        cases.push(("[2, 3, 1]", seed));
+        wanted.push("2\n3\n1\n6\n");
+    }
+    let said = run(&a_program_with_handles(&cases));
+    let lines: Vec<&str> = said.lines().collect();
+    assert_eq!(lines.len(), 4 * cases.len(), "{said}");
+    for (i, chunk) in lines.chunks(4).enumerate() {
+        assert_eq!(format!("{}\n", chunk.join("\n")), wanted[i], "ready {} seed {}", cases[i].0, cases[i].1);
     }
 }
 
