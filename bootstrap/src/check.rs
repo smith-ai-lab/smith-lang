@@ -7558,10 +7558,10 @@ impl<'a> Checker<'a> {
         self.patterned = infer::patterned(stmts);
         self.solved = infer::Solved::default();
         self.solve = None;
-        let refused = self.infer_on && self.solve_ranges(template);
-        if !refused {
-            self.look_twice(template);
+        if self.infer_on {
+            self.solve_ranges(template);
         }
+        self.look_twice(template);
         self.infer_on = false;
         if self.errors.len() == errors {
             let view = self.defs.view(template);
@@ -7618,30 +7618,22 @@ impl<'a> Checker<'a> {
     /// at again, with what it says of each so far, until no range grows. A
     /// `var` that still grows after as many looks as there are `var`s is
     /// changed by itself, and is refused.
-    fn solve_ranges(&mut self, template: Template) -> bool {
+    fn solve_ranges(&mut self, template: Template) {
         let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
         let widened = self.widened.clone();
         let mut before: HashMap<Pos, Int> = HashMap::new();
         let mut looks = 0;
-        let refused;
+        let mut refused = HashSet::new();
         let last = loop {
             self.solve = Some(infer::Solve {
                 before: before.clone(),
                 ..infer::Solve::default()
             });
             self.look_twice(template);
-            // Errors that are not about a `var` changed by itself are the
-            // program's own, and are said by the look that is kept.
-            let others = self.solve.as_ref().map_or(0, |s| {
-                (self.errors.len() - errors).saturating_sub(s.stuck_errors * 2)
-            });
             self.errors.truncate(errors);
             self.refusals = refusals;
             self.no_impl = no_impl;
-            let mut solve = self.solve.take().expect("solving");
-            if others > 0 {
-                solve.written.clear();
-            }
+            let solve = self.solve.take().expect("solving");
             looks += 1;
             let grown: Vec<Pos> = solve
                 .totals
@@ -7659,12 +7651,11 @@ impl<'a> Checker<'a> {
                 // solved from every value. One first given a number written out
                 // has nothing to go on, and is refused.
                 let mut solve = solve;
-                let mut stated = false;
                 for def in stuck {
                     if solve.written.contains(&def) {
                         let error = self.grows_by_itself(def, &solve);
                         self.errors.push(error);
-                        stated = true;
+                        refused.insert(def);
                     } else if let Some((_, _, first)) =
                         solve.given.get(&def).and_then(|g| g.first())
                     {
@@ -7672,7 +7663,6 @@ impl<'a> Checker<'a> {
                         solve.totals.insert(def, first);
                     }
                 }
-                refused = stated;
                 break solve;
             }
             before = solve.totals;
@@ -7680,7 +7670,7 @@ impl<'a> Checker<'a> {
         self.widened = widened;
         self.solved.ranges = last.totals;
         self.solved.given = last.given;
-        refused
+        self.solved.refused = refused;
     }
 
     /// One look at the body of a function, which gives the places of the

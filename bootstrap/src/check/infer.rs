@@ -40,9 +40,6 @@ pub(super) struct Solve {
     pub(super) stuck: HashSet<Pos>,
     /// The `var`s first given a number written out.
     pub(super) written: HashSet<Pos>,
-    /// How many errors the values of the `var`s in `stuck` gave, which the
-    /// refusal of the `var`s says.
-    pub(super) stuck_errors: usize,
     /// The first assignment of each `var` in `stuck` that reads it.
     pub(super) stuck_at: HashMap<Pos, Pos>,
 }
@@ -56,6 +53,9 @@ pub(super) struct Solved {
     pub(super) given: HashMap<Pos, Vec<(Pos, String, Int)>>,
     /// The range of the first use that needs less than a `var` has.
     pub(super) needs: HashMap<Pos, Int>,
+    /// The `var`s that are refused for being changed by themselves, which the
+    /// look that is kept does not check against a range.
+    pub(super) refused: HashSet<Pos>,
 }
 
 /// Whether a block, or one inside it, defines a `var` with no type written.
@@ -126,6 +126,10 @@ impl<'a> Checker<'a> {
         let Ty::Int(first) = gives else {
             return (gives, None);
         };
+        if self.solve.is_none() && self.solved.refused.contains(&pos) {
+            // The refusal is said, and what the `var` holds is not looked at again.
+            return (Ty::Unknown, None);
+        }
         let text = written_expr(value);
         let counted = !matches!(body.numbers, Numbers::Finding(_));
         let total = match self.solve.as_mut() {
@@ -160,7 +164,6 @@ impl<'a> Checker<'a> {
     ) {
         let def = self.inferred[&at];
         self.assigning = Some((def, false));
-        let errors = self.errors.len();
         let gives = match literal(value) {
             Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
             None => self.expr(body, value, &Want::Any),
@@ -203,10 +206,17 @@ impl<'a> Checker<'a> {
             }
             gives => {
                 if read_itself && counted {
-                    if let Some(solve) = self.solve.as_mut() {
+                    // The value depends on the `var` itself only where it would be
+                    // known if the `var` had the range it has so far. Where it is
+                    // not, something else in it is already refused.
+                    let before = self.errors.len();
+                    let known = self.expr(body, value, &Want::Any);
+                    self.errors.truncate(before);
+                    if matches!(known, Ty::Int(_))
+                        && let Some(solve) = self.solve.as_mut()
+                    {
                         solve.stuck.insert(def);
                         solve.stuck_at.entry(def).or_insert(pos);
-                        solve.stuck_errors += self.errors.len() - errors;
                         if looped {
                             solve.in_loop.insert(def);
                         }
