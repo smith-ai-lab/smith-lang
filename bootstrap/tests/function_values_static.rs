@@ -536,7 +536,6 @@ fn a_lambda_that_holds_something_lent_or_needs_an_effect_is_refused_where_it_is_
     let head = "use std.console (console, print)\n\n\
                 struct Pricing {\n  discount: fn(f32) -> f32\n}\n\n";
     let lent = [
-        "fn kept(rate: f32) -> f32 {\n  f = fn(v: f32) -> f32 { v * rate }\n  f(1.0)\n}\n",
         "fn kept(rate: f32) -> Pricing {\n  Pricing(discount: fn(v: f32) -> f32 { v * rate })\n}\n",
         "fn kept(rate: f32) -> fn(f32) -> f32 {\n  fn(v: f32) -> f32 { v * rate }\n}\n",
     ];

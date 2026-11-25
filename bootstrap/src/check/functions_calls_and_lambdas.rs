@@ -407,6 +407,54 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Binds a name to a lambda that reads names of its function: its body is
+    /// checked where it is written, and the name has the type of the struct that
+    /// holds what it reads, at the types those names have.
+    pub(super) fn bind_env<'e>(
+        &mut self,
+        body: &mut Body<'a>,
+        name: &str,
+        pos: Pos,
+        l: &'e Lambda,
+    ) -> End<'e> {
+        let defs = self.defs;
+        let s = defs.env_of(l).expect("a struct for the lambda");
+        let fields = &defs.file.structs[s].fields;
+        let own = defs.file.structs[s].generics.len() - fields.len();
+        let mut args: Vec<Ty> = (0..own).map(Ty::Param).collect();
+        let mut lent = false;
+        for field in fields {
+            let ty = match body.names.iter().rfind(|(n, _)| *n == field.name) {
+                Some((_, ty)) => ty.clone(),
+                None => Ty::Unknown,
+            };
+            if !ty.unknown() && !ownership::copies(defs, body.scope, &ty) {
+                lent = true;
+            }
+            args.push(ty);
+        }
+        if lent {
+            self.errors.push(Error::new(
+                l.pos,
+                "a lambda cannot be bound to a name, as it is only passed to a call",
+            ));
+        }
+        let unknown = vec![Ty::Unknown; l.params.len() + 1];
+        let held = match self.lambda(body, l, &unknown, false) {
+            Ty::Fn(items) if !lent => {
+                self.env_items.insert(s, items);
+                Ty::Struct(s, args)
+            }
+            _ => Ty::Unknown,
+        };
+        if body.names.iter().any(|(n, _)| n == name) {
+            self.errors.push(self.defined_twice(body, name, pos));
+        } else {
+            body.names.push((name.to_string(), held));
+        }
+        End::Binding(pos)
+    }
+
     /// Checks a lambda passed where a function is needed whose parameters
     /// and result, the result last, are of the types `wanted`, which may be
     /// partly known, and gives its type. Its body is checked where it is
@@ -885,6 +933,14 @@ impl<'a> Checker<'a> {
                 return self.unknown_call(body, call);
             };
             return self.trait_call(body, call, k, fi, want);
+        }
+        if let Some((_, Ty::Struct(s, args))) = body.names.iter().rfind(|(n, _)| n == name)
+            && call.qualifier.is_none()
+            && let Some(items) = self.env_items.get(s)
+        {
+            let own = defs.file.structs[*s].generics.len() - defs.file.structs[*s].fields.len();
+            let items: Vec<Ty> = items.iter().map(|t| t.subst(&args[..own])).collect();
+            return self.value_call(body, call, &items);
         }
         if let Some((_, Ty::Fn(items))) = body.names.iter().rfind(|(n, _)| n == name) {
             let items = items.clone();

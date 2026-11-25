@@ -1103,6 +1103,13 @@ impl<'a> Defs<'a> {
         })
     }
 
+    /// The struct that holds what a lambda bound to a name reads, if the parser
+    /// made one for it.
+    pub(crate) fn env_of(&self, l: &Lambda) -> Option<usize> {
+        let name = crate::parser::env_name(l.pos);
+        self.file.structs.iter().position(|s| s.name == name)
+    }
+
     /// The struct the name written at `pos` is, as `function` finds a function.
     fn struct_at(&self, pos: Pos, name: &str) -> Option<usize> {
         match self.type_at(pos, name) {
@@ -3015,6 +3022,7 @@ fn check_file(
         found: HashMap::new(),
         settled: false,
         value_calls: Set::default(),
+        env_items: Map::default(),
         fn_values: Map::default(),
         named: Set::default(),
         named_calls: Map::default(),
@@ -3102,6 +3110,7 @@ fn check_file(
         drops: checker.drops,
         widened: checker.widened,
         value_calls: checker.value_calls,
+        env_items: checker.env_items,
         fn_values: checker.fn_values,
         named: checker.named,
         named_calls: checker.named_calls,
@@ -6667,6 +6676,9 @@ struct Typed<'a> {
     widened: HashMap<usize, Int>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
+    /// For the struct that holds what a lambda bound to a name reads, the types
+    /// of the parameters of the lambda and of its result, last.
+    env_items: Map<usize, Vec<Ty>>,
     /// The names of functions passed as values, by their addresses, with
     /// the function each names.
     fn_values: Map<usize, usize>,
@@ -7158,6 +7170,9 @@ struct Checker<'a> {
     lambda_base: Map<usize, usize>,
     /// The calls of a name that holds a function, by their addresses.
     value_calls: Set<usize>,
+    /// For the struct that holds what a lambda bound to a name reads, the types
+    /// of the parameters of the lambda and of its result, last.
+    env_items: Map<usize, Vec<Ty>>,
     /// The names of functions passed as values, by their addresses, with
     /// the function each names.
     fn_values: Map<usize, usize>,
@@ -8402,6 +8417,12 @@ impl<'a> Checker<'a> {
                 ));
             }
             end = match stmt {
+                Stmt::Define {
+                    name,
+                    pos,
+                    value: Expr::Lambda(l),
+                    ..
+                } if self.defs.env_of(l).is_some() => self.bind_env(body, name, *pos, l),
                 Stmt::Define {
                     name, pos, value, ..
                 } if matches!(value, Expr::Lambda(_)) || lambda_choice(value).is_some() => {
