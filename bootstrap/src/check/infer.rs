@@ -40,6 +40,8 @@ pub(super) struct Solve {
     pub(super) stuck: HashSet<Pos>,
     /// The `var`s first given a number written out.
     pub(super) written: HashSet<Pos>,
+    /// The range of the first value of each `var`.
+    pub(super) first: HashMap<Pos, Int>,
     /// The first assignment of each `var` in `stuck` that reads it.
     pub(super) stuck_at: HashMap<Pos, Pos>,
     /// The element type each list or option that is written with nothing to
@@ -175,6 +177,7 @@ impl<'a> Checker<'a> {
                     solve.totals.insert(pos, total);
                     solve.given.insert(pos, vec![(pos, text, first)]);
                     solve.names.insert(pos, name.to_string());
+                    solve.first.insert(pos, first);
                     if literal(value).is_some() {
                         solve.written.insert(pos);
                     }
