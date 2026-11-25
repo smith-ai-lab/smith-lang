@@ -537,7 +537,7 @@ const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]
     listen_on: fn(host, port) { .ok(listener(1)) },
     accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
     stop: fn(l) { n = release(l) },
-    connect_to: fn(host, port) { .err(.refused) },
+    connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .ok([]) },
     write: fn(c, bytes) {
       var copied: List[Byte] = []
@@ -546,9 +546,9 @@ const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]
       .ok(())
     },
     close: fn(c) { n = release(c) },
-    bind_to: fn(host, port) { .err(.refused) },
-    send: fn(s, to, bytes) { .err(.closed) },
-    receive: fn(s, most) { .err(.closed) },
+    bind_to: fn(host, port) { .err(.refused(host)) },
+    send: fn(s, to, bytes) { .err(.closed(s.host)) },
+    receive: fn(s, most) { .err(.closed(s.host)) },
     unbind: fn(s) { n = release(s) },
     body: body,
   )

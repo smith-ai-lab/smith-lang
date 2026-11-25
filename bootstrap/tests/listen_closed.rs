@@ -96,13 +96,13 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
     accept: fn(l) {{
       accepted = wrapping_add(accepted, 1)
       if accepted > {connections} {{
-        .err(.closed)
+        .err(.closed(l.host))
       }} else {{
         .ok(connection(wrapping_add(accepted, 1)))
       }}
     }},
     stop: fn(l) {{ n = release(l) }},
-    connect_to: fn(host, port) {{ .err(.refused) }},
+    connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{
       var seen = false
       loop i in 0..asked.size {{ if asked[i] == handle(c) {{ seen = true }} }}
@@ -126,9 +126,9 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
       .ok(())
     }},
     close: fn(c) {{ n = release(c) }},
-    bind_to: fn(host, port) {{ .err(.refused) }},
-    send: fn(s, to, bytes) {{ .err(.closed) }},
-    receive: fn(s, most) {{ .err(.closed) }},
+    bind_to: fn(host, port) {{ .err(.refused(host)) }},
+    send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
+    receive: fn(s, most) {{ .err(.closed(s.host)) }},
     unbind: fn(s) {{ n = release(s) }},
     body: body,
   )

@@ -7,22 +7,22 @@ use std.utf8 (utf8)
 
 fn name(e: NetError) -> str {
   match e {
-    .unknown_host(host) { "unknown_host" }
-    .refused { "refused" }
-    .in_use { "in_use" }
-    .closed { "closed" }
-    .failed(why) { "failed" }
+    .unknown_host(address) { "unknown_host" }
+    .refused(address) { "refused" }
+    .in_use(address) { "in_use" }
+    .closed(address) { "closed" }
+    .failed(pair) { "failed" }
   }
 }
 
 // What the error says, with the call and the number a `failed` holds.
 fn said(e: NetError) -> str {
   match e {
-    .unknown_host(host) { host }
-    .refused { "refused" }
-    .in_use { "in_use" }
-    .closed { "closed" }
-    .failed(why) { why }
+    .unknown_host(address) { address }
+    .refused(address) { "refused" }
+    .in_use(address) { "in_use" }
+    .closed(address) { "closed" }
+    .failed((address, why)) { why }
   }
 }
 
@@ -170,5 +170,15 @@ fn main(args: List[str]) <console, net, alloc> {
     }
   } else if mode == "closed" {
     answer(writing(p))
+  } else if mode == "refused_says" {
+    match ask(p, "x") {
+      .ok(bytes) { print("ok") }
+      .err(e) { print("{e}") }
+    }
+  } else if mode == "closed_says" {
+    match writing(p) {
+      .ok(()) { print("ok") }
+      .err(e) { print("{e}") }
+    }
   }
 }

@@ -46,8 +46,8 @@ fn faked[T](body: fn() -> T <net>) -> T <console, alloc> {{
       .ok(connection({c}))
     }},
     stop: fn(l) {{ n = release(l) }},
-    connect_to: fn(host, port) {{ .err(.refused) }},
-    read: fn(c, most) {{ .err(.closed) }},
+    connect_to: fn(host, port) {{ .err(.refused(host)) }},
+    read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{
       print(\"{{handle(c)}}\")
       .ok(())
@@ -58,7 +58,7 @@ fn faked[T](body: fn() -> T <net>) -> T <console, alloc> {{
       print(\"{{handle(s)}}\")
       .ok(())
     }},
-    receive: fn(s, most) {{ .err(.closed) }},
+    receive: fn(s, most) {{ .err(.closed(s.host)) }},
     unbind: fn(s) {{ n = release(s) }},
     body: body,
   )
@@ -124,7 +124,7 @@ fn ask(word: str) -> Result[str, NetError] <net, alloc> {{
   bytes = try read(c, 64)
   match utf8(freeze(bytes)) {{
     .ok(text) {{ .ok(text) }}
-    .err(e) {{ .err(.failed(\"not text\")) }}
+    .err(e) {{ .err(.failed((\"peer.test:7\", \"not text\"))) }}
   }}
 }}
 
@@ -135,16 +135,16 @@ fn serve() <messages, net, alloc> {{
 
 fn peer[T](body: fn() -> T <net>) -> T <alloc> {{
   net(
-    listen_on: fn(host, port) {{ .err(.refused) }},
-    accept: fn(l) {{ .err(.refused) }},
+    listen_on: fn(host, port) {{ .err(.refused(host)) }},
+    accept: fn(l) {{ .err(.refused(l.host)) }},
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .ok(connection({handle})) }},
     read: fn(c, most) {{ .ok(copy(\"{{handle(c)}} read {{most}}\".bytes)) }},
     write: fn(c, bytes) {{ .ok(()) }},
     close: fn(c) {{ n = release(c) }},
-    bind_to: fn(host, port) {{ .err(.refused) }},
-    send: fn(s, to, bytes) {{ .err(.refused) }},
-    receive: fn(s, most) {{ .err(.refused) }},
+    bind_to: fn(host, port) {{ .err(.refused(host)) }},
+    send: fn(s, to, bytes) {{ .err(.refused(s.host)) }},
+    receive: fn(s, most) {{ .err(.refused(s.host)) }},
     unbind: fn(s) {{ n = release(s) }},
     body: body,
   )
@@ -181,11 +181,11 @@ use std.net (Address, NetError, accept, close, connection, listener, net, read, 
 
 fn said(e: NetError) -> str <alloc> {
   match e {
-    .failed(m) { m }
+    .failed((address, m)) { m }
     .unknown_host(h) { \"unknown host\" }
-    .refused { \"refused\" }
-    .in_use { \"in use\" }
-    .closed { \"closed\" }
+    .refused(h) { \"refused\" }
+    .in_use(h) { \"in use\" }
+    .closed(h) { \"closed\" }
   }
 }
 

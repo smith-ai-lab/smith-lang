@@ -136,16 +136,16 @@ fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
 
 fn main() <console, alloc> {
   net(
-    listen_on: fn(host, port) { .err(.refused) },
-    accept: fn(l) { .err(.refused) },
+    listen_on: fn(host, port) { .err(.refused(host)) },
+    accept: fn(l) { .err(.refused(l.host)) },
     stop: fn(l) { n = release(l) },
-    connect_to: fn(host, port) { .err(.refused) },
+    connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .ok([104, 105]) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
-    bind_to: fn(host, port) { .err(.refused) },
+    bind_to: fn(host, port) { .err(.refused(host)) },
     send: fn(s, to, bytes) { .ok(()) },
-    receive: fn(s, most) { .err(.refused) },
+    receive: fn(s, most) { .err(.refused(s.host)) },
     unbind: fn(s) { n = release(s) }
   ) {
     match ask(\"x\") {

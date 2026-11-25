@@ -34,17 +34,17 @@ fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
 // port: each address on a line of its own, or the kind of the failure and what
 // it says.
 fn look(name: str, hosts: str, resolv: str, port: 0..65536) <console, alloc, task> {
-  match resolve(name, hosts, resolv, port, fn(bytes) { counting(bytes) }) {
+  match resolve(name, hosts, resolv, port, "{name}:80", fn(bytes) { counting(bytes) }) {
     .ok(found) {
       loop i in 0..found.size { print(written(found[i])) }
     }
     .err(e) {
       match e {
-        .unknown_host(host) { print("unknown_host {host}") }
-        .refused { print("refused") }
-        .in_use { print("in_use") }
-        .closed { print("closed") }
-        .failed(why) { print("failed {why}") }
+        .unknown_host(address) { print("unknown_host {address}") }
+        .refused(address) { print("refused") }
+        .in_use(address) { print("in_use") }
+        .closed(address) { print("closed") }
+        .failed((address, why)) { print("failed {why}") }
       }
     }
   }
