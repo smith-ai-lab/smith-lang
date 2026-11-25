@@ -37,6 +37,10 @@ pub const ONCE: &[Test] = &[
         an_error_names_a_type_as_the_place_that_needs_it_writes_it,
     ),
     (
+        "an_error_names_a_field_as_the_struct_writes_it",
+        an_error_names_a_field_as_the_struct_writes_it,
+    ),
+    (
         "without_for_an_alias_is_refused_and_the_dead_code_warning_calls_it_an_alias",
         without_for_an_alias_is_refused_and_the_dead_code_warning_calls_it_an_alias,
     ),
@@ -219,6 +223,23 @@ fn an_error_names_a_type_as_the_place_that_needs_it_writes_it() {
         // The call that writes the alias says it, and the call that writes the
         // range says the range, in one program.
         assert_eq!(found.iter().filter(|m| needed(m, "Port")).count(), 1 + usize::from(annotation), "{found:?}");
+        assert_eq!(found.iter().filter(|m| needed(m, "0..65536")).count(), 1, "{found:?}");
+    });
+}
+
+fn an_error_names_a_field_as_the_struct_writes_it() {
+    generate::check(95, 6, |g| g.below(2) == 0, |&alias_first| {
+        let fields = if alias_first {
+            "  port: Port\n  width: 0..65536\n"
+        } else {
+            "  width: 0..65536\n  port: Port\n"
+        };
+        let text = format!(
+            "use std.console (console, print)\n\ntype Port = 0..65536\n\nstruct Socket {{\n{fields}}}\n\nfn main() <console> {{\n  s = Socket(port: \"a\", width: \"b\")\n  print(\"x\")\n}}\n"
+        );
+        let found = messages(&text);
+        let needed = |m: &String, ty: &str| m.contains(&format!("where a `{ty}` is needed"));
+        assert_eq!(found.iter().filter(|m| needed(m, "Port")).count(), 1, "{found:?}");
         assert_eq!(found.iter().filter(|m| needed(m, "0..65536")).count(), 1, "{found:?}");
     });
 }

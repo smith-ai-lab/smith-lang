@@ -97,7 +97,7 @@ fn open(p: Port) -> Int { 1 }
 fn width(w: 0..65536) -> Int { 1 }
 ```
 
-`open("a")` gives "this gives text, where a `Port` is needed", and `width("a")` gives "this gives text, where a `0..65536` is needed". The same holds for a binding with a type, as in `a: Port = 70000`, whose error is "`70000` does not fit `Port`, which holds 0 to 65535", and for a result type.
+`open("a")` gives "this gives text, where a `Port` is needed", and `width("a")` gives "this gives text, where a `0..65536` is needed". The same holds for a binding with a type, as in `a: Port = 70000`, whose error is "`70000` does not fit `Port`, which holds 0 to 65535", for a field of a struct, and for a result type.
 
 ## The forms
 
