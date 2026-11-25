@@ -133,6 +133,9 @@ pub(super) struct Facts {
     constants: Vec<(usize, i128)>,
     keys: Vec<Key>,
     ids: HashMap<Key, usize>,
+    /// The variable of each field, by its path: one field is one variable,
+    /// whichever range the place that made it knew, and the narrowest is kept.
+    fields: HashMap<String, usize>,
     fresh: usize,
     /// While a function's contract is read at a call, the sum each of its
     /// parameters, and its result, stands for there.
@@ -257,6 +260,18 @@ impl Facts {
     }
 
     fn id(&mut self, key: Key) -> usize {
+        if let Key::Field(path, lo, hi) = &key {
+            if let Some(&id) = self.fields.get(path) {
+                if let Key::Field(_, least, most) = &mut self.keys[id] {
+                    *least = (*least).max(*lo);
+                    *most = (*most).min(*hi);
+                }
+                return id;
+            }
+            self.fields.insert(path.clone(), self.keys.len());
+            self.keys.push(key);
+            return self.keys.len() - 1;
+        }
         if let Some(id) = self.ids.get(&key) {
             return *id;
         }
@@ -508,16 +523,20 @@ impl Builder<'_, '_> {
                     .get(&format!("{list}.size"))
                     .cloned()
             }
-            Expr::Field { of, name, .. } => match self.path(e) {
-                Some(path) => {
-                    let (lo, mut hi) = self.range_of(e);
-                    if name == "size" {
-                        hi = hi.min(self.size_most(of));
-                    }
-                    Some(self.variable(Key::Field(path, lo, hi)))
+            Expr::Field { of, name, .. } => {
+                let (lo, mut hi) = self.range_of(e);
+                if name == "size" {
+                    hi = hi.min(self.size_most(of));
                 }
-                None => self.goal.then(|| self.fresh(e)),
-            },
+                match self.path(e) {
+                    Some(path) => Some(self.variable(Key::Field(path, lo, hi))),
+                    None => self.goal.then(|| {
+                        self.facts.fresh += 1;
+                        let key = Key::Fresh(self.facts.fresh, lo, hi);
+                        self.variable(key)
+                    }),
+                }
+            }
             Expr::Arith {
                 op, left, right, ..
             } => {
@@ -734,6 +753,13 @@ impl Builder<'_, '_> {
     /// it is made.
     fn size_most(&self, of: &Expr) -> i128 {
         let full = u64::MAX as i128;
+        // The type of what the size is read from is known where it was checked.
+        if matches!(
+            self.types.get(&addr(of)),
+            Some(Ty::List(_) | Ty::Slice(_) | Ty::Text)
+        ) {
+            return MAX_SIZE;
+        }
         match of {
             Expr::Name { name, .. } => {
                 let sized = (self.body.names.iter().rev())
