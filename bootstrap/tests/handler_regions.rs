@@ -302,7 +302,7 @@ fn a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_ke
 }
 
 /// What a child of a generated program does to the state of the handler `STORE`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum Act {
     /// Builds a list and gives it to `put`, which pushes it onto a list of lists.
     Put(u64, u64),
@@ -393,8 +393,8 @@ fn model(children: &[Vec<Act>]) -> String {
     format!("{shelves} {shelf} {pairs} {pair} {notes} {note} {}", built(400, 3))
 }
 
-fn child(at: usize, acts: &[Act]) -> String {
-    let mut s = format!("fn child{at}() -> u64 <store, alloc> {{\n");
+fn child(case: usize, at: usize, acts: &[Act]) -> String {
+    let mut s = format!("fn child{case}_{at}() -> u64 <store, alloc> {{\n");
     for (i, act) in acts.iter().enumerate() {
         s += &match *act {
             Act::Put(n, k) => format!("  xs{i} = build({n}, {k})\n  put(xs{i})\n"),
@@ -407,28 +407,46 @@ fn child(at: usize, acts: &[Act]) -> String {
     s + "  1\n}\n\n"
 }
 
-fn generated(seed: u64, children: &[Vec<Act>]) -> String {
+/// The text of a program with a function for each of the cases, which runs its
+/// children under the scheduler of its seed and says what the state is, and a
+/// `main` that calls them in order, so that the cases are lowered once.
+fn generated(cases: &[(u64, Vec<Vec<Act>>)]) -> String {
     let mut s = format!("{BUILD}{STORE}");
-    for (at, acts) in children.iter().enumerate() {
-        s += &child(at, acts);
+    for (case, (seed, children)) in cases.iter().enumerate() {
+        for (at, acts) in children.iter().enumerate() {
+            s += &child(case, at, acts);
+        }
+        s += &format!("fn run{case}() -> (List[List[u64]], List[Pair], List[u64]) <alloc, diverge> {{\n  with storing()\n");
+        s += &format!("  with test_scheduler({seed})\n");
+        for at in 0..children.len() {
+            s += &format!("  t{at} = spawn {{ child{case}_{at}() }}\n");
+        }
+        for at in 0..children.len() {
+            s += &format!("  join(t{at})\n");
+        }
+        // Others build over what the children gave back before the state is read.
+        s += "  n1 = spawn { noise(11) }\n  join(n1)\n  n2 = spawn { noise(12) }\n  join(n2)\n";
+        s += "  (shelved(), pairs(), noted())\n}\n\n";
+        s += &format!("fn report{case}() <console, alloc, diverge> {{\n  (shelves, held, notes) = run{case}()\n  zs = build(400, 3)\n");
+        s += "  var shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
+        s += "  var pair: u64 = 0\n  loop i in 0..held.size {\n    p = held[i]\n    pair = wrapping_add(pair, wrapping_add(wrapping_mul(p.tag, 7919), wrapping_add(wrapping_mul(p.items.size, 1000003), total(p.items))))\n  }\n";
+        s += "  var note: u64 = 0\n  loop i in 0..notes.size { note = wrapping_add(note, wrapping_mul(notes[i], 31)) }\n";
+        s += "  print(\"{shelves.size} {shelf} {held.size} {pair} {notes.size} {note} {total(zs)}\")\n}\n\n";
     }
-    s += "fn run() -> (List[List[u64]], List[Pair], List[u64]) <alloc, diverge> {\n  with storing()\n";
-    s += &format!("  with test_scheduler({seed})\n");
-    for at in 0..children.len() {
-        s += &format!("  t{at} = spawn {{ child{at}() }}\n");
+    s += "fn main() <console, alloc, diverge> {\n";
+    for case in 0..cases.len() {
+        s += &format!("  report{case}()\n");
     }
-    for at in 0..children.len() {
-        s += &format!("  join(t{at})\n");
-    }
-    // Others build over what the children gave back before the state is read.
-    s += "  n1 = spawn { noise(11) }\n  join(n1)\n  n2 = spawn { noise(12) }\n  join(n2)\n";
-    s += "  (shelved(), pairs(), noted())\n}\n\n";
-    s += "fn main() <console, alloc, diverge> {\n  (shelves, held, notes) = run()\n  zs = build(400, 3)\n";
-    s += "  var shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
-    s += "  var pair: u64 = 0\n  loop i in 0..held.size {\n    p = held[i]\n    pair = wrapping_add(pair, wrapping_add(wrapping_mul(p.tag, 7919), wrapping_add(wrapping_mul(p.items.size, 1000003), total(p.items))))\n  }\n";
-    s += "  var note: u64 = 0\n  loop i in 0..notes.size { note = wrapping_add(note, wrapping_mul(notes[i], 31)) }\n";
-    s += "  print(\"{shelves.size} {shelf} {held.size} {pair} {notes.size} {note} {total(zs)}\")\n}\n";
+    s += "}\n";
     program(&s)
+}
+
+/// What each of the cases says, as `generated` runs them as one program.
+fn said_by(cases: &[(u64, Vec<Vec<Act>>)]) -> Vec<String> {
+    let said = run(&generated(cases));
+    let lines: Vec<String> = said.lines().map(String::from).collect();
+    assert_eq!(lines.len(), cases.len(), "{said}");
+    lines
 }
 
 fn generate_children(g: &mut generate::Gen) -> (u64, Vec<Vec<Act>>) {
@@ -459,9 +477,17 @@ fn generate_children(g: &mut generate::Gen) -> (u64, Vec<Vec<Act>>) {
 /// a struct that holds a list, and a number, and after other children have built
 /// over what they gave back the whole state is what a model says.
 fn the_whole_state_of_generated_handlers_matches_a_model(part: u64) {
+    // The cases of this part are lowered as one program, and a case that
+    // shrinking tries is lowered alone.
+    let (from, to) = (48 * part / 4, 48 * (part + 1) / 4);
+    let all: Vec<(u64, Vec<Vec<Act>>)> = (from..to).map(|case| generate::sample(1048, case, generate_children)).collect();
+    let known = said_by(&all);
     generate::check_part(1048, 48, part, 4, generate_children, |(seed, children)| {
-        let source = generated(*seed, children);
-        assert_eq!(run(&source), format!("{}\n", model(children)), "for {source}");
+        let said = match all.iter().position(|c| c.0 == *seed && c.1 == *children) {
+            Some(at) => known[at].clone(),
+            None => said_by(&[(*seed, children.clone())]).remove(0),
+        };
+        assert_eq!(said, model(children), "for {seed} {children:?}");
     });
 }
 

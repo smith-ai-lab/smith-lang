@@ -274,17 +274,50 @@ fn a_task_holds_its_value_where_only_join_reads_it() {
     assert!(errors.contains("private"), "{errors}");
 }
 
-/// A `Task[T]` is read at its own `T`, however the children are joined.
-fn two_children_of_different_result_types_joined_in_either_order_give_their_own_values() {
-    generate::check(334, 16, |g| (g.below(1000) as u64, g.below(2) == 0), |&(n, first)| {
+/// The text of a program with a function for each `(n, first)`, which starts a
+/// child that gives a number and one that gives a word, and joins them in the
+/// order `first` says, and a `main` that says what each gave, a line each.
+fn both(cases: &[(u64, bool)]) -> String {
+    let mut s = String::new();
+    for (i, &(_, first)) in cases.iter().enumerate() {
         let (a, b) = if first { ("ta", "tb") } else { ("tb", "ta") };
-        let source = program(&format!(
-            "fn both(n: u64) -> str <alloc> {{\n  with tasks()\n  ta = spawn {{ wrapping_add(n, 1) }}\n  tb = spawn {{ \"word\" }}\n  x = join({a})\n  y = join({b})\n  \"{{x}} {{y}}\"\n}}\n\nfn main() <console, alloc> {{\n  print(both({n}))\n}}\n"
-        ));
-        let said = run(&source);
-        let (number, word) = (n + 1, "word");
-        let expected = if first { format!("{number} {word}\n") } else { format!("{word} {number}\n") };
-        assert_eq!(said, expected, "for {n}");
+        s += &format!(
+            "fn both{i}(n: u64) -> str <alloc> {{\n  with tasks()\n  ta = spawn {{ wrapping_add(n, 1) }}\n  tb = spawn {{ \"word\" }}\n  x = join({a})\n  y = join({b})\n  \"{{x}} {{y}}\"\n}}\n\n"
+        );
+    }
+    s += "fn main() <console, alloc> {\n";
+    for (i, (n, _)) in cases.iter().enumerate() {
+        s += &format!("  print(both{i}({n}))\n");
+    }
+    s += "}\n";
+    program(&s)
+}
+
+/// What a case gives, which is the number and the word in the order they are joined.
+fn both_expected(n: u64, first: bool) -> String {
+    let (number, word) = (n + 1, "word");
+    if first { format!("{number} {word}") } else { format!("{word} {number}") }
+}
+
+/// A `Task[T]` is read at its own `T`, however the children are joined. The
+/// cases are lowered as one program, and a case that shrinking tries is lowered
+/// alone.
+fn two_children_of_different_result_types_joined_in_either_order_give_their_own_values() {
+    let draw = |g: &mut Gen| (g.below(1000) as u64, g.below(2) == 0);
+    let all: Vec<(u64, bool)> = (0..16).map(|case| generate::sample(334, case, draw)).collect();
+    let said = run(&both(&all));
+    let known: Vec<&str> = said.lines().collect();
+    assert_eq!(known.len(), all.len(), "{said}");
+    generate::check(334, 16, draw, |&(n, first)| {
+        let alone;
+        let said = match all.iter().position(|c| *c == (n, first)) {
+            Some(at) => known[at],
+            None => {
+                alone = run(&both(&[(n, first)]));
+                alone.trim_end()
+            }
+        };
+        assert_eq!(said, both_expected(n, first), "for {n}");
     });
 }
 
@@ -347,11 +380,14 @@ fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_o
 
 const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T <clock>) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
 
-/// A child reads the clock that was in force where it was spawned, which a
-/// handler that holds no state gives it.
-fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
-    generate::check(332, 20, |g| (1 + g.below(4), g.below(1000) as u64), |&(children, tick)| {
-        let mut s = format!("{CLOCK}fn readings() -> List[u64] <alloc> {{\n  with fixed({tick})\n  with tasks()\n");
+/// The text of a program with a function for each `(children, tick)`, which
+/// starts that many children under `fixed(tick)` and gives what each read, and
+/// a `main` that says what each function gave, one line each, and `end` after
+/// the lines of each.
+fn readings(cases: &[(usize, u64)]) -> String {
+    let mut s = String::from(CLOCK);
+    for (i, &(children, tick)) in cases.iter().enumerate() {
+        s += &format!("fn readings{i}() -> List[u64] <alloc> {{\n  with fixed({tick})\n  with tasks()\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ now() }}\n");
         }
@@ -359,9 +395,44 @@ fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
         for k in 0..children {
             s += &format!("  all = push(all, join(t{k}))\n");
         }
-        s += "  all\n}\n\nfn main() <console, alloc> {\n  xs = readings()\n  loop i in 0..xs.size { print(\"{xs[i]}\") }\n}\n";
-        let said = run(&program(&s));
-        let ticks: Vec<u64> = said.lines().map(|l| l.parse().unwrap()).collect();
+        s += "  all\n}\n\n";
+    }
+    s += "fn main() <console, alloc> {\n";
+    for i in 0..cases.len() {
+        s += &format!("  xs{i} = readings{i}()\n  loop j in 0..xs{i}.size {{ print(\"{{xs{i}[j]}}\") }}\n  print(\"end\")\n");
+    }
+    s += "}\n";
+    program(&s)
+}
+
+/// What each of the cases read, as `readings` runs them as one program.
+fn read(cases: &[(usize, u64)]) -> Vec<Vec<u64>> {
+    let said = run(&readings(cases));
+    let mut each = vec![Vec::new()];
+    for line in said.lines() {
+        if line == "end" {
+            each.push(Vec::new());
+        } else {
+            each.last_mut().unwrap().push(line.parse().unwrap());
+        }
+    }
+    assert_eq!(each.pop(), Some(Vec::new()), "{said}");
+    assert_eq!(each.len(), cases.len(), "{said}");
+    each
+}
+
+/// A child reads the clock that was in force where it was spawned, which a
+/// handler that holds no state gives it. The cases are lowered as one program,
+/// and a case that shrinking tries is lowered alone.
+fn a_child_runs_under_the_handlers_in_force_where_it_was_spawned() {
+    let draw = |g: &mut Gen| (1 + g.below(4), g.below(1000) as u64);
+    let all: Vec<(usize, u64)> = (0..20).map(|case| generate::sample(332, case, draw)).collect();
+    let known = read(&all);
+    generate::check(332, 20, draw, |&(children, tick)| {
+        let ticks = match all.iter().position(|c| *c == (children, tick)) {
+            Some(at) => known[at].clone(),
+            None => read(&[(children, tick)]).remove(0),
+        };
         assert_eq!(ticks, vec![tick; children], "for {children} children");
     });
 }
@@ -447,23 +518,58 @@ fn a_child_is_joined_once_and_a_handle_is_given_away_only_where_it_is_taken() {
 /// a part of any expression, gives what the same program gives with the handle
 /// bound first, under a group and under a scheduler of a test of any seed.
 fn a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is() {
-    generate::check(1030, 3, |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64), |&(a, b, seed)| {
+    let draw = |g: &mut Gen| (g.below(1000) as u64, g.below(1000) as u64, g.below(6) as u64);
+    let all: Vec<(u64, u64, u64)> = (0..3).map(|case| generate::sample(1030, case, draw)).collect();
+    let known = joined_in_place(&all);
+    generate::check(1030, 3, draw, |&(a, b, seed)| {
+        let (said, expected) = match all.iter().position(|c| *c == (a, b, seed)) {
+            Some(at) => (known.0[at].clone(), known.1[at].clone()),
+            None => {
+                let (said, expected) = joined_in_place(&[(a, b, seed)]);
+                (said[0].clone(), expected[0].clone())
+            }
+        };
+        assert_eq!(said, expected, "for {a} {b} {seed}");
+    });
+}
+
+/// The shapes of a spawn written where it is joined, each under a group and
+/// under a scheduler of a test: the functions they share, and for each the
+/// call, and what it gives.
+const IN_PLACE_ITEMS: &str = "fn pair(x: take Task[u64], y: take Task[u64]) -> u64 <task> {\n  wrapping_add(join(x), join(y))\n}\n\nfn twice(x: take Task[u64]) -> u64 <task> {\n  wrapping_add(join(x), 1)\n}\n\n";
+
+/// What `a_spawn_written_in_an_argument_or_an_expression_is_joined_as_one_bound_first_is`
+/// runs for each of the cases, as one program, which is lowered once: for each
+/// case, what its eight functions say joined, and what they should say, as the
+/// lines of the program.
+fn joined_in_place(cases: &[(u64, u64, u64)]) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
+    let mut items = format!("fn num(n: u64) -> u64 {{\n  n\n}}\n\n{IN_PLACE_ITEMS}");
+    let mut main = String::new();
+    let mut expected = Vec::new();
+    let mut n = 0;
+    for &(a, b, seed) in cases {
         let sum = a + b;
         let shapes = [
-            ("fn pair(x: take Task[u64], y: take Task[u64]) -> u64 <task> {{\n  wrapping_add(join(x), join(y))\n}}\n\n", format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
-            ("", format!("wrapping_add(join(spawn {{ num({a}) }}), join(spawn {{ num({b}) }}))"), sum),
-            ("", format!("join(spawn {{ num({a}) }})"), a),
-            ("fn twice(x: take Task[u64]) -> u64 <task> {{\n  wrapping_add(join(x), 1)\n}}\n\n", format!("twice(spawn {{ join(spawn {{ num({b}) }}) }})"), b + 1),
+            (format!("pair(spawn {{ num({a}) }}, spawn {{ num({b}) }})"), sum),
+            (format!("wrapping_add(join(spawn {{ num({a}) }}), join(spawn {{ num({b}) }}))"), sum),
+            (format!("join(spawn {{ num({a}) }})"), a),
+            (format!("twice(spawn {{ join(spawn {{ num({b}) }}) }})"), b + 1),
         ];
-        for (items, call, expected) in shapes {
+        let mut lines = Vec::new();
+        for (call, answer) in shapes {
             for opening in ["with tasks()".to_string(), format!("with test_scheduler({seed})")] {
-                let source = program(&format!(
-                    "fn num(n: u64) -> u64 {{\n  n\n}}\n\n{}fn run() -> u64 <alloc, diverge> {{\n  {opening}\n  v: u64 = {call}\n  v\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n",
-                    items.replace("{{", "{").replace("}}", "}")
-                ))
-                .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks, test_scheduler)");
-                assert_eq!(run(&source), format!("{expected}\n"), "for {source}");
+                items += &format!("fn run{n}() -> u64 <alloc, diverge> {{\n  {opening}\n  v: u64 = {call}\n  v\n}}\n\n");
+                main += &format!("  print(\"{{run{n}()}}\")\n");
+                lines.push(answer.to_string());
+                n += 1;
             }
         }
-    });
+        expected.push(lines);
+    }
+    let source = program(&format!("{items}fn main() <console, alloc, diverge> {{\n{main}}}\n"))
+        .replace("use std.task (join, spawn, tasks)", "use std.task (Task, join, spawn, task, tasks, test_scheduler)");
+    let said = run(&source);
+    let lines: Vec<String> = said.lines().map(String::from).collect();
+    assert_eq!(lines.len(), n, "{said}");
+    (lines.chunks(8).map(|c| c.to_vec()).collect(), expected)
 }
