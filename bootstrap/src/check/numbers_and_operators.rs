@@ -1307,7 +1307,7 @@ impl<'a> Checker<'a> {
                 format!(
                     "`{}` does not fit `{}`{because}, which holds {} to {}",
                     written_expr(expr),
-                    self.defs.spelling(int),
+                    self.defs.text(&Ty::Int(int), &Scope::default()),
                     int.min(),
                     int.max()
                 ),

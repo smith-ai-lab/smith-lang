@@ -48,6 +48,7 @@ pub(crate) fn add(file: &mut File, source: &str, number: usize) {
                 pos: f.pos,
                 generics: Vec::new(),
                 fields,
+                alias: None,
             },
         ));
     }
