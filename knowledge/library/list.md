@@ -24,6 +24,7 @@ struct List[T] {
 }
 ```
 
+- `size` is below 2 to the 48, as each element has at least a byte and no address of x86-64 or arm64 has more than 48 bits, so a `loop` over a list has fewer than 2 to the 48 passes and a count of elements is proven, as [Inference](../language/inference.md#a-name-a-loop-changes-by-itself) says. A `requires` on the size gives a smaller bound.
 - `items` is an array like any other, so an index proven to be below `size` needs no check, and it can be sliced, looped over, and summed.
 - A list implements [`Index`](../language/indexing.md), so `list[i]` reads the element `list.items[i]`, and it compiles where `i < list.size` is proven:
 

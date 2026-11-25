@@ -10,6 +10,8 @@ built:
 
 # Text functions
 
+The `size` of a [`str`](../language/text.md) is below 2 to the 48, as that of a [`List`](list.md) is, so a `loop` over one has fewer than 2 to the 48 passes, and a sum of its bytes is below 2 to the 56.
+
 The module `std.text` holds the functions that give text back. A search or a comparison of text is a [list function](list-functions.md), since a [`str`](../language/text.md) is used as its bytes. What is here cuts a text, and gives each piece as a text.
 
 ```
