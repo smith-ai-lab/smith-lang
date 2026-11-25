@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::{Body, Checker, Int, Numbers, Ty, Want, pattern_names, statements, written_expr};
 use crate::diag::{Error, Pos};
-use crate::parser::{Expr, Stmt};
+use crate::parser::{Call, Expr, Stmt};
 
 /// What is learned of the `var`s while their ranges are solved, by the place
 /// of the statement that defines each.
@@ -52,6 +52,33 @@ pub(super) struct Solve {
     /// The names that were first given a list or an option written with
     /// nothing to say its element type.
     pub(super) empties: HashSet<Pos>,
+    /// The element type a use of each needs, which is the type of its elements
+    /// where nothing is put in it.
+    pub(super) wanted: HashMap<Pos, Ty>,
+    /// What each was given: the place, how it is written, and the element.
+    pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
+}
+
+impl Solve {
+    /// The element type of each list or option written with nothing: what is
+    /// put in it, and where nothing is, what a use of it needs.
+    pub(super) fn merged_elems(&self) -> HashMap<Pos, Ty> {
+        self.empties
+            .iter()
+            .filter_map(|def| {
+                // What a use needs is the type of the elements where it holds
+                // everything that is put in, and otherwise what is put in is,
+                // and the use says it needs more.
+                let held = match (self.elems.get(def), self.wanted.get(def)) {
+                    (Some(put), Some(need)) if joined(need, put).as_ref() == Some(need) => need,
+                    (Some(put), _) => put,
+                    (None, Some(need)) => need,
+                    (None, None) => return None,
+                };
+                Some((*def, held.clone()))
+            })
+            .collect()
+    }
 }
 
 /// What the last solved look left, which the look that is kept reads.
@@ -68,6 +95,8 @@ pub(super) struct Solved {
     pub(super) refused: HashSet<Pos>,
     /// The element type of each list or option written with nothing to say it.
     pub(super) elems: HashMap<Pos, Ty>,
+    /// What each list or option written with nothing was given.
+    pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
 }
 
 /// Whether a block, or one inside it, defines a `var` with no type written.
@@ -96,6 +125,11 @@ fn is_empty(value: &Expr) -> bool {
         } => name == "none",
         _ => false,
     }
+}
+
+/// Whether a type is, or holds, a type that is not decided yet.
+fn open(t: &Ty) -> bool {
+    matches!(t, Ty::Param(_) | Ty::Flex(_)) || t.args().iter().any(open)
 }
 
 /// What two element types, one of a list or an option, make together: the
@@ -223,16 +257,13 @@ impl<'a> Checker<'a> {
         self.expr(body, value, &Want::Ty(ty.clone()));
         if let Some(solve) = self.solve.as_mut() {
             solve.empties.insert(pos);
-            if let Some(known) = known {
-                solve.elems.insert(pos, known);
-            }
         }
         ty
     }
 
     /// The element type of the list or option `def` was given or used for.
     fn settle_element(&mut self, def: Pos, element: &Ty) {
-        if element.unknown() {
+        if element.unknown() || open(element) {
             return;
         }
         let Some(solve) = self.solve.as_mut() else {
@@ -242,6 +273,36 @@ impl<'a> Checker<'a> {
         if let Some(both) = joined(&held, element) {
             solve.elems.insert(def, both);
         }
+    }
+
+    /// What is wrong with a list written with nothing, whose elements are what
+    /// was put in it, where the use needs other: what it was inferred from and
+    /// where.
+    pub(super) fn element_inferred(
+        &self,
+        body: &Body<'a>,
+        name: &str,
+        given: &str,
+        needed: &str,
+        at: Pos,
+    ) -> Option<String> {
+        let index = body.names.iter().rposition(|(n, _)| n == name)?;
+        let def = self.inferred.get(&index)?;
+        let put = self.solved.put.get(def).filter(|p| !p.is_empty())?;
+        let mut from: Vec<String> = put
+            .iter()
+            .map(|(p, text)| format!("`{text}` at line {}", p.line))
+            .collect();
+        from.dedup();
+        let from = match from.len() {
+            1 => from.concat(),
+            2 => from.join(" and "),
+            n => format!("{}, and {}", from[..n - 1].join(", "), from[n - 1]),
+        };
+        Some(format!(
+            "`{name}` is {given}, inferred from {from}; the use at line {} needs {needed}",
+            at.line
+        ))
     }
 
     /// Notes that a use needs `needed` of the list or option that `value`
@@ -255,9 +316,6 @@ impl<'a> Checker<'a> {
             Ty::Enum(e, args) if *e == self.defs.option => args.first(),
             _ => None,
         };
-        fn open(t: &Ty) -> bool {
-            matches!(t, Ty::Param(_) | Ty::Flex(_)) || t.args().iter().any(open)
-        }
         let element = element.filter(|e| !open(e));
         let (Some(element), Some(at)) = (element, body.names.iter().rposition(|(n, _)| n == name))
         else {
@@ -269,8 +327,48 @@ impl<'a> Checker<'a> {
                 .as_ref()
                 .is_some_and(|s| s.empties.contains(&def))
         {
-            self.settle_element(def, &element.clone());
+            // A use needs the type of the elements, and says nothing of what is put in.
+            if let Some(solve) = self.solve.as_mut() {
+                solve.wanted.entry(def).or_insert_with(|| element.clone());
+            }
         }
+    }
+
+    /// Checks `push(xs, e)` where `xs` is a list written with nothing and its
+    /// elements are not known yet: they are the range of `e`, and the list is
+    /// that of them.
+    pub(super) fn push_to_empty(&mut self, body: &mut Body<'a>, call: &Call) -> Option<Ty> {
+        let [list, item] = call.args.as_slice() else {
+            return None;
+        };
+        let Expr::Name { name, .. } = &list.value else {
+            return None;
+        };
+        let at = body.names.iter().rposition(|(n, _)| n == name.as_str())?;
+        let def = self.inferred.get(&at).copied()?;
+        if !self
+            .solve
+            .as_ref()
+            .is_some_and(|s| s.empties.contains(&def))
+            || !matches!(&body.names[at].1, Ty::List(of) if of[0].unknown())
+        {
+            return None;
+        }
+        let held = self.given_range(body, &item.value);
+        let counted = !matches!(body.numbers, Numbers::Finding(_));
+        if counted
+            && !held.unknown()
+            && !open(&held)
+            && let Some(solve) = self.solve.as_mut()
+        {
+            solve
+                .put
+                .entry(def)
+                .or_default()
+                .push((call.pos, written_expr(&Expr::Call(call.clone()))));
+        }
+        self.settle_element(def, &held);
+        (!held.unknown() && !open(&held)).then(|| Ty::List(vec![held]))
     }
 
     /// The type of a value that is put in a list: the range that holds a number
@@ -310,18 +408,6 @@ impl<'a> Checker<'a> {
             .as_ref()
             .is_some_and(|s| s.empties.contains(&def))
         {
-            // `xs = push(xs, e)` puts `e` in the list: its elements are those it has
-            // and the range of `e`.
-            if let Expr::Call(call) = value
-                && call.callee == "push"
-                && let [list, item] = call.args.as_slice()
-                && matches!(&list.value, Expr::Name { name: n, .. } if n == name)
-            {
-                let held = self.given_range(body, &item.value);
-                self.settle_element(def, &held);
-                self.assign(body, at, value);
-                return;
-            }
             // A case with a number written out as what it holds is that number.
             let want = match value {
                 Expr::Case {

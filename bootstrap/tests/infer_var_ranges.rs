@@ -54,6 +54,22 @@ pub const ONCE: &[Test] = &[
         a_list_written_with_nothing_that_nothing_settles_is_refused_with_where_to_state_it,
     ),
     (
+        "a_list_written_with_nothing_that_a_loop_counter_is_pushed_to_has_the_range_of_the_counter",
+        a_list_written_with_nothing_that_a_loop_counter_is_pushed_to_has_the_range_of_the_counter,
+    ),
+    (
+        "a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_the_loop_one_above_it",
+        a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_the_loop_one_above_it,
+    ),
+    (
+        "a_push_of_the_program_is_not_the_push_that_settles_a_list",
+        a_push_of_the_program_is_not_the_push_that_settles_a_list,
+    ),
+    (
+        "a_list_pushed_to_for_another_name_is_settled_and_a_use_that_needs_less_says_what_was_inferred",
+        a_list_pushed_to_for_another_name_is_settled_and_a_use_that_needs_less_says_what_was_inferred,
+    ),
+    (
         "the_time_to_check_a_body_grows_with_its_size_and_no_faster",
         the_time_to_check_a_body_grows_with_its_size_and_no_faster,
     ),
@@ -546,4 +562,95 @@ fn a_list_written_with_nothing_that_nothing_settles_is_refused_with_where_to_sta
         .unwrap_or_else(|| panic!("{errors:?} for\n{source}"));
     assert!(said.message.contains("an array of nothing"), "{said:?}");
     assert!(said.fix.as_deref().is_some_and(|f| f.contains("xs: List[")), "{said:?}");
+}
+
+fn prints(source: &str, said: &str) {
+    let source = with_header(source.to_string());
+    assert_eq!(
+        run(&source),
+        Outcome {
+            stdout: said.as_bytes().to_vec(),
+            status: 0
+        },
+        "{source}"
+    );
+}
+
+/// `var xs = []` that a `loop` pushes its counter to is a list of the range of
+/// the counter, and the program prints the number of rounds.
+fn a_list_written_with_nothing_that_a_loop_counter_is_pushed_to_has_the_range_of_the_counter() {
+    prints(
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs = []\n  \
+         loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
+        "5\n",
+    );
+}
+
+/// A loop over `0..5` whose counter is given to a `var` that states `0..5`, or
+/// pushed to a list that states `List[0..5]`, ends at a number the range does
+/// not hold, as the counter never is it.
+fn a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_the_loop_one_above_it()
+ {
+    prints(
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[0..5] = []\n  \
+         loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
+        "5\n",
+    );
+    prints(
+        "fn main() <console, alloc> {\n  var last: 0..5 = 0\n  loop i in 0..5 { last = i }\n  \
+         print(\"{last}\")\n}\n",
+        "4\n",
+    );
+}
+
+/// A function of the program that is called `push` does not settle the
+/// elements of a list: its own error is said, and no range is said of the list.
+fn a_push_of_the_program_is_not_the_push_that_settles_a_list() {
+    let source = with_header(
+        "fn push(xs: take List[Byte], n: 0..10) -> List[Byte] { xs }\n\n\
+         fn main() <console, alloc> {\n  var xs = []\n  xs = push(xs, 300)\n  \
+         print(\"{xs.size}\")\n}\n"
+            .to_string(),
+    );
+    let errors = lower(source.as_bytes()).expect_err("a number that does not fit");
+    assert!(
+        errors.iter().any(|e| e.message.contains("does not fit `0..10`")),
+        "{errors:?} for\n{source}"
+    );
+    assert!(
+        errors.iter().all(|e| !e.message.contains("300..301")),
+        "{errors:?} for\n{source}"
+    );
+}
+
+/// `ys = push(xs, 4)` of a list written with nothing settles it, and a use that
+/// needs a list of a range that does not hold what was pushed says the range
+/// it has, what it was inferred from and where, and what the use needs.
+fn a_list_pushed_to_for_another_name_is_settled_and_a_use_that_needs_less_says_what_was_inferred() {
+    prints(
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs = []\n  \
+         ys = push(xs, 4)\n  print(\"{ys.size}\")\n}\n",
+        "1\n",
+    );
+    let source = with_header(
+        "use std.list (push)\n\nfn small(xs: List[0..3]) -> Nat { xs.size }\n\n\
+         fn main() <alloc> {\n  var xs = []\n  xs = push(xs, 7)\n  n = small(xs)\n}\n"
+            .to_string(),
+    );
+    let errors = lower(source.as_bytes()).expect_err("a list that is too wide");
+    let pushed = line_of(&source, "xs = push(xs, 7)");
+    let used = line_of(&source, "n = small(xs)");
+    let said = errors
+        .iter()
+        .find(|e| e.pos.line == used)
+        .unwrap_or_else(|| panic!("{errors:?} for\n{source}"));
+    for part in [
+        "inferred".to_string(),
+        "`List[7..8]`".to_string(),
+        format!("at line {pushed}"),
+        format!("the use at line {used}"),
+        "`List[0..3]`".to_string(),
+    ] {
+        assert!(said.message.contains(&part), "no `{part}` in {said:?}");
+    }
 }

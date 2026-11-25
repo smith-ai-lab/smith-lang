@@ -7532,6 +7532,11 @@ impl<'a> Checker<'a> {
                 at.col
             );
         }
+        if let Expr::Name { name, .. } = value
+            && let Some(said) = self.element_inferred(body, name, &given, &needed, value.pos())
+        {
+            return said;
+        }
         format!("this gives {given}, where {needed} is needed")
     }
 
@@ -7625,6 +7630,7 @@ impl<'a> Checker<'a> {
         let widened = self.widened.clone();
         let mut before: HashMap<Pos, Int> = HashMap::new();
         let mut before_elems: HashMap<Pos, Ty> = HashMap::new();
+        let mut put: HashMap<Pos, Vec<(Pos, String)>> = HashMap::new();
         let mut looks = 0;
         let mut refused = HashSet::new();
         let last = loop {
@@ -7645,7 +7651,16 @@ impl<'a> Checker<'a> {
                 .filter(|(p, t)| before.get(*p) != Some(*t))
                 .map(|(p, _)| *p)
                 .collect();
-            let settled = solve.elems == before_elems;
+            for (def, found) in &solve.put {
+                let held = put.entry(*def).or_default();
+                for one in found {
+                    if !held.iter().any(|(p, _)| *p == one.0) {
+                        held.push(one.clone());
+                    }
+                }
+            }
+            let merged = solve.merged_elems();
+            let settled = merged == before_elems;
             // Where no value that a `var` is given widened it, what was read
             // as its range in this look is what it has, and no look is needed
             // to find it.
@@ -7685,13 +7700,14 @@ impl<'a> Checker<'a> {
                 break solve;
             }
             before = solve.totals;
-            before_elems = solve.elems;
+            before_elems = merged;
         };
         self.widened = widened;
+        self.solved.elems = last.merged_elems();
         self.solved.ranges = last.totals;
         self.solved.given = last.given;
         self.solved.refused = refused;
-        self.solved.elems = last.elems;
+        self.solved.put = put;
     }
 
     /// One look at the body of a function, which gives the places of the
@@ -8875,7 +8891,20 @@ impl<'a> Checker<'a> {
                     let (int, by) = decided[&r.from.pos()];
                     self.deciding = by;
                     self.expr(body, &r.from, &Want::Ty(Ty::Int(int)));
-                    self.expr(body, &r.to, &Want::Ty(Ty::Int(int)));
+                    // The end is not a number of the range, so it may be the one
+                    // above the greatest the counter has, which the type of the
+                    // counter does not hold.
+                    let end = match &r.to {
+                        Expr::Number {
+                            magnitude,
+                            negative: false,
+                            ..
+                        } if i128::try_from(*magnitude).ok() == int.max().checked_add(1) => {
+                            Int::between(int.min(), int.max() + 1).map_or(int, |wide| wide)
+                        }
+                        _ => int,
+                    };
+                    self.expr(body, &r.to, &Want::Ty(Ty::Int(end)));
                     self.deciding = None;
                     body.decided.insert(r.name.clone(), (int, by));
                     return Ty::Int(int);
