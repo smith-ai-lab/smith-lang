@@ -6027,18 +6027,23 @@ fn warnings(file: &File, reached: &[Item]) -> Vec<Error> {
 /// reads. A name is defined once in a function, so any read of it is a
 /// read of that binding.
 fn unused_bindings(file: &File, f: &Function, out: &mut Vec<Error>) {
+    let proof_given = |value: &Expr| matches!(value, Expr::Call(c) if file.functions.iter().any(|g| g.name == c.callee && is_proof(g)));
     // What `arith` is asked to prove in the body: a sum, an index, or a call of
     // a function that owes something. A proof a call gave is read by it, as it
-    // is a fact `arith` may use, though no line writes its name.
-    let asks_arith = exprs(values(&f.body)).into_iter().any(|e| match e {
-        Expr::Arith { .. } | Expr::Index { .. } | Expr::Slice { .. } => true,
-        Expr::Call(c) => file
-            .functions
-            .iter()
-            .any(|g| g.name == c.callee && !g.requires.is_empty() && !is_proof(g)),
-        _ => false,
-    });
-    let proof_given = |value: &Expr| matches!(value, Expr::Call(c) if file.functions.iter().any(|g| g.name == c.callee && is_proof(g)));
+    // is a fact `arith` may use, though no line writes its name. It is looked
+    // for only where a proof is given.
+    let gives_proof = statements(&f.body)
+        .into_iter()
+        .any(|s| matches!(s, Stmt::Define { value, .. } if proof_given(value)));
+    let asks_arith = gives_proof
+        && exprs(values(&f.body)).into_iter().any(|e| match e {
+            Expr::Arith { .. } | Expr::Index { .. } | Expr::Slice { .. } => true,
+            Expr::Call(c) => file
+                .functions
+                .iter()
+                .any(|g| g.name == c.callee && !g.requires.is_empty() && !is_proof(g)),
+            _ => false,
+        });
     let read: Vec<&str> = (exprs(values(&f.body)).into_iter())
         .filter_map(|e| match e {
             Expr::Name { name, .. } => Some(name.as_str()),
