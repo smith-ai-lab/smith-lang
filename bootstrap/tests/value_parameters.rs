@@ -49,6 +49,10 @@ pub const ONCE: &[Test] = &[
         a_list_of_parameters_that_has_a_type_beside_a_number_is_refused_as_not_built,
     ),
     (
+        "a_number_below_zero_is_refused_as_not_a_nat_and_not_as_one_that_is_not_written_out",
+        a_number_below_zero_is_refused_as_not_a_nat_and_not_as_one_that_is_not_written_out,
+    ),
+    (
         "a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_written",
         a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_written,
     ),
@@ -246,5 +250,26 @@ fn a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_w
             errors.iter().all(|e| e.pos.line == line && e.message.contains(&format!("`n` as {k}"))),
             "{errors:?}\nfor\n{source}"
         );
+    });
+}
+
+/// A number below zero is written out, and is refused for what it is: not a
+/// `Nat`, where a use of a function or a struct writes it.
+fn a_number_below_zero_is_refused_as_not_a_nat_and_not_as_one_that_is_not_written_out() {
+    generate::check(4109, 10, |g: &mut Gen| 1 + g.below(1000), |k| {
+        for call in [format!("x = twice[-{k}]()"), format!("x: Box[-{k}] = twice[1]()")] {
+            let source = with_header(format!(
+                "struct Box[n: Nat] {{ at: 0..n }}\n\nfn twice[n: Nat]() -> Nat {{ n }}\n\nfn main() <console, alloc> {{\n  {call}\n}}\n"
+            ));
+            let found = messages(&source);
+            assert!(
+                found.iter().any(|m| m.contains(&format!("`-{k}` is not a `Nat`"))),
+                "{found:?}\nfor\n{source}"
+            );
+            assert!(
+                found.iter().all(|m| !m.contains("written out")),
+                "{found:?}\nfor\n{source}"
+            );
+        }
     });
 }
