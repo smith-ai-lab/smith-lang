@@ -61,6 +61,22 @@ fn gap_again(a: Byte, b: Byte) -> Byte
 
 `gap_again(9, 3)` is `6`. A `requires` may join comparisons with `and`, `or`, and `not`.
 
+## What the caller is told
+
+A comment above a `requires` is the message a caller sees when a call fails it. The goal that failed is shown under the message. A `requires` with no comment shows only the goal.
+
+```
+fn gap(a: Byte, b: Byte) -> Byte
+  // The first number must not be below the second.
+  requires a >= b
+  requires a <= 200
+{
+  a - b
+}
+```
+
+`gap(3, 5)` is refused, and the caller sees "The first number must not be below the second.", with `3 >= 5` under it. `gap(250, 3)` shows only `250 <= 200`, as its `requires` has no comment. The comment is on its own line directly above the `requires`, as [Functions](functions.md#comments) says, and it is for the one `requires` that follows it. The compiler does not build this yet, so the words of the refusal are not quoted.
+
 ## What the function gives
 
 `ensures` states something about the result. The signature gives the result a name, and the `ensures` is about that name.
