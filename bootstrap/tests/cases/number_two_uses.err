@@ -1,4 +1,4 @@
-number_two_uses.smith:11:8: cannot prove that `x <= 127`, so `x` may not fit `i8`
+number_two_uses.smith:11:8: `x` is a `200..201`, inferred from `200` at line 9; the use at line 11 needs a `i8`
   11 |   word(x)
      |        ^
   fix: check the value first, or state it in a `requires`

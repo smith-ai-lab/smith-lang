@@ -656,20 +656,16 @@ fn write(
     let mut text = String::from("struct Pair {\n");
     let first = m.vars[0].ty;
     text.push_str(&format!("  a: {0}\n  b: {0}\n}}\n\n", first.name));
-    // A function for each type that takes one, so that a name bound without
-    // its type is decided by being passed to it.
+    // A function for each type that a mistake passes a name to.
     let mut taken: Vec<Int> = Vec::new();
     let mut bindings = String::new();
     for v in &m.vars {
         let spelling = spelled(g, v.value);
         if g.one_in(2) {
-            bindings.push_str(&format!("  {} = {spelling}\n", v.name));
-            if v.ty.name != "Int" {
-                bindings.push_str(&format!("  _ = id_{}({})\n", v.ty.name, v.name));
-                if !taken.contains(&v.ty) {
-                    taken.push(v.ty);
-                }
-            }
+            // A number bound with no type keeps its own range wherever it is
+            // used, so it is given its type by being bound again with it.
+            bindings.push_str(&format!("  {0}_number = {spelling}\n", v.name));
+            bindings.push_str(&format!("  {}: {} = {}_number\n", v.name, v.ty.name, v.name));
         } else {
             bindings.push_str(&format!("  {}: {} = {spelling}\n", v.name, v.ty.name));
         }
@@ -782,8 +778,8 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
             fix = Some("check the value first".to_string());
             (
                 format!(
-                    "x = {outside}\n  _ = id_{}(x)\n  _ = id_{}(",
-                    ty.name, other.name
+                    "x: {} = {outside}\n  _ = id_{}(x)\n  _ = id_{}(",
+                    ty.name, ty.name, other.name
                 ),
                 "x)".into(),
                 format!("may not fit `{}`", other.name),

@@ -22,6 +22,10 @@ pub const ONCE: &[Test] = &[
         "a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is",
         a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is,
     ),
+    (
+        "a_comparison_that_the_range_of_a_bound_number_decides_is_refused_as_with_the_range_written",
+        a_comparison_that_the_range_of_a_bound_number_decides_is_refused_as_with_the_range_written,
+    ),
 ];
 
 fn printed(source: &str) -> String {
@@ -48,6 +52,23 @@ fn a_number_written_in_place_beside_a_typed_value_is_still_decided_by_its_use() 
     let source = "use std.console (console, print)\n\nfn g(a: 1..3) -> 11..13 { a + 10 }\n\n\
                   fn main() <console, alloc> {\n  print(\"{g(2)}\")\n}\n";
     assert_eq!(printed(source), "12\n");
+}
+
+fn a_comparison_that_the_range_of_a_bound_number_decides_is_refused_as_with_the_range_written() {
+    let program = |binding: &str| {
+        format!(
+            "use std.console (console, print)\n\nfn main() <console> {{\n  a: -15..-13 = -15\n  {binding}\n  \
+             if a < k {{ print(\"less\") }} else {{ print(\"not\") }}\n}}\n"
+        )
+    };
+    for binding in ["k = -15", "k: -15..-14 = -15"] {
+        let source = program(binding);
+        let errors = check(source.as_bytes()).expect_err(&source);
+        assert!(
+            errors.iter().any(|e| e.message.contains("this comparison is always `false`")),
+            "{errors:?} for\n{source}"
+        );
+    }
 }
 
 /// A binding of `n`, and how the name is used beside `a`, a value of the range

@@ -836,8 +836,14 @@ impl<'a> Checker<'a> {
 
     /// Checks a whole number literal bound to `name` with no type written.
     /// While the uses are looked at, it is an undecided number. Once they
-    /// have decided its type, it is that type, and the literal must fit.
-    pub(super) fn literal_binding(&mut self, body: &mut Body<'a>, name: &str, value: &Expr) -> Ty {
+    /// have decided its type, the name is the number's own range, and the
+    /// literal is that type where the name is a `var` that a pattern gives.
+    pub(super) fn literal_binding(
+        &mut self,
+        body: &mut Body<'a>,
+        (name, var): (&str, bool),
+        value: &Expr,
+    ) -> Ty {
         let pos = value.pos();
         match &mut body.numbers {
             Numbers::Off => unreachable!("numbers are looked for"),
@@ -851,9 +857,11 @@ impl<'a> Checker<'a> {
             }
             Numbers::Decided(decided) => {
                 let (int, by) = decided[&pos];
-                // A number that the type its uses decided cannot hold keeps its
-                // own range, as if that range were written for the name, and
-                // is used as one wherever it goes.
+                // A number bound to a name keeps its own range, as if that
+                // range were written for the name, and is used as one wherever
+                // it goes, whatever the type its uses decided. A `var` that a
+                // pattern gives values keeps the type its uses decided, unless
+                // that cannot hold the number.
                 if let Expr::Number {
                     magnitude,
                     negative,
@@ -865,7 +873,7 @@ impl<'a> Checker<'a> {
                         false => *magnitude as i128,
                     };
                     if let Some(own) = Int::between(n, n)
-                        && !int.holds(own)
+                        && (!var || !int.holds(own))
                         && !expr_is_wide_character(value, *magnitude)
                     {
                         body.decided.remove(name);
