@@ -40,15 +40,15 @@ fn one(l: Listener) -> Result[(), NetError] <net, time, alloc> {
   .ok(())
 }
 
-fn session(port: 0..65536) -> Result[(), NetError] <net, time, alloc> {
-  listen("127.0.0.1", port, fn(l) { one(l) })
+fn session(port: 1..65536) -> Result[(), NetError] <net, time, alloc> {
+  listen("127.0.0.1", .at(port), fn(l) { one(l) })
 }
 
 // The program goes on for a while after the group ends, so that a connection
 // that is closed then is closed by the group's end and not by the program's.
 fn main(args: List[str]) -> Result[(), NetError] <net, time, alloc, diverge> {
   if args.size < 1 { return .ok(()) }
-  port: Result[0..65536, ReadError] = from_text("port", args[0])
+  port: Result[1..65536, ReadError] = from_text("port", args[0])
   match port {
     .ok(p) {
       done = session(p)

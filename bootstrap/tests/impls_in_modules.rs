@@ -126,9 +126,9 @@ fn a_call_of_a_trait_function_whose_impls_are_in_a_module_gives_what_the_impl_gi
 /// gives them.
 fn a_handler_that_ends_each_value_of_net_with_the_release_of_std_net_is_checked_and_runs() {
     let source = crate::numbers::with_header(
-        "use std.net (NetError, close, connect, net, read, release, write)
+        "use std.net (Got, NetError, close, connect, net, read, release, write)
 
-fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
+fn ask(question: str) -> Result[Got, NetError] <net, alloc> {
   with c = connect(\"example.test\", 7)
   try write(c, question.bytes)
   read(c, 16)
@@ -140,7 +140,7 @@ fn main() <console, alloc> {
     accept: fn(l) { .err(.refused(l.host)) },
     stop: fn(l) { n = release(l) },
     connect_to: fn(host, port) { .err(.refused(host)) },
-    read: fn(c, most) { .ok([104, 105]) },
+    read: fn(c, most) { .ok(.bytes([104, 105])) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
     bind_to: fn(host, port) { .err(.refused(host)) },

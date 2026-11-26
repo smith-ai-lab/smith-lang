@@ -65,7 +65,7 @@ fn faked[T](body: fn() -> T <net>) -> T <console, alloc> {{
 }}
 
 fn use_all() <net, alloc> {{
-  match listen_on(\"h\", 1) {{
+  match listen_on(\"h\", .at(1)) {{
     .ok(l) {{
       match accept(l) {{
         .ok(c) {{
@@ -81,7 +81,7 @@ fn use_all() <net, alloc> {{
     }}
     .err(e) {{ }}
   }}
-  match bind_to(\"h\", 1) {{
+  match bind_to(\"h\", .at(1)) {{
     .ok(s) {{
       match send(s, Address(host: \"h\", port: 1), \"x\".bytes) {{
         .ok(u) {{ }}
@@ -121,10 +121,14 @@ use std.utf8 (utf8)
 fn ask(word: str) -> Result[str, NetError] <net, alloc> {{
   with c = connect(\"peer.test\", 7)
   try write(c, word.bytes)
-  bytes = try read(c, 64)
-  match utf8(freeze(bytes)) {{
-    .ok(text) {{ .ok(text) }}
-    .err(e) {{ .err(.failed((\"peer.test:7\", \"not text\"))) }}
+  match try read(c, 64) {{
+    .bytes(bytes) {{
+      match utf8(freeze(bytes)) {{
+        .ok(text) {{ .ok(text) }}
+        .err(e) {{ .err(.failed((\"peer.test:7\", \"not text\"))) }}
+      }}
+    }}
+    .ended {{ .err(.closed(\"peer.test:7\")) }}
   }}
 }}
 
@@ -139,7 +143,7 @@ fn peer[T](body: fn() -> T <net>) -> T <alloc> {{
     accept: fn(l) {{ .err(.refused(l.host)) }},
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .ok(connection({handle})) }},
-    read: fn(c, most) {{ .ok(copy(\"{{handle(c)}} read {{most}}\".bytes)) }},
+    read: fn(c, most) {{ .ok(.bytes(copy(\"{{handle(c)}} read {{most}}\".bytes))) }},
     write: fn(c, bytes) {{ .ok(()) }},
     close: fn(c) {{ n = release(c) }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},

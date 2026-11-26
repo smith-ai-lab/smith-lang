@@ -26,6 +26,10 @@ use crate::targets;
 
 pub const ONCE: &[Test] = &[
     (
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it",
+        a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it,
+    ),
+    (
         "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile",
         a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile,
     ),
@@ -57,8 +61,12 @@ pub const MACHINE: &[Test] = &[
         ask_gets_the_bytes_a_listener_sends_it,
     ),
     (
-        "what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_gives_no_bytes",
-        what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_gives_no_bytes,
+        "what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_says_the_connection_ended",
+        what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_says_the_connection_ended,
+    ),
+    (
+        "a_listener_and_a_socket_at_any_port_are_given_one_the_system_has_free",
+        a_listener_and_a_socket_at_any_port_are_given_one_the_system_has_free,
     ),
     (
         "a_datagram_sent_to_a_bound_socket_is_received_with_the_address_it_came_from",
@@ -266,7 +274,7 @@ fn lengths(g: &mut Gen) -> Vec<usize> {
     lengths
 }
 
-fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_gives_no_bytes()
+fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_close_says_the_connection_ended()
 {
     for target in kernel() {
         if !runs(target) {
@@ -293,6 +301,16 @@ fn what_one_side_writes_the_other_reads_in_order_and_whole_and_a_read_after_the_
                 }
             },
         );
+    }
+}
+
+fn a_listener_and_a_socket_at_any_port_are_given_one_the_system_has_free() {
+    for target in kernel() {
+        if !runs(target) {
+            continue;
+        }
+        let mut run = Started::new(target, &["any", "1"]);
+        assert_eq!(run.line().as_deref(), Some("ok"), "{}", target.name());
     }
 }
 
@@ -425,6 +443,50 @@ fn errors(source: &str) -> Vec<Error> {
     }
 }
 
+/// A number written where a connection's port, a listener's port, or the size
+/// of a read is asked for, and is not one the type holds: where it is written
+/// is where the program is refused, and the message names the number.
+fn a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it()
+{
+    // A number below the range, at its end, or far beyond it.
+    let wrong = |g: &mut Gen| match g.below(3) {
+        0 => 0,
+        1 => 65536,
+        _ => 65536 + g.below(1_000_000_000) as u64,
+    };
+    generate::check_cases(41, 0, 2, wrong, |&wrong| {
+        // The three places. A read has no end that a literal could pass, so
+        // the size it is asked for is the one that is below.
+        for place in 0..3 {
+            let (before, number, after) = match place {
+                0 => ("fn run() -> Result[(), NetError] <net, alloc> {\n  with c = connect(\"h\", ", wrong, ")\n  .ok(())\n}\n"),
+                1 => (
+                    "fn run() -> Result[(), NetError] <net, alloc> {\n  with c = connect(\"h\", 1)\n  match read(c, ",
+                    0,
+                    ") {\n    .ok(g) { .ok(()) }\n    .err(e) { .err(e) }\n  }\n}\n",
+                ),
+                _ => ("fn run() <net, alloc, diverge> {\n  with listen(port: ", wrong, ")\n}\n"),
+            };
+            let call = if place == 2 {
+                "  run()\n"
+            } else {
+                "  match run() {\n    .ok(()) { }\n    .err(e) { }\n  }\n"
+            };
+            let head = if place == 2 {
+                "use std.http (listen)\nuse std.net (net)\n\n"
+            } else {
+                "use std.net (NetError, connect, net, read)\n\n"
+            };
+            let source = format!("{head}{before}{number}{after}\nfn main() <net, alloc, diverge> {{\n{call}}}\n");
+            let at = crate::programs::pos_after(&format!("{head}{before}"));
+            let found = lower(source.as_bytes()).err().unwrap_or_default();
+            assert_eq!(found.len(), 1, "{found:?} for\n{source}");
+            assert_eq!(found[0].pos, at, "{found:?} for\n{source}");
+            assert!(found[0].message.contains(&number.to_string()), "{found:?}");
+        }
+    });
+}
+
 /// A program that opens a resource of `std.net` with `open`, which is `listen_on`,
 /// `connect_to`, or `bind_to`, and then runs the lines, which the test says
 /// how to end it in.
@@ -435,10 +497,11 @@ fn opened(ty: &str, open: &str, end: &str, lines: &str) -> String {
     names.sort();
     names.dedup();
     let names = names.join(", ");
+    let port = if open == "connect_to" { "1" } else { ".any" };
     format!(
         "use std.list (freeze)\nuse std.net ({names})\n\n\
          fn run() -> Result[(), NetError] <net, alloc> {{\n  \
-         value = try {open}(\"127.0.0.1\", 0)\n{lines}  .ok(())\n}}\n\n\
+         value = try {open}(\"127.0.0.1\", {port})\n{lines}  .ok(())\n}}\n\n\
          fn main() <net, alloc> {{\n  match run() {{\n    .ok(()) {{ }}\n    .err(e) {{ }}\n  }}\n}}\n"
     )
 }
@@ -531,10 +594,10 @@ fn main() <console, alloc> {
 const HANDLED: &str = "use std.console (console, print)
 use std.instant (instant, since_1970)
 use std.list (freeze)
-use std.net (Connection, NetError, close, connect, net, read, release, write)
+use std.net (Connection, Got, NetError, close, connect, net, read, release, write)
 use std.time (now, time)
 
-fn ask(question: str) -> Result[List[Byte], NetError] <net, alloc> {
+fn ask(question: str) -> Result[Got, NetError] <net, alloc> {
   with c = connect(\"example.test\", 7)
   try write(c, question.bytes)
   read(c, 16)
@@ -546,7 +609,7 @@ fn main() <console, alloc> {
     accept: fn(l) { .err(.refused(l.host)) },
     stop: fn(l) { n = release(l) },
     connect_to: fn(host, port) { .err(.refused(\"{host}:{port}\")) },
-    read: fn(c, most) { .ok([104, 101, 108, 108, 111]) },
+    read: fn(c, most) { .ok(.bytes([104, 101, 108, 108, 111])) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
     bind_to: fn(host, port) { .err(.refused(host)) },

@@ -538,7 +538,7 @@ const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]
     accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
     stop: fn(l) { n = release(l) },
     connect_to: fn(host, port) { .err(.refused(host)) },
-    read: fn(c, most) { .ok([]) },
+    read: fn(c, most) { .ok(.ended) },
     write: fn(c, bytes) {
       var copied: List[Byte] = []
       loop i in 0..bytes.size { copied = push(copied, bytes[i]) }
@@ -587,7 +587,7 @@ fn serve(l: Listener) -> Result[u64, NetError] <net, alloc, task> {
 
 fn net_program(seed: u64) -> String {
     program(&format!(
-        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", 80, serve)\n}}\n\nfn main() <console, alloc, diverge> {{\n  (served, writes) = run()\n  var bytes: u64 = 0\n  var sum: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n    loop j in 0..inner.size {{\n      b: u64 = inner[j]\n      sum = wrapping_add(sum, b)\n    }}\n  }}\n  zs = build(300, 5)\n  print(\"{{writes.size}} {{bytes}} {{sum}} {{total(zs)}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
+        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", .at(80), serve)\n}}\n\nfn main() <console, alloc, diverge> {{\n  (served, writes) = run()\n  var bytes: u64 = 0\n  var sum: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n    loop j in 0..inner.size {{\n      b: u64 = inner[j]\n      sum = wrapping_add(sum, b)\n    }}\n  }}\n  zs = build(300, 5)\n  print(\"{{writes.size}} {{bytes}} {{sum}} {{total(zs)}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
     ))
 }
 

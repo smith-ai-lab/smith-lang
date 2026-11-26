@@ -663,27 +663,20 @@ fn a_thousand_connections_open_at_once_are_each_answered() {
 const NEVER_ACCEPTS: &str = "use std.deserialize (ReadError)
 use std.fromtext (from_text)
 use std.instant (ms)
-use std.int (narrow)
 use std.net (listen_on, net, stop)
 use std.time (sleep, time)
 
 fn main(args: List[str]) <net, time, alloc> {
   if args.size == 0 { return }
-  number: Result[Nat, ReadError] = from_text(\"port\", args[0])
+  number: Result[1..65536, ReadError] = from_text(\"port\", args[0])
   match number {
     .ok(port) {
-      fits: Option[0..65536] = narrow(port)
-      match fits {
-        .some(p) {
-          match listen_on(\"127.0.0.1\", p) {
-            .ok(l) {
-              sleep(ms(60000))
-              stop(l)
-            }
-            .err(e) { }
-          }
+      match listen_on(\"127.0.0.1\", .at(port)) {
+        .ok(l) {
+          sleep(ms(60000))
+          stop(l)
         }
-        .none { }
+        .err(e) { }
       }
     }
     .err(e) { }
@@ -783,7 +776,7 @@ fn the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given(
         .replace("use std.net (net)\n", "")
         .replace("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n", "")
         .replace("fn app()", "pub fn main()");
-    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(port: Nat = 8080) <net, alloc, diverge> {\n  with listen(port: port)\n  main()\n}\n";
+    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(port: 1..65536 = 8080) <net, alloc, diverge> {\n  with listen(port: port)\n  main()\n}\n";
     std::fs::write(dir.join("main.smith"), main).unwrap();
     std::fs::write(dir.join("project.smith"), project).unwrap();
     let built = smith(&dir, &["build", "serve"]);

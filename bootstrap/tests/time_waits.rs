@@ -256,15 +256,15 @@ use std.net (NetError, bind, handle, net)
 use std.instant (ms)
 use std.task (join, spawn, task, tasks, wait_to_read_by)
 
-fn waiting(port: 0..65536, limit: 0..100000) -> Result[bool, NetError] <console, net, alloc, task> {
-  with s = bind(\"127.0.0.1\", port)
+fn waiting(port: 1..65536, limit: 0..100000) -> Result[bool, NetError] <console, net, alloc, task> {
+  with s = bind(\"127.0.0.1\", .at(port))
   print(\"ready\")
   .ok(wait_to_read_by(handle(s), ms(limit)))
 }
 
 fn main(args: List[str]) <console, alloc, net> {
   if args.size < 2 { return }
-  number: Result[0..65536, ReadError] = from_text(\"port\", args[0])
+  number: Result[1..65536, ReadError] = from_text(\"port\", args[0])
   limit: Result[0..100000, ReadError] = from_text(\"limit\", args[1])
   match (number, limit) {
     (.ok(port), .ok(wait)) {

@@ -35,8 +35,8 @@ fn text(bytes: take List[Byte]) -> str {
 
 // What `echo_once` of the library's page does, with a line to say that the
 // listener is open, so that a test connects after it and not before.
-fn once(port: 0..65536) -> Result[(), NetError] <console, net, alloc> {
-  with l = listen("127.0.0.1", port)
+fn once(port: 1..65536) -> Result[(), NetError] <console, net, alloc> {
+  with l = listen("127.0.0.1", .at(port))
   print("ready")
   c = try accept(l)
   result = turn(c)
@@ -45,16 +45,19 @@ fn once(port: 0..65536) -> Result[(), NetError] <console, net, alloc> {
 }
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
-  bytes = try read(c, 4096)
-  write(c, freeze(bytes))
+  match try read(c, 4096) {
+    .bytes(bytes) { write(c, freeze(bytes)) }
+    .ended { .ok(()) }
+  }
 }
 
 fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
   var all: List[Byte] = []
   loop round in 0..2000000 {
-    chunk = try read(c, 4096)
-    if chunk.size == 0 { return .ok(all) }
-    all = append(all, chunk)
+    match try read(c, 4096) {
+      .bytes(chunk) { all = append(all, chunk) }
+      .ended { return .ok(all) }
+    }
   }
   .ok(all)
 }
@@ -67,8 +70,8 @@ fn send_back(c: Connection) -> Result[Nat, NetError] <net, alloc> {
 }
 
 // Reads until the other side finishes sending, and then sends all of it back.
-fn everything(port: 0..65536) -> Result[Nat, NetError] <console, net, alloc> {
-  with l = listen("127.0.0.1", port)
+fn everything(port: 1..65536) -> Result[Nat, NetError] <console, net, alloc> {
+  with l = listen("127.0.0.1", .at(port))
   print("ready")
   c = try accept(l)
   result = send_back(c)
@@ -77,20 +80,23 @@ fn everything(port: 0..65536) -> Result[Nat, NetError] <console, net, alloc> {
 }
 
 // What `ask` of the library's page does, at the port a test gives.
-fn ask(port: 0..65536, question: str) -> Result[List[Byte], NetError] <net, alloc> {
+fn ask(port: 1..65536, question: str) -> Result[List[Byte], NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   try write(c, question.bytes)
-  read(c, 4096)
+  match try read(c, 4096) {
+    .bytes(bytes) { .ok(bytes) }
+    .ended { .ok([]) }
+  }
 }
 
-fn datagram(port: 0..65536) -> Result[(Address, List[Byte]), NetError] <console, net, alloc> {
-  with s = bind("127.0.0.1", port)
+fn datagram(port: 1..65536) -> Result[(Address, List[Byte]), NetError] <console, net, alloc> {
+  with s = bind("127.0.0.1", .at(port))
   print("ready")
   receive(s, 1024)
 }
 
 // Writes until the other side's close is told, which a write after it gives.
-fn writing(port: 0..65536) -> Result[(), NetError] <net, alloc> {
+fn writing(port: 1..65536) -> Result[(), NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   var block: List[Byte] = []
   loop k in 0..65536 { block = push(block, 7) }
@@ -101,14 +107,21 @@ fn writing(port: 0..65536) -> Result[(), NetError] <net, alloc> {
   .ok(())
 }
 
-fn listening(port: 0..65536) -> Result[(), NetError] <net> {
-  with l = listen("127.0.0.1", port)
+fn listening(port: 1..65536) -> Result[(), NetError] <net> {
+  with l = listen("127.0.0.1", .at(port))
   .ok(())
 }
 
 // An address that no interface of the machine holds, which the system refuses.
-fn elsewhere(port: 0..65536) -> Result[(), NetError] <net> {
-  with l = listen("192.0.2.7", port)
+fn elsewhere(port: 1..65536) -> Result[(), NetError] <net> {
+  with l = listen("192.0.2.7", .at(port))
+  .ok(())
+}
+
+// A listener and a socket at the port that the system chooses.
+fn anywhere() -> Result[(), NetError] <net> {
+  with l = listen("127.0.0.1", .any)
+  with s = bind("127.0.0.1", .any)
   .ok(())
 }
 
@@ -119,8 +132,8 @@ fn answer(what: Result[(), NetError]) <console> {
   }
 }
 
-fn at(port: str, then: fn(0..65536)) <console> {
-  number: Result[0..65536, ReadError] = from_text("port", port)
+fn at(port: str, then: fn(1..65536)) <console> {
+  number: Result[1..65536, ReadError] = from_text("port", port)
   match number {
     .ok(p) { then(p) }
     .err(e) { print("bad port") }
@@ -168,6 +181,8 @@ fn main(args: List[str]) <console, net, alloc> {
       .ok(()) { print("ok") }
       .err(e) { print(said(e)) }
     }
+  } else if mode == "any" {
+    answer(anywhere())
   } else if mode == "closed" {
     answer(writing(p))
   } else if mode == "refused_says" {
