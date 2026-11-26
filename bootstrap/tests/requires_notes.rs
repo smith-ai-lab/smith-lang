@@ -4,6 +4,8 @@
 //! it and the comment, is refused as it was. The expectation comes from the
 //! generator that wrote the comments and the numbers.
 
+use std::collections::BTreeSet;
+
 use smith::{check, diag};
 
 use crate::Test;
@@ -23,6 +25,10 @@ pub const ONCE: &[Test] = &[
     (
         "a_comment_above_a_requires_that_the_kernel_works_out_is_told_with_what_it_found",
         a_comment_above_a_requires_that_the_kernel_works_out_is_told_with_what_it_found,
+    ),
+    (
+        "alike_requires_that_fail_are_one_error_and_a_comment_apart_from_its_requires_is_not_told",
+        alike_requires_that_fail_are_one_error_and_a_comment_apart_from_its_requires_is_not_told,
     ),
     (
         "the_goal_is_written_under_the_comment",
@@ -87,8 +93,9 @@ fn above(g: &mut Gen) -> Above {
 #[derive(Debug)]
 struct Call {
     source: String,
-    /// For each `requires`, what is above it and whether the argument meets it.
-    requires: Vec<(Above, bool)>,
+    /// For each `requires`, what is above it, how it is written, and whether
+    /// the argument meets it.
+    requires: Vec<(Above, String, bool)>,
 }
 
 fn call(g: &mut Gen) -> Call {
@@ -101,7 +108,7 @@ fn call(g: &mut Gen) -> Call {
         let over = above(g);
         lines.push_str(&over.written("  "));
         lines.push_str(&format!("  requires {text}\n"));
-        requires.push((over, f(arg)));
+        requires.push((over, text, f(arg)));
     }
     let t = ty.name;
     Call {
@@ -118,9 +125,9 @@ fn call(g: &mut Gen) -> Call {
 /// message and the goal under it, and with no comment of another.
 fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() {
     generate::check(7911, 150, call, |c| {
-        let failed: Vec<&Above> = (c.requires.iter())
-            .filter(|(_, holds)| !holds)
-            .map(|(over, _)| over)
+        let failed: Vec<(&Above, &String)> = (c.requires.iter())
+            .filter(|(_, _, holds)| !holds)
+            .map(|(over, text, _)| (over, text))
             .collect();
         let errors = match check(c.source.as_bytes()) {
             Ok(_) => {
@@ -129,29 +136,31 @@ fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() 
             }
             Err(errors) => errors,
         };
-        let told: Vec<String> = failed.iter().filter_map(|a| a.told()).collect();
-        let plain = failed.len() - told.len();
-        // Errors that are the same are reported once, so two `requires` that
-        // are written alike and fail are one error.
-        assert!(
-            !errors.is_empty() && errors.len() <= failed.len(),
+        // Errors that are the same, in the message and the goal, are reported
+        // once, so `requires` that are written alike and fail are one error.
+        let told: BTreeSet<(String, &String)> = (failed.iter())
+            .filter_map(|(over, text)| over.told().map(|t| (t, *text)))
+            .collect();
+        let plain: BTreeSet<&String> = (failed.iter())
+            .filter(|(over, _)| over.told().is_none())
+            .map(|(_, text)| *text)
+            .collect();
+        let with_goal = errors.iter().filter(|e| e.goal.is_some());
+        let without = errors.iter().filter(|e| e.goal.is_none());
+        assert_eq!(with_goal.clone().count(), told.len(), "{errors:?}");
+        assert_eq!(without.clone().count(), plain.len(), "{errors:?}");
+        // The comment of each is the message of an error with a goal, and no
+        // other comment is.
+        let messages: BTreeSet<&String> = with_goal.map(|e| &e.message).collect();
+        assert_eq!(
+            messages,
+            told.iter().map(|(t, _)| t).collect::<BTreeSet<_>>(),
             "{errors:?}"
         );
-        for text in &told {
-            assert!(
-                errors
-                    .iter()
-                    .any(|e| &e.message == text && e.goal.is_some()),
-                "{text:?} is not told, in {errors:?}"
-            );
-        }
-        // No comment is told but that of a `requires` that fails and has it.
-        for e in errors.iter().filter(|e| e.goal.is_some()) {
-            assert!(told.contains(&e.message), "{e:?} is not a comment above a failed `requires`");
-        }
-        let other: Vec<_> = errors.iter().filter(|e| e.goal.is_none()).collect();
-        assert_eq!(other.is_empty(), plain == 0, "{errors:?}");
-        assert!(other.iter().all(|e| e.message.contains("needs")), "{errors:?}");
+        assert!(
+            errors.iter().filter(|e| e.goal.is_none()).all(|e| e.message.contains("needs")),
+            "{errors:?}"
+        );
     });
 }
 
@@ -192,6 +201,21 @@ fn a_comment_above_a_requires_that_the_kernel_works_out_is_told_with_what_it_fou
             "{errors:?} for\n{source}"
         );
     });
+}
+
+/// The case the merge queue found: two `requires` written alike that fail are
+/// one error, and a comment with a blank line between it and a `requires` is
+/// the comment of none, as [Functions](functions.md#comments) says of every
+/// item, so that `requires` is refused with no comment.
+fn alike_requires_that_fail_are_one_error_and_a_comment_apart_from_its_requires_is_not_told() {
+    let source = with_header(
+        "fn needs(i: Byte) -> Byte\n  requires 2 < i\n  // The\n\n  requires 2 >= i\n  requires 2 >= i\n{\n  i\n}\n\nfn main() <console, alloc> {\n  print(\"{needs(253)}\")\n}\n"
+            .to_string(),
+    );
+    let errors = check(source.as_bytes()).expect_err("a call that fails its `requires`");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].goal.is_none(), "{errors:?}");
+    assert!(errors[0].message.contains("needs"), "{errors:?}");
 }
 
 /// The comment is written first, and the goal after it, before the line of
