@@ -90,15 +90,11 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
             run(&executable, &request.words)
         }
         "check" => check(rest),
-        task if find_root()
-            .is_some_and(|root| tasks_of(&root).is_ok_and(|read| read.task(task).is_some())) =>
-        {
-            run_task(task, rest)
-        }
         "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
             Err(format!("smith {name} is not supported yet"))
         }
-        _ => Err(format!("unknown command `{name}`\n{USAGE}")),
+        _ if name.starts_with('-') => Err(format!("unknown command `{name}`\n{USAGE}")),
+        task => run_task(task, rest),
     }
 }
 
@@ -445,20 +441,36 @@ fn tasks_of(root: &Path) -> Result<project::Read, String> {
     })
 }
 
+/// The folder of the nearest `project.smith` and what it says, when it has a
+/// task of this name. Otherwise the one reason it has not: there is no
+/// `project.smith`, it does not compile, or it has no such task.
+fn project_with_task(task: &str) -> Result<(PathBuf, project::Read), String> {
+    let Some(root) = find_root() else {
+        let here =
+            std::env::current_dir().map_or_else(|_| ".".to_string(), |d| d.display().to_string());
+        return Err(format!(
+            "no project.smith was found in {here} or any folder above it, so `{task}` is not a task: `{task}` would be a task of project.smith"
+        ));
+    };
+    let read = tasks_of(&root)?;
+    if read.task(task).is_none() {
+        let file = root.join("project.smith");
+        let names: Vec<&str> = read.tasks.iter().map(|t| t.name.as_str()).collect();
+        let has = if names.is_empty() {
+            "it has no tasks".to_string()
+        } else {
+            format!("its tasks are: {}", names.join(", "))
+        };
+        return Err(format!("{} has no task `{task}`; {has}", file.display()));
+    }
+    Ok((root, read))
+}
+
 /// Builds the executable that starts at a task of `project.smith`, which is
 /// named after the package, in the folder that holds the file.
 fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<PathBuf, String> {
-    let root = find_root().ok_or_else(|| {
-        format!("no project.smith is in this folder or above it, so there is no task `{task}`")
-    })?;
-    let read = tasks_of(&root)?;
-    let Some(found) = read.task(task) else {
-        let names: Vec<&str> = read.tasks.iter().map(|t| t.name.as_str()).collect();
-        return Err(format!(
-            "`{task}` is not a task of project.smith, which has: {}",
-            names.join(", ")
-        ));
-    };
+    let (root, read) = project_with_task(task)?;
+    let found = read.task(task).expect("project_with_task found it");
     let program = found.program();
     let files = Files {
         root: root.clone(),
@@ -497,6 +509,7 @@ fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<Pa
 
 /// Builds a task for this machine and runs it with the flags it is given.
 fn run_task(task: &str, flags: &[OsString]) -> Result<ExitCode, String> {
+    project_with_task(task)?;
     let target = Target::host().ok_or_else(|| {
         format!(
             "this machine, {}, is not a target",
