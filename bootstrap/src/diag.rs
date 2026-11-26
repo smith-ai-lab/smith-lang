@@ -17,7 +17,7 @@ impl Pos {
 
 /// An error in a program, or a warning about it, at the place it was
 /// found.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Error {
     pub pos: Pos,
     /// What is wrong.
