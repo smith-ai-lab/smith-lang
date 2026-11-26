@@ -83,23 +83,22 @@ impl Parser<'_> {
             }
             let (name, pos, generics, params, result, result_name, effects) = self.signature()?;
             let mut requires = Vec::new();
+            let mut notes = Vec::new();
             loop {
                 match self.tok() {
                     Tok::Newline | Tok::Punct("}") => break,
                     Tok::Keyword("requires") => {
+                        let note = self.note();
                         self.bump();
                         let no_lambda = std::mem::replace(&mut self.no_lambda, true);
                         let statement = self.expr();
                         self.no_lambda = no_lambda;
-                        requires.push(statement?);
-                        if self.tok() == &Tok::Newline
-                            && matches!(
-                                self.tokens.get(self.at + 1).map(|t| &t.tok),
-                                Some(Tok::Keyword("requires"))
-                            )
-                        {
-                            self.bump();
+                        let statement = statement?;
+                        if let Some(note) = note {
+                            notes.push((statement.pos(), note));
                         }
+                        requires.push(statement);
+                        self.skip_to_contract();
                     }
                     Tok::Keyword("ensures") => {
                         return Err(Error::unsupported(self.pos(), "an `ensures` of a trait"));
@@ -117,6 +116,7 @@ impl Parser<'_> {
                 effects,
                 requires,
                 needs: Vec::new(),
+                notes,
                 decreases: Vec::new(),
                 ensures: Vec::new(),
                 body: Vec::new(),

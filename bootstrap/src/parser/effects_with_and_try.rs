@@ -205,6 +205,7 @@ impl Parser<'_> {
                 effects,
                 requires: Vec::new(),
                 needs: Vec::new(),
+                notes: Vec::new(),
                 decreases: Vec::new(),
                 ensures: Vec::new(),
                 body: Vec::new(),

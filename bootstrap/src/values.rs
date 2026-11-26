@@ -456,10 +456,7 @@ impl State {
                         text => text.clone(),
                     })
                     .collect();
-                out.push(Token {
-                    tok: Tok::Interp(pieces),
-                    pos: t.pos,
-                });
+                out.push(Token::new(Tok::Interp(pieces), t.pos));
                 i += 1;
                 continue;
             }
@@ -473,10 +470,7 @@ impl State {
                     && self.allowed(&template, &numbers, t.pos, errors)
                 {
                     let name = self.copy(&template, &numbers);
-                    out.push(Token {
-                        tok: Tok::Ident(name),
-                        pos: t.pos,
-                    });
+                    out.push(Token::new(Tok::Ident(name), t.pos));
                     i += 1;
                     continue;
                 }
@@ -488,10 +482,7 @@ impl State {
                     out.push(t.clone());
                 } else if let Some(numbers) = self.written(&template, &tokens[i..=close], errors) {
                     let name = self.copy(&template, &numbers);
-                    out.push(Token {
-                        tok: Tok::Ident(name),
-                        pos: t.pos,
-                    });
+                    out.push(Token::new(Tok::Ident(name), t.pos));
                 }
                 i = close + 1;
                 continue;
@@ -712,7 +703,7 @@ fn mentions(tokens: &[Token], name: &str) -> bool {
 /// The line that defines a parameter in the body of a copy: `n: Nat = 4`, or
 /// the range from 1 for a `Pos`, which no file can write by its name yet.
 fn binding(p: &Param, number: u64) -> Vec<Token> {
-    let at = |tok| Token { tok, pos: p.pos };
+    let at = |tok| Token::new(tok, p.pos);
     let mut tokens = vec![
         at(Tok::Newline),
         at(Tok::Ident(p.name.clone())),
@@ -798,10 +789,7 @@ pub(crate) fn run(
             while id < s.copies.len() {
                 let made = s.made(id);
                 let made = s.rewrite(made, &mut errors);
-                tokens.push(Token {
-                    tok: Tok::Newline,
-                    pos: end.pos,
-                });
+                tokens.push(Token::new(Tok::Newline, end.pos));
                 tokens.extend(made);
                 id += 1;
             }

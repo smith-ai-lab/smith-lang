@@ -24,6 +24,9 @@ pub struct Error {
     pub message: String,
     /// What to write instead, when the compiler knows.
     pub fix: Option<String>,
+    /// What was to be proven, shown under a message that is the author's own
+    /// words, as the comment above a `requires` is.
+    pub goal: Option<String>,
     /// The module the place is in, when it is not in the file that was
     /// compiled: the name of a module of the standard library, or the path of
     /// the file of a module of a project.
@@ -39,6 +42,7 @@ impl Error {
             pos,
             message: message.into(),
             fix: None,
+            goal: None,
             module: None,
             unbuilt: false,
         }
@@ -47,6 +51,12 @@ impl Error {
     /// The same error, with advice on what to write instead.
     pub fn with_fix(mut self, fix: impl Into<String>) -> Error {
         self.fix = Some(fix.into());
+        self
+    }
+
+    /// The same error, with the goal that failed shown under its message.
+    pub fn with_goal(mut self, goal: impl Into<String>) -> Error {
+        self.goal = Some(goal.into());
         self
     }
 
@@ -103,7 +113,11 @@ pub fn render_with(
     let mut out = String::new();
     for error in errors {
         let Pos { line, col } = error.pos;
-        let message: String = error.message.chars().map(shown).collect();
+        // The lines of a message that is a comment stay lines.
+        let message: String = (error.message.split('\n'))
+            .map(|line| line.chars().map(shown).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
         let (file, lines) = match &error.module {
             Some(module) => (
                 module.chars().map(shown).collect::<String>(),
@@ -118,6 +132,10 @@ pub fn render_with(
             ),
         };
         out.push_str(&format!("{file}:{line}:{col}: {message}\n"));
+        if let Some(goal) = &error.goal {
+            let goal: String = goal.chars().map(shown).collect();
+            out.push_str(&format!("  goal: {goal}\n"));
+        }
         let number = line.to_string();
         let gutter = " ".repeat(number.len());
         let source_line = lines.get(line - 1).map_or("", String::as_str);
