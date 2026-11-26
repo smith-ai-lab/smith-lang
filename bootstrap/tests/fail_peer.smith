@@ -26,7 +26,7 @@ fn eat() <alloc> {
 // child has run: the child is not the one that failed, and it is the only one that
 // holds the connection.
 fn spoil(c: take Connection) <net, task, alloc> {
-  spawn { hold(c) }
+  _ = spawn { hold(c) }
   eat()
 }
 
@@ -35,7 +35,7 @@ fn spoil(c: take Connection) <net, task, alloc> {
 fn one(l: Listener) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
-  spawn { spoil(c) }
+  _ = spawn { spoil(c) }
   sleep(ms(200))
   .ok(())
 }

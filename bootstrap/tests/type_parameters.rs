@@ -444,12 +444,12 @@ fn write_items(items: &[Item], out: &mut String, w: &mut Written, depth: usize, 
             Item::If(then, otherwise) => {
                 out.push_str(&format!("{indent}if c {{\n"));
                 write_items(then, out, w, depth + 1, loops);
-                out.push_str(&format!("{indent}  0\n"));
+                out.push_str(&format!("{indent}  ()\n"));
                 match otherwise {
                     Some(otherwise) => {
                         out.push_str(&format!("{indent}}} else {{\n"));
                         write_items(otherwise, out, w, depth + 1, loops);
-                        out.push_str(&format!("{indent}  0\n{indent}}}\n"));
+                        out.push_str(&format!("{indent}  ()\n{indent}}}\n"));
                     }
                     None => out.push_str(&format!("{indent}}}\n")),
                 }
@@ -459,7 +459,7 @@ fn write_items(items: &[Item], out: &mut String, w: &mut Written, depth: usize, 
                 for (arm, case) in arms.iter().zip(["north", "south", "east"]) {
                     out.push_str(&format!("{indent}  .{case} {{\n"));
                     write_items(arm, out, w, depth + 2, loops);
-                    out.push_str(&format!("{indent}    0\n{indent}  }}\n"));
+                    out.push_str(&format!("{indent}    ()\n{indent}  }}\n"));
                 }
                 out.push_str(&format!("{indent}}}\n"));
             }

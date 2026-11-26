@@ -257,7 +257,7 @@ fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <all
   if executable {
     made = __system(27, fd, 493, 0, 0, 0, 0)
     if made < 0 {
-      __system(28, fd, 0, 0, 0, 0, 0)
+      _ = __system(28, fd, 0, 0, 0, 0, 0)
       return .err(failure(path, "create", made))
     }
   }
@@ -268,7 +268,7 @@ fn system_close_file(f: take File) {
   h = f.handle
   opened = f.opened
   __consume(f)
-  if opened { __system(28, h, 0, 0, 0, 0, 0) }
+  if opened { _ = __system(28, h, 0, 0, 0, 0, 0) }
 }
 
 // Where the file ends, which is its size. Windows says a file that has no places

@@ -18,7 +18,7 @@ fn hold(c: take Connection) <net, task, alloc> {
 fn one_round(l: Listener, pause: 0..100000) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
-  spawn { hold(c) }
+  _ = spawn { hold(c) }
   if pause > 0 { sleep(ms(pause)) }
   .ok(())
 }

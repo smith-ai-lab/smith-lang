@@ -42,7 +42,7 @@ fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
 fn system_now() -> Instant <alloc> {
   var stamp: List[Byte] = __reserve(16)
   stamp = put(put(stamp, 0), 0)
-  __system(10, 0, stamp)
+  _ = __system(10, 0, stamp)
   reading: 0..4611686018427387904 = clamp(milliseconds(word(stamp, 0), word(stamp, 8)))
   instant(reading)
 }

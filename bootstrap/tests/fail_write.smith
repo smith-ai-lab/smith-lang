@@ -16,6 +16,6 @@ fn chatter() <console> {
 fn main() <console, alloc, time> {
   sleep(ms(300))
   with tasks()
-  spawn { chatter() }
+  _ = spawn { chatter() }
   sleep(ms(100))
 }

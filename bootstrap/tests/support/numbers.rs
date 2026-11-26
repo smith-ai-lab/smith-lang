@@ -619,7 +619,7 @@ fn write(
         if g.one_in(2) {
             bindings.push_str(&format!("  {} = {spelling}\n", v.name));
             if v.ty.name != "Int" {
-                bindings.push_str(&format!("  id_{}({})\n", v.ty.name, v.name));
+                bindings.push_str(&format!("  _ = id_{}({})\n", v.ty.name, v.name));
                 if !taken.contains(&v.ty) {
                     taken.push(v.ty);
                 }
@@ -736,7 +736,7 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
             fix = Some("check the value first".to_string());
             (
                 format!(
-                    "x = {outside}\n  id_{}(x)\n  id_{}(",
+                    "x = {outside}\n  _ = id_{}(x)\n  _ = id_{}(",
                     ty.name, other.name
                 ),
                 "x)".into(),
@@ -826,7 +826,7 @@ pub fn program_with_mistake(g: &mut Gen) -> NumberCase {
             // for is refused where it is used.
             fix = Some("check the value first".to_string());
             (
-                format!("x = {too_far}\n  id_{}(", ty.name),
+                format!("x = {too_far}\n  _ = id_{}(", ty.name),
                 "x)".into(),
                 format!("inferred from `{too_far}`"),
             )

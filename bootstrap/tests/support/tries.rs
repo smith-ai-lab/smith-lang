@@ -775,7 +775,7 @@ impl Writer {
         if step.bind {
             self.line(by, &format!("{x} = {split}"));
         } else {
-            self.line(by, &split);
+            self.line(by, &format!("_ = {split}"));
         }
         self.steps(fam, f, i + 1, by, base, bad);
     }

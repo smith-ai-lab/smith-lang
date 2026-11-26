@@ -611,10 +611,10 @@ fn write_items(
                         if f == Form::Split {
                             out.push_str(&format!("{indent}    sink(x{id})\n"));
                         } else {
-                            out.push_str(&format!("{indent}    0\n"));
+                            out.push_str(&format!("{indent}    ()\n"));
                         }
                         out.push_str(&format!(
-                            "{indent}  }}\n{indent}  .none {{\n{indent}    0\n{indent}  }}\n{indent}}}\n"
+                            "{indent}  }}\n{indent}  .none {{\n{indent}    ()\n{indent}  }}\n{indent}}}\n"
                         ));
                     }
                     Form::LamLent | Form::LamTake => {
@@ -643,14 +643,14 @@ fn write_items(
                 out.push_str(&format!("{indent}if c {{\n"));
                 write_items(then, c, out, w, depth + 1, loops);
                 if !ends(then) {
-                    out.push_str(&format!("{indent}  0\n"));
+                    out.push_str(&format!("{indent}  ()\n"));
                 }
                 match otherwise {
                     Some(otherwise) => {
                         out.push_str(&format!("{indent}}} else {{\n"));
                         write_items(otherwise, c, out, w, depth + 1, loops);
                         if !ends(otherwise) {
-                            out.push_str(&format!("{indent}  0\n"));
+                            out.push_str(&format!("{indent}  ()\n"));
                         }
                         out.push_str(&format!("{indent}}}\n"));
                     }
@@ -663,7 +663,7 @@ fn write_items(
                     out.push_str(&format!("{indent}  .{case} {{\n"));
                     write_items(arm, c, out, w, depth + 2, loops);
                     if !ends(arm) {
-                        out.push_str(&format!("{indent}    0\n"));
+                        out.push_str(&format!("{indent}    ()\n"));
                     }
                     out.push_str(&format!("{indent}  }}\n"));
                 }
@@ -819,7 +819,7 @@ struct DbError {
 
 fn begin(db: Db) -> Transaction { Transaction(id: db.n) }
 
-fn debit(t: Transaction, amount: u64) -> u64 { amount }
+fn debit(t: Transaction, amount: u64) { }
 
 fn prepare(db: Db) -> Result[(), DbError] { .ok(()) }
 
@@ -1231,14 +1231,14 @@ fn write_pieces(pieces: &[Piece], c: &Lambda, out: &mut String, depth: usize, co
                 out.push_str(&format!("{indent}if c {{\n"));
                 write_pieces(then, c, out, depth + 1, count);
                 if !ends_piece(then) {
-                    out.push_str(&format!("{indent}  0\n"));
+                    out.push_str(&format!("{indent}  ()\n"));
                 }
                 match otherwise {
                     Some(otherwise) => {
                         out.push_str(&format!("{indent}}} else {{\n"));
                         write_pieces(otherwise, c, out, depth + 1, count);
                         if !ends_piece(otherwise) {
-                            out.push_str(&format!("{indent}  0\n"));
+                            out.push_str(&format!("{indent}  ()\n"));
                         }
                         out.push_str(&format!("{indent}}}\n"));
                     }
@@ -1251,7 +1251,7 @@ fn write_pieces(pieces: &[Piece], c: &Lambda, out: &mut String, depth: usize, co
                     out.push_str(&format!("{indent}  .{case} {{\n"));
                     write_pieces(arm, c, out, depth + 2, count);
                     if !ends_piece(arm) {
-                        out.push_str(&format!("{indent}    0\n"));
+                        out.push_str(&format!("{indent}    ()\n"));
                     }
                     out.push_str(&format!("{indent}  }}\n"));
                 }

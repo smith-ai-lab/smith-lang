@@ -7,6 +7,6 @@ fn word(n: i8) -> i8 { n }
 
 fn main() <console> {
   x = 200
-  byte(x)
+  _ = byte(x)
   word(x)
 }

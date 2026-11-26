@@ -655,7 +655,7 @@ fn assert_written_functions_are_named(maps: &[(&'static str, String)], written: 
 /// passes fold to the constant `f3` gives, so that no instruction of it holds a
 /// line of the file, and its code is all its own: it has a `fn` line and no `at`
 /// line, as a function all of whose code is its own has none.
-const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() <console> {\n  print(f1(\"\"))\n  var x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str <console> {\n  print(first)\n  var x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
+const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() <console> {\n  print(f1(\"\"))\n  var x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str <console> {\n  print(first)\n  var x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  _ = f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
 
 fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
     let (maps, written) = map_and_written(FOLDED.as_bytes());

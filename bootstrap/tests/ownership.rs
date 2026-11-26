@@ -626,7 +626,7 @@ fn write_items(
     let indent = "  ".repeat(depth);
     let block = |items: &[Item], out: &mut String, places: &mut [Pos], next_loop: &mut usize, extra: &str| {
         write_items(items, held, out, places, depth + 1, next_loop);
-        out.push_str(&format!("{indent}  {extra}0\n"));
+        out.push_str(&format!("{indent}  {extra}()\n"));
     };
     for item in items {
         match item {
@@ -648,7 +648,7 @@ fn write_items(
                 for (arm, case) in arms.iter().zip(["north", "south", "east"]) {
                     out.push_str(&format!("{indent}  .{case} {{\n"));
                     write_items(arm, held, out, places, depth + 2, next_loop);
-                    out.push_str(&format!("{indent}    0\n{indent}  }}\n"));
+                    out.push_str(&format!("{indent}    ()\n{indent}  }}\n"));
                 }
                 out.push_str(&format!("{indent}}}\n"));
             }
@@ -1091,13 +1091,13 @@ fn a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_
         // The program a seed found: the path that breaks gives `v` away, and the
         // path that does not gives a field of it, so a look made later reads `v`
         // given away already.
-        "  loop i in 0..3 {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    0\n  }\n  n4 = @v.count\n  0\n",
+        "  loop i in 0..3 {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
         // A `break` in an arm of a `match`, and a field given away in the others.
-        "  loop i in 0..3 {\n    match d {\n      .north {\n        n2 = sink_holder($v)\n        break\n      }\n      .south {\n        n3 = sink_key(v.key)\n        break\n      }\n      .east {\n        n4 = sink_key(v.key)\n        0\n      }\n    }\n  }\n  n5 = @v.count\n  0\n",
+        "  loop i in 0..3 {\n    match d {\n      .north {\n        n2 = sink_holder($v)\n        break\n      }\n      .south {\n        n3 = sink_key(v.key)\n        break\n      }\n      .east {\n        n4 = sink_key(v.key)\n        ()\n      }\n    }\n  }\n  n5 = @v.count\n  0\n",
         // A `break` of a loop inside a loop, read in the loop around it.
-        "  loop i in 0..3 {\n    loop j in 0..3 {\n      if c {\n        n2 = sink_holder($v)\n        break\n      }\n      n3 = sink_key(v.key)\n      0\n    }\n    n4 = @v.count\n    break\n  }\n  0\n",
+        "  loop i in 0..3 {\n    loop j in 0..3 {\n      if c {\n        n2 = sink_holder($v)\n        break\n      }\n      n3 = sink_key(v.key)\n      ()\n    }\n    n4 = @v.count\n    break\n  }\n  0\n",
         // A loop with no range, which only a `break` ends.
-        "  loop {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    0\n  }\n  n4 = @v.count\n  0\n",
+        "  loop {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
     ];
     let mut missed = Vec::new();
     for (k, body) in refused.iter().enumerate() {

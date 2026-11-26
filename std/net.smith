@@ -406,14 +406,14 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <al
   // is then refused as it is elsewhere, and it does not set the option that
   // lets a port be shared.
   if on_windows() {
-    __system(6, fd, 65535, 0 - 5, one, 4, 0)
+    _ = __system(6, fd, 65535, 0 - 5, one, 4, 0)
   } else {
-    __system(6, fd, level, name, one, 4, 0)
+    _ = __system(6, fd, level, name, one, 4, 0)
   }
   if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
-    __system(9, fd, 0, 0, 0, 0, 0)
+    _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure(address_text(host, port), "bind", bound))
   }
   // The system holds this many connections that nothing has accepted, or as
@@ -422,7 +422,7 @@ fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <al
   // A wave of connections that arrives faster than they are accepted is held.
   listening = __system(2, fd, 4096, 0, 0, 0, 0)
   if listening < 0 {
-    __system(9, fd, 0, 0, 0, 0, 0)
+    _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure(address_text(host, port), "listen", listening))
   }
   .ok(Listener(handle: fd, opened: true, host: host, port: port))
@@ -474,7 +474,7 @@ fn system_stop(l: take Listener) {
   h = l.handle
   opened = l.opened
   __consume(l)
-  if opened { __system(9, h, 0, 0, 0, 0, 0) }
+  if opened { _ = __system(9, h, 0, 0, 0, 0, 0) }
 }
 
 // The bytes of a file, up to 60000 of them, or none when it cannot be opened,
@@ -495,7 +495,7 @@ fn file_text(path: str) -> List[Byte] <alloc> {
     if made.size + chunk.size > 60000 { break }
     made = append(made, chunk)
   }
-  __system(9, fd, 0, 0, 0, 0, 0)
+  _ = __system(9, fd, 0, 0, 0, 0, 0)
   made
 }
 
@@ -519,7 +519,7 @@ fn clock() -> u64 <alloc> {
   stamp = append(eight(0), eight(0))
   var which: i64 = 1
   if on_macos() { which = 6 }
-  __system(18, which, stamp, 0, 0, 0, 0)
+  _ = __system(18, which, stamp, 0, 0, 0, 0)
   if stamp.size < 16 { return 0 }
   var seconds: u64 = 0
   var nanoseconds: u64 = 0
@@ -558,7 +558,7 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
   wait_at_most(fd, 20, ms)
   wait_at_most(fd, 21, ms)
   if __system(4, fd, server.bytes, server.bytes.size, 0, 0, 0) < 0 {
-    __system(9, fd, 0, 0, 0, 0, 0)
+    _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .none
   }
   var framed: List[Byte] = []
@@ -572,7 +572,7 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
     rest = packet[sent..]
     given = __system(7, fd, rest, rest.size, no_signal(), 0, 0)
     if given < 0 and given != -4 {
-      __system(9, fd, 0, 0, 0, 0, 0)
+      _ = __system(9, fd, 0, 0, 0, 0, 0)
       return .none
     }
     if given > 0 { sent = saturating_add(sent, count(given)) }
@@ -587,7 +587,7 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
       // A task waits for the bytes until the time is gone, and the others run.
       n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
       if n == would_block() {
-        wait_to_read_by(wrapping_narrow(fd), span(clamp(ms)))
+        _ = wait_to_read_by(wrapping_narrow(fd), span(clamp(ms)))
         n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
         if n == would_block() { n = 0 }
       }
@@ -596,14 +596,14 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
     }
     if n == -4 {
     } else if n <= 0 {
-      __system(9, fd, 0, 0, 0, 0, 0)
+      _ = __system(9, fd, 0, 0, 0, 0, 0)
       return .none
     } else {
       got = append(got, __sized(buffer, count(n)))
     }
     if got.size >= 2 and wanted == 2 { wanted = got[0] * 256 + got[1] + 2 }
   }
-  __system(9, fd, 0, 0, 0, 0, 0)
+  _ = __system(9, fd, 0, 0, 0, 0, 0)
   if got.size < wanted or wanted < 14 { return .none }
   var whole: List[Byte] = []
   loop k in 0..got.size { if k >= 2 and k < wanted { whole = push(whole, got[k]) } }
@@ -720,7 +720,7 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
       // and the others run meanwhile.
       got = __system(8, fd, buffer, 4800, no_wait(), from, length)
       if got == would_block() {
-        wait_to_read_by(wrapping_narrow(fd), span(clamp(wait)))
+        _ = wait_to_read_by(wrapping_narrow(fd), span(clamp(wait)))
         got = __system(8, fd, buffer, 4800, no_wait(), from, length)
       }
     } else {
@@ -809,19 +809,19 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
       .ok(found) {
         match found {
           .some(addresses) {
-            __system(9, fd, 0, 0, 0, 0, 0)
+            _ = __system(9, fd, 0, 0, 0, 0, 0)
             return .ok(addresses)
           }
           .none { }
         }
       }
       .err(e) {
-        __system(9, fd, 0, 0, 0, 0, 0)
+        _ = __system(9, fd, 0, 0, 0, 0, 0)
         return .err(e)
       }
     }
   }
-  __system(9, fd, 0, 0, 0, 0, 0)
+  _ = __system(9, fd, 0, 0, 0, 0, 0)
   .err(.unknown_host(named))
 }
 
@@ -832,7 +832,7 @@ fn connect_place(where: Place, host: str, port: 0..65536) -> Result[Connection, 
   if where.family != 2 { dual_stack(fd) }
   connected = __system(4, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if connected < 0 {
-    __system(9, fd, 0, 0, 0, 0, 0)
+    _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure(address_text(host, port), "connect", connected))
   }
   .ok(Connection(handle: fd, opened: true, host: host, port: port))
@@ -922,7 +922,7 @@ fn system_close(c: take Connection) {
   h = c.handle
   opened = c.opened
   __consume(c)
-  if opened { __system(9, h, 0, 0, 0, 0, 0) }
+  if opened { _ = __system(9, h, 0, 0, 0, 0, 0) }
 }
 
 fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] <alloc> {
@@ -932,7 +932,7 @@ fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] <alloc>
   if where.family != 2 { dual_stack(fd) }
   bound = __system(1, fd, where.bytes, where.bytes.size, 0, 0, 0)
   if bound < 0 {
-    __system(9, fd, 0, 0, 0, 0, 0)
+    _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .err(failure(address_text(host, port), "bind", bound))
   }
   .ok(Socket(handle: fd, opened: true, host: host, port: port))
@@ -971,5 +971,5 @@ fn system_unbind(s: take Socket) {
   h = s.handle
   opened = s.opened
   __consume(s)
-  if opened { __system(9, h, 0, 0, 0, 0, 0) }
+  if opened { _ = __system(9, h, 0, 0, 0, 0, 0) }
 }

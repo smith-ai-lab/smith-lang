@@ -7,6 +7,7 @@ built:
   - "`match` as a statement and as an expression, patterns that name a case, a bare name, a tuple, and a whole number, a character, or a text, written inside a case and inside a tuple too, the first pattern that matches being taken, and an error for a case left out, for a `match` on whole numbers or text with no bare name at the end, and for a pattern the ones before it cover, with a `match` on whole numbers compiled to one jump"
   - "a pattern for a case that holds `()` written without it, as `.more`"
   - "not a `match` on a range of whole numbers that is complete without a bare name"
+  - "the block of a `match` written as a statement ends in `()`, so a value that it ends in is refused as a value that nothing uses"
 ---
 
 # Match

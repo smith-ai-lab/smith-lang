@@ -206,8 +206,8 @@ fn program(c: &Case) -> String {
     let mut k = 0;
     let root = functions(&c.tree, &mut k, &mut functions_text, c.fails);
     let start = match c.tree.given {
-        Some(id) => format!("  g = opened({id})\n  spawn {{ n{root}(g) }}"),
-        None => format!("  spawn {{ n{root}() }}"),
+        Some(id) => format!("  g = opened({id})\n  _ = spawn {{ n{root}(g) }}"),
+        None => format!("  _ = spawn {{ n{root}() }}"),
     };
     let wait = if c.waits { "  late = test_ready_by(999999, ms(10))\n" } else { "" };
     let ready: Vec<String> = c.ready.iter().map(u64::to_string).collect();

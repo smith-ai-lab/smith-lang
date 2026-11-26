@@ -316,7 +316,7 @@ fn program(lines: &[Item], walked: &Walked, form: Form) -> String {
             walked.type_name()
         ),
         Form::Each => format!(
-            "fn f(c: {}) -> Int {{\nvar acc: Int = 0\nvar kept: Int = 0\nvar left = false\neach(c) fn(v) {{\n{block}.go\n}}\nif left {{ return kept }}\nwrapping_add(acc, 1000)\n}}\n",
+            "fn f(c: {}) -> Int {{\nvar acc: Int = 0\nvar kept: Int = 0\nvar left = false\n_ = each(c) fn(v) {{\n{block}.go\n}}\nif left {{ return kept }}\nwrapping_add(acc, 1000)\n}}\n",
             walked.type_name()
         ),
     };
@@ -520,7 +520,7 @@ impl Iterate[Countdown, i32] {
 
 ";
     let each = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn main() <console, alloc> {{\n  each(Countdown(from: 3)) fn(v) {{\n    print(\"{{v}}\")\n    if v == 2 {{ .stop }} else {{ .go }}\n  }}\n  print(\"done\")\n}}\n"
+        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn main() <console, alloc> {{\n  _ = each(Countdown(from: 3)) fn(v) {{\n    print(\"{{v}}\")\n    if v == 2 {{ .stop }} else {{ .go }}\n  }}\n  print(\"done\")\n}}\n"
     );
     assert_eq!(evaluate(&each), Outcome { stdout: b"3\n2\ndone\n".to_vec(), status: 0 });
     let largest = format!(

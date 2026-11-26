@@ -388,7 +388,7 @@ fn a_child_started_where_a_joined_one_was_is_a_new_task_with_a_value_of_its_own(
 /// after the arena it was started in has ended.
 fn left_running(seed: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  _ = spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  _ = spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -609,7 +609,7 @@ fn kept_by_drops(hows: &[&str]) {
 /// dropped in the others, in a tuple, in a struct, and as the value that the last
 /// statement of an arm gives to a `match` whose value is thrown away.
 const DROPS: [&str; 23] = [
-    "spawn { total(build(500)) }",
+    "_ = spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }",
     "t = spawn { total(build(500)) }\n    if r < 5 { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) } else { }",
     "t = spawn { total(build(500)) }\n    if r < 5 { } else { sum = wrapping_add(sum, wrapping_mul(join(t), 0)) }",
@@ -617,7 +617,7 @@ const DROPS: [&str; 23] = [
     "hs = handles()",
     "held = Held.one(spawn { total(build(500)) })",
     "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })",
-    "match r < 1000 {\n      .true { spawn { total(build(500)) } }\n      .false { spawn { total(build(500)) } }\n    }",
+    "_ = match r < 1000 {\n      .true { spawn { total(build(500)) } }\n      .false { spawn { total(build(500)) } }\n    }",
     "var t = spawn { total(build(500)) }",
     "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })",
     "ignore(spawn { total(build(500)) })",
@@ -649,7 +649,7 @@ fn a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined() {
 fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped() {
     let targets = runnable();
     for (source, wanted) in [
-        (dropped_children(3_000, 1, "spawn { total(build(100)) }"), "3000\n"),
+        (dropped_children(3_000, 1, "_ = spawn { total(build(100)) }"), "3000\n"),
     ]
     .into_iter()
     .chain(DROPS.iter().map(|how| (dropped_children(30, 2, how), "30\n")))
@@ -893,7 +893,7 @@ impl Item {
                     add(&format!("join(t{id})"))
                 )
             }
-            Hold::Over => format!("handles({})", self.size),
+            Hold::Over => format!("_ = handles({})", self.size),
         }
     }
 }
@@ -1071,7 +1071,7 @@ fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_ask
 /// ready, one of them with a child of its own, and ends without joining any.
 fn left_waiting(rounds: u64) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 <task> {{\n  spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  spawn {{ waits(r) }}\n  spawn {{ parent(r) }}\n  spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 <diverge> {{\n  var sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 <task> {{\n  _ = spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  _ = spawn {{ waits(r) }}\n  _ = spawn {{ parent(r) }}\n  _ = spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 <diverge> {{\n  var sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
     )
 }
 
@@ -1167,7 +1167,7 @@ fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_blo
 {
     let source = |seed: u64| {
         format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task, console, alloc> {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 <task, console, alloc> {{\n  spawn {{ waits(n) }}\n  spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 <task, console, alloc> {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 <diverge, console, alloc> {{\n  with test_scheduler_with_io({seed}, [])\n  spawn {{ parent(7) }}\n  spawn {{ waits(8) }}\n  3\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{run()}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task, console, alloc> {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 <task, console, alloc> {{\n  _ = spawn {{ waits(n) }}\n  _ = spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 <task, console, alloc> {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 <diverge, console, alloc> {{\n  with test_scheduler_with_io({seed}, [])\n  _ = spawn {{ parent(7) }}\n  _ = spawn {{ waits(8) }}\n  3\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{run()}}\")\n}}\n"
         )
     };
     for seed in 0..8u64 {

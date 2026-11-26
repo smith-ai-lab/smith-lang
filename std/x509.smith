@@ -293,10 +293,10 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
       authority = .some(a)
       path_length = p
     } else if is_id_ce(id, 15) {
-      try bits(inner)
+      _ = try bits(inner)
     } else if is_id_ce(id, 37) {
       uses = try parts(inner, 1, 1000000)
-      loop j in 0..uses.size { try object(uses[j]) }
+      loop j in 0..uses.size { _ = try object(uses[j]) }
     } else if critical {
       return .err("an extension marked critical that is not read")
     }

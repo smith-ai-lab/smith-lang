@@ -621,7 +621,7 @@ fn file_with_functions_that_end_in_nothing(g: &mut Gen) -> File {
                 file.push(&format!(" = {value}\n}}\n"));
             }
         }
-        calls.push_str(&format!("  f{i}()\n"));
+        calls.push_str(&format!("  _ = f{i}()\n"));
     }
     file.push(&format!("fn main() {{\n{calls}  done = 0\n}}\n"));
     file
@@ -679,7 +679,7 @@ fn file_with_calls_of_a_trait_with_a_lambda(g: &mut Gen) -> File {
     file.push("  fn apply(c: Box, a: Byte, f: fn(Byte) -> str) -> str { f(a) }\n}\n\n");
     file.push("fn main() {\n  box = Box(n: 3)\n  other = Other(n: 4)\n  small: Byte = 5\n");
     for _ in 0..1 + g.below(4) {
-        file.push("  ");
+        file.push("  _ = ");
         // The call with `box` and a number settles on `i64`, which no
         // implementation is for.
         let (callee, number) = *g.pick(&[("box", "small"), ("box", "5"), ("other", "small")]);

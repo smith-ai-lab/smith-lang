@@ -95,6 +95,8 @@ enum Stmt {
     Assign(String, Expr),
     Destructure(Pat, Option<Ty>, Expr),
     Print(Expr),
+    /// `_ = e`: `e` is run and what it gives is thrown away.
+    Discard(Expr),
     Expr(Expr),
     /// Lines written as they are, with the mistake placed after the first
     /// part: what it mentions and what its fix mentions, if it has one.
@@ -461,7 +463,7 @@ impl Writing<'_> {
             }
             3 => {
                 let ty = Ty::Tup(vec![Ty::Unit, Ty::Unit]);
-                Stmt::Expr(self.value(ctx, &ty, depth))
+                Stmt::Discard(self.value(ctx, &ty, depth))
             }
             4 => {
                 let ty = some_type(self.g, 2);
@@ -791,6 +793,9 @@ fn stmts(m: &Model, env: &mut Vec<(String, Val)>, list: &[Stmt], out: &mut Vec<u
                 out.extend_from_slice(&v);
                 out.push(b'\n');
             }
+            Stmt::Discard(e) => {
+                eval(m, env, e, out);
+            }
             Stmt::Expr(e) => last = Some(eval(m, env, e, out)),
             Stmt::Raw(..) => unreachable!("a mistake"),
         }
@@ -980,6 +985,10 @@ impl Writer {
                     self.push("print(");
                     self.expr(e, indent);
                     self.push(")");
+                }
+                Stmt::Discard(e) => {
+                    self.push("_ = ");
+                    self.expr(e, indent);
                 }
                 Stmt::Expr(e) => self.expr(e, indent),
                 Stmt::Raw(before, rest, mentions, fix) => {
