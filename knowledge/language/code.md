@@ -54,7 +54,7 @@ fn expect(check: Code[fn() -> bool]) -> Code[Result[(), Failed]]
 `code` is itself a function over code. It returns the code of its lambda, and inside that lambda `run(c)` stands for the code `c`. `both` receives two checks and returns the code of one expression.
 
 ```
-fn both(second: Code[fn() -> bool]; first: Code[fn() -> bool]) -> Code[bool] {
+fn both(first: Code[fn() -> bool], second: Code[fn() -> bool]) -> Code[bool] {
   code { run(first)() and run(second)() }
 }
 ```
@@ -65,11 +65,11 @@ A call of `both` is the expression `run(first)() and run(second)()` with the two
 use std.bits (i32)
 
 fn ordered(a: i32, b: i32, c: i32) -> bool {
-  both(first: { a < b }) { b < c }
+  both({ a < b }) { b < c }
 }
 ```
 
-`ordered` means `a < b and b < c`. The first check is passed by name and the last after the call, as [Lambdas](lambdas.md) says of a call with two lambdas.
+`ordered` means `a < b and b < c`. The first check is passed inside the parentheses and the last after the call, as [Lambdas](lambdas.md) says of a call with two lambdas.
 
 ## What code is
 
