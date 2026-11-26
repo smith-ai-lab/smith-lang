@@ -89,15 +89,26 @@ pub struct Regioned {
 }
 
 impl Regioned {
-    /// Whether the value is built in a region.
-    pub fn holds(&self, v: Value) -> bool {
+    /// Whether the value is kept by a region, wherever in the function it is built.
+    pub fn kept(&self, v: Value) -> bool {
         self.of[v.0].is_some()
     }
 
-    /// The frame of the region the value is built in, as a name that is made before
-    /// the place, which is the instruction `at` of the block.
-    pub fn frame_at(&self, v: Value, block: usize, at: usize) -> Value {
-        let depth = self.of[v.0].expect("a value built in a region");
+    /// Whether the value is built in a region at the place, which is the
+    /// instruction `at` of the block.
+    pub fn holds(&self, v: Value, block: usize, at: usize) -> bool {
+        self.frame_at(v, block, at).is_some()
+    }
+
+    /// The frame of the region the value is built in at the place, which is the
+    /// instruction `at` of the block, as a name that is made before the place.
+    /// A value that a region keeps has no frame at a place that no frame of the
+    /// region is made before, as the places of a function that installs one
+    /// handler after the other, such as the state of a handler that was made before
+    /// the region of the next was, and is built there as a value that no region
+    /// keeps is.
+    pub fn frame_at(&self, v: Value, block: usize, at: usize) -> Option<Value> {
+        let depth = self.of[v.0]?;
         let dominates = |db: usize, di: usize| {
             if db == block {
                 return di <= at;
@@ -111,11 +122,11 @@ impl Regioned {
             }
             false
         };
-        self.frames[&depth]
+        self.frames
+            .get(&depth)?
             .iter()
             .find(|(_, db, di)| dominates(*db, *di))
             .map(|(frame, _, _)| *frame)
-            .expect("a name of the frame of the region that is made before")
     }
 }
 

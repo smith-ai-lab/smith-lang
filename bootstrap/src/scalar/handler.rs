@@ -170,12 +170,12 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
                 Op::System {
                     call: System::Allocate,
                     ..
-                } => !given[k][i.results[0].0] && !regioned[k].holds(i.results[0]),
+                } => !given[k][i.results[0].0] && !regioned[k].kept(i.results[0]),
                 Op::Call { function, .. } => {
                     uses[*function].results
                         && !polls[*function]
                         && !gives_back(f, &given[k], &i.results)
-                        && !in_a_region(&regioned[k], &i.results)
+                        && !i.results.iter().any(|v| regioned[k].kept(*v))
                 }
                 _ => false,
             })
@@ -318,10 +318,24 @@ fn is_poll(f: &Function) -> bool {
     f.name.ends_with("<poll>") || f.name == "<poll any>"
 }
 
+/// The frame of the region that what a call gives is built in, when it is memory
+/// that a region keeps, so that the callee builds it in the region, and the
+/// region is made before the instruction `at` of the block.
+fn region_of_call(
+    regioned: &escape::Regioned,
+    results: &[Value],
+    block: usize,
+    at: usize,
+) -> Option<Value> {
+    results
+        .iter()
+        .find_map(|v| regioned.frame_at(*v, block, at))
+}
+
 /// Whether what a call gives is memory that a region keeps, so that the callee
 /// builds it in the region.
-fn in_a_region(regioned: &escape::Regioned, results: &[Value]) -> bool {
-    results.iter().any(|v| regioned.holds(*v))
+fn in_a_region(regioned: &escape::Regioned, results: &[Value], block: usize, at: usize) -> bool {
+    region_of_call(regioned, results, block, at).is_some()
 }
 
 /// Whether what a call gives is memory that the function returns, so that the
@@ -631,10 +645,12 @@ fn with_state(
                 Op::System {
                     call: System::Allocate,
                     args,
-                } if regioned.holds(i.results[0]) => {
+                } if regioned.holds(i.results[0], k, at_instruction) => {
                     // Memory that a region keeps is built in the stack of the
                     // region, which its frame keeps from one request to the next.
-                    let frame = regioned.frame_at(i.results[0], k, at_instruction);
+                    let frame = regioned
+                        .frame_at(i.results[0], k, at_instruction)
+                        .expect("a region");
                     let [at, left] = load_pair(&mut f, &mut kept, frame, REGION_STACK);
                     let next = fresh(&mut f);
                     i.op = Op::Call {
@@ -665,19 +681,16 @@ fn with_state(
                     *stack = Some(next);
                 }
                 Op::Call { function, args }
-                    if uses[*function].any() && tasks && in_a_region(regioned, &i.results) =>
+                    if uses[*function].any()
+                        && tasks
+                        && in_a_region(regioned, &i.results, k, at_instruction) =>
                 {
                     // What the callee builds for its results is built in the stack
                     // of the region, and what it builds for its temporaries is built
                     // where the function's are.
                     let callee = uses[*function];
-                    let frame = regioned.frame_at(
-                        *(i.results.iter())
-                            .find(|v| regioned.holds(**v))
-                            .expect("a region"),
-                        k,
-                        at_instruction,
-                    );
+                    let frame =
+                        region_of_call(regioned, &i.results, k, at_instruction).expect("a region");
                     if first && callee.temporaries {
                         let [at, left] = now.temporaries.expect("the function takes what it gives");
                         let made = fresh(&mut f);
@@ -982,13 +995,18 @@ fn needing_of(
     regions: bool,
 ) -> Uses {
     let mut now = Uses::default();
-    for i in f.blocks.iter().flat_map(|b| &b.instructions) {
+    for (k, at, i) in (f.blocks.iter().enumerate()).flat_map(|(k, b)| {
+        b.instructions
+            .iter()
+            .enumerate()
+            .map(move |(at, i)| (k, at, i))
+    }) {
         match &i.op {
             Op::System {
                 call: System::Allocate,
                 ..
             } => {
-                if regioned.holds(i.results[0]) {
+                if regioned.holds(i.results[0], k, at) {
                     now.regioned = true;
                 } else if given[i.results[0].0] {
                     now.results = true;
@@ -1010,7 +1028,7 @@ fn needing_of(
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
                 now.regioned |= callee.regioned;
-                if in_a_region(regioned, &i.results) {
+                if in_a_region(regioned, &i.results, k, at) {
                     now.regioned = true;
                     // What it builds for its results is built in the region.
                     now.temporaries |= callee.temporaries;
