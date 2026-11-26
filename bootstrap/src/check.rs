@@ -8808,7 +8808,7 @@ impl<'a> Checker<'a> {
                                     || matches!(value, Expr::Match(m) if literal_blocks(m)))
                                     && !matches!(body.numbers, Numbers::Off) =>
                                 {
-                                    self.literal_binding(body, name, value)
+                                    self.literal_binding(body, (name, *var), value)
                                 }
                                 None => self.expr(body, value, &Want::Any),
                             };

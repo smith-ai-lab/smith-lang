@@ -104,7 +104,7 @@ const UNBUILT: &[Unbuilt] = &[
     },
     // A name a statement that is not built would bind is still bound.
     Unbuilt {
-        declares: "fn u{i}() -> Int {\n  a = 1\n  z = a\n  b = (1)@(2)\n  (c, d) = (1)@(2)\n  wrapping_add(z, wrapping_add(b, wrapping_add(c, d)))\n}\n",
+        declares: "fn u{i}() -> Int {\n  a: Int = 1\n  z = a\n  b = (1)@(2)\n  (c, d) = (1)@(2)\n  wrapping_add(z, wrapping_add(b, wrapping_add(c, d)))\n}\n",
         call: "u{i}()",
         parsed: true,
     },
