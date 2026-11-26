@@ -206,8 +206,8 @@ A component that meets a failure handles it where it is, and writes what stands 
 ```
 fn note_card(id: str) <markup, alloc, store> {
   match load(id) {
-    .ok(note) => h2 { text(note.title) }
-    .err(_) => p(class: "missing") { text("This note is gone.") }
+    .ok(note) { h2 { text(note.title) } }
+    .err(e) { p(class: "missing") { text("This note is gone.") } }
   }
 }
 ```
