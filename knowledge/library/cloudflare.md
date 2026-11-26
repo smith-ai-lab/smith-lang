@@ -37,7 +37,7 @@ After `smith deploy`, the folder `dist` holds the module, the file of JavaScript
 | [`store`](store.md) | `durable()`, which keeps each value in the storage of a Durable Object |
 | [`messages`](mcp.md) | `http`, through [`at`](http.md#a-server-of-messages-at-a-path), or the request itself for a program that is only a server of messages |
 
-`durable` keeps both promises of [`store`](store.md#what-it-promises): a read sees every write before it, and the writes of one request are kept together or none is. Cloudflare's store of keys whose reads may be behind its writes keeps neither, so nothing here answers `store` with it.
+`durable` begins a group with `group` and ends the `Group` it is given in `keep` and in `drop_writes`, as [every handler of `store`](store.md#a-group-is-opened-and-ended-once) does. It keeps both promises of [`store`](store.md#what-it-promises): a read sees every write before it, and the writes of one request are kept together or none is. Cloudflare's store of keys whose reads may be behind its writes keeps neither, so nothing here answers `store` with it.
 
 ## What worker writes
 
