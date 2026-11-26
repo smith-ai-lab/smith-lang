@@ -328,7 +328,9 @@ fn main(args: List[str]) <console, alloc, time, diverge> {
   }
   last = spawn { sleeper(5000) }
   join(last)
-  print(\"done {wrapping_sub(since_1970(now()), since_1970(before))}\")
+  end: u64 = since_1970(now())
+  start: u64 = since_1970(before)
+  print(\"done {wrapping_sub(end, start)}\")
 }
 ";
 
