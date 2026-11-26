@@ -474,9 +474,17 @@ impl Builder<'_, '_> {
         // A range whose greatest number is above `i128::MAX` has no fact, as no
         // bound of it is a number the proof holds, so nothing is proven of a
         // value of one. A number written is its own value, whatever range it is
-        // taken at.
-        if !matches!(e, Expr::Number { .. })
-            && matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none())
+        // taken at. A product of two values that are not constants is one
+        // value with no range, whatever range its type has, so it is read
+        // below, where its sides are known.
+        if !matches!(
+            e,
+            Expr::Number { .. }
+                | Expr::Arith {
+                    op: ArithOp::Mul,
+                    ..
+                }
+        ) && matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none())
             || matches!(e, Expr::Name { name, .. } if matches!(
                 self.body.names.iter().rev().find(|(n, _)| n == name),
                 Some((_, Ty::Int(t))) if t.ends().is_none()))
@@ -568,6 +576,11 @@ impl Builder<'_, '_> {
                     ArithOp::Add => self.combine(&l, 1, &r),
                     ArithOp::Sub => self.combine(&l, -1, &r),
                     ArithOp::Mul => {
+                        let wide = matches!(self.types.get(&addr(e)), Some(Ty::Int(t)) if t.ends().is_none());
+                        if (l.terms.is_empty() || r.terms.is_empty()) && wide {
+                            self.overflow = true;
+                            return None;
+                        }
                         if l.terms.is_empty() {
                             self.scaled(l.constant, &r)
                         } else if r.terms.is_empty() {
