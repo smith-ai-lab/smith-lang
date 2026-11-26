@@ -8,7 +8,7 @@ built:
   - "`render`, the handler of `markup`, which keeps the page in a `Text` its operations append to and gives it as an `Html`, whose field is private to `std.html`, and which has `Fmt`, so `print(\"{page}\")` writes the page as its text"
   - "the operations of `markup` are private to `std.html`: a program that imports one, or handles `markup`, is refused, so `render` is the only handler and no function writes a text as HTML"
   - "a tag stays open until something that is not an attribute is written, so an attribute follows the tag it belongs to, and a handler answers `markup` with the operations `start`, `attribute`, `emit`, `include`, `void`, and `end`"
-  - "the elements `html`, `head`, `title`, `body`, `h1`, `h2`, `p`, `b`, `span`, `ul`, `li`, `article`, and `a`, each called with its text as `h1(\"Hi\")` or with a block as `in_h1() { ... }`, never with both, and `br` and `input`, which hold nothing, with attributes as named arguments, each written only when it is given and not empty; every function that writes a page carries `alloc`"
+  - "the elements `html`, `head`, `title`, `body`, `h1`, `h2`, `p`, `b`, `span`, `ul`, `li`, `article`, and `a`, each one function that takes its attributes as named arguments and a block as its last argument, as `h1 { text(\"Hi\") }`, with text written only by `text`, and `br` and `input`, which hold nothing and take no block, with attributes as named arguments, each written only when it is given and not empty; every function that writes a page carries `alloc`"
   - "`Link`, which `a` takes as its `href`, made by `link` from a link written out, which is refused where it is written when it holds a space or a control character or has a scheme but `http`, `https`, or `mailto`, and by `check_link` from a text known when the program runs, as a `Result` with a `LinkError`; no element has `src` yet"
   - "not `div`, whose name the prelude holds for division, not `attr`, whose name is a text written in the source and checked when the program is built, which waits on functions over code"
 ---
@@ -18,17 +18,17 @@ built:
 `std.html` writes HTML. An element is a function, a page is the calls that make it, and nothing of a page is kept as a tree: each call writes its part as it runs.
 
 ```
-use std.html (render, Html, in_html, in_head, title, in_body, h1, p)
+use std.html (render, Html, html, head, title, body, h1, p, text)
 
 fn hello(name: str) -> Html <alloc> {
   render() {
-    in_html() {
-      in_head() {
-        title("Hello")
+    html {
+      head {
+        title { text("Hello") }
       }
-      in_body() {
-        h1("Hello, {name}")
-        p("This page is written in Smith.")
+      body {
+        h1 { text("Hello, {name}") }
+        p { text("This page is written in Smith.") }
       }
     }
   }
@@ -39,41 +39,38 @@ fn hello(name: str) -> Html <alloc> {
 
 ## An element
 
-An element is held in one of two ways, and each way is a function of its own, so an element is never given a text and a block, nor neither.
+An element is one function, named for it, that takes its attributes as named arguments and a block as its last argument. It writes its opening tag, runs the block, and writes its closing tag. `body { ... }` writes `<body>`, runs the block, and writes `</body>`, and it reads as the page does: the body, and in it these lines. The block is a lambda, written after the call as [Lambdas](../language/lambdas.md) says, and a call whose only argument is a block has no parentheses. Each line of the block writes what stands inside the element.
 
-- **With its text.** `h1("Hello")` writes `<h1>Hello</h1>`. The function is named for the element, and the text is its first argument, which is required.
-- **With a block.** `in_body() { ... }` writes `<body>`, runs the block, and writes `</body>`. The function is named for the element with `in_` before it, and it reads as the page does: in the body, these lines. The block is a lambda, written after the call as [Lambdas](../language/lambdas.md) says, and each line of it writes what stands inside the element.
-
-`h1("Hi") { p("x") }` is refused, as `h1` takes no block, and `in_h1()` is refused, as `in_h1` needs its block. The text form is the bare name because most elements of a page are leaves, such as `title`, `h1`, `p`, and `li`, and the form that holds a text is the one that is written most; the block form is longer by three letters and is written where a page nests. A function that took either would take both, or neither, and `""` would mean no text.
-
-A block is statements and gives no value, so what an element holds is never the value of its block. Text among other elements is written by `text`.
+Text is not an argument of an element. It is written by `text`, in its place among the children, so text and elements mix in the order they are written.
 
 ```
-in_p() {
+p {
   text("Hello, ")
-  b(name)
+  b { text(name) }
   text("!")
 }
 ```
 
-This writes `<p>Hello, <b>Ana</b>!</p>` for the name `Ana`. An element that holds nothing, as `br` and `input`, takes neither a text nor a block.
+This writes `<p>Hello, <b>Ana</b>!</p>` for the name `Ana`. There is one name for each element and one way to write what it holds, so a model has no choice to make between a form for a text and a form for a block, and a text that stands among elements is written as it is anywhere else. `h1("Hi")` is refused, as `h1` takes a block, and `h1()` is refused, as `h1` needs its block.
+
+A block is statements and gives no value, so what an element holds is never the value of its block. An element that holds nothing, as `br` and `input`, takes no block, and `br { }` is refused.
 
 ## Attributes
 
 An attribute is an argument with a name, so the name of one is checked when the program is built.
 
 ```
-a("Open", href: link("/notes/7"), class: "button")
+a(href: link("/notes/7"), class: "button") { text("Open") }
 
 input(name: "title", placeholder: "Title")
 ```
 
-These write `<a href="/notes/7" class="button">Open</a>` and `<input name="title" placeholder="Title">`. Every element has the attributes every element may have, as `class` and `id`, and its own, as `href` on `a`. Each but `href` has a default that writes nothing, so only what is given is written. `a("Open", hreff: link("/"))` is refused, as `a` has no parameter `hreff`. The compiler does not build `std.html`, so no words are quoted.
+These write `<a href="/notes/7" class="button">Open</a>` and `<input name="title" placeholder="Title">`. Every element has the attributes every element may have, as `class` and `id`, and its own, as `href` on `a`. Each but `href` has a default that writes nothing, so only what is given is written. `a(hreff: link("/")) { text("Open") }` is refused, as `a` has no parameter `hreff`. The compiler does not build `std.html`, so no words are quoted.
 
 An attribute the library has no parameter for, as one that begins `data-`, is written by `attr`, on the first lines of the element's block.
 
 ```
-li() {
+li {
   attr("data-id", "7")
   text("First")
 }
@@ -93,34 +90,34 @@ A link is made in one of two ways, and `Link` has no other, as its field is priv
 - **`check_link`**, from a text known when the program runs, as one the user typed or a store gave. It gives a `Result` whose error is a `LinkError`: `not_plain` or `scheme`, each holding the text, with a [`Fmt`](fmt.md) that writes the text and what is wrong.
 
 ```
-use std.html (Html, a, check_link, link, p, render)
+use std.html (Html, a, check_link, link, p, render, text)
 
 fn home() -> Html <alloc> {
   render() {
-    a("Home", href: link("/"))
+    a(href: link("/")) { text("Home") }
   }
 }
 
 fn profile(site: str) -> Html <alloc> {
   match check_link(site) {
-    .ok(to) { render() { a("Site", href: to) } }
-    .err(e) { render() { p("{e}") } }
+    .ok(to) { render() { a(href: to) { text("Site") } } }
+    .err(e) { render() { p { text("{e}") } } }
   }
 }
 ```
 
-`link("javascript:alert(1)")` is refused where it is written, and `a("Open", href: "/")` is refused, as a text is not a `Link`. A `site` of `javascript:alert(1)` gives `.err(.scheme(...))`, so the page holds no link that runs code. The value of a link is escaped, as every text is.
+`link("javascript:alert(1)")` is refused where it is written, and `a(href: "/") { text("Open") }` is refused, as a text is not a `Link`. A `site` of `javascript:alert(1)` gives `.err(.scheme(...))`, so the page holds no link that runs code. The value of a link is escaped, as every text is.
 
 ## Every text is escaped
 
-A text given to an element, to `text`, or to an attribute is written so that it is text and nothing else: `<`, `>`, `&`, and a quote are written as HTML writes them. `h1("{name}")` is safe whatever `name` holds, as the element escapes the finished text.
+A text given to `text` or to an attribute is written so that it is text and nothing else: `<`, `>`, `&`, and a quote are written as HTML writes them. `h1 { text("{name}") }` is safe whatever `name` holds, as `text` escapes the finished text.
 
 No function writes a text as HTML. What is already HTML is an `Html`, which only `render` makes, and `insert` puts one inside another page.
 
 ```
 fn frame(inside: Html) -> Html <alloc> {
   render() {
-    in_span(class: "frame") {
+    span(class: "frame") {
       insert(inside)
     }
   }
@@ -134,20 +131,20 @@ A part of a page is a function that carries the effect `markup`, which every ele
 ```
 // One note of the list.
 fn note_card(note: Note) <markup, alloc> {
-  in_article(class: "card") {
-    h2(note.title)
-    p(note.body)
+  article(class: "card") {
+    h2 { text(note.title) }
+    p { text(note.body) }
     if note.pinned {
-      span("Pinned", class: "badge")
+      span(class: "badge") { text("Pinned") }
     }
   }
 }
 
 fn notes(all: List[Note]) -> Html <alloc> {
   render() {
-    in_ul() {
+    ul {
       loop note in all {
-        in_li() {
+        li {
           note_card(note)
         }
       }
@@ -163,12 +160,12 @@ A component that puts its caller's content somewhere takes it as a block, a lamb
 ```
 fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
   render() {
-    in_html() {
-      in_head() {
-        title(heading)
+    html {
+      head {
+        title { text(heading) }
       }
-      in_body() {
-        h1(heading)
+      body {
+        h1 { text(heading) }
         inside()
       }
     }
@@ -177,7 +174,7 @@ fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
 
 fn about() -> Html <alloc> {
   layout("About") {
-    p("Smith is a programming language.")
+    p { text("Smith is a programming language.") }
   }
 }
 ```
@@ -198,8 +195,8 @@ A block gives no value, so nothing fails through one: a [`try`](../language/try.
 fn note_page(id: str) -> Result[Html, str] <alloc, store> {
   note = try load(id)
   .ok(render() {
-    h1(note.title)
-    p(note.body)
+    h1 { text(note.title) }
+    p { text(note.body) }
   })
 }
 ```
@@ -209,8 +206,8 @@ A component that meets a failure handles it where it is, and writes what stands 
 ```
 fn note_card(id: str) <markup, alloc, store> {
   match load(id) {
-    .ok(note) => h2(note.title)
-    .err(_) => p("This note is gone.", class: "missing")
+    .ok(note) => h2 { text(note.title) }
+    .err(_) => p(class: "missing") { text("This note is gone.") }
   }
 }
 ```
@@ -223,11 +220,11 @@ An `Html` has [`Fmt`](fmt.md), which writes the page as its text. So a program p
 
 ```
 use std.console (console, print)
-use std.html (render, p)
+use std.html (render, p, text)
 
 fn main() <console, alloc> {
   page = render() {
-    p("a < b")
+    p { text("a < b") }
   }
   print("{page}")
 }
@@ -243,10 +240,9 @@ A file imports each element it uses, as any name, or imports the module and writ
 
 | Written | Is |
 | --- | --- |
-| `h1("Hello")` | An element that holds a text |
-| `in_body() { ... }` | An element that holds what its block writes |
+| `body { ... }` | An element, which holds what its block writes |
 | `text("Hello")` | A text among other elements |
-| `a("Open", href: link("/"))` | An attribute, as an argument with a name |
+| `a(href: link("/")) { ... }` | An attribute, as an argument with a name |
 | `link("/notes/7")` | A `Link` from a link written out, checked where the program is built |
 | `check_link(text)` | A `Result` of a `Link` or a `LinkError` from a text known when the program runs |
 | `attr("data-id", "7")` | An attribute the library has no parameter for |

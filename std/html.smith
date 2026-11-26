@@ -250,170 +250,85 @@ fn common(class: str, id: str) <markup, alloc> {
   given("id", id)
 }
 
-// An element that holds a text, which is escaped.
-fn holds_text(tag: str, inside: str) <markup, alloc> {
-  text(inside)
-  end(tag)
-}
-
 // An element that holds what its block writes.
 fn holds_block(tag: str, block: fn() <markup>) <markup> {
   block()
   end(tag)
 }
 
-pub fn html(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("html")
-  common(class, id)
-  holds_text("html", inside)
-}
-
-pub fn in_html(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn html(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("html")
   common(class, id)
   holds_block("html", block)
 }
 
-pub fn head(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("head")
-  common(class, id)
-  holds_text("head", inside)
-}
-
-pub fn in_head(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn head(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("head")
   common(class, id)
   holds_block("head", block)
 }
 
-pub fn title(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("title")
-  common(class, id)
-  holds_text("title", inside)
-}
-
-pub fn in_title(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn title(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("title")
   common(class, id)
   holds_block("title", block)
 }
 
-pub fn body(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("body")
-  common(class, id)
-  holds_text("body", inside)
-}
-
-pub fn in_body(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn body(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("body")
   common(class, id)
   holds_block("body", block)
 }
 
-pub fn h1(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("h1")
-  common(class, id)
-  holds_text("h1", inside)
-}
-
-pub fn in_h1(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn h1(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("h1")
   common(class, id)
   holds_block("h1", block)
 }
 
-pub fn h2(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("h2")
-  common(class, id)
-  holds_text("h2", inside)
-}
-
-pub fn in_h2(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn h2(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("h2")
   common(class, id)
   holds_block("h2", block)
 }
 
-pub fn p(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("p")
-  common(class, id)
-  holds_text("p", inside)
-}
-
-pub fn in_p(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn p(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("p")
   common(class, id)
   holds_block("p", block)
 }
 
-pub fn b(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("b")
-  common(class, id)
-  holds_text("b", inside)
-}
-
-pub fn in_b(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn b(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("b")
   common(class, id)
   holds_block("b", block)
 }
 
-pub fn span(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("span")
-  common(class, id)
-  holds_text("span", inside)
-}
-
-pub fn in_span(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn span(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("span")
   common(class, id)
   holds_block("span", block)
 }
 
-pub fn ul(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("ul")
-  common(class, id)
-  holds_text("ul", inside)
-}
-
-pub fn in_ul(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn ul(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("ul")
   common(class, id)
   holds_block("ul", block)
 }
 
-pub fn li(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("li")
-  common(class, id)
-  holds_text("li", inside)
-}
-
-pub fn in_li(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn li(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("li")
   common(class, id)
   holds_block("li", block)
 }
 
-pub fn article(inside: str, class: str = "", id: str = "") <markup, alloc> {
-  start("article")
-  common(class, id)
-  holds_text("article", inside)
-}
-
-pub fn in_article(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn article(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("article")
   common(class, id)
   holds_block("article", block)
 }
 
-pub fn a(inside: str, href: Link, class: str = "", id: str = "") <markup, alloc> {
-  start("a")
-  linked("href", href)
-  common(class, id)
-  holds_text("a", inside)
-}
-
-pub fn in_a(href: Link, class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn a(href: Link, class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
   start("a")
   linked("href", href)
   common(class, id)

@@ -68,8 +68,12 @@ pub const ONCE: &[Test] = &[
         a_text_is_refused_where_a_link_is_taken,
     ),
     (
-        "an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither",
-        an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither,
+        "an_element_given_a_text_is_refused_and_so_is_one_given_no_block",
+        an_element_given_a_text_is_refused_and_so_is_one_given_no_block,
+    ),
+    (
+        "no_in_function_is_left_and_br_and_input_take_no_block",
+        no_in_function_is_left_and_br_and_input_take_no_block,
     ),
 ];
 
@@ -242,7 +246,7 @@ fn what_text_writes_holds_no_byte_of_markup_that_the_text_did_not_have_as_an_ent
 
 /// The elements and the names that the programs below use.
 const IMPORTS: &str = "use std.console (console, print)
-use std.html (Html, a, b, br, check_link, LinkError, h1, h2, in_a, in_article, in_body, in_head, in_html, in_li, in_p, in_span, in_ul, input, insert, link, markup, p, render, span, text, title)
+use std.html (Html, LinkError, a, article, b, body, br, check_link, h1, h2, head, html, input, insert, li, link, markup, p, render, span, text, title, ul)
 ";
 
 /// The lines a program prints that has the functions `functions` and, for each
@@ -272,45 +276,45 @@ const EXAMPLES: &str = "struct Note {
 }
 
 fn hello(name: str) <markup, alloc> {
-  in_html() {
-    in_head() {
-      title(\"Hello\")
+  html() {
+    head() {
+      title { text(\"Hello\") }
     }
-    in_body() {
-      h1(\"Hello, {name}\")
-      p(\"This page is written in Smith.\")
+    body() {
+      h1 { text(\"Hello, {name}\") }
+      p { text(\"This page is written in Smith.\") }
     }
   }
 }
 
 fn mixed(name: str) <markup, alloc> {
-  in_p() {
+  p() {
     text(\"Hello, \")
-    b(name)
+    b { text(name) }
     text(\"!\")
   }
 }
 
 fn links() <markup, alloc> {
-  a(\"Open\", href: link(\"/notes/7\"), class: \"button\")
+  a(href: link(\"/notes/7\"), class: \"button\") { text(\"Open\") }
   input(name: \"title\", placeholder: \"Title\")
   br()
 }
 
 fn note_card(note: Note) <markup, alloc> {
-  in_article(class: \"card\") {
-    h2(note.title)
-    p(note.body)
+  article(class: \"card\") {
+    h2 { text(note.title) }
+    p { text(note.body) }
     if note.pinned {
-      span(\"Pinned\", class: \"badge\")
+      span(class: \"badge\") { text(\"Pinned\") }
     }
   }
 }
 
 fn notes(all: List[Note]) <markup, alloc> {
-  in_ul() {
+  ul() {
     loop note in all {
-      in_li() {
+      li() {
         note_card(note)
       }
     }
@@ -318,12 +322,12 @@ fn notes(all: List[Note]) <markup, alloc> {
 }
 
 fn layout(heading: str, inside: fn() <markup>) <markup, alloc> {
-  in_html() {
-    in_head() {
-      title(heading)
+  html() {
+    head() {
+      title { text(heading) }
     }
-    in_body() {
-      h1(heading)
+    body() {
+      h1 { text(heading) }
       inside()
     }
   }
@@ -331,12 +335,12 @@ fn layout(heading: str, inside: fn() <markup>) <markup, alloc> {
 
 fn about() <markup, alloc> {
   layout(\"About\") {
-    p(\"Smith is a programming language.\")
+    p { text(\"Smith is a programming language.\") }
   }
 }
 
 fn frame(inside: Html) <markup, alloc> {
-  in_span(class: \"frame\") {
+  span(class: \"frame\") {
     insert(inside)
   }
 }
@@ -383,17 +387,17 @@ fn a_text_given_to_an_element_or_an_attribute_is_escaped_as_the_reference_escape
             let mut expected = Vec::new();
             for t in texts {
                 let (lit, e) = (literal(t), reference_escape(t));
-                calls.push(format!("h1({lit})"));
+                calls.push(format!("h1 {{ text({lit}) }}"));
                 expected.push(format!("<h1>{e}</h1>"));
                 // A text that is empty is what a parameter has by default, so it writes nothing.
                 let attribute = |name: &str| if t.is_empty() { String::new() } else { format!(" {name}=\"{e}\"") };
-                calls.push(format!("p(\"x\", class: {lit})"));
+                calls.push(format!("p(class: {lit}) {{ text(\"x\") }}"));
                 expected.push(format!("<p{}>x</p>", attribute("class")));
-                calls.push(format!("a({lit}, href: link(\"/x?a=1&b=2\"), id: {lit})"));
+                calls.push(format!("a(href: link(\"/x?a=1&b=2\"), id: {lit}) {{ text({lit}) }}"));
                 expected.push(format!("<a href=\"/x?a=1&amp;b=2\"{}>{e}</a>", attribute("id")));
             }
             // An attribute that is the empty text is not written.
-            calls.push("p(\"x\", class: \"\")".to_string());
+            calls.push("p(class: \"\") { text(\"x\") }".to_string());
             expected.push("<p>x</p>".to_string());
             assert_eq!(shown("", &calls), expected);
         },
@@ -403,7 +407,7 @@ fn a_text_given_to_an_element_or_an_attribute_is_escaped_as_the_reference_escape
 /// The examples of the page, written with `render` as the page writes them,
 /// and `main` reaching each, so that every target builds them.
 fn the_examples_of_the_page_build_for_every_target() {
-    let source = "use std.html (Html, a, b, br, check_link, h1, h2, in_article, in_body, in_head, in_html, in_li, in_p, in_span, in_ul, input, insert, link, markup, p, render, span, text, title)
+    let source = "use std.html (Html, a, article, b, body, br, check_link, h1, h2, head, html, input, insert, li, link, markup, p, render, span, text, title, ul)
 
 struct Note {
   title: str
@@ -413,13 +417,13 @@ struct Note {
 
 fn hello(name: str) -> Html <alloc> {
   render() {
-    in_html() {
-      in_head() {
-        title(\"Hello\")
+    html() {
+      head() {
+        title { text(\"Hello\") }
       }
-      in_body() {
-        h1(\"Hello, {name}\")
-        p(\"This page is written in Smith.\")
+      body() {
+        h1 { text(\"Hello, {name}\") }
+        p { text(\"This page is written in Smith.\") }
       }
     }
   }
@@ -427,31 +431,31 @@ fn hello(name: str) -> Html <alloc> {
 
 fn links() -> Html <alloc> {
   render() {
-    in_p() {
+    p() {
       text(\"Hello, \")
-      b(\"Ana\")
+      b { text(\"Ana\") }
     }
-    a(\"Open\", href: link(\"/notes/7\"), class: \"button\")
+    a(href: link(\"/notes/7\"), class: \"button\") { text(\"Open\") }
     input(name: \"title\", placeholder: \"Title\")
     br()
   }
 }
 
 fn note_card(note: Note) <markup, alloc> {
-  in_article(class: \"card\") {
-    h2(note.title)
-    p(note.body)
+  article(class: \"card\") {
+    h2 { text(note.title) }
+    p { text(note.body) }
     if note.pinned {
-      span(\"Pinned\", class: \"badge\")
+      span(class: \"badge\") { text(\"Pinned\") }
     }
   }
 }
 
 fn notes(all: List[Note]) -> Html <alloc> {
   render() {
-    in_ul() {
+    ul() {
       loop note in all {
-        in_li() {
+        li() {
           note_card(note)
         }
       }
@@ -461,12 +465,12 @@ fn notes(all: List[Note]) -> Html <alloc> {
 
 fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
   render() {
-    in_html() {
-      in_head() {
-        title(heading)
+    html() {
+      head() {
+        title { text(heading) }
       }
-      in_body() {
-        h1(heading)
+      body() {
+        h1 { text(heading) }
         inside()
       }
     }
@@ -475,13 +479,13 @@ fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
 
 fn about() -> Html <alloc> {
   layout(\"About\") {
-    p(\"Smith is a programming language.\")
+    p { text(\"Smith is a programming language.\") }
   }
 }
 
 fn frame(inside: Html) -> Html <alloc> {
   render() {
-    in_span(class: \"frame\") {
+    span(class: \"frame\") {
       insert(inside)
     }
   }
@@ -489,14 +493,14 @@ fn frame(inside: Html) -> Html <alloc> {
 
 fn home() -> Html <alloc> {
   render() {
-    a(\"Home\", href: link(\"/\"))
+    a(href: link(\"/\")) { text(\"Home\") }
   }
 }
 
 fn profile(site: str) -> Html <alloc> {
   match check_link(site) {
-    .ok(to) { render() { a(\"Site\", href: to) } }
-    .err(e) { render() { p(\"{e}\") } }
+    .ok(to) { render() { a(href: to) { text(\"Site\") } } }
+    .err(e) { render() { p { text(\"{e}\") } } }
   }
 }
 
@@ -651,7 +655,7 @@ fn a_link_written_out_that_runs_code_is_refused_where_it_is_written_and_the_othe
         any_link,
         |text| {
             let source = format!(
-                "use std.html (a, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(\"Open\", href: link({}))\n  }}\n  same = page\n}}\n",
+                "use std.html (a, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(href: link({})) {{ }}\n  }}\n  same = page\n}}\n",
                 literal(text)
             );
             let said = messages(&source);
@@ -669,9 +673,9 @@ fn a_link_written_out_that_runs_code_is_refused_where_it_is_written_and_the_othe
 
 fn a_link_that_is_written_out_is_written_in_href_escaped() {
     let calls: Vec<String> = [
-        "a(\"Open\", href: link(\"/notes/7?a=1&b=2\"))",
-        "in_a(href: link(\"mailto:ana@example.org\")) { text(\"Write\") }",
-        "a(\"Open\", href: link(\"HTTPS://example.org/\\\"x\"), class: \"button\")",
+        "a(href: link(\"/notes/7?a=1&b=2\")) { text(\"Open\") }",
+        "a(href: link(\"mailto:ana@example.org\")) { text(\"Write\") }",
+        "a(href: link(\"HTTPS://example.org/\\\"x\"), class: \"button\") { text(\"Open\") }",
     ]
     .map(String::from)
     .to_vec();
@@ -692,7 +696,7 @@ fn a_text_is_refused_where_a_link_is_taken() {
         any_link,
         |text| {
             let source = format!(
-                "use std.html (a, in_a, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(\"Open\", href: {})\n    in_a(href: {}) {{ }}\n  }}\n  same = page\n}}\n",
+                "use std.html (a, a, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(href: {}) {{ }}\n    a(href: {}) {{ }}\n  }}\n  same = page\n}}\n",
                 literal(text),
                 literal(text)
             );
@@ -704,24 +708,39 @@ fn a_text_is_refused_where_a_link_is_taken() {
 
 const ELEMENTS: &[&str] = &["html", "head", "title", "body", "h1", "h2", "p", "b", "span", "ul", "li", "article", "a"];
 
-fn an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither() {
+fn an_element_given_a_text_is_refused_and_so_is_one_given_no_block() {
     generate::check(
         8309,
         10,
         |g| *g.pick(ELEMENTS),
         |element| {
             let href = if *element == "a" { ", href: link(\"/x\")" } else { "" };
-            let both = format!(
-                "use std.html ({element}, link, p, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}(\"Hi\"{href}) {{\n      p(\"x\")\n    }}\n  }}\n  same = page\n}}\n"
+            let text = format!(
+                "use std.html ({element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}(\"Hi\"{href})\n  }}\n  same = page\n}}\n"
             );
-            let said = messages(&both);
-            assert!(said.iter().any(|m| m.contains(&format!("`{element}`"))), "{said:?} for {both}");
+            let said = messages(&text);
+            assert!(said.iter().any(|m| m.contains(&format!("`{element}`")) && m.contains("`block`")), "{said:?} for {text}");
             let href = if *element == "a" { "href: link(\"/x\")" } else { "" };
             let neither = format!(
-                "use std.html (in_{element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    in_{element}({href})\n  }}\n  same = page\n}}\n"
+                "use std.html ({element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}({href})\n  }}\n  same = page\n}}\n"
             );
             let said = messages(&neither);
-            assert!(said.iter().any(|m| m.contains(&format!("`in_{element}`")) && m.contains("`block`")), "{said:?} for {neither}");
+            assert!(said.iter().any(|m| m.contains(&format!("`{element}`")) && m.contains("`block`")), "{said:?} for {neither}");
         },
     );
+}
+
+fn no_in_function_is_left_and_br_and_input_take_no_block() {
+    for element in ELEMENTS {
+        let source = format!("use std.html (in_{element})\n\nfn main() {{\n}}\n");
+        let said = refused(&source);
+        assert!(said.iter().any(|m| m.contains(&format!("`in_{element}`"))), "{said:?}");
+    }
+    for element in ["br", "input"] {
+        let source = format!(
+            "use std.html ({element}, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}() {{ }}\n  }}\n  same = page\n}}\n"
+        );
+        let said = messages(&source);
+        assert!(said.iter().any(|m| m.contains(&format!("`{element}`"))), "{said:?} for {source}");
+    }
 }
