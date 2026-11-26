@@ -56,7 +56,7 @@ fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net
 
 ## The first of several
 
-`first` waits for the first of several children of the same group to finish, and gives its value. It takes one child and the list of the others, so that it is never asked to wait for none, and the children give one type.
+`first` waits for the first of several children of the same group to finish, and gives its value together with the children that did not finish. It takes every child, as one child and the list of the others, so that it is never asked to wait for none, and the children give one type. It gives `(T, List[Task[T]])`: the value of the child that finished, and the other children, which keep running.
 
 ```
 use std.task (join, spawn, tasks)
@@ -66,14 +66,15 @@ fn quickest(a: str, b: str, c: str) -> Result[List[Byte], NetError] <net, alloc>
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
   tc = spawn { fetch(c) }
-  first(ta, [tb, tc])
+  (page, rest) = first(ta, [tb, tc])
+  page
 }
 ```
 
-`quickest` gives the page of whichever server answers first. When the children do different work, the work gives one enum, and the enum says which child finished.
+`quickest` gives the page of whichever server answers first. `rest` is `tb` and `tc` without the one that finished, which are still running and are joined with `join` if their values are wanted. This one leaves them, and they are cancelled when the block ends. When the children do different work, the work gives one enum, and the enum says which child finished.
 
 - A child that `first` waits for belongs to the nearest group, as for `join`, and one of another group is refused.
-- The child that finished counts as joined, so `join` of it, or `first` with it again, is refused. The others are not waited for: they keep running until they are joined, or until the block ends and cancels them.
+- The child that finished counts as joined, so `join` of it, or `first` with it again, is refused. It is not in `rest`, so which child finished is known only at run time and the names of the others are never used: the children that may be joined afterwards are the ones in `rest`. They are not waited for: they keep running until they are joined, or until the block ends and cancels them.
 - When two children have finished together, the one that comes first, `a` and then `rest` in order, is the one `first` gives, so the result is the same every run.
 
 ## No child outlives the block
@@ -85,7 +86,7 @@ use std.task (join, spawn, tasks)
 
 fn warm(url: str) <net, alloc> {
   with tasks()
-  spawn { fetch(url) }
+  _ = spawn { fetch(url) }
   ()
 }
 ```
@@ -101,7 +102,7 @@ use std.bits (i32)
 use std.task (spawn, task, tasks)
 
 fn start(n: i32) <task> {
-  spawn { n * 2 }
+  _ = spawn { n * 2 }
   ()
 }
 
@@ -122,7 +123,7 @@ Leaving `task` out of `start` is refused, as is any effect left out of a signatu
 | `with tasks()` | A task group for the rest of the block |
 | `spawn { e }` | A child that runs `e`, in the nearest group |
 | `join(t)` | The value of the child `t`, after waiting for it |
-| `first(t, rest)` | The value of the first of `t` and the children in `rest` to finish |
+| `first(t, others)` | The value of the first of `t` and the children in `others` to finish, with the children that did not: `(T, List[Task[T]])` |
 | `<task>` | A function that spawns into its caller's group |
 
 Next: [What a spawned task may use](task-sharing.md)

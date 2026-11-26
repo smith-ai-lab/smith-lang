@@ -138,7 +138,7 @@ fn pick(wide: bool) -> Pricing {
 
 This is refused at the first `Pricing(discount: double)`: "which function this is depends on what the program does when it runs, and a function value must be known when the program is built". A choice between functions is made where the function is called, by calling each one.
 
-A function type states no effect, so a function that needs one is refused where it goes into a field or is given as a result, since whoever calls what is stored is checked against the type alone. `Pricing(discount: loud)` for a `loud` that needs `console` is refused: "`loud` needs the `console` effect, and the type of the field `discount` states none, so a function that needs one is not stored there". A function passed to a call is checked at the call, as [Effects](effects.md) says.
+A function type lists the effects its functions may carry, as [Effects](effects.md#a-function-stored-in-a-value) says, and none when it lists none. A function that needs an effect its type does not list is refused where it goes into a field or is given as a result, since whoever calls what is stored is checked against the type alone. `Pricing(discount: loud)` for a `loud` that needs `console` is refused: "`loud` needs the `console` effect, and the type of the field `discount` lists none, so a function that needs one is not stored there". A field of type `fn(f32) -> f32 <console>` takes `loud`. A function passed to a call is checked at the call, as [Effects](effects.md) says.
 
 ## The forms
 

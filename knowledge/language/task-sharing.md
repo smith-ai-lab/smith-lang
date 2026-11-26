@@ -74,7 +74,7 @@ fn serve(listener: Listener) <net, alloc, diverge> {
   with tasks()
   loop {
     conn = accept(listener)
-    spawn { handle(conn) }
+    _ = spawn { handle(conn) }
   }
 }
 ```

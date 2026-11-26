@@ -102,6 +102,7 @@ struct Weights {
 }
 
 impl Mul[f32, Weights, Weights] {
+  fn valid(k: f32, w: Weights) -> bool { true }
   fn mul(k: f32, w: Weights) -> Weights { Weights(a: k * w.a, b: k * w.b) }
 }
 ```

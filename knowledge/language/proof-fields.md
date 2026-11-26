@@ -28,7 +28,31 @@ The field for the proof is left out of a construction. `arith` builds it from wh
 fn first() -> Cursor[10] { Cursor(at: 4) }
 ```
 
-`first()` is a `Cursor[10]`, since `4 <= 10`. `Cursor(at: 11)` is refused there, since `11 <= 10` cannot be proven. A value that is known only when the program runs needs a [`check`](check.md) to give the proof.
+`first()` is a `Cursor[10]`, since `4 <= 10`. A proof field takes no part in `==`, in the order of two values, or in how one is shown and written: two `Cursor`s are equal when their `at` is, and `Cursor(at: 4)` is how one is written, as [Traits a type is given](automatic-traits.md#a-proof-field-is-left-out) says. `Cursor(at: 11)` is refused there, since `11 <= 10` cannot be proven. A value that is known only when the program runs needs a [`check`](check.md) to give the proof.
+
+## Changing a field
+
+A field cannot be assigned when a proof field's statement, or the type of another field, names it. Assigning it would leave the proof proving something that is no longer so.
+
+```
+fn past[size: Nat](c: Cursor[size]) -> Cursor[size] {
+  var d = c
+  d.at = 1000000
+  d
+}
+```
+
+This is refused: "`at` cannot be assigned, as `inside` is a proof about it", with the fix "build the value again, as `Cursor(at: e)`". A field the statement does not name is assigned as any other. The value is built again, which proves it again.
+
+```
+fn forward[size: Nat](c: Cursor[size], to: Nat) -> Result[Cursor[size], str]
+  requires to <= size
+{
+  .ok(Cursor(at: to))
+}
+```
+
+The same holds of a field that the type of another names, as `n` in `struct Row { n: Nat; cells: [n]f32 }`, so `r.n = 9` is refused: "`n` cannot be assigned, as the type of `cells` names it".
 
 ## A fact that must hold in every round
 

@@ -96,6 +96,27 @@ fn shifted(x: [5]f32) -> [4]f32 { for i { x[i + 1] } }
 
 The iterations of a `for` are independent, so every `for` may run across SIMD lanes, threads, or a GPU. The keyword states that order does not matter, where a [`loop`](loop.md) runs in order. What follows from this for a block that changes a `var` is in [Accumulation](accumulation.md).
 
+The same holds for effects. A `for` body may only allocate: it carries no effect but `alloc`, since an effect has an order and the iterations have none.
+
+```
+use std.console (console, print)
+use std.time (now, time)
+
+fn stamps() -> [4]u64 <time> { for i { now() } }
+
+fn lines(n: Nat) <console> { for i { print("{i}") } }
+```
+
+Both are refused: "a `for` may only allocate, and `now` needs the `time` effect", with the fix "write a `loop`, which runs in order". Work in order is a `loop`, as the writes are here.
+
+```
+use std.console (console, print)
+
+fn lines(n: Nat) <console, alloc> {
+  loop i in 0..n { print("{i}") }
+}
+```
+
 ## The forms
 
 | Written | Is |
@@ -105,5 +126,6 @@ The iterations of a `for` are independent, so every `for` may run across SIMD la
 | `a[i]` in the block | Gives `i` the size of the axis of `a` |
 | A stated type for the `for` | Gives each index the size of its axis |
 | `x[i + 1]` in the block | Gives `i` no size |
+| An effect other than `alloc` in the block | Refused: write a `loop` |
 
 Next: [Operators on arrays](element-wise.md)

@@ -95,7 +95,7 @@ This prints `3 9 4`. Nothing else can name the value a `var` holds, so the chang
 
 The other forms of assignment, `+=`, `-=`, `*=`, and `/=`, work on a field as they do on a `var`. With `wide.w += 2`, the field `w` of `wide` becomes the field plus 2.
 
-Assigning to a field of a name that is not a `var` is refused.
+A field that a [proof field](proof-fields.md#changing-a-field) or the type of another field names is not assigned: the value is built again. Assigning to a field of a name that is not a `var` is refused.
 
 ```
 use std.console (console)

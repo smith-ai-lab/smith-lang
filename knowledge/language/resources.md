@@ -131,7 +131,7 @@ fn first_bytes(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
 
 Most code only ever writes the `with` line. Generic functions state `T: Copy` where they copy, as [Ownership](ownership.md) shows, and tooling proposes the bound.
 
-A value without `Discard` that a task owns when it is cancelled is not taken by its function: a handle of `net` is closed by its handler, and the rest goes with the task's memory, as [How a task ends](task-ending.md#a-handle-held-while-a-task-may-wait) says.
+A value without `Discard` that a task owns when it is cancelled is not taken by its function: a handle of `net` is closed by its handler, and any other is given to the `abandon` of its type, as [Abandon](abandon.md) says. A function that holds one across a wait needs its type to have one.
 
 ## The forms
 

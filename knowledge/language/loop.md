@@ -4,9 +4,10 @@ title: loop
 description: loop runs a block once for each number in a range, in order, and break ends it early.
 status: partial
 built:
-  - "`loop i in a..b` over whole numbers of one type, whose counter `arith` knows is in range of a `var` list's `size` as of any other, which runs in order and not at all when `a >= b`, ended by `break`"
+  - "`loop i in a..b` over whole numbers of one type, whose counter `arith` knows is in range of a `var` list's `size` as of any other, which runs in order, ended by `break`"
   - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
+  - "not the refusal of `loop i in a..b` where `arith` cannot prove `a <= b`, as [Ranges and slices](ranges.md#a-range-is-ordered) says"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
   - "an `invariant` after the head of a `loop` over a range, a `List`, or a `str`, which `arith` proves holds before the first pass, with the counter as the first end, and holds at the end of each pass, with the counter one more, from its holding at the start of the pass, and which it uses in the block and, where no `break` ends the loop, after it, with the counter as the greater of the two ends"
   - "not an `invariant` that is not a comparison of whole numbers, joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
@@ -34,13 +35,13 @@ fn sum_below(n: Nat) -> Nat {
 
 ## Which numbers
 
-A range `a..b` is a `Range` value, as [Ranges and slices](ranges.md) says. It runs from `a` up to `b` and excludes `b`, so the block of `loop i in 0..3` runs with `0`, `1`, and `2`. A range with no numbers, as `5..2` is, runs the block no times.
+The head of a loop is a range `a..b`, as [Ranges and slices](ranges.md) says, and it is not a `Range` value. It runs from `a` up to `b` and excludes `b`, so the block of `loop i in 0..3` runs with `0`, `1`, and `2`. A range whose ends are equal has no numbers, and runs the block no times. The first end is proven not to be above the second, as [Ranges and slices](ranges.md#a-range-is-ordered) says: `0..n` needs nothing written, and `loop i in a..b` needs `a <= b` from an `if` or a `requires`.
 
 ```
 use std.console (console, print)
 
 fn main() <console, alloc> {
-  loop i in 5..2 { print("{i}") }
+  loop i in 2..2 { print("{i}") }
   print("done")
 }
 ```
@@ -264,7 +265,7 @@ fn before_zero(a: [4]Byte) -> u64 {
 
 ## Going backward
 
-A range goes up, and `loop i in 5..0` is a range with no numbers, so it runs no times. Going backward is written with a reversed range.
+A range goes up, and `loop i in 5..0` is refused as a range that ends below where it starts. Going backward is written with a reversed range.
 
 ```
 use std.console (console, print)
@@ -281,7 +282,8 @@ This prints `2`, `1`, and `0`.
 | Written | Is |
 | --- | --- |
 | `loop i in a..b { e }` | The block with `i` as each number from `a` up to but not including `b`, in order |
-| `loop i in a..b` with `a >= b` | No rounds |
+| `loop i in a..b` with `a == b` | No rounds |
+| `loop i in a..b` where `a <= b` is not proven | Refused |
 | `loop i in reversed(a..b) { e }` | The same numbers, from the last to the first |
 | `loop v in x { e }` | The block with `v` as each element of the array `x`, in order |
 | `loop i in a..b invariant e { e2 }` | The same, with `e` proven before the first pass and at the end of each pass, and known in the block and after the loop |

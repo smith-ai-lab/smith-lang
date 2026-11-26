@@ -4,9 +4,10 @@ title: Ranges and slices
 description: A range a..b runs from a up to but not including b and is also the type of those numbers, and x[a..b] is the part of x between them, with x[..k] and x[k..] as short forms.
 status: partial
 built:
-  - "`a..b` as the range of a `loop`, which runs in order and not at all when `a >= b`"
+  - "`a..b` as the range of a `loop`, which runs in order"
   - "`x[a..b]`, `x[..k]`, and `x[k..]` on a [`Slice`](../library/slice.md), a `Slice` that shares the memory of `x`, compiled when `arith` proves `a <= b` and `b <= x.size`, and a piece of a piece"
   - "`a..b` written as a value, which is a `Range` of the prelude with `start` and `end`, both `Nat`, and whose ends `arith` knows as the ends that were written"
+  - "not the proof `start <= end` that a `Range` holds, or the refusal of a range that `arith` cannot prove ordered, in a `loop` or written as a value"
   - "not a range as a type, or a piece of an array, a text, or a list"
 ---
 
@@ -16,7 +17,7 @@ A range `a..b` is the numbers from `a` up to `b`, and it excludes `b`. It is als
 
 ## A range
 
-`0..3` is `0`, `1`, and `2`. It has three numbers, and `3` is not one of them. A range that begins where it ends, as `3..3`, is empty.
+`0..3` is `0`, `1`, and `2`. It has three numbers, and `3` is not one of them. A range that begins where it ends, as `3..3`, is empty. A range never ends below where it begins: `5..2` is refused, as the next section says.
 
 A [`loop`](loop.md) runs over a range.
 
@@ -28,7 +29,35 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints `0`, `1`, and `2`. A range whose first end is not below its second, as `3..3` or `5..2`, runs the body no times.
+This prints `0`, `1`, and `2`. A range whose two ends are equal, as `3..3`, runs the body no times.
+
+## A range is ordered
+
+A range is written only where its first end is proven not to be above its second, as the [slice](#a-slice-must-be-proven-inside) is. [`arith`](arith.md) proves it by itself for `0..n`, since a `Nat` is at least 0, so a loop over the size of a list needs nothing written. Two numbers written out the wrong way round are refused, as a range written as a type is.
+
+```
+loop i in 5..2 { print("{i}") }
+```
+
+This is refused: the range ends below where it starts. The compiler does not build this yet, so the words are not quoted. For names that `arith` knows nothing of, the proof is stated, as for a slice, with an `if` or a `requires`.
+
+```
+use std.console (console, print)
+
+fn show_from(from: Nat, to: Nat) <console, alloc>
+  requires from <= to
+{
+  loop i in from..to { print("{i}") }
+}
+
+fn show_if(from: Nat, to: Nat) <console, alloc> {
+  if from <= to {
+    loop i in from..to { print("{i}") }
+  }
+}
+```
+
+`loop i in from..to` with no `requires` and no `if` is refused: "cannot prove that `from <= to`, which the range `from..to` needs". Going backward is written with [`reversed`](loop.md#going-backward).
 
 ## A range as a type
 
@@ -42,7 +71,15 @@ fn pick[n: Nat](i: 0..n) -> Nat { i }
 
 ## A range as a value
 
-A range written anywhere but the head of a `loop`, an index, and a type is a `Range`, a struct of [the prelude](prelude.md) with two fields, `start` and `end`, both `Nat`.
+A range written anywhere but the head of a `loop`, an index, and a type is a `Range`, a struct of [the prelude](prelude.md) with two fields, `start` and `end`, both `Nat`, and a proof that the first is not above the second.
+
+```
+struct Range {
+  start: Nat
+  end: Nat
+  ordered: start <= end
+}
+```
 
 ```
 fn first(r: Range) -> Nat { r.start }
@@ -53,9 +90,9 @@ fn demo() -> (Nat, Nat, Nat) {
 }
 ```
 
-`demo()` is `(2, 5, 1)`. Each end is a `Nat`, so an end that is negative or not a whole number is refused where the range is written. A `Range` has `Copy`, takes the bytes of its two `Nat` and nothing else, and says nothing about whether `start` is below `end`.
+`demo()` is `(2, 5, 1)`. Each end is a `Nat`, so an end that is negative or not a whole number is refused where the range is written. A `Range` has `Copy`, and takes the bytes of its two `Nat` and nothing else, as the proof is erased. As for any [proof field](proof-fields.md), `ordered` is left out of the construction, which `arith` builds, and `3..1` is refused where it is written.
 
-[`arith`](arith.md) knows the ends that were written. After `r = a..b`, `r.start` is `a` and `r.end` is `b`, so a proof that needs `a <= b` from the range holds when `a <= b` is known.
+[`arith`](arith.md) knows the ends that were written. After `r = a..b`, `r.start` is `a` and `r.end` is `b`, and `r.ordered` is the proof that `a <= b`, so a proof that needs `a <= b` from the range holds with nothing more written.
 
 ```
 fn between(xs: Slice[Byte], from: Nat, to: Nat) -> Nat
@@ -124,8 +161,8 @@ fn take_two(a: [4]Byte) -> [2]Byte { a[..2] }
 
 | Written | Is |
 | --- | --- |
-| `a..b` | The numbers from `a` up to `b`, excluding `b`, and the type that holds them |
-| `a..b` as a value | A `Range` with `start` `a` and `end` `b` |
+| `a..b` | The numbers from `a` up to `b`, excluding `b`, and the type that holds them, written where `a <= b` is proven |
+| `a..b` as a value | A `Range` with `start` `a`, `end` `b`, and the proof that `a <= b` |
 | `x[a..b]` | The elements of `x` from `a` up to `b`, of size `b - a`, compiled when `a <= b` and `b <= x.size` are proven |
 | `xs[a..b]` on a `List` | A lent piece of `xs`, for a function that reads |
 | `s[a..b]` on a `Slice` | A `Slice` that shares the memory of `s` |
