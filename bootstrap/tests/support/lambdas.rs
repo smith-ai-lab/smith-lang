@@ -159,24 +159,47 @@ struct Ho {
     generic: bool,
     values: Vec<Ty>,
     fns: Vec<FnTy>,
+    /// Whether the last function is the block of the call, the one parameter
+    /// of a function that is given by position, after the values, and so the
+    /// one a lambda may be written for after the call. The other functions
+    /// are given by name.
+    block: bool,
     result: Ty,
     console: bool,
     body: Vec<Stmt>,
 }
 
 impl Ho {
-    /// The type of each parameter: the values, then the functions.
+    /// The functions in the order of the parameters: the block first, when
+    /// there is one, then the others.
+    fn fn_order(&self) -> Vec<usize> {
+        let n = self.fns.len();
+        if self.block {
+            std::iter::once(n - 1).chain(0..n - 1).collect()
+        } else {
+            (0..n).collect()
+        }
+    }
+
+    /// The type of each parameter, in the order they are written: the values,
+    /// the block, and after the `;` the functions that are given by name.
     fn params(&self) -> Vec<Result<Ty, FnTy>> {
         let values = self.values.iter().cloned().map(Ok);
-        values.chain(self.fns.iter().cloned().map(Err)).collect()
+        let fns = self.fn_order().into_iter().map(|k| Err(self.fns[k].clone()));
+        values.chain(fns).collect()
     }
 
     fn param_name(&self, i: usize) -> String {
         if i < self.values.len() {
             format!("p{i}")
         } else {
-            format!("f{}", i - self.values.len())
+            format!("f{}", self.fn_order()[i - self.values.len()])
         }
+    }
+
+    /// How many parameters are given by position: those before the `;`.
+    fn split(&self) -> usize {
+        self.values.len() + usize::from(self.block)
     }
 }
 
@@ -421,9 +444,12 @@ impl Writing<'_> {
                 }),
                 Err(f) => {
                     let value = self.function(ctx, &subst_fn(f, t), depth - 1);
-                    let last = i + 1 == params.len();
-                    let how = if last && matches!(value, Expr::Lambda(_)) && !self.g.one_in(4) {
-                        How::After
+                    let how = if ho.block && i == ho.values.len() {
+                        if matches!(value, Expr::Lambda(_)) && !self.g.one_in(4) {
+                            How::After
+                        } else {
+                            How::Position
+                        }
                     } else {
                         How::Named
                     };
@@ -555,6 +581,7 @@ fn model(g: &mut Gen) -> Model {
             generic,
             values,
             fns,
+            block: g.one_in(2),
             result: types[g.below(n)].clone(),
             console: g.one_in(2),
             body: Vec::new(),
@@ -1230,7 +1257,12 @@ impl Writer {
                     format!("{}: {ty}", ho.param_name(i))
                 })
                 .collect();
-            self.push(&format!("({})", params.join(", ")));
+            let (before, after) = params.split_at(ho.split());
+            if after.is_empty() {
+                self.push(&format!("({})", before.join(", ")));
+            } else {
+                self.push(&format!("({}; {})", before.join(", "), after.join(", ")));
+            }
             if ho.result != Ty::Unit {
                 self.push(&format!(" -> {}", type_text(&ho.result)));
             }

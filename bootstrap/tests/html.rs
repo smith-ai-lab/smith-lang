@@ -716,10 +716,10 @@ fn an_element_given_a_text_is_refused_and_so_is_one_given_no_block() {
         |element| {
             let href = if *element == "a" { ", href: link(\"/x\")" } else { "" };
             let text = format!(
-                "use std.html ({element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}(\"Hi\"{href})\n  }}\n  same = page\n}}\n"
+                "use std.html ({element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}(\"Hi\"{href}) {{ }}\n  }}\n  same = page\n}}\n"
             );
             let said = messages(&text);
-            assert!(said.iter().any(|m| m.contains(&format!("`{element}`")) && m.contains("`block`")), "{said:?} for {text}");
+            assert!(said.iter().any(|m| m.contains(&format!("of `{element}` is given by name"))), "{said:?} for {text}");
             let href = if *element == "a" { "href: link(\"/x\")" } else { "" };
             let neither = format!(
                 "use std.html ({element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}({href})\n  }}\n  same = page\n}}\n"

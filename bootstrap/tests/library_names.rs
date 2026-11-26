@@ -77,7 +77,7 @@ fn a_parameter_named_like_a_function_of_its_module_is_the_parameter_where_it_is_
     let shapes = "\
 pub fn body() -> Nat { 3 }
 
-fn wrap(body: Nat) -> Nat { body }
+fn wrap(; body: Nat) -> Nat { body }
 
 pub fn render(body: Nat) -> Nat { wrap(body: body) }
 ";

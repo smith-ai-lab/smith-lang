@@ -256,92 +256,92 @@ fn holds_block(tag: str, block: fn() <markup>) <markup> {
   end(tag)
 }
 
-pub fn html(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn html(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("html")
   common(class, id)
   holds_block("html", block)
 }
 
-pub fn head(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn head(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("head")
   common(class, id)
   holds_block("head", block)
 }
 
-pub fn title(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn title(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("title")
   common(class, id)
   holds_block("title", block)
 }
 
-pub fn body(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn body(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("body")
   common(class, id)
   holds_block("body", block)
 }
 
-pub fn h1(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn h1(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("h1")
   common(class, id)
   holds_block("h1", block)
 }
 
-pub fn h2(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn h2(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("h2")
   common(class, id)
   holds_block("h2", block)
 }
 
-pub fn p(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn p(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("p")
   common(class, id)
   holds_block("p", block)
 }
 
-pub fn b(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn b(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("b")
   common(class, id)
   holds_block("b", block)
 }
 
-pub fn span(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn span(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("span")
   common(class, id)
   holds_block("span", block)
 }
 
-pub fn ul(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn ul(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("ul")
   common(class, id)
   holds_block("ul", block)
 }
 
-pub fn li(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn li(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("li")
   common(class, id)
   holds_block("li", block)
 }
 
-pub fn article(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn article(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc> {
   start("article")
   common(class, id)
   holds_block("article", block)
 }
 
-pub fn a(href: Link, class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+pub fn a(block: fn() <markup>; href: Link, class: str = "", id: str = "") <markup, alloc> {
   start("a")
   linked("href", href)
   common(class, id)
   holds_block("a", block)
 }
 
-pub fn br(class: str = "", id: str = "") <markup, alloc> {
+pub fn br(; class: str = "", id: str = "") <markup, alloc> {
   start("br")
   common(class, id)
   void()
 }
 
-pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") <markup, alloc> {
+pub fn input(; name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") <markup, alloc> {
   start("input")
   given("name", name)
   given("placeholder", placeholder)

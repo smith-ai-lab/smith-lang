@@ -97,16 +97,25 @@ fn declaration(public: bool, ops: &[Op]) -> String {
     let mut text = String::new();
     text += if public { "pub effect fx {\n" } else { "effect fx {\n" };
     for (k, op) in ops.iter().enumerate() {
-        let params: Vec<String> = (op.params.iter().enumerate())
-            .map(|(i, p)| match p.default {
-                true => format!("a{i}: {} = {}", p.ty, value(p.ty)),
-                false => format!("a{i}: {}", p.ty),
-            })
-            .collect();
+        // The parameters with a default come last, and are given by name,
+        // after the `;`.
+        let written = |i: usize, p: &Param| match p.default {
+            true => format!("a{i}: {} = {}", p.ty, value(p.ty)),
+            false => format!("a{i}: {}", p.ty),
+        };
+        let (by_position, by_name): (Vec<_>, Vec<_>) =
+            (op.params.iter().enumerate()).partition(|(_, p)| !p.default);
+        let by_position: Vec<String> = by_position.into_iter().map(|(i, p)| written(i, p)).collect();
+        let by_name: Vec<String> = by_name.into_iter().map(|(i, p)| written(i, p)).collect();
+        let params = if by_name.is_empty() {
+            by_position.join(", ")
+        } else {
+            format!("{}; {}", by_position.join(", "), by_name.join(", "))
+        };
         let result = op.result.map_or(String::new(), |r| format!(" -> {r}"));
         // The operations of an effect that other modules use are `pub`.
         let public = if public { "pub " } else { "" };
-        text += &format!("  {public}fn op{k}({}){result}\n", params.join(", "));
+        text += &format!("  {public}fn op{k}({params}){result}\n");
     }
     text + "}\n"
 }

@@ -207,13 +207,37 @@ impl Parser<'_> {
         let (name, pos) = self.defined("the function's name")?;
         let generics = self.generics()?;
         self.expect_punct("(", "`(`")?;
-        let mut params = Vec::new();
+        let mut params: Vec<Param> = Vec::new();
         self.skip_newlines();
+        // Whether a `;` has been read: the parameters after it are given by
+        // name, and those before it by position.
+        let mut by_name = false;
+        if self.tok() == &Tok::Punct(";") {
+            self.bump();
+            self.skip_newlines();
+            by_name = true;
+            if self.tok() == &Tok::Punct(")") {
+                return Err(self.after_semicolon());
+            }
+        }
         loop {
             match self.tok() {
                 Tok::Punct(")") => break,
-                Tok::Ident(_) => params.push(self.param()?),
-                tok if starts_pattern(tok) => params.push(self.param()?),
+                Tok::Ident(_) => params.push(Param {
+                    by_name,
+                    ..self.param()?
+                }),
+                tok if starts_pattern(tok) => {
+                    let at = self.pos();
+                    if by_name {
+                        return Err(Error::new(
+                            at,
+                            "a parameter written as a pattern has no name to give at a call, so it is written before the `;`",
+                        )
+                        .with_fix("write it before the `;`, or give it a name"));
+                    }
+                    params.push(self.param()?);
+                }
                 tok => return Err(self.expected("a parameter or `)`", tok)),
             }
             self.skip_newlines();
@@ -221,6 +245,21 @@ impl Parser<'_> {
                 Tok::Punct(",") => {
                     self.bump();
                     self.skip_newlines();
+                }
+                Tok::Punct(";") if !by_name => {
+                    self.bump();
+                    self.skip_newlines();
+                    by_name = true;
+                    if self.tok() == &Tok::Punct(")") {
+                        return Err(self.after_semicolon());
+                    }
+                }
+                Tok::Punct(";") => {
+                    return Err(Error::new(
+                        self.pos(),
+                        "a parameter list has one `;`, and the parameters after it are all given by name",
+                    )
+                    .with_fix("take out this `;`"));
                 }
                 Tok::Punct(")") => break,
                 tok => return Err(self.expected("`,` or `)`", tok)),
@@ -257,6 +296,15 @@ impl Parser<'_> {
         let effects = self.effects()?;
         self.skip_to_contract();
         Ok((name, pos, generics, params, result, result_name, effects))
+    }
+
+    /// The mistake of a `;` that no parameter follows.
+    fn after_semicolon(&self) -> Error {
+        Error::new(
+            self.pos(),
+            "a `;` is followed by the parameters that are given by name",
+        )
+        .with_fix("write those parameters after the `;`, or take it out")
     }
 
     /// Skips the line breaks, and the comments between them, that lie before a
@@ -457,6 +505,7 @@ impl Parser<'_> {
             take,
             takes,
             effects,
+            by_name: false,
         })
     }
 

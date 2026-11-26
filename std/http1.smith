@@ -395,7 +395,7 @@ fn has_header(headers: List[(str, str)], wanted: str) -> bool {
   false
 }
 
-pub fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] <alloc> {
+pub fn request_head(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[RequestHead] <alloc> {
   match scan(bytes, limit, false) {
     .incomplete { .incomplete }
     .refused(why) { .refused(why) }
@@ -491,7 +491,7 @@ fn folded_response(bytes: Slice[Byte], limit: Nat) -> Read[ResponseHead] <alloc>
   }
 }
 
-pub fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] <alloc> {
+pub fn response_head(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[ResponseHead] <alloc> {
   match scan(bytes, limit, true) {
     .incomplete { .incomplete }
     .refused(why) { if why == folding() { folded_response(bytes, limit) } else { .refused(why) } }
@@ -531,7 +531,7 @@ fn trailer(view: Slice[Byte], from: Nat) -> Read[Slice[Byte]]
   .incomplete
 }
 
-pub fn chunk(bytes: Slice[Byte], limit: Nat = 16384) -> Read[Slice[Byte]] {
+pub fn chunk(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[Slice[Byte]] {
   view = if bytes.size > limit { bytes[0..limit] } else { bytes }
   digits = hex_end(view)
   if digits == 0 {

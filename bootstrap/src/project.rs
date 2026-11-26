@@ -102,6 +102,20 @@ pub fn read(source: &str) -> Result<Read, Vec<Error>> {
         }
         let mut flags = Vec::new();
         for p in &f.params {
+            if !p.by_name {
+                errors.push(
+                    Error::new(
+                        p.pos,
+                        format!(
+                            "`{}` of the task `{}` is a flag, which is given by name, so it is written after `;`",
+                            p.name, f.name
+                        ),
+                    )
+                    .with_fix(format!("write `fn {}(; ...)`, with every parameter after the `;`", f.name))
+                    .in_module(FILE),
+                );
+                continue;
+            }
             match flag(p) {
                 Some(flag) => flags.push(flag),
                 None => errors.push(

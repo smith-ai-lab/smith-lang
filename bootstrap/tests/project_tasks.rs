@@ -118,7 +118,7 @@ fn a_task_built_with_its_name_answers_a_client_that_starts_it_and_a_build_with_n
 
 const TASKS_MAIN: &str = "use std.console (console, print)\n\npub fn main() <console> {\n  print(\"main\")\n}\n";
 
-const TASKS: &str = "use std.console (console, print)\nuse std.project (Package)\n\npackage = Package(name: \"tasks\")\n\npub fn deploy(env: str, verbose: bool, note: Option[str], region: str = \"eu\", count: 1..100 = 3) -> Result[(), str] <console, alloc> {\n  print(\"deploy {env} {verbose} {region} {count}\")\n  match note {\n    .some(n) { print(\"note {n}\") }\n    .none { }\n  }\n  .ok(())\n}\n\npub fn fail() -> Result[(), str] <console> {\n  .err(\"it broke\")\n}\n";
+const TASKS: &str = "use std.console (console, print)\nuse std.project (Package)\n\npackage = Package(name: \"tasks\")\n\npub fn deploy(; env: str, verbose: bool, note: Option[str], region: str = \"eu\", count: 1..100 = 3) -> Result[(), str] <console, alloc> {\n  print(\"deploy {env} {verbose} {region} {count}\")\n  match note {\n    .some(n) { print(\"note {n}\") }\n    .none { }\n  }\n  .ok(())\n}\n\npub fn fail() -> Result[(), str] <console> {\n  .err(\"it broke\")\n}\n";
 
 /// The executable of the task `deploy`, built once for a test.
 fn deploy() -> PathBuf {

@@ -394,8 +394,8 @@ fn a_head_longer_than_the_limit_is_refused_at_the_limit_however_the_bytes_go_on(
             let helpers = SHOW
                 .replace("show_request(b: take List[Byte])", "show_request_limited(b: take List[Byte], limit: Nat)")
                 .replace("show_response(b: take List[Byte])", "show_response_limited(b: take List[Byte], limit: Nat)")
-                .replace("request_head(freeze(b))", "request_head(freeze(b), limit)")
-                .replace("response_head(freeze(b))", "response_head(freeze(b), limit)");
+                .replace("request_head(freeze(b))", "request_head(freeze(b), limit: limit)")
+                .replace("response_head(freeze(b))", "response_head(freeze(b), limit: limit)");
             let source = program("request_head, response_head", &helpers, &calls);
             assert_eq!(printed(&source), lines);
         },

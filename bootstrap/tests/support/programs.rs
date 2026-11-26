@@ -312,6 +312,9 @@ struct StructDef {
 struct Func {
     name: String,
     params: Vec<(&'static str, Type)>,
+    /// How many parameters are given by position only: the rest, which follow
+    /// a `;` in the signature, are given by name only.
+    split: usize,
     /// The default of each parameter, if it has one. Those with one come
     /// after those without.
     defaults: Vec<Option<Expr>>,
@@ -474,11 +477,18 @@ fn structs(g: &mut Gen, with_field: bool, with_defaults: bool) -> Vec<StructDef>
 /// `shaped` asks for a second function that returns text and takes two
 /// parameters or more, with no defaults, `with_field` for a struct with a
 /// field, and `field_defaults` lets fields have defaults.
-fn model(g: &mut Gen, shaped: bool, with_field: bool, field_defaults: bool) -> Model {
+fn model(
+    g: &mut Gen,
+    shaped: bool,
+    by_name: bool,
+    with_field: bool,
+    field_defaults: bool,
+) -> Model {
     let structs = structs(g, with_field, field_defaults);
     let mut fns = vec![Func {
         name: "main".to_string(),
         params: Vec::new(),
+        split: 0,
         defaults: Vec::new(),
         result: None,
         body: Vec::new(),
@@ -507,9 +517,21 @@ fn model(g: &mut Gen, shaped: bool, with_field: bool, field_defaults: bool) -> M
         let defaults = (params.iter().enumerate())
             .map(|(p, &(_, ty))| (p >= first_default).then(|| default_value(g, &structs, ty)))
             .collect();
+        // A function that holds a mistake about its parameters is given them all
+        // by position, or all by name when the mistake is about a name.
+        // Otherwise those without a default are given by position and those
+        // with one by name, or, now and then, the line between them is moved.
+        let split = if shaped && i == 1 {
+            if by_name { 0 } else { count }
+        } else if count > 0 && g.one_in(4) {
+            g.below(count + 1)
+        } else {
+            first_default
+        };
         fns.push(Func {
             name: format!("f{i}"),
             params,
+            split,
             defaults,
             result,
             body: Vec::new(),
@@ -712,12 +734,11 @@ fn body(g: &mut Gen, m: &Model, i: usize) -> Vec<Stmt> {
             }
             _ => {
                 let value = value(g, m, i, &names, Type::Str, DEPTH);
-                let named = g.one_in(4);
                 Stmt::Expr(Expr::Call {
                     callee: None,
                     args: vec![Arg {
                         param: 0,
-                        named,
+                        named: false,
                         value,
                     }],
                 })
@@ -811,14 +832,26 @@ fn call_of(
     depth: usize,
 ) -> Expr {
     let count = m.fns[j].params.len();
-    let left_out: Vec<usize> = (0..count)
-        .filter(|&p| m.fns[j].defaults[p].is_some() && g.one_in(2))
+    let split = m.fns[j].split;
+    // Those by name are given in any order, but for some that have defaults.
+    let mut rest: Vec<usize> = (split..count)
+        .filter(|&p| m.fns[j].defaults[p].is_none() || !g.one_in(2))
         .collect();
-    // Only the arguments before the first left out can be by position.
-    let by_position = (count - g.below(count + 1)).min(left_out.first().copied().unwrap_or(count));
-    let mut rest: Vec<usize> = (by_position..count)
-        .filter(|p| !left_out.contains(p))
-        .collect();
+    // The arguments by position are those of the parameters before `;`, less
+    // some that have defaults, which are left out from the end. A default is
+    // worked out after the arguments that are given, so one that is left out
+    // before an argument by name is written out after it only in the order
+    // the parameters are in, which the expanded form cannot write.
+    let trailing = (0..split)
+        .rev()
+        .take_while(|&p| m.fns[j].defaults[p].is_some())
+        .count();
+    let left_out = if rest.is_empty() {
+        g.below(trailing + 1)
+    } else {
+        0
+    };
+    let by_position = split - left_out;
     let mut order: Vec<usize> = (0..by_position).collect();
     while !rest.is_empty() {
         order.push(rest.remove(g.below(rest.len())));
@@ -827,7 +860,7 @@ fn call_of(
         .into_iter()
         .map(|param| Arg {
             param,
-            named: param >= by_position,
+            named: param >= split,
             value: value(g, m, i, names, m.fns[j].params[param].1, depth - 1),
         })
         .collect();
@@ -1030,6 +1063,10 @@ fn build(g: &mut Gen, kind: Option<Kind>) -> Case {
     let mut m = model(
         g,
         kind.is_some_and(Kind::needs_parameters),
+        matches!(
+            kind,
+            Some(Kind::NamedTwice | Kind::NoSuchParameter | Kind::PositionAfterName)
+        ),
         kind.is_some_and(|k| k.needs_struct() || k == Kind::DefaultWrongType),
         !kind.is_some_and(Kind::needs_struct),
     );
@@ -1282,11 +1319,17 @@ fn signature_with_console(m: &Model, f: &Func) -> String {
             None => format!("{p}: {}", m.type_name(*ty)),
         })
         .collect();
+    let (before, after) = params.split_at(f.split);
+    let params = if after.is_empty() {
+        before.join(", ")
+    } else {
+        format!("{}; {}", before.join(", "), after.join(", "))
+    };
     let result = match f.result {
         Some(ty) => format!(" -> {}", m.type_name(ty)),
         None => String::new(),
     };
-    format!("fn {}({}){result} <console>", f.name, params.join(", "))
+    format!("fn {}({params}){result} <console>", f.name)
 }
 
 /// Writes function `f`, which holds the mistake if `site`. Gives whether
@@ -1317,7 +1360,14 @@ fn function(b: &mut Builder, m: &Model, f: usize, site: bool, around: Option<&Ex
         b.pick(&["", " ", "\n", "\n  // no parameters\n"]);
     }
     for (i, (p, ty)) in func.params.iter().enumerate() {
-        if i > 0 {
+        if i == func.split {
+            // The parameters from here on are given by name.
+            if i > 0 {
+                b.pick(&["; ", ";", ";\n  "]);
+            } else {
+                b.pick(&[";", "; ", ";\n  "]);
+            }
+        } else if i > 0 {
             b.pick(&[", ", ",", ",\n  "]);
         }
         if f == 1 && i + 1 == func.params.len() && b.is(Kind::DefaultBeforeOther) {
@@ -1624,9 +1674,12 @@ fn main_statement(
             b.push(")");
         }
         Kind::PrintEnd => {
-            b.push("print(\"a\", \"b\", .stdout, ");
-            b.mark("takes 3 arguments", None);
-            b.push("\"c\")");
+            b.push("print(\"a\", ");
+            b.mark(
+                "`end` of `print` is given by name",
+                Some("`print(end: \"b\")`".to_string()),
+            );
+            b.push("\"b\")");
         }
         Kind::TextWhereNothing => {
             b.mark("returns nothing", None);
@@ -1862,6 +1915,28 @@ fn construction(
     b.push(")");
 }
 
+/// Writes, by position, the defaults of the parameters before `;` that a call
+/// leaves out, as the expanded form of the call does.
+fn positional_defaults(
+    b: &mut Builder,
+    m: &Model,
+    callee: Option<usize>,
+    left_out: &[usize],
+    split: usize,
+    count: &mut usize,
+    console_site: &Option<String>,
+) {
+    let Some(f) = callee else { return };
+    for &p in left_out.iter().filter(|&&p| p < split) {
+        if *count > 0 {
+            b.push(", ");
+        }
+        let default = m.fns[f].defaults[p].as_ref().expect("a default");
+        expr(b, m, default, console_site);
+        *count += 1;
+    }
+}
+
 /// Writes the arguments of a call and its `)`, with the mistake about
 /// arguments if `kind` is one.
 fn call_args(
@@ -1878,17 +1953,32 @@ fn call_args(
     };
     // How each argument is written: by name or not.
     let named = |a: &Arg| match kind {
-        Some(Kind::TooFewArguments | Kind::TooManyArguments) => false,
         Some(Kind::NamedTwice | Kind::NoSuchParameter | Kind::PositionAfterName) => true,
         _ => a.named,
     };
+    let split = callee.map_or(1, |f| m.fns[f].split);
     let mut written: Vec<&Arg> = args.iter().collect();
     if matches!(kind, Some(Kind::TooFewArguments | Kind::TooManyArguments)) {
         written.sort_by_key(|a| a.param);
     }
     let dropped = (kind == Some(Kind::TooFewArguments)).then(|| written.pop().unwrap());
-    for (i, arg) in written.iter().enumerate() {
-        if i > 0 {
+    // The parameters before `;` that the call leaves out, which the expanded
+    // form writes by position after the others, and those after it, which it
+    // writes by name.
+    let left_out: Vec<usize> = match callee {
+        Some(_) if b.expand => (0..params.len())
+            .filter(|p| !args.iter().any(|a| a.param == *p))
+            .collect(),
+        _ => Vec::new(),
+    };
+    let mut count = 0;
+    let mut flushed = false;
+    for arg in &written {
+        if named(arg) && !flushed {
+            flushed = true;
+            positional_defaults(b, m, callee, &left_out, split, &mut count, console_site);
+        }
+        if count > 0 {
             b.pick(&[", ", ",", ",\n    "]);
         }
         if named(arg) {
@@ -1896,6 +1986,10 @@ fn call_args(
             b.pick(&[": ", ":"]);
         }
         expr(b, m, &arg.value, console_site);
+        count += 1;
+    }
+    if !flushed {
+        positional_defaults(b, m, callee, &left_out, split, &mut count, console_site);
     }
     // One more argument, by name if it has one.
     let more = |b: &mut Builder, mentions: String, fix: Option<String>, name: Option<&str>| {
@@ -1907,18 +2001,16 @@ fn call_args(
         }
         b.push("\"a\"");
     };
-    if b.expand
-        && let Some(f) = callee
-    {
-        let left_out = (0..params.len()).filter(|p| !args.iter().any(|a| a.param == *p));
-        for (i, p) in left_out.enumerate() {
-            if i > 0 || !written.is_empty() {
+    if let Some(f) = callee {
+        for &p in left_out.iter().filter(|&&p| p >= split) {
+            if count > 0 {
                 b.push(", ");
             }
             b.push(params[p]);
             b.push(": ");
             let default = m.fns[f].defaults[p].as_ref().expect("a default");
             expr(b, m, default, console_site);
+            count += 1;
         }
     }
     match kind {
@@ -1952,7 +2044,7 @@ fn bad_literal(b: &mut Builder, pieces: &[usize]) {
     match b.kind {
         Some(Kind::UnexpectedCharacter) => {
             b.mark("unexpected character", None);
-            b.pick(&["#", "$", "?", "`", ";", "~", "é", "日"]);
+            b.pick(&["#", "$", "?", "`", "~", "é", "日"]);
             literal_text(b, pieces, None);
         }
         Some(Kind::ExpressionNotBuilt) => {

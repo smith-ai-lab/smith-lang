@@ -1526,9 +1526,11 @@ impl<'a> Checker<'a> {
     /// Checks a call of `wrapping_div` or `wrapping_rem`, which compiles only
     /// when `arith` proves that the divisor is not zero.
     pub(super) fn wrapping_division(&mut self, body: &mut Body<'a>, call: &Call, sig: &Signature) {
-        let by = (params_of(&sig.params, &call.args).into_iter().flatten())
-            .position(|p| p == 1)
-            .map(|i| &call.args[i].value);
+        let by = (params_of(&sig.params, sig.by_position(), &call.args)
+            .into_iter()
+            .flatten())
+        .position(|p| p == 1)
+        .map(|i| &call.args[i].value);
         let op = if call.callee == "wrapping_div" {
             ArithOp::Div
         } else {
@@ -1545,9 +1547,11 @@ impl<'a> Checker<'a> {
     /// compiles only when `arith` proves that it is below the number of bits
     /// of the type `ty` that is shifted.
     pub(super) fn shift(&mut self, body: &mut Body<'a>, call: &Call, sig: &Signature, ty: &Ty) {
-        let by = (params_of(&sig.params, &call.args).into_iter().flatten())
-            .position(|p| p == 1)
-            .map(|i| &call.args[i].value);
+        let by = (params_of(&sig.params, sig.by_position(), &call.args)
+            .into_iter()
+            .flatten())
+        .position(|p| p == 1)
+        .map(|i| &call.args[i].value);
         match (ty, by) {
             (Ty::Int(t), Some(by)) => self.shifts(body, by, *t, call.pos),
             (Ty::Unknown, _) | (_, None) => {}

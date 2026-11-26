@@ -145,6 +145,7 @@ fn punct_text(p: Punct) -> str {
     .bang { "!" }
     .pipe_arrow { "|>" }
     .percent { "%" }
+    .semicolon { ";" }
   }
 }
 

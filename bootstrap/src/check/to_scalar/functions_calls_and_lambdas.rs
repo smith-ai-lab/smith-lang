@@ -805,7 +805,8 @@ impl<'a> Lowering<'a> {
     ) -> (Ty, Vec<form::Value>) {
         let typed = self.typed;
         let signature = typed.defs.handler_signature(effect);
-        let places = params_of(&signature.params, &call.args).expect("checked");
+        let places =
+            params_of(&signature.params, signature.by_position(), &call.args).expect("checked");
         let mut given: Vec<Option<Bound<'a>>> = vec![None; signature.params.len()];
         for (arg, at) in call.args.iter().zip(places) {
             given[at] = Some(self.argument(out, &arg.value, &signature.params[at], env));
@@ -996,11 +997,9 @@ impl<'a> Lowering<'a> {
         };
         let params = defs.params(instance.template);
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
-        for (arg, at) in call
-            .args
-            .iter()
-            .zip(params_of(&params, &call.args).expect("checked"))
-        {
+        for (arg, at) in call.args.iter().zip(
+            params_of(&params, defs.by_position(instance.template), &call.args).expect("checked"),
+        ) {
             args[at] = Some(self.argument(out, &arg.value, &params[at], env));
         }
         for (at, default) in defs.left_out(call) {
@@ -1147,11 +1146,9 @@ impl<'a> Lowering<'a> {
         };
         let params = defs.params(instance.template);
         let mut args: Vec<Option<Bound<'a>>> = vec![None; params.len()];
-        for (arg, at) in call
-            .args
-            .iter()
-            .zip(params_of(&params, &call.args).expect("checked"))
-        {
+        for (arg, at) in call.args.iter().zip(
+            params_of(&params, defs.by_position(instance.template), &call.args).expect("checked"),
+        ) {
             args[at] = Some(self.argument(out, &arg.value, &params[at], env));
         }
         let args = args.into_iter().map(|a| a.expect("given")).collect();
@@ -1181,11 +1178,9 @@ impl<'a> Lowering<'a> {
         };
         let params = defs.params(instance.template);
         let mut args: Vec<Option<Vec<form::Value>>> = vec![None; params.len()];
-        for (arg, at) in call
-            .args
-            .iter()
-            .zip(params_of(&params, &call.args).expect("checked"))
-        {
+        for (arg, at) in call.args.iter().zip(
+            params_of(&params, defs.by_position(instance.template), &call.args).expect("checked"),
+        ) {
             args[at] = Some(self.passed(out, &arg.value, &params[at].1, env));
         }
         if defs.provided(f).is_some_and(|p| p.operation == "fill") {
