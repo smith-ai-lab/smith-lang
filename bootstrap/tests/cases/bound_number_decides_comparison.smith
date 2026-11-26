@@ -1,0 +1,7 @@
+use std.console (console, print)
+
+fn main() <console> {
+  a: -15..-13 = -15
+  k = -15
+  if a < k { print("less") } else { print("not") }
+}
