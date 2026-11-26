@@ -35,6 +35,18 @@ pub const ONCE: &[Test] = &[
         a_function_that_gives_a_proof_and_carries_an_effect_is_refused,
     ),
     (
+        "a_proof_function_that_is_refused_is_one_error_and_never_reaches_the_lowering",
+        a_proof_function_that_is_refused_is_one_error_and_never_reaches_the_lowering,
+    ),
+    (
+        "a_function_that_gives_a_proof_with_an_effect_listed_is_refused_saying_why",
+        a_function_that_gives_a_proof_with_an_effect_listed_is_refused_saying_why,
+    ),
+    (
+        "a_name_bound_to_a_proof_is_read_when_arith_may_use_it_and_not_otherwise",
+        a_name_bound_to_a_proof_is_read_when_arith_may_use_it_and_not_otherwise,
+    ),
+    (
         "a_proof_of_a_statement_that_names_a_var_is_refused_with_the_name_of_the_var",
         a_proof_of_a_statement_that_names_a_var_is_refused_with_the_name_of_the_var,
     ),
@@ -341,4 +353,46 @@ fn a_proof_of_a_statement_that_names_a_var_is_refused_with_the_name_of_the_var()
             check(source("n = m", "m").as_bytes())
         );
     });
+}
+
+/// A proof function whose steps are refused is reported, whether or not code
+/// calls it and binds what it gives, and the program is never lowered.
+fn a_proof_function_that_is_refused_is_one_error_and_never_reaches_the_lowering() {
+    let source = with_header(
+        "fn more(a: Nat, p: a > 3) -> a > 2 { arith(p) }\n\nfn need(a: Nat) -> Nat\n  requires a > 2\n{ a }\n\nfn f(a: Nat) -> Nat {\n  match check(a > 3) {\n    .some(p) {\n      q = more(a, p)\n      need(a)\n    }\n    .none { 0 }\n  }\n}\n\nfn main() <console, alloc> {\n  print(\"{f(5)}\")\n}\n"
+            .to_string(),
+    );
+    refused(&source, "`arith`");
+    assert!(lower(source.as_bytes()).is_err());
+}
+
+/// A function that gives a proof lists no effect, and is told why.
+fn a_function_that_gives_a_proof_with_an_effect_listed_is_refused_saying_why() {
+    let source = with_header(
+        "fn bad(a: Nat, p: a > 0) -> a > 0 <console> { p }\n\nfn main() <console, alloc> {\n  print(\"{1}\")\n}\n"
+            .to_string(),
+    );
+    refused(&source, "carries no effect");
+}
+
+/// A proof a call gave and bound to a name is a fact `arith` uses, so the name
+/// is read where the body asks `arith` for something, and is never read in a
+/// body that asks it for nothing.
+fn a_name_bound_to_a_proof_is_read_when_arith_may_use_it_and_not_otherwise() {
+    let source = |tail: &str| {
+        with_header(format!(
+            "fn more(a: Nat, p: a == 3) -> a + 1 == 4 {{ arith(p) }}\n\nfn need(a: Nat) -> Nat\n  requires a > 2\n{{ a }}\n\nfn f(a: Nat) -> Nat {{\n  match check(a == 3) {{\n    .some(p) {{\n      q = more(a, p)\n      {tail}\n    }}\n    .none {{ 0 }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(3)}}\")\n}}\n"
+        ))
+    };
+    let used = source("need(a)");
+    let warnings = check(used.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{used}"));
+    assert!(warnings.is_empty(), "{warnings:?} for\n{used}");
+    let out = smith::scalar::run(&lowered(&used));
+    assert_eq!(out.stdout, b"3\n".to_vec());
+    let unused = source("7");
+    let warnings = check(unused.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{unused}"));
+    assert!(
+        warnings.iter().any(|w| w.message.contains("`q`")),
+        "{warnings:?} for\n{unused}"
+    );
 }

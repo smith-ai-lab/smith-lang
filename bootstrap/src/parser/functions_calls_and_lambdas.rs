@@ -238,6 +238,13 @@ impl Parser<'_> {
                 self.bump();
                 self.bump();
             }
+            if let Some(at) = self.effects_after_statement() {
+                return Err(Error::new(
+                    at,
+                    "a function that gives a proof carries no effect, as a proof is erased and the code that gives it is never run",
+                )
+                .with_fix("take the effects off the function, and give the proof from steps of a proof"));
+            }
             if let Some(statement) = self.statement_type() {
                 result = Some(statement);
             } else {
@@ -322,6 +329,27 @@ impl Parser<'_> {
             statement: Some(Box::new(statement)),
             length: None,
         })
+    }
+
+    /// Where the effects are written after a result that is a statement, as in
+    /// `-> a > 0 <console>`, which a proof does not carry.
+    fn effects_after_statement(&self) -> Option<Pos> {
+        let mut compared = false;
+        for (i, token) in self.tokens[self.at..].iter().enumerate() {
+            match &token.tok {
+                Tok::Punct("<") if compared && self.effects_at(self.at + i) => {
+                    return Some(token.pos);
+                }
+                Tok::Punct("==" | "!=" | "<" | "<=" | ">" | ">=")
+                | Tok::Keyword("and" | "or" | "not") => compared = true,
+                Tok::Punct("{")
+                | Tok::Keyword("requires" | "ensures")
+                | Tok::Newline
+                | Tok::Eof => return None,
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Whether a comparison, or `and`, `or`, or `not`, is written before the
