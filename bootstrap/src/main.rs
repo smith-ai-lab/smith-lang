@@ -449,7 +449,7 @@ fn project_with_task(task: &str) -> Result<(PathBuf, project::Read), String> {
         let here =
             std::env::current_dir().map_or_else(|_| ".".to_string(), |d| d.display().to_string());
         return Err(format!(
-            "no project.smith was found in {here} or any folder above it, so `{task}` is not a task: `{task}` would be a task of project.smith"
+            "no project.smith was found in {here} or any folder above it, and `{task}` would be a task of project.smith"
         ));
     };
     let read = tasks_of(&root)?;
