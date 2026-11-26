@@ -13,10 +13,10 @@ built:
 The module `std.fetch` declares the `fetch` [effect](../language/effect-declarations.md), by which a program asks another server for something over HTTP. A program says what it asks, and the deployment says how the request travels, as it does for [`http`](http.md), which is the other direction.
 
 ```
-use std.fetch (FetchError, Request, fetch, send)
+use std.fetch (FetchError, fetch, get)
 
 fn keys_of(issuer: str) -> Result[List[Byte], FetchError] <fetch, alloc> {
-  response = try send(Request(url: "{issuer}/.well-known/jwks.json"), 65536)
+  response = try get[65536]("{issuer}/.well-known/jwks.json")
   if response.status == 200 { .ok(response.body.bytes) } else { .err(.failed((issuer, "status {response.status}"))) }
 }
 ```
@@ -82,6 +82,32 @@ Each case holds the URL of the request, as [Errors of the library](errors.md) sa
 - **An address that begins `https` is always checked.** No argument and no setting sends a request to a server whose certificate is not right, so `untrusted` cannot be turned off.
 - A response that sends the program to another address is given as it is, with its status and its `location`, and `send` follows nothing.
 
+## The functions of a method
+
+`get`, `post`, `put`, `patch`, and `delete` each send a request with the method of their name, and take the limit on the body as a type parameter, as `get[65536](url)` does. Each gives `Result[Response[limit], FetchError]`, and is written over `send`.
+
+```
+fn get[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  send(Request(url: url, method: .get, headers: headers), limit)
+}
+
+fn post[limit: Nat](url: str, body: str = "", headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  send(Request(url: url, method: .post, headers: headers, body: body), limit)
+}
+```
+
+`put` and `patch` are `post` with their own method, and `delete` is `get` with its own. The limit is written at every call, and no function has a default for it, so `get(url)` is refused: "`get` needs a limit on the body, which a type parameter gives", with the fix "write `get[65536](url)`". A limit that is not a `Nat` is refused as any type argument is.
+
+`head` takes no limit, as the response to it has no body: `head(url)` gives `Result[Response[0], FetchError]`, which has the status and the headers of what a `get` of the same address would give.
+
+```
+fn head(url: str, headers: List[(str, str)] = []) -> Result[Response[0], FetchError] <fetch, alloc> {
+  send(Request(url: url, method: .head, headers: headers), 0)
+}
+```
+
+A request that needs another method, or a header and a body together in a way these do not, is a `Request` given to `send`.
+
 ## What answers it
 
 What answers `fetch` is the [deployment](../language/deployments.md) and not the program.
@@ -94,5 +120,8 @@ What answers `fetch` is the [deployment](../language/deployments.md) and not the
 
 | Written | Is |
 | --- | --- |
-| `send(Request(url: u), n)` | The response of the server at `u`, with a body of at most `n` bytes, or why there is none |
-| `Request(url: u, method: .post, headers: h, body: b)` | A request with a method, headers, and a body |
+| `get[n](u)` | The response of the server at `u`, with a body of at most `n` bytes, or why there is none; `post`, `put`, `patch`, and `delete` are the same with their own method |
+| `post[n](u, body: b, headers: h)` | The same, with a body and headers sent |
+| `head(u)` | The status and headers of the server at `u`, with no body, and no limit |
+| `send(Request(url: u), n)` | The same as `get[n](u)`, for a request built by hand |
+| `Request(url: u, method: .post, headers: h, body: b)` | A request with a method, headers, and a body, for `send` |
