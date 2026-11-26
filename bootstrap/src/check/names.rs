@@ -195,7 +195,11 @@ pub(super) fn renamed_tokens(
             ),
             other => other.clone(),
         };
-        out.push(Token { tok, pos: t.pos });
+        out.push(Token {
+            tok,
+            pos: t.pos,
+            note: t.note.clone(),
+        });
     }
     out
 }

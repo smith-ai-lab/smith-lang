@@ -96,6 +96,8 @@ pub(super) struct KernelCall {
     pub(super) args: Vec<crate::kernel::Value>,
     /// The requirement as it is written, with the arguments put in.
     pub(super) written: String,
+    /// The comment above the `requires`, which is the message of the refusal.
+    pub(super) note: Option<String>,
 }
 
 /// The value of an expression that is written out whole, or none.
@@ -2347,26 +2349,29 @@ impl<'a> Checker<'a> {
                 .is_some_and(|g| proves(&background(&facts, std::iter::once(g)), g));
             if !proved {
                 let goal = written_contract(&|n| texts.get(n).cloned(), requirement);
+                let note = callee.note(requirement);
                 if said.is_none()
                     && let Some(call) = call
-                    && let Some(pending) =
+                    && let Some(mut pending) =
                         self.for_the_kernel(requirement, call, &sig.params, &goal)
                 {
+                    pending.note = note.map(str::to_string);
                     self.kernel_calls.push(pending);
                     continue;
                 }
-                self.errors.push(
-                    Error::new(
+                let error = match note {
+                    Some(note) => Error::new(pos, note).with_goal(format!("`{goal}`")),
+                    None => Error::new(
                         pos,
                         format!(
                             "cannot prove that `{goal}`, which `{}` requires of its arguments",
                             callee.name
                         ),
-                    )
-                    .with_fix(
-                        "check the arguments first with an `if`, or state it in a `requires`",
                     ),
-                );
+                };
+                self.errors.push(error.with_fix(
+                    "check the arguments first with an `if`, or state it in a `requires`",
+                ));
             }
         }
         if let (Some((name, _)), Ty::Int(t)) = (&callee.result_name, &sig.gives) {
@@ -2438,6 +2443,7 @@ impl<'a> Checker<'a> {
             predicate: f,
             args: args?,
             written: written.to_string(),
+            note: None,
         })
     }
 

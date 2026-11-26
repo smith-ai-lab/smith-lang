@@ -842,8 +842,12 @@ impl<'a> Typed<'a> {
                     pending.written
                 ),
             };
+            let error = match &pending.note {
+                Some(note) => Error::new(pending.pos, note).with_goal(message),
+                None => Error::new(pending.pos, message),
+            };
             errors.push(
-                Error::new(pending.pos, message).with_fix(
+                error.with_fix(
                     "check the arguments first with an `if`, or state it in a `requires`",
                 ),
             );

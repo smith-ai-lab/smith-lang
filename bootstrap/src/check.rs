@@ -4220,7 +4220,11 @@ fn shifted(tokens: &[crate::lexer::Token], base: usize) -> Vec<crate::lexer::Tok
             };
             let mut pos = t.pos;
             pos.line += base;
-            crate::lexer::Token { tok, pos }
+            crate::lexer::Token {
+                tok,
+                pos,
+                note: t.note.clone(),
+            }
         })
         .collect()
 }

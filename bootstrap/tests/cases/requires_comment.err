@@ -1,0 +1,5 @@
+requires_comment.smith:11:38: The first number must not be below the second.
+  goal: `3 >= 5`
+  11 | fn main() <console, alloc> { print("{gap(3, 5)}") }
+     |                                      ^
+  fix: check the arguments first with an `if`, or state it in a `requires`
