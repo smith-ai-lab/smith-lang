@@ -61,6 +61,22 @@ fn gap_again(a: Byte, b: Byte) -> Byte
 
 `gap_again(9, 3)` is `6`. A `requires` may join comparisons with `and`, `or`, and `not`.
 
+## A requires is a proof parameter
+
+`requires e` is a parameter of the statement `e` that has no name and the default `arith`, so these two are one feature.
+
+```
+fn gap(a: Byte, b: Byte) -> Byte
+  requires a >= b
+{
+  a - b
+}
+
+fn gap_named(a: Byte, b: Byte, _: a >= b = arith) -> Byte { a - b }
+```
+
+At each call `arith` proves `a >= b`, and no proof is passed by hand for it. `gap(5, 3)` and `gap_named(5, 3)` are both `2`, and `gap(3, 5)` and `gap_named(3, 5)` are both refused with the goal `3 >= 5`. A proof parameter that has a name, as [Statements](statements.md#a-proof-parameter-may-have-a-default) says, may also be passed: `gap_named(a, b, q)` gives the proof `q` that `a >= b`, which a `requires` has no way to do, as it has no name to pass.
+
 ## What the function gives
 
 `ensures` states something about the result. The signature gives the result a name, and the `ensures` is about that name.

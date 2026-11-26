@@ -16,7 +16,7 @@ built:
 
 # What arith proves
 
-`arith` is the procedure that proves, when the program is built, that a value fits the range it enters, as [Integer arithmetic](arithmetic.md) says, and that an index is in range. It decides linear arithmetic over the integers and nothing more, which is why it always answers yes or no, in a time that can be predicted.
+`arith` is the procedure that proves, when the program is built, that a value fits the range it enters, as [Integer arithmetic](arithmetic.md) says, and that an index is in range. It decides whole-number facts with no quantifier, and nothing more, which is why it always answers yes or no, in a time that can be predicted. It gives a proof that the [kernel](trust.md) checks, and it never searches. It is the default of a [proof parameter](statements.md#a-proof-parameter-may-have-a-default) and of a [proof field](proof-fields.md#making-one), and `requires e` is a parameter of `e` with that default.
 
 ```
 use std.console (console, print)
@@ -185,7 +185,7 @@ It claims no more. `bit_and(x, 63) + 200` is refused, since 63 + 200 does not fi
 
 **A contract.** The function's own `requires`, and the `ensures` of a function that was called, are facts. [Contracts](contracts.md) says how.
 
-**A proof held in a value.** Every proof it can see, as a value or as a field of a value, is a fact. [A struct that holds a proof](proof-fields.md) says how a value comes to hold one.
+**A proof in scope.** Every proof it can see is a fact: one bound by a [`check`](check.md), one a lemma gave, and one held in a field of a value. [A struct that holds a proof](proof-fields.md) says how a value comes to hold one. So the result of a lemma proves a later `requires` with nothing passed, and `Cursor(at: at)` inside `.some(p)` is proven from `p`, as [Proofs as functions](proof-functions.md) shows.
 
 ## What it cannot decide
 
@@ -220,6 +220,8 @@ fn area(w: Byte, h: Byte) -> Byte
 ```
 
 `area(15, 17)` is `255`. So `rows * cols <= limit` is never proven from facts about `rows` and `cols` alone. A function that needs it states it in a `requires`, and a caller whose sizes are known only when the program runs gets it from a [`check`](check.md).
+
+What `arith` cannot decide is proven by a lemma, a [proof function](proof-functions.md) whose body is steps the kernel checks, and the proof it gives is in scope after that. A statement that holds for every element is never instantiated by `arith`: it is used at one point by hand, or by a lemma.
 
 A caller that cannot show it is refused where it calls.
 
@@ -267,6 +269,6 @@ The author supplies the missing fact in one of three ways: with a [`requires`](c
 | What a caller owes | The `requires` of the function |
 | What a function gave | The `ensures` of a function that was called |
 | What a bit operation gave | The numbers it was given |
-| A proof | A value or field that holds one |
+| A proof | A name bound to one, or a field that holds one |
 
 Next: [Contracts](contracts.md)

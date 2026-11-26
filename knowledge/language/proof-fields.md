@@ -22,7 +22,7 @@ A fact about one number alone needs no struct, as its range says it: a number ab
 
 ## Making one
 
-The field for the proof is left out of a construction. `arith` builds it from what is known, or the construction is refused.
+A proof field has the default `arith`, as a [proof parameter](statements.md#a-proof-parameter-may-have-a-default) may. The field is left out of a construction, and `arith` builds it from what is known, or the construction is refused.
 
 ```
 fn first() -> Cursor[10] { Cursor(at: 4) }
