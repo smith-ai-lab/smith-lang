@@ -45,10 +45,10 @@ fn past[size: Nat](c: Cursor[size]) -> Cursor[size] {
 This is refused: "`at` cannot be assigned, as `inside` is a proof about it", with the fix "build the value again, as `Cursor(at: e)`". A field the statement does not name is assigned as any other. The value is built again, which proves it again.
 
 ```
-fn forward[size: Nat](c: Cursor[size], to: Nat) -> Result[Cursor[size], str]
+fn forward[size: Nat](c: Cursor[size], to: Nat) -> Cursor[size]
   requires to <= size
 {
-  .ok(Cursor(at: to))
+  Cursor(at: to)
 }
 ```
 

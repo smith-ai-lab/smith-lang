@@ -70,14 +70,14 @@ fn busy(n: u64) -> u64 {
   total
 }
 
-fn abandon(n: u64) {
+fn leave(n: u64) {
   with tasks()
   _ = spawn { busy(n) }
   ()
 }
 ```
 
-`busy` carries no effect and so never suspends. The block of `abandon` ends at once, and the block waits until `busy` has ended on its own, as [Tasks](tasks.md) says.
+`busy` carries no effect and so never suspends. The block of `leave` ends at once, and the block waits until `busy` has ended on its own, as [Tasks](tasks.md) says.
 
 ## Its own children
 

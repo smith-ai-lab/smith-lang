@@ -30,11 +30,29 @@ effect fetch {
   fn send(request: Request, limit: Nat) -> Result[Response[limit], FetchError]
 }
 
-struct Request {
+enum Request {
+  get: Url
+  head: Url
+  delete: Url
+  post: Upload
+  put: Upload
+  patch: Upload
+}
+
+struct Url {
   url: str
-  method: Method = .get
   headers: List[(str, str)] = []
-  body: str = ""
+}
+
+pub struct Payload {
+  content_type: str
+  bytes: List[Byte]
+}
+
+struct Upload {
+  url: str
+  payload: Payload
+  headers: List[(str, str)] = []
 }
 
 struct Response[most: Nat] {
@@ -84,29 +102,56 @@ Each case holds the URL of the request, as [Errors of the library](errors.md) sa
 
 ## The functions of a method
 
-`get`, `post`, `put`, `patch`, and `delete` each send a request with the method of their name, and take the limit on the body as a type parameter, as `get[65536](url)` does. Each gives `Result[Response[limit], FetchError]`, and is written over `send`.
+Each method is a function that takes only what that method has, so a request that is wrong cannot be written. `get`, `head`, and `delete` take a `url` and `headers`, and have no body parameter. `post`, `put`, and `patch` take a `url`, a body that is required, and `headers`.
+
+`get`, `post`, `put`, `patch`, and `delete` take the limit on the body as a type parameter, `[limit: Nat]`, fixed when the program is compiled, as `get[65536](url)` does. Each gives `Result[Response[limit], FetchError]`, and is written over `send`.
 
 ```
-fn get[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
-  send(Request(url: url, method: .get, headers: headers), limit)
+fn get[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn delete[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn post[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn put[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn patch[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+```
+
+`head` takes no limit, as its response has no body. It gives a `HeadResponse`, which has a status and headers and no body field.
+
+```
+fn head(url: str, headers: List[(str, str)] = []) -> Result[HeadResponse, FetchError] <fetch, alloc>
+
+struct HeadResponse {
+  status: 100..600
+  headers: List[(str, str)]
 }
+```
 
-fn post[limit: Nat](url: str, body: str = "", headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
-  send(Request(url: url, method: .post, headers: headers, body: body), limit)
+```
+use std.fetch (fetch, get, head, json, post)
+
+fn demo(item: Item) -> Result[(), FetchError] <fetch, alloc> {
+  page = try get[65536]("http://example.com/keys")
+  made = try post[4096]("http://api.example.com/items", json(item))
+  seen = try head("http://example.com/keys")
+  .ok(())
 }
 ```
 
-`put` and `patch` are `post` with their own method, and `delete` is `get` with its own. The limit is written at every call, and no function has a default for it, so `get(url)` is refused: "`get` needs a limit on the body, which a type parameter gives", with the fix "write `get[65536](url)`". A limit that is not a `Nat` is refused as any type argument is.
+A call that does not fit is refused where it is written, with a message that names the method. `get(url, body: x)` is refused: "`get` has no body", a `post` with no body is refused: "`post` needs a body", and `seen.body` is refused: "a `HeadResponse` has no body". A limit is written at every call: `get(url)` is refused: "`get` needs a limit on the body, which a type parameter gives", with the fix "write `get[65536](url)`".
 
-`head` takes no limit, as the response to it has no body: `head(url)` gives `Result[Response[0], FetchError]`, which has the status and the headers of what a `get` of the same address would give.
+## A body
 
-```
-fn head(url: str, headers: List[(str, str)] = []) -> Result[Response[0], FetchError] <fetch, alloc> {
-  send(Request(url: url, method: .head, headers: headers), 0)
-}
-```
+A body is a `Payload`, made by one of four functions, and only by them.
 
-A request that needs another method, or a header and a body together in a way these do not, is a `Request` given to `send`.
+| Written | Is |
+| --- | --- |
+| `json(value)` | The JSON of any value with [`Serialize`](serialize.md), with the content type `application/json` |
+| `form(pairs)` | A list of `(str, str)` as `application/x-www-form-urlencoded` |
+| `text(s)` | The text `s`, with the content type `text/plain; charset=utf-8` |
+| `bytes(data, content_type)` | The bytes `data`, with the content type `content_type` |
+
+The `content-type` and `content-length` of the request are the payload's, so they cannot disagree with it. A `headers` entry that names either is refused where it is written when the name is written out, and is `.err(.failed(...))` before anything is sent when it is not known until the program runs.
+
+`send` takes the enum `Request`, so a handler of `fetch` matches the case and gets exactly what that method has: `.get(u)` has the `Url`, and `.post(u)` has the `Upload` with its `Payload`.
 
 ## What answers it
 
@@ -120,8 +165,7 @@ What answers `fetch` is the [deployment](../language/deployments.md) and not the
 
 | Written | Is |
 | --- | --- |
-| `get[n](u)` | The response of the server at `u`, with a body of at most `n` bytes, or why there is none; `post`, `put`, `patch`, and `delete` are the same with their own method |
-| `post[n](u, body: b, headers: h)` | The same, with a body and headers sent |
+| `get[n](u)` | The response of the server at `u`, with a body of at most `n` bytes, or why there is none; `delete` is the same |
+| `post[n](u, json(x))` | The same, with a body sent; `put` and `patch` are the same |
 | `head(u)` | The status and headers of the server at `u`, with no body, and no limit |
-| `send(Request(url: u), n)` | The same as `get[n](u)`, for a request built by hand |
-| `Request(url: u, method: .post, headers: h, body: b)` | A request with a method, headers, and a body, for `send` |
+| `json(x)`, `form(p)`, `text(s)`, `bytes(d, t)` | A `Payload` for `post`, `put`, or `patch` |
