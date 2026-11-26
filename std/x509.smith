@@ -201,7 +201,8 @@ fn moment(v: Value) -> Result[Instant, str] {
   }
   days = wrapping_add(days, day - 1)
   seconds: u64 = wrapping_add(wrapping_mul(days, 86400), hour * 3600 + minute * 60 + second)
-  match narrow(wrapping_mul(seconds, 1000)) {
+  fits: Option[0..4611686018427387904] = narrow(wrapping_mul(seconds, 1000))
+  match fits {
     .some(ms) { .ok(instant(ms)) }
     .none { .err("a time too far from 1970") }
   }
