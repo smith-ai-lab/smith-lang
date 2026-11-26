@@ -373,7 +373,7 @@ fn an_operation_inside_the_conditions_that_bound_its_operands_compiles_exactly_w
 }
 
 /// A sum `a * x + b * y + k` of the variables, written out.
-fn linear(a: i128, b: i128, k: i128) -> String {
+pub fn linear(a: i128, b: i128, k: i128) -> String {
     let mut text = match (a, b) {
         (0, 0) => return lit(k),
         (0, b) => format!("{b} * y"),
@@ -388,9 +388,9 @@ fn linear(a: i128, b: i128, k: i128) -> String {
 
 /// A condition on the variables, written out, with the function that says
 /// for which values it holds.
-type Condition = (String, Box<dyn Fn(i128, i128) -> bool>);
+pub type Condition = (String, Box<dyn Fn(i128, i128) -> bool>);
 
-fn condition(g: &mut Gen, depth: usize, big: bool) -> Condition {
+pub fn condition(g: &mut Gen, depth: usize, big: bool) -> Condition {
     if depth > 0 && g.one_in(2) {
         let (a, f) = condition(g, depth - 1, big);
         return match g.below(3) {

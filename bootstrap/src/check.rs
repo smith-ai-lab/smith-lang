@@ -9495,6 +9495,9 @@ impl<'a> Checker<'a> {
     /// unless it is a `Result`, whose failure must not be dropped.
     fn if_expr(&mut self, body: &mut Body<'a>, m: &Match, otherwise: bool, want: &Want) -> Ty {
         self.condition(body, &m.of);
+        if m.checked.is_some() {
+            self.checkable(body, &m.of);
+        }
         let outer = body.names.len();
         let vars = body.vars.len();
         let known = body.facts.mark();
@@ -9549,6 +9552,47 @@ impl<'a> Checker<'a> {
             Want::Unused => Ty::Nothing,
             Want::Ty(t) if !t.unknown() => t.clone(),
             _ => first.unwrap_or(Ty::Nothing),
+        }
+    }
+
+    /// Refuses what `check` is given when the statement names a `var`, which
+    /// holds another value later, or calls a function that carries an effect,
+    /// as a proof is erased and says nothing of a value that changes.
+    fn checkable(&mut self, body: &Body<'a>, test: &Expr) {
+        let mut all = Vec::new();
+        walk(test, &mut all);
+        for e in all {
+            match e {
+                Expr::Name { name, pos } if body.vars.contains(name) => {
+                    self.errors.push(
+                        Error::new(
+                            *pos,
+                            format!("`check` tests a statement, which names no `var`, and `{name}` is one"),
+                        )
+                        .with_fix("bind its value to a name that is not a `var` first"),
+                    );
+                }
+                Expr::Call(c) => {
+                    let carries = c.qualifier.is_none()
+                        && self.defs.function(c.name_pos, &c.callee).is_some_and(|f| {
+                            !self.defs.file.functions[f].effects.is_empty()
+                                || !self.defs.signatures[f].effects.is_empty()
+                        });
+                    if carries {
+                        self.errors.push(
+                            Error::new(
+                                c.name_pos,
+                                format!(
+                                    "`check` tests a statement, which carries no effect, and `{}` does",
+                                    c.callee
+                                ),
+                            )
+                            .with_fix("call it first and test what it gave"),
+                        );
+                    }
+                }
+                _ => {}
+            }
         }
     }
 

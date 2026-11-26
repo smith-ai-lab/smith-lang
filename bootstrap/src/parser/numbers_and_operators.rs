@@ -275,6 +275,7 @@ pub(super) fn compared(left: Expr, op: &str, right: Expr, op_pos: Pos) -> Expr {
                     of: same,
                     arms,
                     form: Form::Match,
+                    checked: None,
                 }))
             }
         }
