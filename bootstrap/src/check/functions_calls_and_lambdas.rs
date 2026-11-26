@@ -1312,6 +1312,9 @@ impl<'a> Checker<'a> {
                 self.unknown_call(body, call)
             }
             _ => {
+                if let Some(given) = self.left_out_numbers(body, call, want) {
+                    return given;
+                }
                 // What is not known was reported where it was bound.
                 if !matches!(
                     body.names.iter().rfind(|(n, _)| n == name),
