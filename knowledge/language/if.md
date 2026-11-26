@@ -126,7 +126,7 @@ fn log(v: bool, a: Option[str]) -> Result[str, str] {
 }
 ```
 
-This gives "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away". `if v { _ = find("a", a) }` is allowed, and so is `if v { try find("a", a) }`.
+This gives "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away". `if v { _ = find("a", a) }` is allowed, and so is `if v { _ = try find("a", a) }`.
 
 ## Changing a `var`
 
