@@ -6043,7 +6043,8 @@ fn unused_bindings(f: &Function, out: &mut Vec<Error>) {
             Stmt::Assign { .. } | Stmt::Expr(_) => Vec::new(),
         };
         for (name, pos) in defined {
-            if !read.contains(&name) {
+            // `_` defines no name, so there is none to read.
+            if name != "_" && !read.contains(&name) {
                 out.push(
                     Error::new(
                         pos,

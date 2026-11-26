@@ -36,6 +36,10 @@ pub const ONCE: &[Test] = &[
         check_warns_of_dead_code_and_an_unread_binding_that_build_allows,
     ),
     (
+        "a_discarded_value_is_never_reported_as_a_name_that_is_not_read",
+        a_discarded_value_is_never_reported_as_a_name_that_is_not_read,
+    ),
+    (
         "without_a_file_check_checks_main_smith",
         without_a_file_check_checks_main_smith,
     ),
@@ -128,6 +132,33 @@ fn check_warns_of_dead_code_and_an_unread_binding_that_build_allows() {
     let built = smith(&dir, &["build", "--target", any().name(), "two.smith"]);
     assert!(built.status.success(), "{}", stderr(&built));
     assert!(built.stderr.is_empty(), "{}", stderr(&built));
+}
+
+/// Where `_ = e` stands, `check` says nothing of a name that is not read.
+fn a_discarded_value_is_never_reported_as_a_name_that_is_not_read() {
+    let places = [
+        ("the last statement of a function", "fn main() {\n  _ = s()\n}\n"),
+        ("the only statement", "fn main() { _ = s() }\n"),
+        ("two in a row", "fn main() {\n  _ = s()\n  _ = s()\n}\n"),
+        (
+            "an if",
+            "fn main() {\n  if true {\n    _ = s()\n  }\n}\n",
+        ),
+        (
+            "a match",
+            "fn main() {\n  match s() {\n    0 { _ = s() }\n    n { _ = n }\n  }\n}\n",
+        ),
+        (
+            "a loop",
+            "fn main() <diverge> {\n  loop {\n    _ = s()\n  }\n}\n",
+        ),
+    ];
+    for (place, body) in places {
+        let source = format!("fn s() -> Nat {{ 1 }}\n\n{body}");
+        let warnings = check(source.as_bytes()).unwrap_or_else(|e| panic!("{place}: {e:?}"));
+        assert!(warnings.is_empty(), "{place}: {warnings:?}");
+        assert!(lower(source.as_bytes()).is_ok(), "{place}");
+    }
 }
 
 fn without_a_file_check_checks_main_smith() {
