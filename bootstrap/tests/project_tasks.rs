@@ -45,6 +45,10 @@ pub const ONCE: &[Test] = &[
         "a_task_named_as_a_command_is_refused_where_it_is_written",
         a_task_named_as_a_command_is_refused_where_it_is_written,
     ),
+    (
+        "a_name_that_is_no_command_runs_a_task_or_says_why_it_found_none",
+        a_name_that_is_no_command_runs_a_task_or_says_why_it_found_none,
+    ),
 ];
 
 /// The first block of the page of `std.mcp` that holds the text, so that the
@@ -334,4 +338,60 @@ fn an_error_of_a_task_is_at_a_line_of_project_smith() {
     assert_eq!(err.matches("does not import it").count(), 1, "{err}");
     let (line, col) = (3, "pub fn hi() <".len() + 1);
     assert!(err.contains(&format!("project.smith:{line}:{col}")), "{err}");
+}
+
+/// A name no task of the projects below has, and no command: lowercase letters
+/// that are not a command's, starting with a letter the tasks do not.
+fn a_task_name(g: &mut Gen) -> String {
+    let letters = b"xyzqwjk";
+    let length = 1 + g.below(8);
+    let name: String = (0..length).map(|_| *g.pick(letters) as char).collect();
+    name
+}
+
+fn a_name_that_is_no_command_runs_a_task_or_says_why_it_found_none() {
+    let tasks = "use main (main)\nuse std.console (console)\n\npub fn alpha() <console> {\n  main()\n}\n\npub fn beta() <console> {\n  main()\n}\n";
+    let with_tasks = project("why-tasks", &[("main.smith", TASKS_MAIN), ("project.smith", tasks)]);
+    let broken = project("why-broken", &[("main.smith", TASKS_MAIN), ("project.smith", "pub fn (\n")]);
+    let none = project("why-none", &[]);
+    let none_file = none.join("project.smith");
+    assert!(none_file.ancestors().skip(1).all(|up| !up.join("project.smith").exists()), "a project.smith above the scratch folder");
+
+    generate::check(9503, 6, a_task_name, |name: &String| {
+        // No project.smith: the folder is named and the name would be a task.
+        let said = smith(&none, &[name]);
+        let err = stderr(&said);
+        assert_eq!(said.status.code(), Some(1), "{name}: {err}");
+        assert!(err.contains(&none.display().to_string()) && err.contains("no project.smith") && err.contains(&format!("`{name}`")), "{name}: {err}");
+        assert!(!err.contains("unknown command"), "{name}: {err}");
+
+        // A project.smith without the task: its path, the name, and its tasks.
+        let said = smith(&with_tasks, &[name]);
+        let err = stderr(&said);
+        assert_eq!(said.status.code(), Some(1), "{name}: {err}");
+        assert!(err.contains(&with_tasks.join("project.smith").display().to_string()) && err.contains(&format!("no task `{name}`")), "{name}: {err}");
+        assert!(err.contains("alpha") && err.contains("beta"), "{name}: {err}");
+        assert!(!err.contains("unknown command"), "{name}: {err}");
+
+        // A project.smith that does not compile: the errors `build` prints.
+        let said = smith(&broken, &[name]);
+        assert_eq!(said.status.code(), Some(1), "{name}");
+        let built = stderr(&smith(&broken, &["build", name]));
+        assert!(built.contains("project.smith"), "{name}: {built}");
+        assert_eq!(stderr(&said), built, "{name}");
+    });
+
+    // Only a name that starts with `-` is an unknown command, in any folder.
+    for dir in [&none, &with_tasks, &broken] {
+        let said = smith(dir, &["--nope"]);
+        assert_eq!(said.status.code(), Some(1));
+        assert!(stderr(&said).contains("unknown command `--nope`"), "{}", stderr(&said));
+    }
+
+    // A name that is a task still runs it.
+    if runs_here() {
+        let ran = smith(&with_tasks, &["alpha"]);
+        assert!(ran.status.success(), "{}", stderr(&ran));
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "main");
+    }
 }
