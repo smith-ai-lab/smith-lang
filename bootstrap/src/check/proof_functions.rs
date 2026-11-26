@@ -38,6 +38,8 @@ impl<'a> Checker<'a> {
             returned: None,
             lambdas: 0,
             kept: 0,
+            proofs: Vec::new(),
+            call_proofs: HashMap::new(),
         };
         // What the proof's caller owes is what it knows.
         for requirement in &def.requires {
@@ -54,7 +56,9 @@ impl<'a> Checker<'a> {
                 format!("`{}` is a proof, which carries no effect", def.name),
             ));
         }
-        self.proof_block(&mut body, &def.body, &mut Vec::new());
+        self.hold_params(&mut body, def);
+        let mut names: Vec<String> = body.proofs.iter().map(|(n, _)| n.clone()).collect();
+        self.proof_block(&mut body, &def.body, &mut names);
     }
 }
 
@@ -65,6 +69,8 @@ impl<'a> Checker<'a> {
     fn proof_block(&mut self, body: &mut Body<'a>, stmts: &'a [Stmt], names: &mut Vec<String>) {
         match stmts {
             [Stmt::Expr(Expr::Name { name, .. })] if name == "same" => {}
+            // A proof given before, which proves what it proves.
+            [Stmt::Expr(Expr::Name { name, .. })] if names.contains(name) => {}
             [Stmt::Expr(Expr::Call(c))] if c.callee == "arith" && c.qualifier.is_none() => {
                 for arg in &c.args {
                     match &arg.value {
@@ -144,6 +150,7 @@ impl<'a> Checker<'a> {
                 // the arguments, and is checked as any call is, so a proof that
                 // calls itself is held to its `decreases`.
                 self.expr(body, value, &Want::Any);
+                self.hold_called_proof(body, name, value);
                 names.push(name.clone());
                 self.proof_block(body, rest, names);
             }
@@ -160,6 +167,65 @@ impl<'a> Checker<'a> {
 }
 
 impl<'a> Checker<'a> {
+    /// A name given by a call of a proof function is a proof of its statement
+    /// with the call's arguments put in, which the call just proved.
+    pub(super) fn hold_called_proof(&mut self, body: &mut Body<'a>, name: &str, value: &Expr) {
+        let Expr::Call(c) = value else { return };
+        if self.proof_called(c).is_none() {
+            return;
+        }
+        if let Some(held) = body.call_proofs.get(&addr(c)).cloned() {
+            body.proofs.push((name.to_string(), held));
+        }
+    }
+
+    /// A statement names no `var`: a proof of one says nothing once the `var`
+    /// holds another value. So an argument that names a `var` is refused where
+    /// the statement of a proof a call gives, or is passed, is about it.
+    pub(super) fn statements_name_no_var(
+        &mut self,
+        body: &Body<'a>,
+        args: &[(&Expr, usize)],
+        callee: &Function,
+    ) {
+        let result = callee.result.as_ref().and_then(|t| t.statement.as_deref());
+        let mentions = |statement: &Expr, param: &str| {
+            let mut all = Vec::new();
+            walk(statement, &mut all);
+            all.iter()
+                .any(|e| matches!(e, Expr::Name { name, .. } if name == param))
+        };
+        let statements: Vec<&Expr> = result
+            .into_iter()
+            .chain(args.iter().filter_map(|&(_, place)| owed_by(callee, place)))
+            .collect();
+        for &(arg, place) in args {
+            let param = callee.params[place].name.as_str();
+            if callee.params[place].ty.statement.is_some()
+                || !statements.iter().any(|s| mentions(s, param))
+            {
+                continue;
+            }
+            let mut all = Vec::new();
+            walk(arg, &mut all);
+            for e in all {
+                if let Expr::Name { name, pos } = e
+                    && body.vars.contains(name)
+                {
+                    self.errors.push(
+                        Error::new(
+                            *pos,
+                            format!(
+                                "a proof is of a statement that names no `var`, and `{name}` is one"
+                            ),
+                        )
+                        .with_fix("bind its value to a name that is not a `var` first"),
+                    );
+                }
+            }
+        }
+    }
+
     /// The proof function a call is of, if it is one.
     pub(super) fn proof_called(&self, c: &Call) -> Option<usize> {
         if c.qualifier.is_some() {
@@ -175,5 +241,48 @@ fn stmt_pos(s: &Stmt) -> Pos {
         Stmt::Define { pos, .. } | Stmt::Assign { pos, .. } => *pos,
         Stmt::Destructure { pattern, .. } => pattern.pos(),
         Stmt::Expr(e) => e.pos(),
+    }
+}
+
+/// What a proof says, which is what a name that holds one is a proof of: the
+/// statement as `arith` reads it, where it does, and as it is written.
+#[derive(Clone)]
+pub(super) struct Held {
+    pub(super) formula: Option<super::arith::Formula>,
+    pub(super) text: String,
+}
+
+/// The statement of the parameter at `place` that is a proof, which the parser
+/// also put among the `requires`, so that it is checked as they are.
+pub(super) fn owed_by(f: &Function, place: usize) -> Option<&Expr> {
+    f.params[place].ty.statement.as_ref()?;
+    let before = f.params[..place]
+        .iter()
+        .filter(|p| p.ty.statement.is_some())
+        .count();
+    f.requires.get(before)
+}
+
+impl<'a> Checker<'a> {
+    /// What `e` says now, as a proof of it says.
+    pub(super) fn held(&mut self, body: &mut Body<'a>, e: &Expr) -> Held {
+        let mut facts = std::mem::take(&mut body.facts);
+        let formula = self.said(body, &mut facts, e, true);
+        body.facts = facts;
+        Held {
+            formula,
+            text: proof::written_contract(&|_| None, e),
+        }
+    }
+
+    /// The proofs a function is given are its parameters whose type is a
+    /// statement, each a proof of it.
+    pub(super) fn hold_params(&mut self, body: &mut Body<'a>, f: &'a Function) {
+        for place in 0..f.params.len() {
+            if let Some(statement) = owed_by(f, place) {
+                let held = self.held(body, statement);
+                body.proofs.push((f.params[place].name.clone(), held));
+            }
+        }
     }
 }

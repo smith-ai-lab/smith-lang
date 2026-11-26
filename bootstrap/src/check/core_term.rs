@@ -4,6 +4,7 @@
 //! itself one. A function that has anything else, or that has a type
 //! parameter, has no core term yet.
 
+use super::proof_functions::owed_by;
 use super::*;
 use crate::core::{self, Callee, Kind, Lit, Make, Operator, Pattern as CorePattern, Source, Term};
 
@@ -869,6 +870,11 @@ impl<'a> Typed<'a> {
                 core::Type::Nothing,
                 *pos,
             )),
+            [Stmt::Expr(Expr::Name { name, pos })] => Some(Term::new(
+                Kind::Name(name.clone()),
+                core::Type::Nothing,
+                *pos,
+            )),
             [Stmt::Expr(Expr::Call(c))] if c.callee == "arith" && c.qualifier.is_none() => {
                 let args: Option<Vec<Term>> = c
                     .args
@@ -1060,9 +1066,14 @@ impl<'a> Typed<'a> {
                 .collect();
             let requires: Option<Vec<Term>> =
                 f.requires.iter().map(|r| self.core_expr(r)).collect();
-            let (Some(params), Some(requires), Some(statement), Some(body)) = (
+            let given: Option<Vec<(String, Term)>> = (0..f.params.len())
+                .filter_map(|k| owed_by(f, k).map(|e| (f.params[k].name.clone(), e)))
+                .map(|(n, e)| Some((n, self.core_expr(e)?)))
+                .collect();
+            let (Some(params), Some(requires), Some(given), Some(statement), Some(body)) = (
                 params,
                 requires,
+                given,
                 self.core_expr(statement_expr),
                 self.core_proof(&f.body),
             ) else {
@@ -1085,6 +1096,7 @@ impl<'a> Typed<'a> {
                 pos: at,
                 params,
                 requires,
+                given,
                 statement,
                 written: proof::written_contract(&|_| None, statement_expr),
                 body,

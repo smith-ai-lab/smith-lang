@@ -174,6 +174,12 @@ impl Parser<'_> {
             Tok::Punct("{") => self.bump(),
             tok => return Err(self.expected("`{` to open the function's body", tok)),
         }
+        // What a proof parameter says is owed at every call, as a `requires`
+        // says it, so the statement of each is one before the others.
+        let owed: Vec<Expr> = (params.iter())
+            .filter_map(|p| p.ty.statement.as_deref().cloned())
+            .collect();
+        requires.splice(0..0, owed);
         Ok((
             name,
             pos,
@@ -257,6 +263,30 @@ impl Parser<'_> {
         {
             self.at = ahead;
         }
+    }
+
+    /// Reads the type of a parameter when it is a statement, which ends at the
+    /// `,` or `)` that ends the parameter, or at the `=` of its default.
+    pub(super) fn param_statement_type(&mut self) -> Option<Type> {
+        let mut depth = 0usize;
+        let mut found = false;
+        for (i, token) in self.tokens[self.at..].iter().enumerate() {
+            match &token.tok {
+                Tok::Punct("<") if self.effects_at(self.at + i) => return None,
+                Tok::Punct("(" | "[" | "{") => depth += 1,
+                Tok::Punct(")" | "]" | "}") if depth == 0 => break,
+                Tok::Punct(")" | "]" | "}") => depth -= 1,
+                Tok::Punct("," | "=") if depth == 0 => break,
+                Tok::Punct("==" | "!=" | "<" | "<=" | ">" | ">=")
+                | Tok::Keyword("and" | "or" | "not") => found = true,
+                Tok::Eof => break,
+                _ => {}
+            }
+        }
+        if !found {
+            return None;
+        }
+        self.statement_type()
     }
 
     /// Reads a type that is a statement: a comparison of values, or comparisons
@@ -349,9 +379,22 @@ impl Parser<'_> {
         };
         self.expect_punct(":", "`:` and the parameter's type")?;
         let take = self.taking();
-        self.name_bound_ok = self.bound_names_allowed && self.tok() != &Tok::Keyword("fn");
-        let (ty, takes, effects) = self.ty_taking()?;
-        self.name_bound_ok = false;
+        // A function with a body takes a proof; a signature that has none, as a
+        // trait's or an effect's, does not.
+        let proof = if self.bound_names_allowed {
+            self.param_statement_type()
+        } else {
+            None
+        };
+        let (ty, takes, effects) = match proof {
+            Some(statement) => (statement, Vec::new(), Vec::new()),
+            None => {
+                self.name_bound_ok = self.bound_names_allowed && self.tok() != &Tok::Keyword("fn");
+                let read = self.ty_taking();
+                self.name_bound_ok = false;
+                read?
+            }
+        };
         let mut default = None;
         if self.tok() == &Tok::Punct("=") {
             if pattern.is_some() {
@@ -363,7 +406,17 @@ impl Parser<'_> {
             }
             self.bump();
             self.skip_newlines();
-            default = Some(self.default()?);
+            let at = self.pos();
+            let value = self.default()?;
+            if ty.statement.is_some()
+                && !matches!(&value, Expr::Name { name, .. } if name == "arith")
+            {
+                return Err(
+                    Error::new(at, "the one default a proof parameter has is `arith`")
+                        .with_fix("write `= arith`, or leave the default out and pass the proof"),
+                );
+            }
+            default = Some(value);
         }
         if let Some(pattern) = pattern {
             self.binds.push(taken_apart(pattern, &name, pos));

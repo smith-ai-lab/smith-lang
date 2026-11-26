@@ -2118,6 +2118,8 @@ impl<'a> Lowering<'a> {
                 None if typed.fn_values.contains_key(&addr(expr)) => {
                     (typed.type_of(expr, env), Vec::new())
                 }
+                // A proof is erased: it has no value.
+                None if typed.proof_names.contains(&addr(expr)) => (Ty::Nothing, Vec::new()),
                 None => {
                     let k = defs.case_of(defs.boolean, name).expect("checked");
                     (
@@ -2129,6 +2131,15 @@ impl<'a> Lowering<'a> {
                     )
                 }
             },
+            // A call of a proof function is a proof, which is erased.
+            Expr::Call(call)
+                if call.qualifier.is_none()
+                    && defs
+                        .function(call.name_pos, &call.callee)
+                        .is_some_and(|f| is_proof(&defs.file.functions[f])) =>
+            {
+                (Ty::Nothing, Vec::new())
+            }
             Expr::Call(call) if self.bits_function(call).is_some() => {
                 let op = self.bits_function(call).expect("a function of `Bits`");
                 self.bits_call(out, expr, call, op, env)

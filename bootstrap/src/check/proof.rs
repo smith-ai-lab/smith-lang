@@ -12,6 +12,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use super::arith::{Formula, Lin, proves};
+use super::proof_functions::{Held, owed_by};
 use super::{
     Body, Checker, Int, Numbers, Signature, Ty, addr, params_of, pattern_names, statements,
     written_expr, written_with,
@@ -746,6 +747,10 @@ impl Builder<'_, '_> {
 
     /// The sum the size of the list `of` stands for.
     pub(super) fn list_size(&mut self, of: &Expr) -> Option<Lin> {
+        // A list written out has the size of what is written.
+        if let Expr::List { items, .. } = of {
+            return Some(constant(items.len() as i128));
+        }
         let range = (0, self.size_most(of));
         if self.facts.subst.is_some() {
             return None;
@@ -858,7 +863,7 @@ impl<'a> Checker<'a> {
 
     /// What `cond` says when it is `holds`, if it is something arith knows:
     /// a comparison of whole numbers, joined with `and`, `or`, and `not`.
-    fn said(
+    pub(super) fn said(
         &self,
         body: &Body<'a>,
         facts: &mut Facts,
@@ -2219,6 +2224,8 @@ impl<'a> Checker<'a> {
             returned: None,
             lambdas: 0,
             kept: 0,
+            proofs: Vec::new(),
+            call_proofs: HashMap::new(),
         };
         for e in &f.requires {
             self.contract(&mut body, e);
@@ -2347,7 +2354,7 @@ impl<'a> Checker<'a> {
         let mut sums = HashMap::new();
         let mut texts: HashMap<String, String> = HashMap::new();
         let mut given: HashMap<String, (String, Ty)> = HashMap::new();
-        for (arg, place) in args {
+        for &(arg, place) in &args {
             let (name, ty) = &sig.params[place];
             // A parameter whose type is a type parameter is what the argument is.
             let ty = &match ty {
@@ -2387,7 +2394,27 @@ impl<'a> Checker<'a> {
         }
         facts.subst = Some(sums);
         facts.args = Some(given);
-        for requirement in &callee.requires {
+        self.statements_name_no_var(body, &args, callee);
+        // A proof written at the call is one of what the parameter owes.
+        for &(arg, place) in &args {
+            if let Some(owed) = owed_by(callee, place) {
+                let name = (callee.params[place].name.as_str(), callee.name.as_str());
+                self.proof_argument(body, &mut facts, arg, owed, name, &texts);
+            }
+        }
+        // A proof parameter with no default is always passed, and the call that
+        // leaves it out is refused for that, not also for what it owes.
+        let left_out: Vec<usize> = (0..callee.params.len())
+            .filter(|&k| callee.params[k].default.is_none() && !args.iter().any(|(_, p)| *p == k))
+            .filter_map(|k| {
+                owed_by(callee, k)
+                    .and_then(|owed| callee.requires.iter().position(|r| std::ptr::eq(r, owed)))
+            })
+            .collect();
+        for (at, requirement) in callee.requires.iter().enumerate() {
+            if left_out.contains(&at) {
+                continue;
+            }
             let said = self.said(body, &mut facts, requirement, true);
             let proved = said
                 .as_ref()
@@ -2436,9 +2463,74 @@ impl<'a> Checker<'a> {
                 }
             }
         }
+        // What a proof function proves, it proves of the arguments it was
+        // given, which the caller then has.
+        if let Some(statement) = callee.result.as_ref().and_then(|t| t.statement.as_deref()) {
+            let said = self.said(body, &mut facts, statement, true);
+            body.call_proofs.insert(
+                key,
+                Held {
+                    formula: said.clone(),
+                    text: written_contract(&|n| texts.get(n).cloned(), statement),
+                },
+            );
+            facts.known.extend(said);
+        }
         facts.subst = None;
         facts.args = None;
         body.facts = facts;
+    }
+
+    /// Checks that the argument written for a proof parameter is a proof in
+    /// scope of the statement the parameter owes, with the call's arguments put
+    /// in, from what that proof says and nothing else.
+    fn proof_argument(
+        &mut self,
+        body: &mut Body<'a>,
+        facts: &mut Facts,
+        arg: &Expr,
+        owed: &Expr,
+        (param, callee): (&str, &str),
+        texts: &HashMap<String, String>,
+    ) {
+        let (name, pos, held) = match arg {
+            Expr::Name { name, pos } => {
+                let held = body.proofs.iter().rfind(|(n, _)| n == name);
+                let Some((_, held)) = held else {
+                    // What is not a proof is the wrong type, which is reported
+                    // where the arguments are checked, and a name that is not
+                    // defined where it is read.
+                    return;
+                };
+                (name.as_str(), *pos, held.clone())
+            }
+            Expr::Call(c) if body.call_proofs.contains_key(&addr(c)) => {
+                (c.callee.as_str(), c.pos, body.call_proofs[&addr(c)].clone())
+            }
+            _ => return,
+        };
+        self.proof_names.insert(addr(arg));
+        let written = written_contract(&|n| texts.get(n).cloned(), owed);
+        let kept = std::mem::take(&mut facts.known);
+        facts.known = held.formula.iter().cloned().collect();
+        let goal = self.said(body, facts, owed, true);
+        let proved = goal
+            .as_ref()
+            .is_some_and(|g| proves(&background(facts, std::iter::once(g)), g))
+            || written == held.text;
+        facts.known = kept;
+        if !proved {
+            self.errors.push(
+                Error::new(
+                    pos,
+                    format!(
+                        "`{name}` proves `{}`, which is not `{written}`, that `{param}` of `{callee}` takes a proof of",
+                        held.text
+                    ),
+                )
+                .with_fix("pass a proof of the statement the parameter is of"),
+            );
+        }
     }
 
     /// The function a call is of, when it is one the kernel works out for a

@@ -66,6 +66,7 @@ use names::{Naming, Resolution, own_final, renamed_tokens};
 use numbers_and_operators::{
     Int, Narrowing, Numbers, flexible, is_float_call, literal_blocks, narrowing, own_range,
 };
+use proof_functions::Held;
 use traits::{
     Found, ImplInfo, PRELUDE_TRAITS, Requirement, TRAITS_NOT_BUILT, bounds_named, impl_info,
     needs_named, overlaps, split_needs, withouts,
@@ -3185,6 +3186,7 @@ fn check_file(
         fn_values: checker.fn_values,
         named: checker.named,
         named_calls: checker.named_calls,
+        proof_names: checker.proof_names,
         field_receivers: checker.field_receivers,
         type_args: checker.type_args,
         core_vars: RefCell::new(Vec::new()),
@@ -6764,6 +6766,9 @@ struct Typed<'a> {
     /// The calls of a name that holds a function by its type, by their
     /// addresses, with the function each calls.
     named_calls: Map<usize, usize>,
+    /// The proofs written as arguments and the defaults of proof parameters,
+    /// by their addresses, which have no value.
+    proof_names: Set<usize>,
     /// For a call of a field that holds a function, the type of the name the
     /// field is read from, which says the function once the type parameters
     /// are known.
@@ -7235,6 +7240,7 @@ impl<'a> Checker<'a> {
             fn_values: Map::default(),
             named: Set::default(),
             named_calls: Map::default(),
+            proof_names: Set::default(),
             field_receivers: Map::default(),
             type_args: Map::default(),
             frame_gives: Map::default(),
@@ -7356,6 +7362,9 @@ struct Checker<'a> {
     named: Set<usize>,
     /// The calls of a name that holds a function by its type, with the function.
     named_calls: Map<usize, usize>,
+    /// The proofs written as arguments and the defaults of proof parameters,
+    /// by their addresses, which have no value.
+    proof_names: Set<usize>,
     /// For a call of a field that holds a function, the type of the name the
     /// field is read from, which says the function once the type parameters
     /// are known.
@@ -7712,6 +7721,13 @@ struct Body<'a> {
     /// How many of those are stored in a field or returned, which carry no
     /// effect, as the type that holds one states none.
     kept: usize,
+    /// The proofs in scope, each by its name, with the statement it proves in
+    /// terms of the names around it: a parameter that is a proof, a name a
+    /// `check` bound, and a name a call of a proof function was given.
+    proofs: Vec<(String, Held)>,
+    /// What each call of a proof function proved, by the address of the call,
+    /// for the name the call is bound to or the parameter it is passed for.
+    call_proofs: HashMap<usize, Held>,
 }
 
 impl<'a> Body<'a> {
@@ -8452,12 +8468,15 @@ impl<'a> Checker<'a> {
             returned: None,
             lambdas: 0,
             kept: 0,
+            proofs: Vec::new(),
+            call_proofs: HashMap::new(),
         };
         body.facts.solving = self.solve.is_some();
         if let Template::Free(_) = template {
             for requirement in &f.requires {
                 self.assume(&mut body, requirement, true);
             }
+            self.hold_params(&mut body, f);
             self.measure_parts(&mut body, f);
             if !f.ensures.is_empty() {
                 proof::tails(&f.body, &mut body.tails);
@@ -8839,6 +8858,7 @@ impl<'a> Checker<'a> {
                                 } else {
                                     self.assume_binding(body, value);
                                     self.note_bounds(body, &named);
+                                    self.hold_called_proof(body, name, value);
                                 }
                             }
                         }
@@ -9308,6 +9328,20 @@ impl<'a> Checker<'a> {
     /// its blocks give the same type, which it gives.
     fn match_expr(&mut self, body: &mut Body<'a>, m: &Match, want: &Want) -> Ty {
         let defs = self.defs;
+        if let Expr::Name { name, pos } = &m.of
+            && body.proofs.iter().any(|(n, _)| n == name)
+        {
+            self.errors.push(
+                Error::new(
+                    *pos,
+                    format!(
+                        "`{name}` is a proof, which is erased, so no `match` or `if` picks a value by it"
+                    ),
+                )
+                .with_fix("test the statement with `check`, which gives the proof where it holds"),
+            );
+            return Ty::Unknown;
+        }
         match m.form {
             Form::Match | Form::Try => {}
             Form::If { otherwise } => return self.if_expr(body, m, otherwise, want),
@@ -9500,6 +9534,7 @@ impl<'a> Checker<'a> {
         }
         let outer = body.names.len();
         let vars = body.vars.len();
+        let proofs = body.proofs.len();
         let known = body.facts.mark();
         let blocks: Vec<&[Stmt]> = m.arms.iter().map(|a| a.body.as_slice()).collect();
         let assigned = self.assigned_vars(body, &blocks);
@@ -9507,6 +9542,7 @@ impl<'a> Checker<'a> {
         if !otherwise {
             let arm = &m.arms[0];
             self.assume(body, &m.of, true);
+            self.hold_proof(body, m);
             if let End::Value(gives, value) = self.block(body, &arm.body, &Want::Unused) {
                 self.dropped(body, value, &gives);
             }
@@ -9517,6 +9553,7 @@ impl<'a> Checker<'a> {
             }
             body.names.truncate(outer);
             body.vars.truncate(vars);
+            body.proofs.truncate(proofs);
             body.facts.reset(&known);
             // Where the condition is not so, nothing runs.
             self.assume(body, &m.of, false);
@@ -9530,6 +9567,9 @@ impl<'a> Checker<'a> {
         let mut ends = Vec::new();
         for (k, arm) in m.arms.iter().enumerate() {
             self.assume(body, &m.of, k == 0);
+            if k == 0 {
+                self.hold_proof(body, m);
+            }
             self.arm(
                 body,
                 arm,
@@ -9544,6 +9584,7 @@ impl<'a> Checker<'a> {
             }
             body.names.truncate(outer);
             body.vars.truncate(vars);
+            body.proofs.truncate(proofs);
             body.facts.reset(&known);
         }
         self.settle(body, later, &mut first);
@@ -9552,6 +9593,15 @@ impl<'a> Checker<'a> {
             Want::Unused => Ty::Nothing,
             Want::Ty(t) if !t.unknown() => t.clone(),
             _ => first.unwrap_or(Ty::Nothing),
+        }
+    }
+
+    /// Where a `check` held, the name it bound is a proof of what it tested.
+    fn hold_proof(&mut self, body: &mut Body<'a>, m: &Match) {
+        if let Some((name, _)) = &m.checked {
+            body.names.push((name.clone(), Ty::Nothing));
+            let held = self.held(body, &m.of);
+            body.proofs.push((name.clone(), held));
         }
     }
 
