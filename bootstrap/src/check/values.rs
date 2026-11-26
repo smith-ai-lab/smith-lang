@@ -99,6 +99,16 @@ impl<'a> Checker<'a> {
             unknown |= given.unknown();
             read(defs, &template, shape, &given, &mut found);
         }
+        // What neither an argument nor the type the call must give says is the
+        // default of its parameter, if it has one. Where a type is not known
+        // yet, a later round says it, so nothing is taken.
+        if !unknown {
+            for (n, p) in found.iter_mut().zip(&template.params) {
+                if n.is_none() {
+                    *n = p.default;
+                }
+            }
+        }
         if let Some(numbers) = found.iter().copied().collect::<Option<Vec<u64>>>() {
             crate::values::say(call.name_pos, &template.name, numbers);
             // What the file is checked with now is not final, and no more of

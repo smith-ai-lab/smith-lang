@@ -56,6 +56,26 @@ pub const ONCE: &[Test] = &[
         "a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_written",
         a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_written,
     ),
+    (
+        "a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default",
+        a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default,
+    ),
+    (
+        "a_number_that_an_argument_or_the_wanted_type_settles_is_taken_over_the_default",
+        a_number_that_an_argument_or_the_wanted_type_settles_is_taken_over_the_default,
+    ),
+    (
+        "a_default_that_its_kind_does_not_hold_is_refused_where_it_is_written",
+        a_default_that_its_kind_does_not_hold_is_refused_where_it_is_written,
+    ),
+    (
+        "a_number_with_no_default_after_one_with_a_default_is_refused_at_the_number",
+        a_number_with_no_default_after_one_with_a_default_is_refused_at_the_number,
+    ),
+    (
+        "a_use_may_write_the_numbers_before_those_with_a_default_and_no_fewer",
+        a_use_may_write_the_numbers_before_those_with_a_default_and_no_fewer,
+    ),
 ];
 
 /// A number a parameter may be: the least and the greatest as often as another.
@@ -270,6 +290,118 @@ fn a_number_below_zero_is_refused_as_not_a_nat_and_not_as_one_that_is_not_writte
                 found.iter().all(|m| !m.contains("written out")),
                 "{found:?}\nfor\n{source}"
             );
+        }
+    });
+}
+
+/// Where `needle` first is in the text, as the place the checker names.
+fn place(source: &str, needle: &str) -> smith::diag::Pos {
+    let at = source.find(needle).expect("the text is there");
+    let before = &source[..at];
+    smith::diag::Pos {
+        line: before.matches('\n').count() + 1,
+        col: before.rsplit('\n').next().unwrap_or("").chars().count() + 1,
+    }
+}
+
+/// The box and the function of the issue, with a default for the number.
+fn defaulted(k: u64) -> String {
+    format!(
+        "struct Box[most: Nat = {k}] {{ at: 0..most }}\n\nfn top[most: Nat = {k}]() -> Box[most] {{ Box(at: most - 1) }}\n\nfn size[n: Nat = {k}](b: Box[n]) -> Nat {{ n }}\n"
+    )
+}
+
+/// A function or a struct that a use leaves the number out of, where nothing
+/// settles it, is the one written with the default.
+fn a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default() {
+    generate::check(4110, 20, |g: &mut Gen| number(g), |k| {
+        let left_out = with_header(format!(
+            "{}\nfn main() <console, alloc> {{\n  print(\"{{top().at}}\")\n  b: Box = Box(at: 0)\n  print(\"{{size(b)}}\")\n  print(\"{{size(Box(at: 0))}}\")\n}}\n",
+            defaulted(*k)
+        ));
+        let written = with_header(format!(
+            "{}\nfn main() <console, alloc> {{\n  print(\"{{top[{k}]().at}}\")\n  b: Box[{k}] = Box[{k}](at: 0)\n  print(\"{{size(b)}}\")\n  print(\"{{size(Box[{k}](at: 0))}}\")\n}}\n",
+            defaulted(*k)
+        ));
+        assert_eq!(stdout(&left_out), format!("{}\n{k}\n{k}\n", k - 1), "for\n{left_out}");
+        assert_eq!(stdout(&left_out), stdout(&written), "for\n{left_out}");
+        let a = compile(left_out.as_bytes(), any()).unwrap_or_else(|e| panic!("{e:?}\n{left_out}"));
+        let b = compile(written.as_bytes(), any()).unwrap_or_else(|e| panic!("{e:?}\n{written}"));
+        assert!(a == b, "the executables differ for\n{left_out}\nand\n{written}");
+    });
+}
+
+/// A number that an argument or the type the use must give says is that
+/// number, whatever the default is.
+fn a_number_that_an_argument_or_the_wanted_type_settles_is_taken_over_the_default() {
+    generate::check(4111, 20, |g: &mut Gen| (number(g), number(g)), |(k, j)| {
+        let source = with_header(format!(
+            "{}\nfn main() <console, alloc> {{\n  a: Box[{j}] = top()\n  b: Box[{j}] = Box(at: 0)\n  c = top[{j}]()\n  print(\"{{size(a)}} {{size(b)}} {{size(c)}} {{top[{j}]().at}} {{a.at}}\")\n}}\n",
+            defaulted(*k)
+        ));
+        assert_eq!(
+            stdout(&source),
+            format!("{j} {j} {j} {} {}\n", j - 1, j - 1),
+            "for\n{source}"
+        );
+    });
+}
+
+/// A default that is not held by its parameter's type is one error, at the
+/// default, naming the number and the parameter.
+fn a_default_that_its_kind_does_not_hold_is_refused_where_it_is_written() {
+    generate::check(4112, 10, |g: &mut Gen| (g.one_in(2), g.below(1000) as u64), |(item_is_struct, k)| {
+        let item = if *item_is_struct { "struct S[n: Pos = 0] { at: 0..n }" } else { "fn f[n: Pos = 0]() -> Nat { n }" };
+        let source = with_header(format!("{item}\n\nfn main() <console, alloc> {{\n  print(\"{k}\")\n}}\n"));
+        let errors = check(source.as_bytes()).expect_err("a default of zero for a `Pos`");
+        let at = place(&source, "= 0");
+        let at = smith::diag::Pos { line: at.line, col: at.col + 2 };
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].pos, at, "{errors:?}");
+        assert!(errors[0].message.contains("`0`") && errors[0].message.contains("`n`"), "{errors:?}");
+        // The same number that is above zero is held.
+        let held = source.replace("= 0", &format!("= {}", k + 1));
+        assert!(compiles(&held), "for\n{held}");
+    });
+}
+
+/// A number with no default after one that has a default is one error, at the
+/// number, naming the one before it.
+fn a_number_with_no_default_after_one_with_a_default_is_refused_at_the_number() {
+    generate::check(4113, 10, |g: &mut Gen| (g.one_in(2), 1 + g.below(1000) as u64), |(item_is_struct, k)| {
+        let item = if *item_is_struct {
+            format!("struct S[a: Nat = {k}, b: Nat] {{ at: 0..b }}")
+        } else {
+            format!("fn f[a: Nat = {k}, b: Nat]() -> Nat {{ b }}")
+        };
+        let source = with_header(format!("{item}\n\nfn main() <console, alloc> {{\n  print(\"1\")\n}}\n"));
+        let errors = check(source.as_bytes()).expect_err("a number with no default after a default");
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].pos, place(&source, "b: Nat"), "{errors:?}");
+        assert!(
+            errors[0].message.contains("`b`") && errors[0].message.contains("`a`"),
+            "{errors:?}"
+        );
+    });
+}
+
+/// A use writes the numbers that have no default, and may stop there: the
+/// ones it leaves off are their defaults. It may not write fewer or more.
+fn a_use_may_write_the_numbers_before_those_with_a_default_and_no_fewer() {
+    generate::check(4114, 20, |g: &mut Gen| (number(g), number(g)), |(a, b)| {
+        let head = format!("struct Grid[w: Nat, h: Nat = {b}] {{ x: 0..w\n  y: 0..h }}\n\nfn cells[w: Nat, h: Nat = {b}](g: Grid[w, h]) -> Nat {{ h }}\n");
+        let program = |ty: &str, call: &str| {
+            with_header(format!(
+                "{head}\nfn main() <console, alloc> {{\n  g: {ty} = Grid(x: 0, y: 0)\n  print(\"{{{call}(g)}}\")\n}}\n"
+            ))
+        };
+        let short = program(&format!("Grid[{a}]"), "cells");
+        let full = program(&format!("Grid[{a}, {b}]"), "cells");
+        assert_eq!(stdout(&short), format!("{b}\n"), "for\n{short}");
+        assert_eq!(stdout(&short), stdout(&full), "for\n{short}");
+        for ty in ["Grid[]".to_string(), format!("Grid[{a}, {b}, {a}]")] {
+            let source = program(&ty, "cells");
+            assert!(!compiles(&source), "for\n{source}");
         }
     });
 }
