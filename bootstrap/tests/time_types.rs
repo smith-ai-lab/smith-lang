@@ -21,8 +21,8 @@ pub const ONCE: &[Test] = &[
         a_number_is_refused_where_a_point_or_a_span_is_needed_and_the_field_of_each_is_private,
     ),
     (
-        "a_point_and_a_span_add_to_a_point_and_two_points_between_them_are_a_span",
-        a_point_and_a_span_add_to_a_point_and_two_points_between_them_are_a_span,
+        "a_point_and_a_span_give_a_point_or_none_and_two_points_give_a_span_or_none",
+        a_point_and_a_span_give_a_point_or_none_and_two_points_give_a_span_or_none,
     ),
     (
         "a_point_is_compared_with_a_point_and_a_span_with_a_span_and_a_second_is_a_thousand_milliseconds",
@@ -51,7 +51,7 @@ fn place(source: &str, from: &str, needle: &str) -> Pos {
 /// A program whose `main` holds `line`, with the time of the library in reach.
 fn program(line: &str) -> String {
     format!(
-        "use std.instant (Duration, Instant, between, ms, seconds, until)\nuse std.time (now, sleep, time)\n\n\
+        "use std.instant (after, between, ms, until)\nuse std.time (now, sleep, time)\n\n\
          fn main() <time, alloc> {{\n  a = now()\n  d = ms(5)\n  {line}\n}}\n"
     )
 }
@@ -66,7 +66,8 @@ const WRONG: &[(&str, &str, &str)] = &[
     ("x = a < d", "d\n", "Duration"),
     ("x = a == d", "d\n", "Duration"),
     ("x = d + d", "d + d", "Add"),
-    ("x = between(now(), a)", "between(now(), a)", "earlier"),
+    ("x = between(a, d)", "d)", "Instant"),
+    ("x = after(d, a)", "d, a)", "Duration"),
 ];
 
 fn a_wrong_use_of_a_point_or_a_span_is_refused_where_it_is_written_and_says_what_is_wrong() {
@@ -98,20 +99,23 @@ fn a_number_is_refused_where_a_point_or_a_span_is_needed_and_the_field_of_each_i
     assert!(private.iter().any(|e| e.message.contains("private")), "{private:?}");
 }
 
-fn a_point_and_a_span_add_to_a_point_and_two_points_between_them_are_a_span() {
+fn a_point_and_a_span_give_a_point_or_none_and_two_points_give_a_span_or_none() {
     let spans = |g: &mut Gen| (g.below(1000), g.below(1000));
     generate::check(9202, 8, spans, |(x, y)| {
-        let earlier = x.min(y);
-        let later = x.max(y);
+        let (early, late) = (x.min(y), x.max(y));
+        // `until` is the span left to a deadline, and none once it has passed.
+        let left = if y > x { y - x } else { 0 };
+        let between = if late > early { format!(".some(ms({}))", late - early) } else { ".some(ms(0))".to_string() };
         let source = format!(
-            "use std.console (console, print)\nuse std.instant (Duration, Instant, between, instant, ms, since_1970, until)\n\n\
-             fn later(a: Instant, d: Duration) -> Instant\n  requires Add.valid(a, d)\n{{\n  a + d\n}}\n\n\
-             fn gap(a: Instant, b: Instant) -> Duration\n  requires a <= b\n{{\n  between(a, b)\n}}\n\n\
-             fn main() <console, alloc> {{\n  a = instant({earlier})\n  b = instant({later})\n  \
-             print(\"{{since_1970(later(a, ms({later})))}} {{gap(a, b) == ms({later} - {earlier})}} {{until(a, b) == ms(0)}} {{until(b, a) == ms({later} - {earlier})}}\")\n}}\n"
+            "use std.console (console, print)\nuse std.instant (after, between, instant, ms, until)\n\n\
+             fn main() <console, alloc> {{\n  a = instant({early})\n  b = instant({late})\n  \
+             print(\"{{between(a, b) == {between}}} {{between(b, a) == .none}} {{after(a, ms({late})) == .some(instant({sum}))}} {{until(instant({y}), instant({x})) == ms({left})}}\")\n}}\n",
+            sum = early + late,
         );
         let said = String::from_utf8(outcome(&source).stdout).unwrap();
-        assert_eq!(said, format!("{} true true true\n", earlier + later), "for\n{source}");
+        // Two equal points are in order both ways, so the second is no `.none` there.
+        let reversed = if early == late { "false" } else { "true" };
+        assert_eq!(said, format!("true {reversed} true true\n"), "for\n{source}");
     });
 }
 
