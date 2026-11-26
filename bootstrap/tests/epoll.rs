@@ -42,19 +42,20 @@ use std.task (join, spawn, tasks)
 fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
-    .ok(bytes) {
+    .ok(.bytes(bytes)) {
       size = bytes.size
       _ = write(c, freeze(bytes))
     }
+    .ok(.ended) { }
     .err(e) { }
   }
   close(c)
   size
 }
 
-fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
+fn pair(port: 1..65536) -> Result[u64, NetError] <console, net, alloc> {
   with tasks()
-  with l = listen("127.0.0.1", port)
+  with l = listen("127.0.0.1", .at(port))
   print("ready")
   a = try accept(l)
   ta = spawn { turn(a) }
@@ -66,7 +67,7 @@ fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
 fn main(args: List[str]) <console, net, alloc> {
   if args.size == 0 { return }
   port_word = args[0]
-  number: Result[0..65536, ReadError] = from_text("port", port_word)
+  number: Result[1..65536, ReadError] = from_text("port", port_word)
   match number {
     .ok(p) {
       match pair(p) {
@@ -93,10 +94,11 @@ use std.task (join, spawn, task, tasks)
 fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
-    .ok(bytes) {
+    .ok(.bytes(bytes)) {
       size = bytes.size
       _ = write(c, freeze(bytes))
     }
+    .ok(.ended) { }
     .err(e) { }
   }
   close(c)
@@ -110,9 +112,9 @@ fn inner(a: take Connection, b: take Connection) -> u64 <net, alloc, task> {
   wrapping_add(join(ta), join(tb))
 }
 
-fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
+fn pair(port: 1..65536) -> Result[u64, NetError] <console, net, alloc> {
   with tasks()
-  with l = listen("127.0.0.1", port)
+  with l = listen("127.0.0.1", .at(port))
   print("ready")
   a = try accept(l)
   b = match accept(l) {
@@ -138,7 +140,7 @@ fn pair(port: 0..65536) -> Result[u64, NetError] <console, net, alloc> {
 fn main(args: List[str]) <console, net, alloc> {
   if args.size == 0 { return }
   port_word = args[0]
-  number: Result[0..65536, ReadError] = from_text("port", port_word)
+  number: Result[1..65536, ReadError] = from_text("port", port_word)
   match number {
     .ok(p) {
       match pair(p) {

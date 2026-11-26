@@ -4,7 +4,7 @@ title: The network
 description: The net effect of std.net, for connections and datagrams, each a value used exactly once, with a write that sends everything and a read that gives what has come.
 status: partial
 built:
-  - "`std.net` declares `net`, with the operations, `Address`, and `NetError` as the page shows them, and `Listener`, `Connection`, and `Socket`, each a struct with the system's handle, the `host` and `port` it was opened with, and neither `Copy` nor `Discard`"
+  - "`std.net` declares `net`, with the operations, `Address`, `NetError`, `Got`, and `Port` as the page shows them, a read that gives `.ended` when the other side has finished and `.bytes` of at least one byte otherwise, a port of `1..65536` for `connect_to`, `.any` or `.at` of that range for `listen_on` and `bind_to`, and a number outside them refused where it is written, and `Listener`, `Connection`, and `Socket`, each a struct with the system's handle, the `host` and `port` it was opened with, and neither `Copy` nor `Discard`"
   - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
   - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is looked up by `connect_to` on Linux, as [Looking up a name](#looking-up-a-name) says, and is `failed` with the one message that looking up a name is not built on macOS and in `listen`, `bind`, and `send`"
   - "`failed` holds the address and the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed; each case holds the host and the port, as `example.com:80`, and `NetError` has a `Fmt` that writes them with what went wrong"
@@ -25,33 +25,43 @@ built:
 The module `std.net` declares the `net` [effect](../language/effect-declarations.md), by which a program talks over the network: connections, which carry bytes in order both ways, and datagrams, which are sent one at a time. Most programs never call it. A server asks for requests through [`http`](http.md) and a client asks another server through [`fetch`](fetch.md), and the handlers of those are what use `net`.
 
 ```
-use std.net (NetError, connect, net, read, write)
+use std.net (Got, NetError, connect, net, read, write)
 
-fn ask(host: str, question: str) -> Result[List[Byte], NetError] <net, alloc> {
+fn ask(host: str, question: str) -> Result[Got, NetError] <net, alloc> {
   with c = connect(host, 7)
   try write(c, question.bytes)
   read(c, 4096)
 }
 ```
 
-`ask` opens a connection to port 7 of the host, sends the text, and gives the bytes that come back. The connection is closed when the block ends, on every path.
+`ask` opens a connection to port 7 of the host, sends the text, and gives what comes back: the bytes, or `.ended` when the other side has finished without sending any. The connection is closed when the block ends, on every path.
 
 A call that has to wait, as `read` does for bytes that have not come, reads as any call does. Under the system's handler it suspends its task, as [Async](../language/async.md) says, and other tasks run.
 
 ## The effect
 
 ```
+enum Port {
+  any
+  at: 1..65536
+}
+
+enum Got {
+  bytes: List[Byte]
+  ended
+}
+
 effect net {
-  fn listen_on(host: str, port: 0..65536) -> Result[Listener, NetError]
+  fn listen_on(host: str, port: Port) -> Result[Listener, NetError]
   fn accept(l: Listener) -> Result[Connection, NetError]
   fn stop(l: take Listener)
 
-  fn connect_to(host: str, port: 0..65536) -> Result[Connection, NetError]
-  fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc>
+  fn connect_to(host: str, port: 1..65536) -> Result[Connection, NetError]
+  fn read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc>
   fn write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError]
   fn close(c: take Connection)
 
-  fn bind_to(host: str, port: 0..65536) -> Result[Socket, NetError]
+  fn bind_to(host: str, port: Port) -> Result[Socket, NetError]
   fn send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError]
   fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc>
   fn unbind(s: take Socket)
@@ -73,16 +83,17 @@ enum NetError {
 
 | Operation | Does |
 | --- | --- |
-| `listen_on` | Begins to take connections at a port of this machine. Port 0 asks the system for one that is free. The system holds up to 4096 connections that `accept` has not yet taken, or as many as it allows when that is fewer, so a burst of connections arrives without a wait |
+| `listen_on` | Begins to take connections at a port of this machine, `.any` for one that the system has free or `.at(port)` for the one written. The system holds up to 4096 connections that `accept` has not yet taken, or as many as it allows when that is fewer, so a burst of connections arrives without a wait |
 | `accept` | Waits for the next connection to a listener, and gives it |
 | `connect_to` | Opens a connection to a port of a host |
-| `read` | Waits for bytes and gives those that have come, at most `most`. No bytes means the other side has finished sending |
+| `read` | Waits for bytes and gives those that have come, as `.bytes`, at least one and at most `most`, or `.ended` when the other side has finished sending |
 | `write` | Sends every byte, or fails |
-| `bind_to` | Takes a port of this machine for datagrams |
+| `bind_to` | Takes a port of this machine for datagrams, `.any` or `.at(port)` as `listen_on` does |
 | `send` | Sends the bytes as one datagram to an address |
 | `receive` | Waits for the next datagram and gives it with where it came from. One longer than `most` is cut to `most` |
 | `stop`, `close`, `unbind` | End a listener, a connection, or a socket, which cannot be used again |
 
+- **A port is a port that can be.** A connection is made to a port of `1..65536`, so `connect_to(host, 0)` is refused where it is written, and a listener or a socket is at `.any`, which asks the system for a port that is free, or at `.at(port)` of the same range. A read asks for at least one byte, so `read(c, 0)` is refused too, and its answer says plainly that the other side has finished, which an empty list never did.
 - **A write sends everything.** There is no count of how many bytes went: `write` gives `.ok` when all of them were handed to the system, and `.err` otherwise, so no program has to send the rest.
 - **A `Listener`, a `Connection`, and a `Socket` are used exactly once,** as [Values used exactly once](../language/resources.md) says. One that is not ended, is ended twice, or is used after it is ended does not compile.
 - **A host is a name or a number,** as `example.com`, `192.0.2.7`, or `::1`. Finding the number of a name is the handler's work, and `unknown_host` is a name it could not find.
@@ -108,12 +119,14 @@ use std.list (freeze)
 use std.net (Connection, NetError, accept, close, listen, net, read, write)
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
-  bytes = try read(c, 4096)
-  write(c, freeze(bytes))
+  match try read(c, 4096) {
+    .bytes(bytes) { write(c, freeze(bytes)) }
+    .ended { .ok(()) }
+  }
 }
 
-fn echo_once(port: 0..65536) -> Result[(), NetError] <net, alloc> {
-  with l = listen("::", port)
+fn echo_once(port: 1..65536) -> Result[(), NetError] <net, alloc> {
+  with l = listen("::", .at(port))
   c = try accept(l)
   result = turn(c)
   close(c)
@@ -121,7 +134,7 @@ fn echo_once(port: 0..65536) -> Result[(), NetError] <net, alloc> {
 }
 ```
 
-`echo_once` takes one connection, sends back what it reads, and ends. The connection is closed on every path, as a `try` that left before `close(c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
+`echo_once` takes one connection, sends back what it reads, and ends; a connection that is finished before it says anything is answered with nothing. The connection is closed on every path, as a `try` that left before `close(c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
 
 ## Ending a value in a handler
 
@@ -130,7 +143,7 @@ A handler's lambda for `stop`, `close`, or `unbind` takes the value, as [Handler
 ```
 use std.net (net, release)
 
-fn ended[T](body: fn() -> T <net>) -> T {
+fn ended[T](body: fn() -> T <net>) -> T <alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused("{host}:{port}")) },
     accept: fn(l) { .err(.refused("{l.host}:{l.port}")) },
@@ -155,15 +168,16 @@ The system's handler never calls them. A value that the system's handler opened 
 A handler that plays the other side of a connection gives the program a `Connection`, a `Listener`, or a `Socket`. It makes each from a number of its own choosing with `connection`, `listener`, and `socket`, and `handle` gives the number back from the value it is lent, so it knows which one a call is about.
 
 ```
+use std.int (wrapping_add)
 use std.net (connection, handle, listener, net, release)
 
-fn one_client[T](body: fn() -> T <net>) -> T {
+fn one_client[T](body: fn() -> T <net>) -> T <alloc> {
   net(
     listen_on: fn(host, port) { .ok(listener(1)) },
-    accept: fn(l) { .ok(connection(handle(l) + 1)) },
+    accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
     stop: fn(l) { n = release(l) },
     connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
-    read: fn(c, most) { .ok([]) },
+    read: fn(c, most) { .ok(.ended) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
     bind_to: fn(host, port) { .err(.refused("{host}:{port}")) },
@@ -175,7 +189,7 @@ fn one_client[T](body: fn() -> T <net>) -> T {
 }
 ```
 
-Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gives no bytes, which is a connection the other side has finished with. A handler may keep what `write` is given in a `var`, as [Handlers](../language/handlers.md#a-handler-that-keeps-state) says.
+Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gives `.ended`, which is a connection the other side has finished with. A handler may keep what `write` is given in a `var`, as [Handlers](../language/handlers.md#a-handler-that-keeps-state) says.
 
 - **A number the system did not open reaches nothing.** The system's handler answers `listen`, `accept`, `read`, `write`, `send`, and `receive` with `failed`, whose message says the handle is not one the system opened, when it is given a value that `listener`, `connection`, or `socket` made, and makes no system call with it. `stop`, `close`, and `unbind` end such a value and close nothing. A program that makes `connection(1)` and writes to it writes nothing to standard output, under any handler.
 - **A value the system opened is not made again.** `handle` gives its number, and `connection` of that number is a value the system did not open.
@@ -224,9 +238,9 @@ Not done: a cache of answers, DNS over TLS or HTTPS, mDNS (`.local` names), and 
 
 | Written | Is |
 | --- | --- |
-| `with l = listen(host, port)` | A listener for the rest of the block |
-| `with c = connect(host, port)` | A connection for the rest of the block |
-| `with s = bind(host, port)` | A socket for datagrams for the rest of the block |
+| `with l = listen(host, port)` | A listener for the rest of the block, at `.any` or `.at(port)` |
+| `with c = connect(host, port)` | A connection for the rest of the block, to a port of `1..65536` |
+| `with s = bind(host, port)` | A socket for datagrams for the rest of the block, at `.any` or `.at(port)` |
 | `accept(l)` | The next connection, which the program closes |
-| `read(c, most)`, `write(c, bytes)` | Bytes that have come, and bytes sent, all of them |
+| `read(c, most)`, `write(c, bytes)` | `.bytes` that have come or `.ended`, and bytes sent, all of them |
 | `send(s, to, bytes)`, `receive(s, most)` | One datagram out, and the next one in |

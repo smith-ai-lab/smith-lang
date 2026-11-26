@@ -31,7 +31,7 @@ fn app() <http, alloc> {
 // What `serve` of `project.smith` does, at the port a test gives.
 fn main(args: List[str]) <net, alloc, diverge> {
   if args.size == 0 { return }
-  number: Result[Nat, ReadError] = from_text("port", args[0])
+  number: Result[1..65536, ReadError] = from_text("port", args[0])
   match number {
     .ok(port) {
       with listen(port: port)

@@ -65,37 +65,51 @@ fn address_text(host: str, port: 0..65536) -> str <alloc> {
   "{host}:{port}"
 }
 
+// What a read of a connection gave: bytes, of which there is at least one, or
+// that the other side has finished sending.
+pub enum Got {
+  bytes: List[Byte]
+  ended
+}
+
+// The port of a listener or a socket: any that the system has free, or one that
+// is written.
+pub enum Port {
+  any
+  at: 1..65536
+}
+
 pub effect net {
-  pub fn listen_on(host: str, port: 0..65536) -> Result[Listener, NetError]
+  pub fn listen_on(host: str, port: Port) -> Result[Listener, NetError]
   pub fn accept(l: Listener) -> Result[Connection, NetError]
   pub fn stop(l: take Listener)
 
-  pub fn connect_to(host: str, port: 0..65536) -> Result[Connection, NetError]
-  pub fn read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc>
+  pub fn connect_to(host: str, port: 1..65536) -> Result[Connection, NetError]
+  pub fn read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc>
   pub fn write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError]
   pub fn close(c: take Connection)
 
-  pub fn bind_to(host: str, port: 0..65536) -> Result[Socket, NetError]
+  pub fn bind_to(host: str, port: Port) -> Result[Socket, NetError]
   pub fn send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetError]
   pub fn receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc>
   pub fn unbind(s: take Socket)
 }
 
-pub fn listen[T](host: str, port: 0..65536, body: fn(Listener) -> Result[T, NetError]) -> Result[T, NetError] <net> {
+pub fn listen[T](host: str, port: Port, body: fn(Listener) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   l = try listen_on(host, port)
   result = body(l)
   stop(l)
   result
 }
 
-pub fn connect[T](host: str, port: 0..65536, body: fn(Connection) -> Result[T, NetError]) -> Result[T, NetError] <net> {
+pub fn connect[T](host: str, port: 1..65536, body: fn(Connection) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   c = try connect_to(host, port)
   result = body(c)
   close(c)
   result
 }
 
-pub fn bind[T](host: str, port: 0..65536, body: fn(Socket) -> Result[T, NetError]) -> Result[T, NetError] <net> {
+pub fn bind[T](host: str, port: Port, body: fn(Socket) -> Result[T, NetError]) -> Result[T, NetError] <net> {
   s = try bind_to(host, port)
   result = body(s)
   unbind(s)
@@ -390,7 +404,16 @@ fn no_signal_wait() -> i64 {
   if on_windows() { 0 } else if on_macos() { 524416 } else { 16448 }
 }
 
-fn system_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <alloc> {
+// The number a port is, which the system is given: 0 asks it for a free one.
+fn number_of(port: Port) -> 0..65536 {
+  match port {
+    .any { 0 }
+    .at(p) { p }
+  }
+}
+
+fn system_listen_on(host: str, wanted: Port) -> Result[Listener, NetError] <alloc> {
+  port = number_of(wanted)
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
@@ -838,7 +861,7 @@ fn connect_place(where: Place, host: str, port: 0..65536) -> Result[Connection, 
   .ok(Connection(handle: fd, opened: true, host: host, port: port))
 }
 
-fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] <alloc, task> {
+fn system_connect_to(host: str, port: 1..65536) -> Result[Connection, NetError] <alloc, task> {
   match place(host, port) {
     .ok(where) { return connect_place(where, host, port) }
     .err(e) {
@@ -856,9 +879,13 @@ fn system_connect_to(host: str, port: 0..65536) -> Result[Connection, NetError] 
   .err(last)
 }
 
-fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc, task> {
+// What a read gave: no bytes is the end of what the other side sends.
+fn arrived(bytes: take List[Byte]) -> Got {
+  if bytes.size == 0 { .ended } else { .bytes(bytes) }
+}
+
+fn system_read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc, task> {
   if not c.opened { return .err(not_opened(address_text(c.host, c.port), "read", c.handle)) }
-  if most == 0 { return .ok([]) }
   buffer: List[Byte] = __reserve(most)
   if __scheduled() {
     var got: i64 = would_block()
@@ -872,12 +899,12 @@ fn system_read(c: Connection, most: Nat) -> Result[List[Byte], NetError] <alloc,
         break
       }
     }
-    if got >= 0 { return .ok(__sized(buffer, got)) }
+    if got >= 0 { return .ok(arrived(__sized(buffer, got))) }
     return .err(failure(address_text(c.host, c.port), "read", got))
   }
   loop attempt in 0..64 {
     got = __system(8, c.handle, buffer, most, 0, 0, 0)
-    if got >= 0 { return .ok(__sized(buffer, got)) }
+    if got >= 0 { return .ok(arrived(__sized(buffer, got))) }
     if got != -4 { return .err(failure(address_text(c.host, c.port), "read", got)) }
   }
   .err(.failed((address_text(c.host, c.port), "read: interrupted")))
@@ -925,7 +952,8 @@ fn system_close(c: take Connection) {
   if opened { _ = __system(9, h, 0, 0, 0, 0, 0) }
 }
 
-fn system_bind_to(host: str, port: 0..65536) -> Result[Socket, NetError] <alloc> {
+fn system_bind_to(host: str, wanted: Port) -> Result[Socket, NetError] <alloc> {
+  port = number_of(wanted)
   where = try place(host, port)
   fd = __system(0, where.family, 2, 0, 0, 0, 0)
   if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }

@@ -107,15 +107,15 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
       var seen = false
       loop i in 0..asked.size {{ if asked[i] == handle(c) {{ seen = true }} }}
       if seen {{
-        .ok([])
+        .ok(.ended)
       }} else {{
         asked = push(asked, handle(c))
         if handle(c) == 2 {{
-          .ok({seven})
+          .ok(.bytes({seven}))
         }} else if handle(c) == 3 {{
-          .ok({eight})
+          .ok(.bytes({eight}))
         }} else {{
-          .ok({nine})
+          .ok(.bytes({nine}))
         }}
       }}
     }},

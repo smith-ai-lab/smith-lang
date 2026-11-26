@@ -31,8 +31,8 @@ fn rounds_of(l: Listener, pause: 0..100000, rounds: u64) -> Result[(), NetError]
   .ok(())
 }
 
-fn session(port: 0..65536, pause: 0..100000, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
-  listen("127.0.0.1", port, fn(l) { rounds_of(l, pause, rounds) })
+fn session(port: 1..65536, pause: 0..100000, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
+  listen("127.0.0.1", .at(port), fn(l) { rounds_of(l, pause, rounds) })
 }
 
 // The program goes on for a while after the last group ends, so that a
@@ -40,7 +40,7 @@ fn session(port: 0..65536, pause: 0..100000, rounds: u64) -> Result[(), NetError
 // program's.
 fn main(args: List[str]) -> Result[(), NetError] <net, time, alloc, diverge> {
   if args.size < 3 { return .ok(()) }
-  port: Result[0..65536, ReadError] = from_text("port", args[0])
+  port: Result[1..65536, ReadError] = from_text("port", args[0])
   pause: Result[0..100000, ReadError] = from_text("pause", args[1])
   rounds: Result[u64, ReadError] = from_text("rounds", args[2])
   match (port, pause, rounds) {

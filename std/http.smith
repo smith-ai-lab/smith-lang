@@ -6,7 +6,7 @@ use std.fetch (Method)
 use std.fromtext (from_text)
 use std.html (Html)
 use std.http1 (RequestHead, body_of, chunk, request_head)
-use std.int (narrow, saturating_add, saturating_sub)
+use std.int (saturating_add, saturating_sub)
 use std.json (In, json_ended, json_in, to_json)
 use std.list (append, copy, freeze, push)
 use std.net (Connection, Listener, NetError, accept, close, listen_on, net, read, stop, write)
@@ -897,7 +897,7 @@ fn copy_of(r: Request) -> Request <alloc> {
 }
 
 // What `listen` reads of a connection, at most, in one call of `read`.
-fn most_read() -> Nat { 65536 }
+fn most_read() -> 1..65537 { 65536 }
 
 // The most bytes of a body that `listen` reads, which a request with more is
 // refused for.
@@ -914,13 +914,8 @@ enum Fault {
 // The bytes read so far with what the connection has sent since.
 fn fill(c: Connection, held: Slice[Byte]) -> Result[Slice[Byte], Fault] <net, alloc> {
   match read(c, most_read()) {
-    .ok(bytes) {
-      if bytes.size == 0 {
-        Result.err(Fault.ended)
-      } else {
-        Result.ok(freeze(append(copy(held), bytes)))
-      }
-    }
+    .ok(.bytes(bytes)) { Result.ok(freeze(append(copy(held), bytes))) }
+    .ok(.ended) { Result.err(Fault.ended) }
     .err(e) { Result.err(Fault.ended) }
   }
 }
@@ -1284,10 +1279,10 @@ fn why(e: NetError) -> str <alloc> {
 }
 
 // A listener on the port, on every address of this machine.
-fn open(port: 0..65536) -> Result[Listener, NetError] <net> {
-  match listen_on("::", port) {
+fn open(port: 1..65536) -> Result[Listener, NetError] <net> {
+  match listen_on("::", .at(port)) {
     .ok(l) { Result.ok(l) }
-    .err(e) { listen_on("0.0.0.0", port) }
+    .err(e) { listen_on("0.0.0.0", .at(port)) }
   }
 }
 
@@ -1369,21 +1364,15 @@ fn unasked[T](body: fn() -> T <http>) -> T {
 // for the system, and one request after another on each. It ends only with the program: a port that cannot be
 // listened on ends the program with a failing status, and the error on
 // standard error.
-pub fn listen[T](port: Nat, body: fn() -> T <http>) -> T <net, alloc, diverge>
+pub fn listen[T](port: 1..65536, body: fn() -> T <http>) -> T <net, alloc, diverge>
   requires Discard[T]
 {
-  number: Option[0..65536] = narrow(port)
-  match number {
-    .none { cannot("listen: the port {port} is not one") }
-    .some(p) {
-      match open(p) {
-        .ok(l) {
-          serve_listener(l, body)
-          stop(l)
-        }
-        .err(e) { cannot(why(e)) }
-      }
+  match open(port) {
+    .ok(l) {
+      serve_listener(l, body)
+      stop(l)
     }
+    .err(e) { cannot(why(e)) }
   }
   unasked(body)
 }

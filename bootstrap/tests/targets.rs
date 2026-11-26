@@ -1423,7 +1423,7 @@ fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_on
 /// that only listens has no such call, and neither has a program with no `net`.
 fn a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup() {
     let connects = "use std.console (console, print)\nuse std.net (NetError, connect, net)\n\nfn go(host: str) -> Result[(), NetError] <net, alloc> {\n  with c = connect(host, 80)\n  .ok(())\n}\n\nfn main() <console, net, alloc> {\n  match go(\"a.test\") {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
-    let listens = "use std.console (console, print)\nuse std.net (NetError, listen, net)\n\nfn go() -> Result[(), NetError] <net, alloc> {\n  with l = listen(\"127.0.0.1\", 8080)\n  .ok(())\n}\n\nfn main() <console, net, alloc> {\n  match go() {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
+    let listens = "use std.console (console, print)\nuse std.net (NetError, listen, net)\n\nfn go() -> Result[(), NetError] <net, alloc> {\n  with l = listen(\"127.0.0.1\", .at(8080))\n  .ok(())\n}\n\nfn main() <console, net, alloc> {\n  match go() {\n    .ok(()) { print(\"ok\") }\n    .err(e) { print(\"no\") }\n  }\n}\n";
     // `mov eax, 318` and `syscall` on x86-64, and `mov w8, 278` and `svc 0` on arm64.
     let has = |bytes: &[u8], call: &[u8]| bytes.windows(call.len()).any(|w| w == call);
     let linux: Vec<Target> = buildable().into_iter().filter(|t| t.name().starts_with("linux")).collect();
