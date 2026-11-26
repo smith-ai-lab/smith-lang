@@ -417,7 +417,12 @@ fn condition(g: &mut Gen, depth: usize, big: bool) -> Condition {
     // A thin slab between two lines, with numbers that have little in common,
     // has whole numbers inside it only now and then.
     if big && g.one_in(3) {
-        let (a, b) = (g.below(27) as i128 - 13, g.below(27) as i128 - 13);
+        let (mut a, b) = (g.below(27) as i128 - 13, g.below(27) as i128 - 13);
+        // A sum of no variable is a number, and comparing two numbers is
+        // refused, as the two ranges decide it.
+        if a == 0 && b == 0 {
+            a = 1;
+        }
         let (lo, width) = (g.below(61) as i128 - 30, g.below(30) as i128);
         let hi = lo + width;
         return (
@@ -430,8 +435,12 @@ fn condition(g: &mut Gen, depth: usize, big: bool) -> Condition {
     }
     let small = |g: &mut Gen| g.below(reach) as i128 - reach as i128 / 2;
     let constant = |g: &mut Gen| g.below(ks) as i128 - ks as i128 / 2;
-    let left = (small(g), small(g), constant(g));
+    let mut left = (small(g), small(g), constant(g));
     let right = (small(g), small(g), constant(g));
+    // Two numbers are not compared, as the two ranges decide it.
+    if (left.0, left.1, right.0, right.1) == (0, 0, 0, 0) {
+        left.0 = 1;
+    }
     let op = *g.pick(&["<", "<=", ">", ">=", "==", "!="]);
     let text = format!(
         "{} {op} {}",
