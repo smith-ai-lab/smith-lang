@@ -47,6 +47,7 @@ mod proof_functions;
 mod scope;
 mod to_scalar;
 mod traits;
+mod values;
 
 use crate::core;
 use crate::diag::{Error, Pos};

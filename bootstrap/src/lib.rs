@@ -16,6 +16,7 @@ pub mod project;
 pub mod scalar;
 pub mod target;
 pub mod timings;
+mod values;
 pub mod work;
 
 use target::Target;
@@ -306,11 +307,14 @@ pub fn lower_in(
     library: &[(&str, &str)],
 ) -> Result<scalar::Program, Vec<diag::Error>> {
     let tokens = lexer::lex(source).map_err(in_order)?;
-    let mut file = parser::parse(&tokens).map_err(in_order)?;
-    with_function_args(&mut file, source);
-    check::check(file, &check::Library::new(library))
-        .map(|checked| checked.program)
-        .map_err(in_order)
+    values::run(tokens, |tokens, unbuilt| {
+        let mut file = parser::parse(&tokens).map_err(in_order)?;
+        file.unbuilt.extend(unbuilt);
+        with_function_args(&mut file, source);
+        check::check(file, &check::Library::new(library)).map_err(in_order)
+    })
+    .map(|checked| checked.program)
+    .map_err(in_order)
 }
 
 /// The program a source file describes, as the target's executable, when the
@@ -329,11 +333,14 @@ pub fn compile_in(
 /// before a target is involved.
 pub fn core_terms(source: &[u8]) -> Result<Vec<core::Function>, Vec<diag::Error>> {
     let tokens = lexer::lex(source).map_err(in_order)?;
-    let mut file = parser::parse(&tokens).map_err(in_order)?;
-    with_function_args(&mut file, source);
-    check::check_core(file, &check::Library::standard())
-        .map(|checked| checked.core)
-        .map_err(in_order)
+    values::run(tokens, |tokens, unbuilt| {
+        let mut file = parser::parse(&tokens).map_err(in_order)?;
+        file.unbuilt.extend(unbuilt);
+        with_function_args(&mut file, source);
+        check::check_core(file, &check::Library::standard()).map_err(in_order)
+    })
+    .map(|checked| checked.core)
+    .map_err(in_order)
 }
 
 fn checked(source: &[u8], timings: &mut Timings) -> Result<check::Checked, Vec<diag::Error>> {
@@ -348,13 +355,17 @@ fn checked_in(
     let tokens = timings
         .stage("lex", || lexer::lex(source))
         .map_err(in_order)?;
-    let mut file = timings
-        .stage("parse", || parser::parse(&tokens))
-        .map_err(in_order)?;
-    with_function_args(&mut file, source);
-    timings
-        .stage("check", || check::check(file, library))
-        .map_err(in_order)
+    values::run(tokens, |tokens, unbuilt| {
+        let mut file = timings
+            .stage("parse", || parser::parse(&tokens))
+            .map_err(in_order)?;
+        file.unbuilt.extend(unbuilt);
+        with_function_args(&mut file, source);
+        timings
+            .stage("check", || check::check(file, library))
+            .map_err(in_order)
+    })
+    .map_err(in_order)
 }
 
 /// Makes the structs of the arguments of the file's functions, when it writes

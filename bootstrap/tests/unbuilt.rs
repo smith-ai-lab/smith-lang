@@ -67,7 +67,7 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}[n: @Nat](a: @[n]Int) -> Int { 1 }\n",
+        declares: "fn u{i}[n: Nat](a: @[n]Int) -> Int { 1 }\n",
         call: "u{i}([1, 2])",
         parsed: false,
     },
