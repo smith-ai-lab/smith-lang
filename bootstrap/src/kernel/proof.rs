@@ -20,7 +20,7 @@ pub fn check_proof(
         proofs,
         proof,
         limit,
-        facts: Vec::new(),
+        facts: proof.given.clone(),
         known: proof
             .requires
             .iter()
@@ -54,6 +54,21 @@ impl Check<'_> {
                 callee: Callee::Step(Step::Arith),
                 args,
             } => self.arith(args, owed),
+            // A name of a proof given before, which proves what it proves.
+            Kind::Name(n) => {
+                let Some((_, fact)) = self.facts.iter().rev().find(|(k, _)| k == n) else {
+                    return Err(format!("`{n}` is no proof here"));
+                };
+                if same_shape(fact, owed) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "a proof of `{}` is owed, and `{n}` proves `{}`",
+                        self.render(owed),
+                        self.render(fact)
+                    ))
+                }
+            }
             Kind::Bind { name, value, rest } => {
                 let fact = match &value.kind {
                     Kind::Call {

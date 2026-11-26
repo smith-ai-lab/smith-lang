@@ -327,6 +327,8 @@ impl<'a> Checker<'a> {
             returned: None,
             lambdas: 0,
             kept: 0,
+            proofs: Vec::new(),
+            call_proofs: HashMap::new(),
         };
         let gives = self.expr(&mut body, value, &Want::Ty(needed.clone()));
         self.expect(&mut body, value, &gives, needed);
@@ -344,6 +346,12 @@ impl<'a> Checker<'a> {
             let last_fn = i + 1 == f.params.len() && p.ty.function;
             match (&p.default, first) {
                 (None, Some(_)) if last_fn => {}
+                // The default of a proof is `arith`, which the parser reads and
+                // which is no value.
+                (Some(value), _) if p.ty.statement.is_some() => {
+                    self.proof_names.insert(addr(value));
+                    first = first.or(Some(p.name.as_str()));
+                }
                 (Some(value), _) => {
                     first = first.or(Some(p.name.as_str()));
                     let extra = sig.fn_effects.get(i).cloned().unwrap_or_default();

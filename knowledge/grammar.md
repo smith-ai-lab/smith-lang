@@ -67,7 +67,7 @@ statement  = expr ;   (* a comparison, or comparisons joined with `and`, `or`, `
 generics   = "[" generic { "," generic } "]" ;
 generic    = [ "out" ] IDENT [ ":" type ] [ "=" ( type | LITERAL ) ] ;   (* a LITERAL is the default of a whole number parameter *)
 params     = param { "," param } [ "," ] ;
-param      = ( IDENT | tuple_pat ) ":" [ "take" ] type [ "=" expr ] ;
+param      = ( IDENT | tuple_pat ) ":" [ "take" ] type [ "=" expr ] ;   (* the one default of a statement is `arith` *)
 tuple_pat  = "(" bind_pat { "," bind_pat } ")" ;
 bind_pat   = IDENT | "_" | "var" IDENT | tuple_pat ;
 effects    = "<" IDENT { "," IDENT } [ "," ] ">" ;

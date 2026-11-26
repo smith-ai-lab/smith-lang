@@ -115,6 +115,8 @@ pub struct Proof {
     pub params: Vec<(String, Type)>,
     /// What the caller owes, which the proof may use: each is a boolean term.
     pub requires: Vec<Term>,
+    /// The parameters that are proofs, each with the statement it proves.
+    pub given: Vec<(String, Term)>,
     pub statement: Term,
     pub written: String,
     pub body: Term,
