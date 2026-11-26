@@ -27,17 +27,16 @@ pub fn milliseconds(d: Duration) -> 0..4611686018427387904 { d.ms }
 // hands one to the system.
 pub fn since_1970(i: Instant) -> 0..4611686018427387904 { i.ms }
 
-// A point and a span give the point the span after it, where that is a point.
-impl Add[Instant, Duration, Instant] {
-  fn valid(a: Instant, b: Duration) -> bool { Add.valid(a.ms, b.ms) }
-  fn add(a: Instant, b: Duration) -> Instant { Instant(ms: a.ms + b.ms) }
+// The point a span after a point, and none when that is past what an `Instant`
+// holds.
+pub fn after(at: Instant, span: Duration) -> Option[Instant] {
+  if at.ms + span.ms < 4611686018427387904 { .some(Instant(ms: at.ms + span.ms)) } else { .none }
 }
 
-// The span from a point to one that is not before it.
-pub fn between(earlier: Instant, later: Instant) -> Duration
-  requires earlier <= later
-{
-  Duration(ms: later.ms - earlier.ms)
+// The span from a point to one after it, and none when the second is before the
+// first.
+pub fn between(earlier: Instant, later: Instant) -> Option[Duration] {
+  if later.ms >= earlier.ms { .some(Duration(ms: later.ms - earlier.ms)) } else { .none }
 }
 
 // The span from `now` to `deadline`, and none once the deadline has passed.

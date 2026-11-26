@@ -36,7 +36,7 @@ fn pause_and_read() -> Instant <time> {
 }
 ```
 
-`sleep(now())` is refused, as an `Instant` is where a `Duration` is needed, and so is `sleep(250)`, as a number is. `now() + now()` is refused, as two points have no sum.
+`sleep(now())` is refused, as an `Instant` is where a `Duration` is needed, and so is `sleep(250)`, as a number is. `now() + now()` is refused, as an `Instant` has no `+`.
 
 - `sleep` suspends the task that calls it, as a wait for a file or the network does, so it does not hold up the other tasks. A task that is cancelled while it sleeps ends at once, as [Cancellation](../language/cancellation.md) says of any task that is waiting, and the rest of the `sleep` does not run.
 - A function that calls `sleep` lists `time`, as one that calls `now` does, and a function that lists no effect never waits for a time.

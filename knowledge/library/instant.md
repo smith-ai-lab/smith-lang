@@ -4,7 +4,7 @@ title: Instants and durations
 description: std.instant, with Instant, a point in time, and Duration, a span of time, two types that hold milliseconds in a private field so that a point is never used as a span, or a number as either.
 status: partial
 built:
-  - "`std.instant`: `Instant` and `Duration`, each with a private field of `0..4611686018427387904` milliseconds; `ms`, `seconds`, `instant`, `milliseconds`, and `since_1970`; `Instant + Duration`, `between`, and `until`; and the comparison of two of one type"
+  - "`std.instant`: `Instant` and `Duration`, each with a private field of `0..4611686018427387904` milliseconds; `ms`, `seconds`, `instant`, `milliseconds`, and `since_1970`; `after`, `between`, and `until`; and the comparison of two of one type"
   - "`now`, `sleep`, `x509.Certificate.not_before` and `not_after`, `wait_for_time`, `wait_to_read_by`, `wait_to_write_by`, `test_ready_by`, and `time_left` use them"
   - "not built: the claims of `std.jwt`, which has no code yet; and the `Wait.time` and `limit` of `std.task`, and the sums of the name lookup of `std.net`, which are the milliseconds of the library's own scheduler and lookup and not times that a program holds"
 ---
@@ -23,7 +23,7 @@ pub struct Duration {
 }
 ```
 
-The field of each is private, as [Public and private](../language/pub.md) says: no other module reads it, assigns it, or builds the struct by calling its name. Each holds `0..2^62` milliseconds, which is about 146 million years, so that a point and a span added always fit a `u64`, and which holds every time that a certificate or a clock can say.
+The field of each is private, as [Public and private](../language/pub.md) says: no other module reads it, assigns it, or builds the struct by calling its name. Each holds `0..2^62` milliseconds, which is about 146 million years, so that a point and a span added always fit a `u64` before they are checked, and which holds every time that a certificate or a clock can say.
 
 | Function | Gives |
 | --- | --- |
@@ -32,29 +32,26 @@ The field of each is private, as [Public and private](../language/pub.md) says: 
 | `instant(n)` | The `Instant` that is `n` milliseconds after the start of 1970, for `n` in `0..2^62` |
 | `milliseconds(d)` | The milliseconds of a `Duration`, for what writes one down or hands one to the system |
 | `since_1970(i)` | The milliseconds from the start of 1970 to an `Instant`, for the same |
-| `between(earlier, later)` | The `Duration` from one `Instant` to another, which requires `earlier <= later` |
-| `until(deadline, now)` | The `Duration` from `now` to `deadline`, and `ms(0)` once the deadline has passed |
+| `after(at, span)` | `.some` of the `Instant` a `Duration` after `at`, and `.none` when that is past `2^62` milliseconds |
+| `between(earlier, later)` | `.some` of the `Duration` from `earlier` to `later`, and `.none` when `later` is before `earlier` |
+| `until(deadline, now)` | The `Duration` from `now` to `deadline`, and `ms(0)` once the deadline has passed, which is what it is for: the time left to wait |
 
 ```
-use std.instant (Duration, Instant, between, ms, until)
+use std.instant (Duration, between, ms)
 use std.time (now, sleep, time)
 
-fn how_long() -> Duration <time, alloc> {
+fn how_long() -> Option[Duration] <time, alloc> {
   start = now()
   sleep(ms(250))
   between(start, now())
 }
 ```
 
-`between` is refused unless its two arguments are shown to be in order, by a comparison or a `requires`, as `how_long` would be if `start` were not known to be before `now()`. `until` is the one that is named for what it does when the time has come: its answer is no time. `Instant - Instant` is refused, as a silent zero for a later point taken from an earlier one is a wrong value that looks right.
+A subtraction that has no answer is `.none` and not a zero, so a later point taken from an earlier one is a case the program handles and never a number that looks right. `until` is the one function that answers none for a deadline that has passed, as the time left to wait is none then.
 
-## What the operators do
+## There are no operators
 
-```
-impl Add[Instant, Duration, Instant]
-```
-
-`Instant + Duration` is the `Instant` that far after. It compiles where the sum is shown to be below `2^62`, as `+` of any two ranges does, so a function that adds names `Add.valid(a, d)` in a `requires`, as [Operators](../language/operators.md) says. `Instant + Instant`, `Duration + Instant`, `Duration + Duration`, and `-` of any two are each refused with "there is no implementation".
+An `Instant` and a `Duration` have no `+`, `-`, `*`, or `/`: each is refused with "there is no implementation", `Instant + Instant` among them. `after` and `between` are what add and subtract, and give an `Option` because the answer may not be a time.
 
 `==`, `<`, and the rest compare two `Instant`s or two `Duration`s. An `Instant` compared with a `Duration`, or with a number, is refused, as two types meet in no comparison.
 
