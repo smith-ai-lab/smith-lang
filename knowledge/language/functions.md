@@ -122,8 +122,8 @@ This prints `a`, `x`, and `Z`. `label` is given by position, and `n` and `m` by 
 
 Arguments by position come first, in the order of the parameters. Named arguments follow in any order, and are evaluated in the order they are written, so `show("a", m: "Z", n: "N")` works out `"Z"` before `"N"` and gives what `show("a", n: "N", m: "Z")` gives. A call may leave out any parameter after `;` that has a default.
 
-- `show(label: "a")` is refused: "`label` of `show` is given by position", with the fix "write `"a"` without its name, `label:`".
-- `show("a", "N")` is refused: "`n` of `show` is given by name", with the fix "write `show(n: "N")`".
+- `show(label: "a")` is refused: "`label` of `show` is given by position", with the fix "write `show("a")`".
+- `show("a", "N")` is refused: "`n` of `show` is given by name", with the fix "write `show("a", n: "N")`".
 - `show(m: "Z", "a")` is refused: "an argument by position comes after a named one", with the fix "name it, or move it before the named arguments".
 - `show("a", width: "y")` is refused: "`show` has no parameter named `width`".
 - `show("a", n: "x", n: "y")` is refused: "the `n` argument is given twice".
@@ -144,7 +144,7 @@ The last parameter before `;` may take a function, and is then given as a block 
 fn p(block: fn(); class: str = "", id: str = "") { ... }
 ```
 
-`p(class: "note") { ... }` writes the block after the call, and `p("Hello") { ... }` is refused: "`class` of `p` is given by name", with the fix "write `p(class: "Hello")`".
+`p(class: "note") { ... }` writes the block after the call, and `p("Hello") { ... }` is refused: "`class` of `p` is given by name", with the fix "write `p(class: "Hello") { ... }`", the call with every argument as it was written.
 
 ## Defaults
 
