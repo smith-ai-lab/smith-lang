@@ -564,6 +564,22 @@ impl State {
         }
         let mut numbers = Vec::new();
         for (p, g) in template.params.iter().zip(&given) {
+            if let [minus, t] = g.as_slice()
+                && minus.tok == Tok::Punct("-")
+                && let Tok::Number(text) = &t.tok
+            {
+                errors.push(
+                    Error::new(
+                        minus.pos,
+                        format!(
+                            "`-{text}` is not a `Nat`, which `{}` of `{}` is",
+                            p.name, template.name
+                        ),
+                    )
+                    .with_fix("write a number that is not below zero"),
+                );
+                return None;
+            }
             let number = match g.as_slice() {
                 [t] => match &t.tok {
                     Tok::Number(text) => value_of(text).map(|v| (v, t.pos)),
