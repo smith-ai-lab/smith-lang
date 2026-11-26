@@ -47,6 +47,9 @@ pub(crate) struct Param {
     pub name: String,
     pos: Pos,
     kind: Kind,
+    /// The number a use that leaves the parameter out and that nothing settles
+    /// gets, written after `=`.
+    pub default: Option<u64>,
 }
 
 /// A type as it is written in the signature of an item: a name with the types
@@ -227,34 +230,100 @@ fn template_of(tokens: &[Token], errors: &mut Vec<Error>) -> Option<Template> {
     }
     let close = closing(tokens, open)?;
     let inside = plain(&tokens[open + 1..close]);
-    let mut params = Vec::new();
+    let mut params: Vec<Param> = Vec::new();
     let mut others = 0;
+    let mut broken = false;
     for generic in split_commas(&inside) {
-        match generic.as_slice() {
-            [n, colon, kind]
+        let (n, kind, rest) = match generic.as_slice() {
+            [n, colon, kind, rest @ ..]
                 if colon.tok == Tok::Punct(":")
                     && matches!(&n.tok, Tok::Ident(_))
                     && matches!(&kind.tok, Tok::Ident(k) if k == "Nat" || k == "Pos") =>
             {
-                let (Tok::Ident(n), Tok::Ident(k)) = (&n.tok, &kind.tok) else {
+                (n, kind, rest)
+            }
+            _ => {
+                others += 1;
+                continue;
+            }
+        };
+        let (Tok::Ident(n_name), Tok::Ident(k)) = (&n.tok, &kind.tok) else {
+            unreachable!("matched above")
+        };
+        let kind = if k == "Pos" { Kind::Pos } else { Kind::Nat };
+        let pos = tokens[open + 1..close]
+            .iter()
+            .find(|t| t.tok == Tok::Ident(n_name.clone()))
+            .map_or(tokens[open].pos, |t| t.pos);
+        let mut default = None;
+        match rest {
+            [] => {}
+            [eq, value] if eq.tok == Tok::Punct("=") => match default_of(n_name, kind, value) {
+                Ok(number) => default = Some(number),
+                Err(error) => {
+                    errors.push(error);
+                    broken = true;
+                }
+            },
+            [eq, minus, value]
+                if eq.tok == Tok::Punct("=")
+                    && minus.tok == Tok::Punct("-")
+                    && matches!(&value.tok, Tok::Number(_)) =>
+            {
+                let Tok::Number(text) = &value.tok else {
                     unreachable!("matched above")
                 };
-                params.push(Param {
-                    name: n.clone(),
-                    pos: tokens[open + 1..close]
-                        .iter()
-                        .find(|t| t.tok == Tok::Ident(n.clone()))
-                        .map_or(tokens[open].pos, |t| t.pos),
-                    kind: if k == "Pos" { Kind::Pos } else { Kind::Nat },
-                });
+                errors.push(
+                    Error::new(
+                        minus.pos,
+                        format!("`-{text}` is not a `Nat`, which `{n_name}` is"),
+                    )
+                    .with_fix("write a number that is not below zero"),
+                );
+                broken = true;
             }
-            _ => others += 1,
+            _ => {
+                errors.push(
+                    Error::new(
+                        rest[0].pos,
+                        format!(
+                            "the default of `{n_name}` is a whole number that is known when the program is built, so it is written out"
+                        ),
+                    )
+                    .with_fix("write the number, as `= 4`"),
+                );
+                broken = true;
+            }
         }
+        if default.is_none()
+            && rest.is_empty()
+            && let Some(before) = params.iter().find(|q| q.default.is_some())
+        {
+            errors.push(
+                Error::new(
+                    pos,
+                    format!(
+                        "`{n_name}` has no default, and comes after `{}`, which has one",
+                        before.name
+                    ),
+                )
+                .with_fix(format!(
+                    "give `{n_name}` a default, or write it before `{}`",
+                    before.name
+                )),
+            );
+            broken = true;
+        }
+        params.push(Param {
+            name: n_name.clone(),
+            pos,
+            kind,
+            default,
+        });
     }
     if params.is_empty() {
         return None;
     }
-    let mut broken = false;
     if others > 0 {
         errors.push(Error::unsupported(
             tokens[open].pos,
@@ -286,6 +355,32 @@ fn template_of(tokens: &[Token], errors: &mut Vec<Error>) -> Option<Template> {
         tokens: tokens.to_vec(),
         brackets: (open, close),
     })
+}
+
+/// The number a default is, which its parameter's kind must hold.
+fn default_of(name: &str, kind: Kind, value: &Token) -> Result<u64, Error> {
+    let Tok::Number(text) = &value.tok else {
+        return Err(Error::new(
+            value.pos,
+            format!(
+                "the default of `{name}` is a whole number that is known when the program is built, so it is written out"
+            ),
+        )
+        .with_fix("write the number, as `= 4`"));
+    };
+    let Some(number) = value_of(text).and_then(|v| u64::try_from(v).ok()) else {
+        return Err(Error::new(
+            value.pos,
+            format!("this does not fit a `Nat`, which `{name}` is"),
+        ));
+    };
+    if kind == Kind::Pos && number == 0 {
+        return Err(
+            Error::new(value.pos, format!("`0` is not a `Pos`, which `{name}` is"))
+                .with_fix("write a number above zero"),
+        );
+    }
+    Ok(number)
 }
 
 /// Where an array type has a size that is the name of a parameter, as `[n]f32`
@@ -475,6 +570,24 @@ impl State {
                     continue;
                 }
             } else if let Some(template) = self.templates.get(name).cloned()
+                && template.is_struct
+                && !template.broken
+                && template.params.iter().all(|p| p.default.is_some())
+                && i > 0
+                && matches!(tokens[i - 1].tok, Tok::Punct(":" | "->" | "[" | ","))
+                && !matches!(
+                    tokens.get(i + 1).map(|t| &t.tok),
+                    Some(Tok::Punct("(" | "[" | "."))
+                )
+            {
+                // A type written with every number left out is the one that
+                // writes the defaults.
+                let numbers: Vec<u64> = template.params.iter().filter_map(|p| p.default).collect();
+                let name = self.copy(&template, &numbers);
+                out.push(Token::new(Tok::Ident(name), t.pos));
+                i += 1;
+                continue;
+            } else if let Some(template) = self.templates.get(name).cloned()
                 && tokens.get(i + 1).map(|t| &t.tok) == Some(&Tok::Punct("["))
                 && let Some(close) = closing(&tokens, i + 1)
             {
@@ -530,14 +643,26 @@ impl State {
         let at = tokens[0].pos;
         let inside = plain(&tokens[2..tokens.len() - 1]);
         let given = split_commas(&inside);
-        if given.len() != template.params.len() {
+        let required = template
+            .params
+            .iter()
+            .filter(|p| p.default.is_none())
+            .count();
+        if given.len() < required || given.len() > template.params.len() {
+            let takes = if required == template.params.len() {
+                plural(required, "whole number")
+            } else {
+                format!(
+                    "{required} to {}",
+                    plural(template.params.len(), "whole number")
+                )
+            };
             errors.push(
                 Error::new(
                     at,
                     format!(
-                        "`{}` takes {}, and {} written",
+                        "`{}` takes {takes}, and {} written",
                         template.name,
-                        plural(template.params.len(), "whole number"),
                         given.len()
                     ),
                 )
@@ -603,6 +728,13 @@ impl State {
                 return None;
             };
             numbers.push(value);
+        }
+        // What a use leaves out is its default.
+        for p in &template.params[numbers.len()..] {
+            numbers.push(
+                p.default
+                    .expect("a parameter after those written has a default"),
+            );
         }
         let allowed = template
             .params
