@@ -56,7 +56,7 @@ pub const MACHINE: &[Test] = &[(
 /// the standard library that they import.
 fn with_std<'a>(library: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
     let mut all = library.to_vec();
-    for module in ["bits", "console", "int", "task", "list", "float"] {
+    for module in ["bits", "console", "instant", "int", "task", "list", "float"] {
         if !all.iter().any(|(name, _)| *name == module) {
             all.push((module, smith::library_text(module)));
         }

@@ -223,6 +223,20 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
 }
 ",
         ),
+        "Instant" => (
+            "Instant, instant",
+            "fn main() {
+  f(instant(0))
+}
+",
+        ),
+        "Duration" => (
+            "Duration, ms",
+            "fn main() {
+  f(ms(0))
+}
+",
+        ),
         other => panic!("the test makes no `{other}`, so it needs a way to"),
     };
     let main = if takes {
