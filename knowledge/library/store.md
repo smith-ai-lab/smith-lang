@@ -102,10 +102,10 @@ fn nothing[T](body: fn() -> T <store>) -> T {
   store(
     begin: fn() { group(1) },
     keep: fn(g) {
-      n = release(g)
+      _ = release(g)
       .ok(())
     },
-    drop_writes: fn(g) { n = release(g) },
+    drop_writes: fn(g) { _ = release(g) },
     get: fn(key) { .ok(.none) },
     put: fn(key, value) { .ok(()) },
     delete: fn(key) { .ok(()) },
