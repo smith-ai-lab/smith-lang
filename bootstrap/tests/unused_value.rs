@@ -164,5 +164,10 @@ fn throwing_away_a_value_without_discard_is_refused_as_any_drop_is() {
     );
     let found = errors(&source);
     assert_eq!(found.len(), 1, "{found:?}\n{source}");
-    assert!(found[0].message.contains("dropped"), "{found:?}");
+    let message = &found[0].message;
+    assert!(message.contains("`_ =` throws this `Ticket` away"), "{found:?}");
+    assert!(message.contains("no `Discard`"), "{found:?}");
+    assert!(!message.contains("`_` is"), "{found:?}");
+    let fix = found[0].fix.as_deref().expect("a fix");
+    assert!(fix.contains("takes it"), "{fix}");
 }
