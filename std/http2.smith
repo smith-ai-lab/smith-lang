@@ -381,8 +381,10 @@ fn table_packed(t: take Table) -> Table <alloc> {
   var w = t
   if w.first >= 32 and wrapping_mul(w.first, 2) >= w.entries.size {
     var kept: List[Entry] = []
-    loop i in w.first..w.entries.size {
-      if i < w.entries.size { kept = push(kept, w.entries[i]) }
+    if w.first <= w.entries.size {
+      loop i in w.first..w.entries.size {
+        if i < w.entries.size { kept = push(kept, w.entries[i]) }
+      }
     }
     w.entries = kept
     w.first = 0
@@ -739,8 +741,9 @@ fn find(t: Table, name: str, value: str) -> Found {
       }
     }
   }
-  if whole == 0 {
-    loop d in 1..wrapping_add(wrapping_sub(t.entries.size, t.first), 1) {
+  count = wrapping_add(wrapping_sub(t.entries.size, t.first), 1)
+  if whole == 0 and 1 <= count {
+    loop d in 1..count {
       match table_get(t, d) {
         .some(e) {
           if e.name == name {

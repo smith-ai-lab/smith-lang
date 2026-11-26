@@ -1468,6 +1468,38 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `arith` proves that the first end of the range `r` of a `loop`
+    /// is not above its second, and if it does not, the goal it could not
+    /// prove.
+    pub(super) fn range_ordered(&mut self, body: &mut Body<'a>, r: &Range) {
+        if !Self::decided(body) || body.contract {
+            return;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let (from, to) = (builder.lin(&r.from), builder.lin(&r.to));
+        let overflow = builder.overflow;
+        let goal = match (from, to) {
+            (Some(from), Some(to)) if !overflow => self.sum(body, &mut facts, &to, &from, 0),
+            _ => None,
+        };
+        let goals: Vec<&Formula> = goal.iter().collect();
+        let used = background(&facts, goals.into_iter());
+        body.facts = facts;
+        if !goal.as_ref().is_some_and(|g| proves(&used, g)) {
+            let (a, b) = (written_expr(&r.from), written_expr(&r.to));
+            self.errors.push(
+                Error::new(
+                    r.from.pos(),
+                    format!("cannot prove that `{a} <= {b}`, which the range `{a}..{b}` needs"),
+                )
+                .with_fix(format!(
+                    "check `{a} <= {b}` with an `if`, or state it in a `requires`"
+                )),
+            );
+        }
+    }
+
     /// Whether `arith` proves that the part of the slice `of` from `a` up to
     /// `b` lies inside it, that `a <= b` and `b <= of.size`, where an end that
     /// is left out is the start or the size, and if it does not, the goal it

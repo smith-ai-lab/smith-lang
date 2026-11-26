@@ -299,7 +299,9 @@ const DOWN: &str = "struct Down {
 
 impl Iterate[Down, Int] {
   fn each(c: Down, body: fn(Int) -> Flow) -> Flow {
-    loop i in 0..c.from { try body(c.from - i) }
+    if 0 <= c.from {
+      loop i in 0..c.from { try body(c.from - i) }
+    }
     .go
   }
 }
@@ -508,10 +510,12 @@ fn the_examples_of_the_page_that_are_built_give_what_it_says() {
 
 impl Iterate[Countdown, i32] {
   fn each(c: Countdown, body: fn(i32) -> Flow) -> Flow {
-    loop i in 0..c.from {
-      match body(c.from - i) {
-        .stop { return .stop }
-        .go { }
+    if 0 <= c.from {
+      loop i in 0..c.from {
+        match body(c.from - i) {
+          .stop { return .stop }
+          .go { }
+        }
       }
     }
     .go

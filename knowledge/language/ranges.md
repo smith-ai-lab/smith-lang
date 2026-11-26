@@ -7,7 +7,8 @@ built:
   - "`a..b` as the range of a `loop`, which runs in order"
   - "`x[a..b]`, `x[..k]`, and `x[k..]` on a [`Slice`](../library/slice.md), a `Slice` that shares the memory of `x`, compiled when `arith` proves `a <= b` and `b <= x.size`, and a piece of a piece"
   - "`a..b` written as a value, which is a `Range` of the prelude with `start` and `end`, both `Nat`, and whose ends `arith` knows as the ends that were written"
-  - "not the proof `start <= end` that a `Range` holds, or the refusal of a range that `arith` cannot prove ordered, in a `loop` or written as a value"
+  - "`loop i in a..b` written only where `arith` proves `a <= b`, refused with \"cannot prove that `a <= b`, which the range `a..b` needs\" where it does not"
+  - "not the proof `start <= end` that a `Range` holds, or the refusal of a range that `arith` cannot prove ordered when it is written as a value"
   - "not a range as a type, or a piece of an array, a text, or a list"
 ---
 
@@ -39,7 +40,7 @@ A range is written only where its first end is proven not to be above its second
 loop i in 5..2 { print("{i}") }
 ```
 
-This is refused: the range ends below where it starts. The compiler does not build this yet, so the words are not quoted. For names that `arith` knows nothing of, the proof is stated, as for a slice, with an `if` or a `requires`.
+This is refused: "cannot prove that `5 <= 2`, which the range `5..2` needs". For names that `arith` knows nothing of, the proof is stated, as for a slice, with an `if` or a `requires`.
 
 ```
 use std.console (console, print)

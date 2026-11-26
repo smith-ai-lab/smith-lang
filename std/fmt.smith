@@ -22,7 +22,9 @@ fn hex_digit(d: u64, upper: bool) -> Byte {
 
 pub fn hex(n: u64, width: Byte = 0, upper: bool = true) -> str <alloc> {
   var digits: List[Byte] = []
-  loop i in 16..width { digits = push(digits, '0') }
+  if 16 <= width {
+    loop i in 16..width { digits = push(digits, '0') }
+  }
   var started: bool = false
   loop j in 0..16 {
     pos = 15 - j
@@ -35,7 +37,9 @@ pub fn hex(n: u64, width: Byte = 0, upper: bool = true) -> str <alloc> {
 
 pub fn binary(n: u64, width: Byte = 0) -> str <alloc> {
   var digits: List[Byte] = []
-  loop i in 64..width { digits = push(digits, '0') }
+  if 64 <= width {
+    loop i in 64..width { digits = push(digits, '0') }
+  }
   var started: bool = false
   loop j in 0..64 {
     pos = 63 - j

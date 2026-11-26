@@ -119,11 +119,13 @@ fn years(year: Nat) -> (Nat, bool) {
   var c4: Nat = 2
   var c100: Nat = 70
   var c400: Nat = 370
-  loop i in 1970..year {
-    if c4 == 0 and (c100 != 0 or c400 == 0) { days = wrapping_add(days, 366) } else { days = wrapping_add(days, 365) }
-    if c4 == 3 { c4 = 0 } else { c4 = wrapping_add(c4, 1) }
-    if c100 == 99 { c100 = 0 } else { c100 = wrapping_add(c100, 1) }
-    if c400 == 399 { c400 = 0 } else { c400 = wrapping_add(c400, 1) }
+  if 1970 <= year {
+    loop i in 1970..year {
+      if c4 == 0 and (c100 != 0 or c400 == 0) { days = wrapping_add(days, 366) } else { days = wrapping_add(days, 365) }
+      if c4 == 3 { c4 = 0 } else { c4 = wrapping_add(c4, 1) }
+      if c100 == 99 { c100 = 0 } else { c100 = wrapping_add(c100, 1) }
+      if c400 == 399 { c400 = 0 } else { c400 = wrapping_add(c400, 1) }
+    }
   }
   (days, c4 == 0 and (c100 != 0 or c400 == 0))
 }
@@ -478,10 +480,12 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
     _ { }
   }
   s.at = .inside
-  loop k in begin..end {
-    b = input[k]
-    if b >= 128 { return .err("a byte that is not base64 in a certificate") }
-    s.body = append_ascii(s.body, b)
+  if begin <= end {
+    loop k in begin..end {
+      b = input[k]
+      if b >= 128 { return .err("a byte that is not base64 in a certificate") }
+      s.body = append_ascii(s.body, b)
+    }
   }
   .ok(s)
 }

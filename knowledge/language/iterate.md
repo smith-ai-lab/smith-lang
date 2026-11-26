@@ -42,7 +42,9 @@ struct Countdown {
 
 impl Iterate[Countdown, i32] {
   fn each(c: Countdown, body: fn(i32) -> Flow) -> Flow {
-    loop i in 0..c.from { try body(c.from - i) }
+    if 0 <= c.from {
+      loop i in 0..c.from { try body(c.from - i) }
+    }
     .go
   }
 }
