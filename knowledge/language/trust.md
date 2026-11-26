@@ -19,7 +19,7 @@ fn first(xs: List[Byte]) -> Byte
 }
 ```
 
-`xs[0]` reads with no test of the index, as the `requires` is a proof that the index is inside. Whatever finds a proof may be as clever as it likes, and may be wrong: [`arith`](arith.md), a [function over code](code.md), a library of facts. What it finds is checked, so a wrong proof is refused and never believed.
+`xs[0]` reads with no test of the index, as the `requires` is a proof that the index is inside. Whatever finds a proof may be as clever as it likes, and may be wrong: [`arith`](arith.md), a [function over code](code.md), a library of facts. What it finds is checked, so a wrong proof is refused and never believed. No solver searches when a program is built: the kernel is the only part trusted, and proofs are written in the code so that checking them is fast and predictable.
 
 ## What a kernel is
 

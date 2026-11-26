@@ -92,6 +92,22 @@ main.smith:11:38: The first number must not be below the second.
 
 `gap(250, 3)` is refused as a `requires` with no comment is, with "cannot prove that `250 <= 200`, which `gap` requires of its arguments" and no `goal:` line. The comment is on its own line directly above the `requires`, as [Functions](functions.md#comments) says, and it is for the one `requires` that follows it: the next `requires` has none of its own, and a blank line between a comment and its `requires` leaves that one with none. A comment of several lines is shown as several lines. A comment above a `requires` of a function of a [trait](traits.md) is shown at a call through any `impl`, and one above a `requires` that calls a function the compiler works out is shown with what it found, as the `goal:`.
 
+## A requires is a proof parameter
+
+`requires e` is a parameter of the statement `e` that has no name and the default `arith`, so these two are one feature.
+
+```
+fn gap(a: Byte, b: Byte) -> Byte
+  requires a >= b
+{
+  a - b
+}
+
+fn gap_named(a: Byte, b: Byte, _: a >= b = arith) -> Byte { a - b }
+```
+
+At each call `arith` proves `a >= b`, and no proof is passed by hand for it. `gap(5, 3)` and `gap_named(5, 3)` are both `2`, and `gap(3, 5)` and `gap_named(3, 5)` are both refused with the goal `3 >= 5`. A proof parameter that has a name, as [Statements](statements.md#a-proof-parameter-may-have-a-default) says, may also be passed: `gap_named(a, b, q)` gives the proof `q` that `a >= b`, which a `requires` has no way to do, as it has no name to pass.
+
 ## What the function gives
 
 `ensures` states something about the result. The signature gives the result a name, and the `ensures` is about that name.

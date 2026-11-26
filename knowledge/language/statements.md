@@ -15,7 +15,19 @@ A statement is a type, and a proof of it is a value of that type. A boolean expr
 fn first(xs: List[Byte], p: xs.size > 0) -> Byte { xs[0] }
 ```
 
-`xs.size > 0` is a statement, and `p` is a proof of it. Most statements a program needs are of this kind, and [`arith`](arith.md) finds their proofs, so they are written in a `requires` and no proof is named.
+`xs.size > 0` is a statement, and `p` is a proof of it. A call passes one, as `first(xs, q)` does with a proof `q`. Most statements a program needs are of this kind, and [`arith`](arith.md) finds their proofs, so a parameter that has the default `arith` or a `requires` leaves the proof out of the call.
+
+## A proof parameter may have a default
+
+A proof parameter has a default as any parameter may, written after its type with `=`, and the one default a proof has is `arith`.
+
+```
+fn first(xs: List[Byte], p: xs.size > 0 = arith) -> Byte { xs[0] }
+```
+
+`first([7, 8])` is `7`, since `arith` proves `[7, 8].size > 0` where the call is written. `first(xs, q)` passes a proof `q` of `xs.size > 0` and leaves `arith` out. A call that leaves the proof out where `arith` cannot prove it is refused with the goal for the call's arguments: "cannot prove that `ys.size > 0`, which `first` requires of its arguments". A proof parameter with no default is always passed. The default is written where the parameter is declared, so no proof is passed that the declaration does not show.
+
+`requires e` is this parameter with no name: it is the same as `_: e = arith`, as [Contracts](contracts.md#a-requires-is-a-proof-parameter) says.
 
 ## What a statement may compare
 
@@ -132,6 +144,7 @@ A proof is written once. The compiler checks proofs and never searches for one, 
 | Written | Is |
 | --- | --- |
 | `p: a < 10` | A proof that the boolean expression is true |
+| `p: a < 10 = arith` | The same, which a call may leave out where `arith` proves it |
 | `(p, q)` | A proof of both |
 | `fn(p: P) -> Q` | A proof that P gives Q |
 | `fn(i: Nat, p: i < n) -> xs[i] < m` | A proof for every `i` below `n` |
