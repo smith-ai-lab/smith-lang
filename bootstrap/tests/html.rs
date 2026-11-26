@@ -51,6 +51,26 @@ pub const ONCE: &[Test] = &[
         "the_examples_of_the_page_build_for_every_target",
         the_examples_of_the_page_build_for_every_target,
     ),
+    (
+        "a_link_is_made_from_a_text_exactly_when_the_reference_says_it_runs_no_code",
+        a_link_is_made_from_a_text_exactly_when_the_reference_says_it_runs_no_code,
+    ),
+    (
+        "a_link_written_out_that_runs_code_is_refused_where_it_is_written_and_the_others_are_not",
+        a_link_written_out_that_runs_code_is_refused_where_it_is_written_and_the_others_are_not,
+    ),
+    (
+        "a_link_that_is_written_out_is_written_in_href_escaped",
+        a_link_that_is_written_out_is_written_in_href_escaped,
+    ),
+    (
+        "a_text_is_refused_where_a_link_is_taken",
+        a_text_is_refused_where_a_link_is_taken,
+    ),
+    (
+        "an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither",
+        an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither,
+    ),
 ];
 
 /// What the page says a text becomes: `<`, `>`, `&`, `"`, and `'` are
@@ -106,6 +126,8 @@ fn literal(text: &str) -> String {
             '\\' => written += "\\\\",
             '{' => written += "\\{",
             '}' => written += "\\}",
+            '\t' => written += "\\t",
+            '\n' => written += "\\n",
             c => written.push(c),
         }
     }
@@ -220,7 +242,7 @@ fn what_text_writes_holds_no_byte_of_markup_that_the_text_did_not_have_as_an_ent
 
 /// The elements and the names that the programs below use.
 const IMPORTS: &str = "use std.console (console, print)
-use std.html (Html, a, article, b, body, br, h1, h2, head, html, input, insert, li, markup, p, render, span, text, title, ul)
+use std.html (Html, a, b, br, check_link, LinkError, h1, h2, in_a, in_article, in_body, in_head, in_html, in_li, in_p, in_span, in_ul, input, insert, link, markup, p, render, span, text, title)
 ";
 
 /// The lines a program prints that has the functions `functions` and, for each
@@ -250,11 +272,11 @@ const EXAMPLES: &str = "struct Note {
 }
 
 fn hello(name: str) <markup, alloc> {
-  html() {
-    head() {
+  in_html() {
+    in_head() {
       title(\"Hello\")
     }
-    body() {
+    in_body() {
       h1(\"Hello, {name}\")
       p(\"This page is written in Smith.\")
     }
@@ -262,7 +284,7 @@ fn hello(name: str) <markup, alloc> {
 }
 
 fn mixed(name: str) <markup, alloc> {
-  p() {
+  in_p() {
     text(\"Hello, \")
     b(name)
     text(\"!\")
@@ -270,13 +292,13 @@ fn mixed(name: str) <markup, alloc> {
 }
 
 fn links() <markup, alloc> {
-  a(\"Open\", href: \"/notes/7\", class: \"button\")
+  a(\"Open\", href: link(\"/notes/7\"), class: \"button\")
   input(name: \"title\", placeholder: \"Title\")
   br()
 }
 
 fn note_card(note: Note) <markup, alloc> {
-  article(class: \"card\") {
+  in_article(class: \"card\") {
     h2(note.title)
     p(note.body)
     if note.pinned {
@@ -286,9 +308,9 @@ fn note_card(note: Note) <markup, alloc> {
 }
 
 fn notes(all: List[Note]) <markup, alloc> {
-  ul() {
+  in_ul() {
     loop note in all {
-      li() {
+      in_li() {
         note_card(note)
       }
     }
@@ -296,11 +318,11 @@ fn notes(all: List[Note]) <markup, alloc> {
 }
 
 fn layout(heading: str, inside: fn() <markup>) <markup, alloc> {
-  html() {
-    head() {
+  in_html() {
+    in_head() {
       title(heading)
     }
-    body() {
+    in_body() {
       h1(heading)
       inside()
     }
@@ -314,7 +336,7 @@ fn about() <markup, alloc> {
 }
 
 fn frame(inside: Html) <markup, alloc> {
-  span(class: \"frame\") {
+  in_span(class: \"frame\") {
     insert(inside)
   }
 }
@@ -367,8 +389,8 @@ fn a_text_given_to_an_element_or_an_attribute_is_escaped_as_the_reference_escape
                 let attribute = |name: &str| if t.is_empty() { String::new() } else { format!(" {name}=\"{e}\"") };
                 calls.push(format!("p(\"x\", class: {lit})"));
                 expected.push(format!("<p{}>x</p>", attribute("class")));
-                calls.push(format!("a({lit}, href: {lit}, id: {lit})"));
-                expected.push(format!("<a{}{}>{e}</a>", attribute("href"), attribute("id")));
+                calls.push(format!("a({lit}, href: link(\"/x?a=1&b=2\"), id: {lit})"));
+                expected.push(format!("<a href=\"/x?a=1&amp;b=2\"{}>{e}</a>", attribute("id")));
             }
             // An attribute that is the empty text is not written.
             calls.push("p(\"x\", class: \"\")".to_string());
@@ -381,7 +403,7 @@ fn a_text_given_to_an_element_or_an_attribute_is_escaped_as_the_reference_escape
 /// The examples of the page, written with `render` as the page writes them,
 /// and `main` reaching each, so that every target builds them.
 fn the_examples_of_the_page_build_for_every_target() {
-    let source = "use std.html (Html, a, article, b, body, br, h1, h2, head, html, input, insert, li, markup, p, render, span, text, title, ul)
+    let source = "use std.html (Html, a, b, br, check_link, h1, h2, in_article, in_body, in_head, in_html, in_li, in_p, in_span, in_ul, input, insert, link, markup, p, render, span, text, title)
 
 struct Note {
   title: str
@@ -391,11 +413,11 @@ struct Note {
 
 fn hello(name: str) -> Html <alloc> {
   render() {
-    html() {
-      head() {
+    in_html() {
+      in_head() {
         title(\"Hello\")
       }
-      body() {
+      in_body() {
         h1(\"Hello, {name}\")
         p(\"This page is written in Smith.\")
       }
@@ -405,18 +427,18 @@ fn hello(name: str) -> Html <alloc> {
 
 fn links() -> Html <alloc> {
   render() {
-    p() {
+    in_p() {
       text(\"Hello, \")
       b(\"Ana\")
     }
-    a(\"Open\", href: \"/notes/7\", class: \"button\")
+    a(\"Open\", href: link(\"/notes/7\"), class: \"button\")
     input(name: \"title\", placeholder: \"Title\")
     br()
   }
 }
 
 fn note_card(note: Note) <markup, alloc> {
-  article(class: \"card\") {
+  in_article(class: \"card\") {
     h2(note.title)
     p(note.body)
     if note.pinned {
@@ -427,9 +449,9 @@ fn note_card(note: Note) <markup, alloc> {
 
 fn notes(all: List[Note]) -> Html <alloc> {
   render() {
-    ul() {
+    in_ul() {
       loop note in all {
-        li() {
+        in_li() {
           note_card(note)
         }
       }
@@ -439,11 +461,11 @@ fn notes(all: List[Note]) -> Html <alloc> {
 
 fn layout(heading: str, inside: fn() <markup>) -> Html <alloc> {
   render() {
-    html() {
-      head() {
+    in_html() {
+      in_head() {
         title(heading)
       }
-      body() {
+      in_body() {
         h1(heading)
         inside()
       }
@@ -459,9 +481,22 @@ fn about() -> Html <alloc> {
 
 fn frame(inside: Html) -> Html <alloc> {
   render() {
-    span(class: \"frame\") {
+    in_span(class: \"frame\") {
       insert(inside)
     }
+  }
+}
+
+fn home() -> Html <alloc> {
+  render() {
+    a(\"Home\", href: link(\"/\"))
+  }
+}
+
+fn profile(site: str) -> Html <alloc> {
+  match check_link(site) {
+    .ok(to) { render() { a(\"Site\", href: to) } }
+    .err(e) { render() { p(\"{e}\") } }
   }
 }
 
@@ -470,6 +505,8 @@ fn main() <alloc> {
   two = links()
   three = notes([])
   four = frame(about())
+  five = home()
+  six = profile(\"javascript:alert(1)\")
 }
 ";
     for target in Target::ALL {
@@ -514,4 +551,177 @@ fn main() {
     for operation in OPERATIONS {
         assert!(said.iter().any(|m| m.contains(&format!("`{operation}`"))), "{operation}: {said:?}");
     }
+}
+
+/// Whether the reference says a text is a link: it holds no space and no
+/// control character, and it has no scheme, or its scheme is `http`, `https`,
+/// or `mailto` in any case of its letters. A scheme is what stands before a
+/// `:` that comes before any `/`, `?`, or `#`.
+fn reference_is_a_link(text: &str) -> bool {
+    if text.bytes().any(|b| b <= 32 || b == 127) {
+        return false;
+    }
+    match text.find([':', '/', '?', '#']) {
+        Some(at) if text.as_bytes()[at] == b':' => {
+            matches!(text[..at].to_ascii_lowercase().as_str(), "http" | "https" | "mailto")
+        }
+        _ => true,
+    }
+}
+
+/// A text that may be a link: with a scheme that runs code or that does not,
+/// in any case of its letters, or with none, and the rest of a link, a space,
+/// or a break.
+fn any_link(g: &mut Gen) -> String {
+    const SCHEMES: &[&str] = &[
+        "", "http", "https", "mailto", "HTTP", "MailTo", "javascript", "JavaScript", "JAVASCRIPT", "data",
+        "vbscript", "ftp", "tel", "a", "java\tscript", "httpx", "htt",
+    ];
+    const REST: &[&str] = &[
+        "//x.org/a", "/notes/7", "?a:b", "#top", "x@y.org", "alert(1)", "é", "a:b", "x y", "\n", "",
+    ];
+    let rest = *g.pick(REST);
+    match g.below(3) {
+        0 => rest.to_string(),
+        _ => format!("{}:{rest}", g.pick(SCHEMES)),
+    }
+}
+
+/// A program that has `functions` and runs `lines` in a function with `alloc`
+/// and `console`, whose own imports are those of the tests above.
+fn program_of(lines: &[String]) -> String {
+    let mut body = String::new();
+    for line in lines {
+        body += &format!("  {line}\n");
+    }
+    format!("{IMPORTS}\nfn main() <console, alloc> {{\n{body}}}\n")
+}
+
+fn a_link_is_made_from_a_text_exactly_when_the_reference_says_it_runs_no_code() {
+    generate::check(
+        8306,
+        3,
+        |g| (0..8).map(|_| any_link(g)).collect::<Vec<_>>(),
+        |texts| {
+            let lines: Vec<String> = texts
+                .iter()
+                .map(|t| {
+                    format!(
+                        "match check_link({}) {{\n    .ok(l) {{ print(\"made\") }}\n    .err(e) {{ print(why(e)) }}\n  }}",
+                        literal(t)
+                    )
+                })
+                .collect();
+            let source = program_of(&lines).replace(
+                "\nfn main()",
+                "\nfn why(e: LinkError) -> str {\n  match e {\n    .not_plain(t) { \"not_plain\" }\n    .scheme(t) { \"scheme\" }\n  }\n}\n\nfn main()",
+            );
+            let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+            let outcome = scalar::run(&lowered);
+            assert_eq!(outcome.status, 0, "for {source}");
+            let printed = String::from_utf8(outcome.stdout).unwrap();
+            for (text, line) in texts.iter().zip(printed.lines()) {
+                let plain = !text.bytes().any(|b| b <= 32 || b == 127);
+                let expected = match (reference_is_a_link(text), plain) {
+                    (true, _) => "made",
+                    (false, false) => "not_plain",
+                    (false, true) => "scheme",
+                };
+                assert_eq!(line, expected, "{text:?}");
+            }
+            assert_eq!(printed.lines().count(), texts.len(), "for {source}");
+        },
+    );
+}
+
+/// The messages a program is refused with, or none when it is built.
+fn messages(source: &str) -> Vec<String> {
+    smith::check(source.as_bytes())
+        .err()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.message)
+        .collect()
+}
+
+fn a_link_written_out_that_runs_code_is_refused_where_it_is_written_and_the_others_are_not() {
+    generate::check(
+        8307,
+        10,
+        any_link,
+        |text| {
+            let source = format!(
+                "use std.html (a, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(\"Open\", href: link({}))\n  }}\n  same = page\n}}\n",
+                literal(text)
+            );
+            let said = messages(&source);
+            if reference_is_a_link(text) {
+                assert!(said.iter().all(|m| !m.contains("runs_no_code") && !m.contains("plain")), "{said:?} for {source}");
+            } else {
+                assert!(
+                    said.iter().any(|m| m.contains("runs_no_code") || m.contains("plain")),
+                    "{said:?} for {source}"
+                );
+            }
+        },
+    );
+}
+
+fn a_link_that_is_written_out_is_written_in_href_escaped() {
+    let calls: Vec<String> = [
+        "a(\"Open\", href: link(\"/notes/7?a=1&b=2\"))",
+        "in_a(href: link(\"mailto:ana@example.org\")) { text(\"Write\") }",
+        "a(\"Open\", href: link(\"HTTPS://example.org/\\\"x\"), class: \"button\")",
+    ]
+    .map(String::from)
+    .to_vec();
+    assert_eq!(
+        shown("", &calls),
+        [
+            "<a href=\"/notes/7?a=1&amp;b=2\">Open</a>",
+            "<a href=\"mailto:ana@example.org\">Write</a>",
+            "<a href=\"HTTPS://example.org/&quot;x\" class=\"button\">Open</a>",
+        ]
+    );
+}
+
+fn a_text_is_refused_where_a_link_is_taken() {
+    generate::check(
+        8308,
+        6,
+        any_link,
+        |text| {
+            let source = format!(
+                "use std.html (a, in_a, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    a(\"Open\", href: {})\n    in_a(href: {}) {{ }}\n  }}\n  same = page\n}}\n",
+                literal(text),
+                literal(text)
+            );
+            let said = messages(&source);
+            assert!(said.iter().filter(|m| m.contains("`Link`")).count() >= 2, "{said:?} for {source}");
+        },
+    );
+}
+
+const ELEMENTS: &[&str] = &["html", "head", "title", "body", "h1", "h2", "p", "b", "span", "ul", "li", "article", "a"];
+
+fn an_element_given_a_text_and_a_block_is_refused_and_so_is_one_given_neither() {
+    generate::check(
+        8309,
+        10,
+        |g| *g.pick(ELEMENTS),
+        |element| {
+            let href = if *element == "a" { ", href: link(\"/x\")" } else { "" };
+            let both = format!(
+                "use std.html ({element}, link, p, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    {element}(\"Hi\"{href}) {{\n      p(\"x\")\n    }}\n  }}\n  same = page\n}}\n"
+            );
+            let said = messages(&both);
+            assert!(said.iter().any(|m| m.contains(&format!("`{element}`"))), "{said:?} for {both}");
+            let href = if *element == "a" { "href: link(\"/x\")" } else { "" };
+            let neither = format!(
+                "use std.html (in_{element}, link, render)\n\nfn main() <alloc> {{\n  page = render() {{\n    in_{element}({href})\n  }}\n  same = page\n}}\n"
+            );
+            let said = messages(&neither);
+            assert!(said.iter().any(|m| m.contains(&format!("`in_{element}`")) && m.contains("`block`")), "{said:?} for {neither}");
+        },
+    );
 }

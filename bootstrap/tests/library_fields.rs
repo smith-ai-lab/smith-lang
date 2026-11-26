@@ -223,6 +223,13 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
 }
 ",
         ),
+        "Link" => (
+            "Link, link",
+            "fn main() {
+  f(link(\"/\"))
+}
+",
+        ),
         "Instant" => (
             "Instant, instant",
             "fn main() {
