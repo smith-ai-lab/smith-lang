@@ -26,6 +26,7 @@ impl Parser<'_> {
             requires,
             ensures,
             decreases,
+            notes,
         ) = match self.body_signature() {
             Ok(signature) => signature,
             Err(e) if nested => return Err(e),
@@ -110,6 +111,7 @@ impl Parser<'_> {
             effects,
             requires,
             needs: Vec::new(),
+            notes,
             ensures,
             decreases,
             body: block.finish(end),
@@ -125,6 +127,7 @@ impl Parser<'_> {
         let (name, pos, generics, params, result, result_name, effects) = signature?;
         let (mut requires, mut ensures) = (Vec::new(), Vec::new());
         let mut decreases: Vec<Expr> = Vec::new();
+        let mut notes = Vec::new();
         loop {
             self.skip_newlines();
             let keyword = match self.tok() {
@@ -133,12 +136,19 @@ impl Parser<'_> {
                 _ => break,
             };
             let at = self.pos();
+            let note = self.note();
             self.bump();
             let no_lambda = std::mem::replace(&mut self.no_lambda, true);
             let statement = self.expr();
             self.no_lambda = no_lambda;
             match keyword {
-                "requires" => requires.push(statement?),
+                "requires" => {
+                    let statement = statement?;
+                    if let Some(note) = note {
+                        notes.push((statement.pos(), note));
+                    }
+                    requires.push(statement);
+                }
                 "decreases" => {
                     if !decreases.is_empty() {
                         return Err(Error::new(
@@ -175,7 +185,13 @@ impl Parser<'_> {
             requires,
             ensures,
             decreases,
+            notes,
         ))
+    }
+
+    /// The comment above the `requires` read next, if it has one.
+    pub(super) fn note(&self) -> Option<String> {
+        self.tokens[self.at].note.as_deref().map(str::to_string)
     }
 
     /// Parses a function's signature, through its list of effects.
@@ -226,15 +242,21 @@ impl Parser<'_> {
             }
         }
         let effects = self.effects()?;
-        if self.tok() == &Tok::Newline
-            && matches!(
-                self.tokens.get(self.at + 1).map(|t| &t.tok),
-                Some(Tok::Keyword("requires" | "ensures"))
-            )
-        {
-            self.bump();
-        }
+        self.skip_to_contract();
         Ok((name, pos, generics, params, result, result_name, effects))
+    }
+
+    /// Skips the line breaks, and the comments between them, that lie before a
+    /// `requires` or an `ensures` on a line of its own.
+    pub(super) fn skip_to_contract(&mut self) {
+        let mut ahead = self.at;
+        while self.tokens[ahead].tok == Tok::Newline {
+            ahead += 1;
+        }
+        if ahead > self.at && matches!(self.tokens[ahead].tok, Tok::Keyword("requires" | "ensures"))
+        {
+            self.at = ahead;
+        }
     }
 
     /// Reads a type that is a statement: a comparison of values, or comparisons

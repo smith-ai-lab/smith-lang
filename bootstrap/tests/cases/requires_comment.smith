@@ -1,0 +1,11 @@
+use std.console (console, print)
+
+fn gap(a: Byte, b: Byte) -> Byte
+  // The first number must not be below the second.
+  requires a >= b
+  requires a <= 200
+{
+  a - b
+}
+
+fn main() <console, alloc> { print("{gap(3, 5)}") }

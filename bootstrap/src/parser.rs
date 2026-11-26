@@ -187,6 +187,16 @@ pub struct Field {
     pub public: Option<Pos>,
 }
 
+impl Function {
+    /// The comment above the `requires` whose expression is `requirement`.
+    pub fn note(&self, requirement: &Expr) -> Option<&str> {
+        let at = requirement.pos();
+        (self.notes.iter())
+            .find(|(pos, _)| *pos == at)
+            .map(|(_, note)| note.as_str())
+    }
+}
+
 /// A function definition.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Function {
@@ -204,6 +214,9 @@ pub struct Function {
     /// The `requires` that name a trait, as `requires Pair[A, B]`, which the
     /// parser leaves among `requires` and the checker moves here.
     pub needs: Vec<Expr>,
+    /// The comment above a `requires`, by where its expression is: the message
+    /// a caller that fails it is told.
+    pub notes: Vec<(Pos, String)>,
     /// What the function gives, one expression for each `ensures`.
     pub ensures: Vec<Expr>,
     /// The measure that proves the function ends, one expression for each of
@@ -250,6 +263,7 @@ type BodySignature = (
     Vec<Expr>,
     Vec<Expr>,
     Vec<Expr>,
+    Vec<(Pos, String)>,
 );
 
 /// A parameter, its type, and its default, if it has one.

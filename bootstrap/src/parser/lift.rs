@@ -299,6 +299,7 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
         effects: Vec::new(),
         requires: Vec::new(),
         needs: Vec::new(),
+        notes: Vec::new(),
         ensures: Vec::new(),
         decreases: Vec::new(),
         body: l.body.clone(),

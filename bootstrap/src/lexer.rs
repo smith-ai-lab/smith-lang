@@ -64,6 +64,19 @@ pub enum Piece {
 pub struct Token {
     pub tok: Tok,
     pub pos: Pos,
+    /// The comment above a `requires` that starts its line, as
+    /// `comments::above` gives it, when there is one.
+    pub note: Option<Box<str>>,
+}
+
+impl Token {
+    pub fn new(tok: Tok, pos: Pos) -> Token {
+        Token {
+            tok,
+            pos,
+            note: None,
+        }
+    }
 }
 
 /// The tokens in the plain form that the lexer written in Smith prints, one
@@ -157,6 +170,7 @@ fn advance(pos: &mut Pos, c: char) {
 }
 
 struct Lexer<'a> {
+    text: &'a str,
     rest: &'a str,
     pos: Pos,
     tokens: Vec<Token>,
@@ -168,6 +182,7 @@ struct Lexer<'a> {
 impl<'a> Lexer<'a> {
     fn new(text: &'a str) -> Lexer<'a> {
         Lexer {
+            text,
             rest: text,
             pos: Pos::START,
             tokens: Vec::new(),
@@ -193,7 +208,7 @@ impl<'a> Lexer<'a> {
 
     fn push(&mut self, tok: Tok, pos: Pos) {
         self.line_has_token = tok != Tok::Newline;
-        self.tokens.push(Token { tok, pos });
+        self.tokens.push(Token::new(tok, pos));
     }
 
     fn error(&mut self, error: Error) {
@@ -255,12 +270,21 @@ impl<'a> Lexer<'a> {
     }
 
     fn word(&mut self, start: Pos) {
+        let starts_line = !self.line_has_token;
         let word = self.take_while(|c| c.is_ascii_alphanumeric() || c == '_');
         let tok = match KEYWORDS.iter().find(|k| **k == word) {
             Some(keyword) => Tok::Keyword(keyword),
             None => Tok::Ident(word.to_string()),
         };
         self.push(tok, start);
+        if starts_line && word == "requires" {
+            let note = crate::comments::above(self.text, start.line);
+            if !note.is_empty()
+                && let Some(last) = self.tokens.last_mut()
+            {
+                last.note = Some(note.into());
+            }
+        }
     }
 
     fn number(&mut self, start: Pos) {

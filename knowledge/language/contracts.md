@@ -10,6 +10,7 @@ built:
   - "a function that returns `bool`, carries no effect, and is one expression of comparisons joined with `and`, `or`, and `not`, or a call of another such function, as a contract: `requires f(args)` and `ensures f(args)` are proven and give facts as that expression with the arguments put in does, and a call that carries an effect is refused"
   - "a `requires` that calls a function that returns `bool` and carries no effect but `alloc`, with arguments written out whole (numbers, texts, lists and tuples of them, `true`, `false`) in the call or in a parameter of the function that was, which the kernel works out when the program is built: a call whose `requires` works out to `true` is proven, one that works out to `false` is refused with the call as written, and the comparison that gave `false` with where it is written and the numbers it compared, and one that takes more than 1000000 steps is refused naming the call and the limit; a function that only a `requires` or an `ensures` names is checked"
   - "a `requires` on a function of a trait, a call of another function of the trait that gives a `bool` on its parameters, which each call proves and which holds in the body of each `impl` of it; and a `requires` of any function that names a trait's function that gives a `bool`, as `requires Add.valid(x, x)`, which a caller proves for the type it calls with, by what the `impl` that type picks says when its `valid` is one expression of comparisons of whole numbers, and where the type is a type parameter of the caller, by a `requires` of the same call; an `ensures` of a trait's function is not built"
+  - "a comment on the line above a `requires`, which is the message of a call that fails it, with the goal that failed on a `goal:` line under it, for a `requires` of a function, of a function of a trait at a call through any `impl`, and of one that calls a function the kernel works out; a `requires` with none is refused as it was"
   - "not an argument that is a name, a call, or an operation, for the kernel to work out, and not a float"
 ---
 
@@ -79,7 +80,17 @@ fn gap(a: Byte, b: Byte) -> Byte
 }
 ```
 
-`gap(3, 5)` is refused, and the caller sees "The first number must not be below the second.", with `3 >= 5` under it. `gap(250, 3)` shows only `250 <= 200`, as its `requires` has no comment. The comment is on its own line directly above the `requires`, as [Functions](functions.md#comments) says, and it is for the one `requires` that follows it. The compiler does not build this yet, so the words of the refusal are not quoted.
+`gap(3, 5)` is refused, and the caller sees this.
+
+```
+main.smith:11:38: The first number must not be below the second.
+  goal: `3 >= 5`
+  11 | fn main() <console, alloc> { print("{gap(3, 5)}") }
+     |                                      ^
+  fix: check the arguments first with an `if`, or state it in a `requires`
+```
+
+`gap(250, 3)` is refused as a `requires` with no comment is, with "cannot prove that `250 <= 200`, which `gap` requires of its arguments" and no `goal:` line. The comment is on its own line directly above the `requires`, as [Functions](functions.md#comments) says, and it is for the one `requires` that follows it: the next `requires` has none of its own, and a blank line between a comment and its `requires` leaves that one with none. A comment of several lines is shown as several lines. A comment above a `requires` of a function of a [trait](traits.md) is shown at a call through any `impl`, and one above a `requires` that calls a function the compiler works out is shown with what it found, as the `goal:`.
 
 ## What the function gives
 
