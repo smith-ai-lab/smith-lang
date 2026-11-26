@@ -50,6 +50,19 @@ struct Version {
 
 `Version(major: 1, minor: 9) < Version(major: 2, minor: 0)` is `true`, as `major` is compared first, and `minor` only when the majors are equal.
 
+## A proof field is left out
+
+A field that holds a [proof](proof-fields.md) has no data, so `Eq`, `Ord`, `Fmt`, and `Repr` leave it out. Two values are equal when their data fields are, they are ordered by their data fields, and only the data fields are shown and written.
+
+```
+struct Cursor[size: Nat] {
+  at: Nat
+  inside: at <= size
+}
+```
+
+`Cursor(at: 4) == Cursor(at: 4)` is `true`, and `Cursor(at: 1) < Cursor(at: 4)` is `true`. `"{Cursor(at: 4)}"` is `Cursor(at: 4)`, and so is `repr(Cursor(at: 4))`, which is how the value is written in source: a program that holds that text builds the `Cursor` again, and the construction proves `inside` again.
+
 ## Taking one away
 
 `without Eq for Key` takes away the `Eq` that `Key` was given. Then `Key` cannot be compared, and neither can a type that has a `Key`.
@@ -83,7 +96,7 @@ This is refused: "there is no implementation of `Eq` for `Door`, as `Key` has no
 
 | Written | Is |
 | --- | --- |
-| a struct, enum, tuple, array, `List`, or `Slice` | Has `Eq` and `Ord` when each of its parts has |
+| a struct, enum, tuple, array, `List`, or `Slice` | Has `Eq` and `Ord` when each of its parts has, a proof field not counted |
 | `without Eq for T` | `T` has no `Eq` |
 | `without Ord for T` | `T` has no `Ord` |
 | `impl Eq[T] { ... }` | Refused: `==` means the same value, and is not written by a program |

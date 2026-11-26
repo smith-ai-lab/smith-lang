@@ -64,7 +64,7 @@ fn pets() <console, alloc> {
 
 ## What is given
 
-Both traits are given automatically, as [`Copy`](ownership.md) is: a struct, an enum, a tuple, or an array has each unless one of its fields or its element lacks it. Its `Fmt` is its `Repr`, so `"{tom}"` above is `Cat(name: "tom")` and `"{Pet.cat("a")}"` is `.cat("a")`.
+Both traits are given automatically, as [`Copy`](ownership.md) is: a struct, an enum, a tuple, or an array has each unless one of its fields or its element lacks it. A field that holds a [proof](proof-fields.md) is left out, so `Cursor(at: 4)` is how a `Cursor` is shown and written, as [Traits a type is given](automatic-traits.md#a-proof-field-is-left-out) says. Its `Fmt` is its `Repr`, so `"{tom}"` above is `Cat(name: "tom")` and `"{Pet.cat("a")}"` is `.cat("a")`.
 
 `without` takes one away. After `without Fmt for Secret`, a `Secret` cannot be put in braces.
 
