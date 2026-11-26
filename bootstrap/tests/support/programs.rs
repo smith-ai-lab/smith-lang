@@ -1677,7 +1677,7 @@ fn main_statement(
             b.push("print(\"a\", ");
             b.mark(
                 "`end` of `print` is given by name",
-                Some("`print(end: \"b\")`".to_string()),
+                Some("`print(\"a\", end: \"b\")`".to_string()),
             );
             b.push("\"b\")");
         }

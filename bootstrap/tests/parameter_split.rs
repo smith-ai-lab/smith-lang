@@ -48,6 +48,10 @@ pub const ONCE: &[Test] = &[
         the_library_gives_its_options_by_name_and_the_rest_by_position,
     ),
     (
+        "the_fix_of_a_call_given_the_other_way_is_the_whole_call",
+        the_fix_of_a_call_given_the_other_way_is_the_whole_call,
+    ),
+    (
         "an_implementation_has_the_semicolon_of_the_function_it_implements",
         an_implementation_has_the_semicolon_of_the_function_it_implements,
     ),
@@ -196,6 +200,12 @@ fn main_with(call: &str) -> String {
     format!("fn main() <console, alloc> {{\n  {call}\n}}\n")
 }
 
+/// The call that a fix says to write, from the text `write `call``.
+fn suggested(fix: &str) -> &str {
+    (fix.strip_prefix("write `").and_then(|f| f.strip_suffix('`')))
+        .unwrap_or_else(|| panic!("a fix that writes a call: {fix}"))
+}
+
 /// Where `needle` is in the source: its line and its column.
 fn place(source: &str, needle: &str) -> Pos {
     let at = source.find(needle).expect("the text is in the source");
@@ -271,6 +281,24 @@ fn a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name() {
                     && e.message.contains("by position")),
                 "{found:?} for\n{source}"
             );
+            // The fix is the call with that name taken off and every other
+            // argument as it was, which builds and gives what the call that
+            // names the parameters gives.
+            let fix = found
+                .iter()
+                .find(|e| e.pos == wanted)
+                .and_then(|e| e.fix.as_deref())
+                .unwrap_or_else(|| panic!("a fix in {found:?}"));
+            let fixed = shape.text() + &main_with(suggested(fix));
+            let plain: Vec<String> = (0..shape.count)
+                .map(|i| match i >= shape.split {
+                    true => format!("a{i}: {}", value(i)),
+                    false => value(i).to_string(),
+                })
+                .collect();
+            let reference = shape.text() + &main_with(&format!("f({})", plain.join(", ")));
+            assert!(errors(&fixed).is_empty(), "{:?} for\n{fixed}", errors(&fixed));
+            assert_eq!(outcome(&fixed).stdout, outcome(&reference).stdout, "for\n{fixed}");
         },
     );
 }
@@ -290,14 +318,21 @@ fn an_argument_by_position_for_a_parameter_after_the_semicolon_is_refused_naming
             shape
         },
         |shape| {
-            // Every parameter by position is given, then one more by position.
-            let mut args: Vec<String> = (0..shape.split).map(|i| value(i).to_string()).collect();
-            args.push("77".to_string());
-            let call = format!("f({})", args.join(", "));
+            // Every parameter by position is given, then one more by position,
+            // and the parameters by name that are needed after it are named.
+            let mut args: Vec<String> = (0..shape.split)
+                .map(|i| format!("noisy({})", value(i)))
+                .collect();
+            args.push("noisy(77)".to_string());
+            let others: Vec<String> = (shape.split + 1..shape.count)
+                .filter(|&i| !shape.has_default(i))
+                .map(|i| format!("a{i}: noisy({})", value(i)))
+                .collect();
+            let call = format!("f({})", [args.clone(), others.clone()].concat().join(", "));
             let source = shape.text() + &main_with(&call);
             let found = errors(&source);
             let name = format!("`a{}`", shape.split);
-            let wanted = place(&source, "77)");
+            let wanted = place(&source, "noisy(77)");
             assert!(
                 found.iter().any(|e| e.pos == wanted
                     && e.message.contains(&name)
@@ -305,12 +340,24 @@ fn an_argument_by_position_for_a_parameter_after_the_semicolon_is_refused_naming
                     && e.message.contains("by name")),
                 "{found:?} for\n{source}"
             );
-            let fixed = found
+            // The fix is the whole call with that argument named and every
+            // other as it was, which builds and gives what the call written with
+            // the names gives.
+            let fix = found
                 .iter()
                 .find(|e| e.pos == wanted)
-                .and_then(|e| e.fix.clone())
-                .unwrap_or_default();
-            assert!(fixed.contains(&format!("a{}: 77", shape.split)), "{fixed} for\n{source}");
+                .and_then(|e| e.fix.as_deref())
+                .unwrap_or_else(|| panic!("a fix in {found:?}"));
+            let named = format!("a{}: noisy(77)", shape.split);
+            let reference = format!(
+                "f({})",
+                [args[..args.len() - 1].to_vec(), vec![named], others].concat().join(", ")
+            );
+            assert_eq!(suggested(fix), reference, "for\n{source}");
+            let fixed = shape.text() + &main_with(suggested(fix));
+            let reference = shape.text() + &main_with(&reference);
+            assert!(errors(&fixed).is_empty(), "{:?} for\n{fixed}", errors(&fixed));
+            assert_eq!(outcome(&fixed).stdout, outcome(&reference).stdout, "for\n{fixed}");
         },
     );
 }
@@ -580,6 +627,40 @@ fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
     assert!(
         found.iter().any(|e| e.message.contains("`a`") && e.message.contains("`href`")),
         "{found:?}"
+    );
+}
+
+/// The fix of a call given the other way is the whole call, written again with
+/// every other argument as it was written, a block among them.
+fn the_fix_of_a_call_given_the_other_way_is_the_whole_call() {
+    let program = |call: &str| {
+        format!(
+            "use std.console (console, print)\nuse std.html (p, render, text)\n\n\
+             fn show(label: str; n: str = \"x\") <console> {{ print(label) }}\n\n\
+             fn main() <console, alloc> {{\n  {call}\n}}\n"
+        )
+    };
+    let fix_of = |call: &str, message: &str| -> String {
+        let found = errors(&program(call));
+        let found = found.iter().find(|e| e.message.contains(message));
+        let found = found.unwrap_or_else(|| panic!("{message} for {call}"));
+        found.fix.clone().expect("a fix")
+    };
+    assert_eq!(
+        fix_of("show(\"a\", \"N\")", "is given by name"),
+        "write `show(\"a\", n: \"N\")`"
+    );
+    assert_eq!(
+        fix_of("render { p({ text(\"a\") }, \"note\") }", "is given by name"),
+        "write `p({ text(\"a\") }, class: \"note\")`"
+    );
+    assert_eq!(
+        fix_of("render { p(\"note\") { text(\"a\") } }", "is given by name"),
+        "write `p(class: \"note\") { text(\"a\") }`"
+    );
+    assert_eq!(
+        fix_of("show(label: \"a\", n: \"N\")", "is given by position"),
+        "write `show(\"a\", n: \"N\")`"
     );
 }
 
