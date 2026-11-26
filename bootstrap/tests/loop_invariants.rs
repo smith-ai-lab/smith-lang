@@ -247,7 +247,7 @@ fn the_invariant_must_hold_where_the_counter_is_the_end_of_the_range_and_before_
     // runs none, so the invariant holds after it as it did before it.
     let zero = |held: i128| {
         with_header(format!(
-            "fn f() -> 0..3 {{\n  var acc: 0..3 = 0\n  loop i in 5..2 invariant acc == {held} {{\n    acc = 2\n  }}\n  acc\n}}\n\n\
+            "fn f() -> 0..3 {{\n  var acc: 0..3 = 0\n  loop i in 2..2 invariant acc == {held} {{\n    acc = 2\n  }}\n  acc\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n"
         ))
     };

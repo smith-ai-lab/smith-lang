@@ -363,7 +363,7 @@ fn answers(name: &str, min: i128, max: i128, signed: bool, g: &mut Gen) -> (Stri
     source += "  r\n}\n";
     if name != "bool" {
         source += &format!(
-            "fn count(a: {name}, b: {name}) -> Nat <diverge> {{\n  var n: Nat = 0\n  loop k in a..b {{ n = saturating_add(n, 1) }}\n  var i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
+            "fn count(a: {name}, b: {name}) -> Nat <diverge> {{\n  var n: Nat = 0\n  if a <= b {{\n    loop k in a..b {{ n = saturating_add(n, 1) }}\n  }}\n  var i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
         );
     }
     let list: Vec<String> = values.iter().map(|&v| literal(name, v)).collect();

@@ -21,6 +21,14 @@ pub const ONCE: &[Test] = &[
         a_loop_over_a_range_runs_once_for_each_number_from_a_up_to_b_in_order,
     ),
     (
+        "a_loop_over_a_range_compiles_exactly_when_arith_proves_that_it_is_ordered",
+        a_loop_over_a_range_compiles_exactly_when_arith_proves_that_it_is_ordered,
+    ),
+    (
+        "a_loop_over_a_range_from_zero_or_over_two_numbers_written_out_needs_nothing_written",
+        a_loop_over_a_range_from_zero_or_over_two_numbers_written_out_needs_nothing_written,
+    ),
+    (
         "a_loop_over_the_numbers_of_a_type_that_has_eight_bits_runs_each_once_and_ends",
         a_loop_over_the_numbers_of_a_type_that_has_eight_bits_runs_each_once_and_ends,
     ),
@@ -126,8 +134,9 @@ struct Span {
     b: i128,
 }
 
-/// A pair of numbers of one type, a few apart, in either order, away from
-/// the limits of the type or at them, or any two, when they are not far apart.
+/// A pair of numbers of one type, the first not above the second, a few
+/// apart, away from the limits of the type or at them, or any two, when they
+/// are not far apart.
 fn span(g: &mut Gen) -> Span {
     let ty = *g.pick(INTS);
     let length = g.below(10) as i128;
@@ -138,11 +147,14 @@ fn span(g: &mut Gen) -> Span {
         }
         1 => {
             let a = value(g, ty);
-            (a, (a - length).max(ty.min()))
+            (a, a)
         }
         2 => (ty.max() - length, ty.max()),
         3 => (ty.min(), ty.min() + length),
-        _ => (value(g, ty), value(g, ty)),
+        _ => {
+            let (a, b) = (value(g, ty), value(g, ty));
+            (a.min(b), a.max(b))
+        }
     };
     // A range of more numbers than a test can run is cut short.
     let b = if b - a > 20 {
@@ -155,19 +167,97 @@ fn span(g: &mut Gen) -> Span {
 
 fn show(ty: Int, a: i128, b: i128) -> String {
     with_header(format!(
-        "fn show(a: {t}, b: {t}) <console, alloc> {{\n  loop i in a..b {{ print(\"{{i}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  show({a}, {b})\n}}\n",
+        "fn show(a: {t}, b: {t}) <console, alloc>\n  requires a <= b\n{{\n  loop i in a..b {{ print(\"{{i}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  show({a}, {b})\n}}\n",
         t = ty.name
     ))
 }
 
 /// For every pair of whole numbers of one type, the loop runs for each
 /// number from `a` up to but not including `b`, in order, and not at all
-/// when `a >= b`.
+/// when `a == b`.
 fn a_loop_over_a_range_runs_once_for_each_number_from_a_up_to_b_in_order() {
     generate::check(41, 120, span, |s| {
         let lines = (s.a..s.b).map(|n| n.to_string()).collect();
         prints(&show(s.ty, s.a, s.b), lines);
     });
+}
+
+/// How a program says that `a <= b` before `loop i in a..b`.
+#[derive(Clone, Copy, Debug)]
+enum Said {
+    Nothing,
+    Requires,
+    If,
+    /// The other way round, which proves nothing of `a <= b`.
+    Backward,
+}
+
+/// For every type of whole number, and whatever is written to prove
+/// `a <= b`, `loop i in a..b` compiles exactly when `a <= b` is proven where
+/// it is written, and where it is refused the error names `a <= b`.
+fn a_loop_over_a_range_compiles_exactly_when_arith_proves_that_it_is_ordered() {
+    generate::check(
+        43,
+        40,
+        |g| {
+            let ty = *g.pick(INTS);
+            let said = *g.pick(&[Said::Nothing, Said::Requires, Said::If, Said::Backward]);
+            (ty, said)
+        },
+        |(ty, said)| {
+            let (requires, open, close) = match said {
+                Said::Nothing => ("", "", ""),
+                Said::Requires => ("\n  requires a <= b", "", ""),
+                Said::If => ("", "  if a <= b {\n", "  }\n"),
+                Said::Backward => ("\n  requires b <= a", "", ""),
+            };
+            let source = with_header(format!(
+                "fn show(a: {t}, b: {t}) <console, alloc>{requires}\n{{\n{open}  loop i in a..b {{ print(\"{{i}}\") }}\n{close}}}\n\nfn main() <console, alloc> {{\n  show(1, 2)\n}}\n",
+                t = ty.name
+            ));
+            let errors = refused(&source);
+            match said {
+                Said::Requires | Said::If => {
+                    assert_eq!(errors, Vec::<String>::new(), "for {source}")
+                }
+                Said::Nothing | Said::Backward => {
+                    assert!(
+                        errors.iter().any(|e| e.contains("a <= b")),
+                        "{errors:?} does not name `a <= b` for {source}"
+                    );
+                }
+            }
+        },
+    );
+}
+
+/// `0..n` and `0..xs.size` are ordered with nothing written, and two numbers
+/// written out are ordered exactly when the first is not above the second.
+fn a_loop_over_a_range_from_zero_or_over_two_numbers_written_out_needs_nothing_written() {
+    let from_zero = with_header(
+        "fn each(n: Nat, xs: List[Byte]) <console, alloc> {\n  loop i in 0..n { print(\"{i}\") }\n  loop j in 0..xs.size { print(\"{j}\") }\n}\n\nfn main() <console, alloc> {\n  each(2, [1, 2])\n}\n"
+            .to_string(),
+    );
+    assert_eq!(refused(&from_zero), Vec::<String>::new());
+    generate::check(
+        44,
+        40,
+        |g| (g.below(12), g.below(12)),
+        |(a, b)| {
+            let source = with_header(format!(
+                "fn main() <console, alloc> {{\n  loop i in {a}..{b} {{ print(\"{{i}}\") }}\n}}\n"
+            ));
+            let errors = refused(&source);
+            if a <= b {
+                assert_eq!(errors, Vec::<String>::new(), "for {source}");
+            } else {
+                assert!(
+                    errors.iter().any(|e| e.contains(&format!("{a} <= {b}"))),
+                    "{errors:?} does not name `{a} <= {b}` for {source}"
+                );
+            }
+        },
+    );
 }
 
 fn a_loop_over_the_numbers_of_a_type_that_has_eight_bits_runs_each_once_and_ends() {

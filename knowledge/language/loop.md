@@ -7,7 +7,7 @@ built:
   - "`loop i in a..b` over whole numbers of one type, whose counter `arith` knows is in range of a `var` list's `size` as of any other, which runs in order, ended by `break`"
   - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
-  - "not the refusal of `loop i in a..b` where `arith` cannot prove `a <= b`, as [Ranges and slices](ranges.md#a-range-is-ordered) says"
+  - "`loop i in a..b` written only where `arith` proves `a <= b`, as [Ranges and slices](ranges.md#a-range-is-ordered) says, so `0..n` needs nothing written and `loop i in 5..2` is refused"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
   - "an `invariant` after the head of a `loop` over a range, a `List`, or a `str`, which `arith` proves holds before the first pass, with the counter as the first end, and holds at the end of each pass, with the counter one more, from its holding at the start of the pass, and which it uses in the block and, where no `break` ends the loop, after it, with the counter as the greater of the two ends"
   - "not an `invariant` that is not a comparison of whole numbers, joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
@@ -265,7 +265,7 @@ fn before_zero(a: [4]Byte) -> u64 {
 
 ## Going backward
 
-A range goes up, and `loop i in 5..0` is refused as a range that ends below where it starts. Going backward is written with a reversed range.
+A range goes up, and `loop i in 5..0` is refused: "cannot prove that `5 <= 0`, which the range `5..0` needs". Going backward is written with a reversed range.
 
 ```
 use std.console (console, print)

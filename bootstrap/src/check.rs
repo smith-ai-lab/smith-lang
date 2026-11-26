@@ -9607,6 +9607,7 @@ impl<'a> Checker<'a> {
             for invariant in &l.invariants {
                 self.condition(body, invariant);
             }
+            self.range_ordered(body, r);
             self.invariants_before(body, l, Some(r));
             self.assume_range(body, r);
         }

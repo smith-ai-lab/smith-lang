@@ -371,7 +371,9 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
 // The bytes of the list from the place `from`.
 fn tail(xs: List[Byte], from: Nat) -> List[Byte] <alloc> {
   var made: List[Byte] = []
-  loop i in from..xs.size { made = push(made, xs[i]) }
+  if from <= xs.size {
+    loop i in from..xs.size { made = push(made, xs[i]) }
+  }
   made
 }
 
@@ -451,8 +453,10 @@ fn holding(files: List[MemoryFile], at: Nat, bytes: List[Byte]) -> List[MemoryFi
 fn piece(bytes: List[Byte], range: Range) -> List[Byte] <alloc> {
   last = if range.end < bytes.size { range.end } else { bytes.size }
   var made: List[Byte] = []
-  loop i in range.start..last {
-    if i < bytes.size { made = push(made, bytes[i]) }
+  if range.start <= last {
+    loop i in range.start..last {
+      if i < bytes.size { made = push(made, bytes[i]) }
+    }
   }
   made
 }

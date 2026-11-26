@@ -522,8 +522,10 @@ fn byte(b: Slice[Byte], at: Nat) -> Byte {
 }
 
 fn skip_space(b: Slice[Byte], from: Nat) -> Nat {
-  loop i in from..b.size {
-    if not is_space(b[i]) { return i }
+  if from <= b.size {
+    loop i in from..b.size {
+      if not is_space(b[i]) { return i }
+    }
   }
   b.size
 }
@@ -596,14 +598,16 @@ fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
   } else {
     // The digits run to the first byte that is not one, or to the end.
     var stop = b.size
-    loop j in i..b.size {
-      d = b[j]
-      if is_digit(d) {
-        digit: Nat = wrapping_sub(d, '0')
-        size = wrapping_add(wrapping_mul(size, 10), digit)
-      } else {
-        stop = j
-        break
+    if i <= b.size {
+      loop j in i..b.size {
+        d = b[j]
+        if is_digit(d) {
+          digit: Nat = wrapping_sub(d, '0')
+          size = wrapping_add(wrapping_mul(size, 10), digit)
+        } else {
+          stop = j
+          break
+        }
       }
     }
     i = stop
@@ -635,17 +639,19 @@ fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
 // when it is more than a `u64` holds.
 fn magnitude(b: Slice[Byte], from: Nat, end: Nat) -> Option[u64] {
   var m: u64 = 0
-  loop i in from..end {
-    if i < b.size {
-      d: u64 = wrapping_sub(b[i], '0')
-      match checked_mul(m, 10) {
-        .some(t) {
-          match checked_add(t, d) {
-            .some(v) { m = v }
-            .none { return Option.none }
+  if from <= end {
+    loop i in from..end {
+      if i < b.size {
+        d: u64 = wrapping_sub(b[i], '0')
+        match checked_mul(m, 10) {
+          .some(t) {
+            match checked_add(t, d) {
+              .some(v) { m = v }
+              .none { return Option.none }
+            }
           }
+          .none { return Option.none }
         }
-        .none { return Option.none }
       }
     }
   }
