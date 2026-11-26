@@ -1,0 +1,4 @@
+loop_range_unordered.smith:4:13: cannot prove that `from <= to`, which the range `from..to` needs
+  4 |   loop i in from..to { print("{i}") }
+    |             ^
+  fix: check `from <= to` with an `if`, or state it in a `requires`
