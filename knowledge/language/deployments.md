@@ -22,7 +22,7 @@ use std.store (files)
 
 package: Package = Package(name: "notes")
 
-pub fn serve(port: 1..65536 = 8080) <net, fs, alloc, diverge> {
+pub fn serve(; port: 1..65536 = 8080) <net, fs, alloc, diverge> {
   with listen(port: port)
   with files(folder: "data")
   main()
@@ -75,7 +75,7 @@ An executable is built only when everything its start carries has an answer on i
 - On WebAssembly, each effect the start carries is an import of the module, as [The host of a WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) says.
 
 ```
-pub fn forgot(port: 1..65536 = 8080) <net, alloc, diverge> {
+pub fn forgot(; port: 1..65536 = 8080) <net, alloc, diverge> {
   with listen(port: port)
   main()
 }

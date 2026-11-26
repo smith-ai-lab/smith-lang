@@ -107,17 +107,17 @@ Each method is a function that takes only what that method has, so a request tha
 `get`, `post`, `put`, `patch`, and `delete` take the limit on the body as a type parameter, `[limit: Nat]`, fixed when the program is compiled, as `get[65536](url)` does. Each gives `Result[Response[limit], FetchError]`, and is written over `send`.
 
 ```
-fn get[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
-fn delete[limit: Nat](url: str, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
-fn post[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
-fn put[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
-fn patch[limit: Nat](url: str, payload: Payload, headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn get[limit: Nat](url: str; headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn delete[limit: Nat](url: str; headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn post[limit: Nat](url: str, payload: Payload; headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn put[limit: Nat](url: str, payload: Payload; headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
+fn patch[limit: Nat](url: str, payload: Payload; headers: List[(str, str)] = []) -> Result[Response[limit], FetchError] <fetch, alloc>
 ```
 
 `head` takes no limit, as its response has no body. It gives a `HeadResponse`, which has a status and headers and no body field.
 
 ```
-fn head(url: str, headers: List[(str, str)] = []) -> Result[HeadResponse, FetchError] <fetch, alloc>
+fn head(url: str; headers: List[(str, str)] = []) -> Result[HeadResponse, FetchError] <fetch, alloc>
 
 struct HeadResponse {
   status: 100..600

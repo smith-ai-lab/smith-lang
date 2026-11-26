@@ -55,11 +55,11 @@ time(now: { 42 }, body: body)
 
 ## Defaults
 
-An operation may give its parameters defaults, like any function. The lambda that a handler supplies for it takes every argument, whether or not a call gave it.
+An operation may give its parameters defaults, like any function, and a parameter with a default is given by name, after the `;`. The lambda that a handler supplies for it takes every argument, whether or not a call gave it.
 
 ```
 effect log {
-  fn write(text: str, level: i32 = 0)
+  fn write(text: str; level: i32 = 0)
 }
 ```
 
@@ -75,7 +75,7 @@ A program declares its own effects in the same way, so nothing about `time` is s
 
 ```
 pub effect log {
-  pub fn write(text: str, level: i32 = 0)
+  pub fn write(text: str; level: i32 = 0)
 }
 ```
 
@@ -114,7 +114,7 @@ An operation may have type parameters, as `fn put[T](x: take T) -> T` does. A ha
 | Written | Means |
 | --- | --- |
 | `effect e { fn op(a: T) -> U }` | An effect `e` with the operation `op`, which carries `e` |
-| `fn op(a: T = x)` in an effect | An operation whose parameter has a default |
+| `fn op(a: T; b: U = x)` in an effect | An operation whose parameter after the `;` has a default |
 | `e(op: { ... }, body: b)` | `e`, called with a lambda for each operation and then the body, handles it |
 | `pub effect e { ... }` | An effect that other modules may import |
 | `pub fn op(...)` in an effect | An operation that other modules may call, and give a function for in a handler |

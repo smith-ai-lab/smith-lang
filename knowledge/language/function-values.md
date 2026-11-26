@@ -65,7 +65,7 @@ When a stored function needs data to work with, the data is stored beside it and
 A default belongs to a function's name and not to its type, so a function passed as a value takes every argument.
 
 ```
-fn scale(x: f32, by: f32 = 2.0) -> f32 { x * by }
+fn scale(x: f32; by: f32 = 2.0) -> f32 { x * by }
 ```
 
 The type of `scale` is `fn(f32, f32) -> f32`, so `twice(8.0, scale)` is refused: "this gives a `fn(f32, f32) -> f32`, where a `fn(f32) -> f32` is needed". A lambda gives the default, since the call inside it is an ordinary call.

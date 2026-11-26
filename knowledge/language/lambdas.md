@@ -46,7 +46,7 @@ A function that gives nothing has no arrow, as `fn(f32)`, and one that takes not
 
 ## Writing a lambda
 
-A lambda is the word `fn`, the names of its parameters in parentheses, and a block. It is written after the call's `)`, on the same line, and it is the call's last argument.
+A lambda is the word `fn`, the names of its parameters in parentheses, and a block. It is written after the call's `)`, on the same line, and it is the argument for the last parameter before the `;`, which is the last parameter of a function that has none.
 
 ```
 fn quarter(x: f32) -> f32 {
@@ -145,10 +145,10 @@ fn ten() -> f32 { at_five fn(v) { v * 2.0 } }
 
 ## Several lambdas in one call
 
-Only the last argument is written after the call. A call that takes several lambdas passes the others by name, inside the parentheses.
+Only the last parameter before `;` is written after the call. A call that takes several lambdas passes the others by name, inside the parentheses, so the function writes them after the `;`.
 
 ```
-fn pick(first: bool, a: fn() -> f32, b: fn() -> f32) -> f32 {
+fn pick(first: bool, b: fn() -> f32; a: fn() -> f32) -> f32 {
   if first { a() } else { b() }
 }
 
@@ -261,6 +261,6 @@ Two keywords of later pages stop at a lambda. [`try`](try.md) inside a lambda re
 | `fn(T) -> R` | The type of a function that takes a `T` and gives an `R` |
 | `f(a) { e }` | A lambda that takes nothing |
 | `f { e }` and `f fn(x) { e }` | A lambda as the only argument |
-| `f(a, g: { e }) { e2 }` | Two lambdas: `g` by name, and the last after the call |
+| `f(a, g: { e }) { e2 }` | Two lambdas: `g` by name, after the `;` of `f`, and the last before it after the call |
 
 Next: [Function values](function-values.md)
