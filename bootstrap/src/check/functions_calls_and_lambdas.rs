@@ -1545,8 +1545,8 @@ impl<'a> Checker<'a> {
                                 format!("`{name}` of `{callee}` is given by name"),
                             )
                             .with_fix(format!(
-                                "write `{callee}({name}: {})`",
-                                written_expr(&arg.value)
+                                "write `{}`",
+                                self.call_by_name(call, signature, positional)
                             )),
                         );
                     }
@@ -1585,8 +1585,8 @@ impl<'a> Checker<'a> {
                                         format!("`{name}` of `{callee}` is given by position"),
                                     )
                                     .with_fix(format!(
-                                        "write `{}` without its name, `{name}:`",
-                                        written_expr(&arg.value)
+                                        "write `{}`",
+                                        self.call_with_name_taken_off(call, name)
                                     )),
                                 );
                             }
@@ -2092,4 +2092,110 @@ enum Held {
     /// The types of the parameters and the result of a function that is not
     /// known yet, since the type parameter that stands for it is not settled.
     Items(Vec<Ty>),
+}
+
+impl<'a> Checker<'a> {
+    /// What an argument is written as: a block as the source has it, and any
+    /// other expression as `written_expr` says.
+    fn argument_text(&self, arg: &Arg) -> String {
+        match &arg.value {
+            Expr::Lambda(l) => self
+                .source_between(l.pos, l.end)
+                .unwrap_or_else(|| "{ ... }".to_string()),
+            value => written_expr(value),
+        }
+    }
+
+    /// The source from `from` through the character at `to`, for a place in the
+    /// file that is built.
+    fn source_between(&self, from: Pos, to: Pos) -> Option<String> {
+        if from.line >= STEP || to.line >= STEP {
+            return None;
+        }
+        let text = self.defs.file.text.as_ref()?;
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut out = String::new();
+        for line in from.line..=to.line {
+            let chars = lines.get(line - 1)?.chars();
+            let skip = if line == from.line { from.col - 1 } else { 0 };
+            let take = if line == to.line {
+                to.col - skip.min(to.col)
+            } else {
+                usize::MAX
+            };
+            let part: String = chars.skip(skip).take(take).collect();
+            // A block on several lines is advised on one, as a line break is no
+            // part of a text.
+            if line > from.line {
+                out.push(' ');
+            }
+            out.push_str(if line > from.line {
+                part.trim_start()
+            } else {
+                &part
+            });
+        }
+        Some(out)
+    }
+
+    /// The call as it is written, each argument as it is, with those that the
+    /// closure gives a name for written with it, and a block after the call
+    /// after it.
+    fn call_written(&self, call: &Call, name_of: &dyn Fn(usize, &Arg) -> Option<String>) -> String {
+        let mut args = Vec::new();
+        let mut after = String::new();
+        for (i, arg) in call.args.iter().enumerate() {
+            if arg.after {
+                after = format!(" {}", self.argument_text(arg));
+                continue;
+            }
+            let text = self.argument_text(arg);
+            args.push(match name_of(i, arg) {
+                Some(name) => format!("{name}: {text}"),
+                None => text,
+            });
+        }
+        let qualifier = call
+            .qualifier
+            .as_ref()
+            .map_or(String::new(), |(q, _)| format!("{q}."));
+        let parentheses = if args.is_empty() && !after.is_empty() {
+            String::new()
+        } else {
+            format!("({})", args.join(", "))
+        };
+        format!("{qualifier}{}{parentheses}{after}", call.callee)
+    }
+
+    /// The call with each argument by position that is for a parameter after
+    /// the `;` written with that parameter's name.
+    fn call_by_name(&self, call: &Call, signature: &Signature, positional: usize) -> String {
+        let first = signature.named_from.unwrap_or(signature.params.len());
+        let mut place = 0;
+        let mut names: HashMap<usize, String> = HashMap::new();
+        for (i, arg) in call.args.iter().enumerate() {
+            if arg.name.is_none() && !arg.after {
+                if place >= positional
+                    && let Some((name, _)) = signature.params.get(first + place - positional)
+                {
+                    names.insert(i, name.clone());
+                }
+                place += 1;
+            }
+        }
+        self.call_written(call, &|i, arg| {
+            names
+                .get(&i)
+                .cloned()
+                .or_else(|| arg.name.as_ref().map(|(n, _)| n.clone()))
+        })
+    }
+
+    /// The call with the argument for the parameter `name` written without it.
+    fn call_with_name_taken_off(&self, call: &Call, name: &str) -> String {
+        self.call_written(call, &|_, arg| match &arg.name {
+            Some((n, _)) if n != name => Some(n.clone()),
+            _ => None,
+        })
+    }
 }
