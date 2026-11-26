@@ -78,6 +78,10 @@ pub const ONCE: &[Test] = &[
         an_extension_that_is_written_twice_is_an_error_whichever_it_is,
     ),
     (
+        "what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error",
+        what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error,
+    ),
+    (
         "an_extension_that_is_read_and_is_not_written_right_is_an_error_and_one_that_is_not_read_is_passed_over",
         an_extension_that_is_read_and_is_not_written_right_is_an_error_and_one_that_is_not_read_is_passed_over,
     ),
@@ -138,15 +142,17 @@ fn show(b: Slice[Byte]) <console, alloc> {
   match certificate(b) {
     .err(e) { print(\"err\") }
     .ok(c) {
-      authority = match c.authority {
-        .some(a) { \"{a}\" }
-        .none { \"none\" }
+      signing = match c.signing {
+        .unstated { \"unstated\" }
+        .leaf { \"leaf\" }
+        .authority(p) {
+          match p {
+            .some(n) { \"authority:{n}\" }
+            .none { \"authority\" }
+          }
+        }
       }
-      path = match c.path_length {
-        .some(n) { \"{n}\" }
-        .none { \"none\" }
-      }
-      print(\"ok serial={hex(c.serial)} not_before={since_1970(c.not_before) / 1000} not_after={since_1970(c.not_after) / 1000} algorithm={dotted(c.algorithm)} key_algorithm={dotted(c.key_algorithm)} key={hex(c.key)} names={joined(c.names)} authority={authority} path={path} signed={hex(c.signed)} signature={hex(c.signature)} issuer={hex(c.issuer)} subject={hex(c.subject)}\")
+      print(\"ok serial={hex(c.serial)} not_before={since_1970(c.not_before) / 1000} not_after={since_1970(c.not_after) / 1000} algorithm={dotted(c.algorithm)} key_algorithm={dotted(c.key_algorithm)} key={hex(c.key)} names={joined(c.names)} signing={signing} signed={hex(c.signed)} signature={hex(c.signature)} issuer={hex(c.issuer)} subject={hex(c.subject)}\")
     }
   }
 }
@@ -188,8 +194,7 @@ struct Printed {
     key_algorithm: String,
     key: Option<String>,
     names: Vec<String>,
-    authority: String,
-    path: String,
+    signing: String,
     issuer: String,
     subject: String,
 }
@@ -252,13 +257,13 @@ fn printed(name: &str) -> Printed {
         })
         .unwrap_or_default();
     let constraints = lines.iter().find_map(|l| l.strip_prefix("CA:"));
-    let (authority, path) = match constraints {
-        None => ("none".to_string(), "none".to_string()),
-        Some(c) => {
-            let ca = if c.starts_with("TRUE") { "true" } else { "false" };
-            let path = c.split("pathlen:").nth(1).unwrap_or("none");
-            (ca.to_string(), path.to_string())
-        }
+    let signing = match constraints {
+        None => "unstated".to_string(),
+        Some(c) if c.starts_with("TRUE") => match c.split("pathlen:").nth(1) {
+            Some(n) => format!("authority:{n}"),
+            None => "authority".to_string(),
+        },
+        Some(_) => "leaf".to_string(),
     };
     let algorithm = after("Public Key Algorithm:").to_string();
     Printed {
@@ -268,8 +273,7 @@ fn printed(name: &str) -> Printed {
         key_algorithm: algorithm,
         key: key_at,
         names,
-        authority,
-        path,
+        signing,
         issuer: after("Issuer:").to_string(),
         subject: after("Subject:").to_string(),
     }
@@ -355,8 +359,7 @@ fn a_certificate_is_read_to_what_openssl_printed_for_it() {
         let names = field(line, "names");
         let names: Vec<String> = if names.is_empty() { vec![] } else { names.split(',').map(str::to_string).collect() };
         assert_eq!(names, p.names, "{name} names");
-        assert_eq!(field(line, "authority"), p.authority, "{name} authority");
-        assert_eq!(field(line, "path"), p.path, "{name} path");
+        assert_eq!(field(line, "signing"), p.signing, "{name} signing");
         // The names and the part that is signed are the bytes of the certificate.
         let tbs = part(der, &[0]);
         assert_eq!(field(line, "signed"), hex_of(tbs), "{name} signed");
@@ -765,6 +768,55 @@ fn an_extension_that_is_read_and_is_not_written_right_is_an_error_and_one_that_i
     let (wrong, passed) = lines.split_at(10);
     assert!(wrong.iter().all(|l| l == "err"), "{lines:?}");
     assert!(passed.iter().all(|l| l.starts_with("ok ")), "{lines:?}");
+}
+
+/// What a certificate that holds only these basic constraints may sign, as the
+/// generator that built them knows: `None` where they are not written right.
+fn what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error() {
+    generate::check(
+        7,
+        2,
+        |g| {
+            // Whether the authority boolean is written, and the path length if one is.
+            let mut cases: Vec<(bool, Option<u64>)> = vec![(false, None), (true, None), (true, Some(0)), (false, Some(0)), (false, Some(3))];
+            cases.extend((0..10).map(|_| {
+                let path = g.one_in(2).then(|| g.below(1 << 31) as u64);
+                (g.one_in(2), path)
+            }));
+            cases
+        },
+        |cases| {
+            // The extensions of a certificate that has none for what it may sign come first.
+            let names = extension(&id_ce(17), false, tlv(0x30, &tlv(0x82, b"a.example")));
+            let mut inputs = vec![changed("smith_test_leaf", with_only_extensions(vec![names]))];
+            for (authority, path) in cases {
+                let mut parts = Vec::new();
+                if *authority {
+                    parts.extend(tlv(1, &[255]));
+                }
+                if let Some(n) = path {
+                    let mut digits: Vec<u8> = n.to_be_bytes().into_iter().skip_while(|b| *b == 0).collect();
+                    if digits.is_empty() || digits[0] & 128 != 0 {
+                        digits.insert(0, 0);
+                    }
+                    parts.extend(tlv(2, &digits));
+                }
+                let value = tlv(0x30, &parts);
+                inputs.push(changed("smith_test_leaf", with_only_extensions(vec![extension(&id_ce(19), false, value)])));
+            }
+            let lines = run(&certificates_program(&inputs));
+            assert_eq!(lines.len(), inputs.len());
+            assert_eq!(field(&lines[0], "signing"), "unstated");
+            for ((authority, path), line) in cases.iter().zip(&lines[1..]) {
+                match (authority, path) {
+                    (false, Some(_)) => assert_eq!(line, "err", "a path length with no authority"),
+                    (false, None) => assert_eq!(field(line, "signing"), "leaf"),
+                    (true, None) => assert_eq!(field(line, "signing"), "authority"),
+                    (true, Some(n)) => assert_eq!(field(line, "signing"), format!("authority:{n}")),
+                }
+            }
+        },
+    );
 }
 
 /// The numbers of an object identifier of the ASN.1 of Appendix A of the text,

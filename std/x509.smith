@@ -6,6 +6,15 @@ use std.int (narrow, wrapping_add, wrapping_mul)
 use std.list (push)
 use std.text (Text, append_ascii, finish, text as new_text)
 
+// What a certificate may sign: `unstated` when it has no extension that says,
+// `leaf` when the extension says it signs no certificate, and `authority` when
+// it may, with the most certificates that may follow it when it says so.
+pub enum Signing {
+  unstated
+  leaf
+  authority: Option[Nat]
+}
+
 pub struct Certificate {
   pub signed: Slice[Byte]
   pub algorithm: List[Nat]
@@ -18,8 +27,7 @@ pub struct Certificate {
   pub key_algorithm: List[Nat]
   pub key: Slice[Byte]
   pub names: List[str]
-  pub authority: Option[bool]
-  pub path_length: Option[Nat]
+  pub signing: Signing
 }
 
 // A value, the bytes it is written in with its tag and length, and the bytes
@@ -233,7 +241,7 @@ fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> 
 }
 
 // What an extension that says whether a certificate may sign others holds.
-fn basic_constraints(v: Value) -> Result[(bool, Option[Nat]), str] <alloc> {
+fn basic_constraints(v: Value) -> Result[Signing, str] <alloc> {
   xs = try children(v)
   if xs.size > 2 { return .err("basic constraints of more than two parts") }
   var authority = false
@@ -257,21 +265,26 @@ fn basic_constraints(v: Value) -> Result[(bool, Option[Nat]), str] <alloc> {
     }
     path = .some(n)
   }
-  .ok((authority, path))
+  if authority {
+    .ok(.authority(path))
+  } else {
+    match path {
+      .some(n) { .err("a path length in basic constraints that do not say the certificate is an authority") }
+      .none { .ok(.leaf) }
+    }
+  }
 }
 
 struct Found {
   names: List[str]
-  authority: Option[bool]
-  path_length: Option[Nat]
+  signing: Signing
 }
 
 // The extensions, which are the parts of a sequence of them.
 fn extensions(list: Value) -> Result[Found, str] <alloc> {
   xs = try parts(list, 1, 1000000)
   var names: List[str] = []
-  var authority: Option[bool] = .none
-  var path_length: Option[Nat] = .none
+  var signing: Signing = .unstated
   var seen: List[List[Nat]] = []
   loop i in 0..xs.size {
     ext = try parts(xs[i], 2, 3)
@@ -291,9 +304,7 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
     if is_id_ce(id, 17) {
       names = try dns_names(inner, names)
     } else if is_id_ce(id, 19) {
-      (a, p) = try basic_constraints(inner)
-      authority = .some(a)
-      path_length = p
+      signing = try basic_constraints(inner)
     } else if is_id_ce(id, 15) {
       _ = try bits(inner)
     } else if is_id_ce(id, 37) {
@@ -304,7 +315,7 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
     }
     seen = push(seen, id)
   }
-  .ok(Found(names: names, authority: authority, path_length: path_length))
+  .ok(Found(names: names, signing: signing))
 }
 
 // The two times of a validity.
@@ -356,8 +367,7 @@ pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {
   key = try whole_bits(info_parts[1])
 
   var names: List[str] = []
-  var authority: Option[bool] = .none
-  var path_length: Option[Nat] = .none
+  var signing: Signing = .unstated
   var rest = t7
   loop i in 0..t7.size {
     if rest.size == 0 { break }
@@ -370,8 +380,7 @@ pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {
           if wrapper.size != 1 { return .err("extensions that are not one sequence") }
           found = try extensions(wrapper[0])
           names = found.names
-          authority = found.authority
-          path_length = found.path_length
+          signing = found.signing
         } else if n != 1 and n != 2 {
           return .err("a part of a certificate that is not read")
         }
@@ -379,7 +388,7 @@ pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {
       _ { return .err("a part of a certificate that is not read") }
     }
   }
-  .ok(Certificate(signed: signed, algorithm: outer_algorithm, signature: signature_bytes, serial: serial, issuer: issuer, subject: subject, not_before: before, not_after: after_time, key_algorithm: key_algorithm, key: key, names: names, authority: authority, path_length: path_length))
+  .ok(Certificate(signed: signed, algorithm: outer_algorithm, signature: signature_bytes, serial: serial, issuer: issuer, subject: subject, not_before: before, not_after: after_time, key_algorithm: key_algorithm, key: key, names: names, signing: signing))
 }
 
 // Whether the bytes of `input` from `from` to `to` are the bytes of `marker`.
