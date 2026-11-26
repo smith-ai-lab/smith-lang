@@ -362,7 +362,7 @@ fn a_name_that_is_no_command_runs_a_task_or_says_why_it_found_none() {
         let said = smith(&none, &[name]);
         let err = stderr(&said);
         assert_eq!(said.status.code(), Some(1), "{name}: {err}");
-        assert!(err.contains(&none.display().to_string()) && err.contains("no project.smith") && err.contains(&format!("`{name}`")), "{name}: {err}");
+        assert!(err.contains(&none.display().to_string()) && err.contains("no project.smith") && err.contains(&format!("`{name}` would be a task of project.smith")), "{name}: {err}");
         assert!(!err.contains("unknown command"), "{name}: {err}");
 
         // A project.smith without the task: its path, the name, and its tasks.
