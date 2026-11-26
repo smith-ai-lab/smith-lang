@@ -1,10 +1,13 @@
-use std.bits (bit_and, bit_or, shift_right, u32, u64)
+use std.bits (bit_and, bit_or, shift_right, u16, u32, u64)
 use std.http1 (Read)
 use std.int (saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_shift_left, wrapping_sub)
 use std.list (freeze, push)
 use std.utf8 (utf8)
 
 // The frames.
+
+// A stream a frame is on, which is never 0: that is the connection.
+pub type Stream = 1..2147483648
 
 pub struct Dependency {
   pub exclusive: bool
@@ -13,14 +16,14 @@ pub struct Dependency {
 }
 
 pub struct Data {
-  pub stream: 0..2147483648
+  pub stream: Stream
   pub end_stream: bool
   pub padding: Option[Byte]
   pub data: Slice[Byte]
 }
 
 pub struct Headers {
-  pub stream: 0..2147483648
+  pub stream: Stream
   pub end_stream: bool
   pub end_headers: bool
   pub padding: Option[Byte]
@@ -29,12 +32,12 @@ pub struct Headers {
 }
 
 pub struct Reset {
-  pub stream: 0..2147483648
+  pub stream: Stream
   pub code: u32
 }
 
 pub struct Promise {
-  pub stream: 0..2147483648
+  pub stream: Stream
   pub end_headers: bool
   pub padding: Option[Byte]
   pub promised: 0..2147483648
@@ -52,13 +55,19 @@ pub struct GoAway {
   pub debug: Slice[Byte]
 }
 
+// What a WINDOW_UPDATE gives room to: the connection, or one stream.
+pub enum Target {
+  connection
+  stream: Stream
+}
+
 pub struct Window {
-  pub stream: 0..2147483648
-  pub increment: 0..2147483648
+  pub target: Target
+  pub increment: 1..2147483648
 }
 
 pub struct Continuation {
-  pub stream: 0..2147483648
+  pub stream: Stream
   pub end_headers: bool
   pub block: Slice[Byte]
 }
@@ -66,16 +75,16 @@ pub struct Continuation {
 pub enum Frame {
   data: Data
   headers: Headers
-  priority: Nat
+  priority: Stream
   reset: Reset
-  settings: List[(Nat, Nat)]
+  settings: List[(u16, u32)]
   settings_ack
   push_promise: Promise
   ping: Ping
   go_away: GoAway
   window_update: Window
   continuation: Continuation
-  unknown: Nat
+  unknown: 10..256
 }
 
 fn nat(b: Byte) -> Nat { b }
@@ -110,6 +119,8 @@ fn be64(b: Slice[Byte], i: Nat) -> Nat {
 fn stream_of(x: Nat) -> 0..2147483648 { bit_and(x, 2147483647) }
 
 fn word_of(x: Nat) -> u32 { bit_and(x, 4294967295) }
+
+fn half_of(x: Nat) -> u16 { bit_and(x, 65535) }
 
 fn shl(x: Nat, by: Byte) -> Nat { if by < 64 { wrapping_shift_left(x, by) } else { 0 } }
 
@@ -233,9 +244,15 @@ pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
     }
     .ping(f) { put64(head(to, 8, 6, flag(f.ack, 1), 0), f.data) }
     .go_away(f) { put_all(put32(put32(head(to, wrapping_add(f.debug.size, 8), 7, 0, 0), f.last), f.code), f.debug) }
-    .window_update(f) { put32(head(to, 4, 8, 0, f.stream), f.increment) }
+    .window_update(f) {
+      stream: Nat = match f.target {
+        .connection { 0 }
+        .stream(s) { s }
+      }
+      put32(head(to, 4, 8, 0, stream), f.increment)
+    }
     .continuation(f) { put_all(head(to, f.block.size, 9, flag(f.end_headers, 4), f.stream), f.block) }
-    .unknown(kind) { head(to, 0, low(kind), 0, 0) }
+    .unknown(kind) { head(to, 0, kind, 0, 0) }
   }
 }
 
@@ -278,23 +295,10 @@ fn needs_connection(kind: Byte) -> bool { kind == 4 or kind == 6 or kind == 7 }
 // whole number to 2 to the 34 over 6, exact for any `n` below 2 to the 32.
 fn sixths(n: Nat) -> Nat { shift_right(wrapping_mul(n, 2863311531), 34) }
 
-pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc> {
-  if bytes.size < 9 { return Read.incomplete }
-  n = be24(bytes, 0)
-  if n > largest { return refused("a frame longer than the most that is read") }
-  kind = bytes[3]
-  flags = bytes[4]
-  s = be32(bytes, 5)
-  stream = stream_of(s)
-  if needs_stream(kind) and stream == 0 { return refused("a frame that must be on a stream is on stream 0") }
-  if needs_connection(kind) and stream != 0 { return refused("a frame that must be on stream 0 is on a stream") }
+// A frame of a kind that is on a stream, which `frame` has shown is not 0.
+fn on_stream(bytes: Slice[Byte], n: Nat, kind: Byte, flags: Byte, stream: Stream) -> Read[Frame] {
   if kind == 2 and n != 5 { return refused("a PRIORITY that is not 5 bytes") }
   if kind == 3 and n != 4 { return refused("a RST_STREAM that is not 4 bytes") }
-  if kind == 6 and n != 8 { return refused("a PING that is not 8 bytes") }
-  if kind == 8 and n != 4 { return refused("a WINDOW_UPDATE that is not 4 bytes") }
-  if kind == 4 and has(flags, 1) and n != 0 { return refused("a SETTINGS with ACK that holds settings") }
-  if kind == 4 and wrapping_sub(n, wrapping_mul(sixths(n), 6)) != 0 { return refused("a SETTINGS that is not a whole number of settings") }
-  if kind == 7 and n < 8 { return refused("a GOAWAY of fewer than 8 bytes") }
   end = wrapping_add(9, n)
   if bytes.size < end { return Read.incomplete }
   if kind == 0 {
@@ -319,26 +323,68 @@ pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc> {
   }
   if kind == 2 { return done(.priority(stream), end) }
   if kind == 3 { return done(.reset(Reset(stream: stream, code: word_of(be32(bytes, 9)))), end) }
-  if kind == 4 {
-    if has(flags, 1) { return done(.settings_ack, end) }
-    var pairs: List[(Nat, Nat)] = []
-    loop i in 0..sixths(n) {
-      at_ = wrapping_add(9, wrapping_mul(i, 6))
-      pairs = push(pairs, (be16(bytes, at_), be32(bytes, wrapping_add(at_, 2))))
-    }
-    return done(.settings(pairs), end)
-  }
   if kind == 5 {
     match body(bytes, 9, n, has(flags, 8), 4) {
       .err(why) { return refused(why) }
       .ok(r) { return done(.push_promise(Promise(stream: stream, end_headers: has(flags, 4), padding: r.padding, promised: stream_of(be32(bytes, r.from)), block: piece(bytes, wrapping_add(r.from, 4), r.to))), end) }
     }
   }
+  done(.continuation(Continuation(stream: stream, end_headers: has(flags, 4), block: piece(bytes, 9, end))), end)
+}
+
+// A frame of a kind that is on the connection, which `frame` has shown is on stream 0.
+fn on_connection(bytes: Slice[Byte], n: Nat, kind: Byte, flags: Byte) -> Read[Frame] <alloc> {
+  if kind == 6 and n != 8 { return refused("a PING that is not 8 bytes") }
+  if kind == 4 and has(flags, 1) and n != 0 { return refused("a SETTINGS with ACK that holds settings") }
+  if kind == 4 and wrapping_sub(n, wrapping_mul(sixths(n), 6)) != 0 { return refused("a SETTINGS that is not a whole number of settings") }
+  if kind == 7 and n < 8 { return refused("a GOAWAY of fewer than 8 bytes") }
+  end = wrapping_add(9, n)
+  if bytes.size < end { return Read.incomplete }
+  if kind == 4 {
+    if has(flags, 1) { return done(.settings_ack, end) }
+    var pairs: List[(u16, u32)] = []
+    loop i in 0..sixths(n) {
+      at_ = wrapping_add(9, wrapping_mul(i, 6))
+      pairs = push(pairs, (half_of(be16(bytes, at_)), word_of(be32(bytes, wrapping_add(at_, 2)))))
+    }
+    return done(.settings(pairs), end)
+  }
   if kind == 6 { return done(.ping(Ping(ack: has(flags, 1), data: be64(bytes, 9))), end) }
-  if kind == 7 { return done(.go_away(GoAway(last: stream_of(be32(bytes, 9)), code: word_of(be32(bytes, 13)), debug: piece(bytes, 17, end))), end) }
-  if kind == 8 { return done(.window_update(Window(stream: stream, increment: stream_of(be32(bytes, 9)))), end) }
-  if kind == 9 { return done(.continuation(Continuation(stream: stream, end_headers: has(flags, 4), block: piece(bytes, 9, end))), end) }
-  done(.unknown(nat(kind)), end)
+  done(.go_away(GoAway(last: stream_of(be32(bytes, 9)), code: word_of(be32(bytes, 13)), debug: piece(bytes, 17, end))), end)
+}
+
+// A WINDOW_UPDATE, which is on a stream or, on stream 0, on the connection.
+fn window_update(bytes: Slice[Byte], n: Nat, stream: 0..2147483648) -> Read[Frame] {
+  if n != 4 { return refused("a WINDOW_UPDATE that is not 4 bytes") }
+  end = wrapping_add(9, n)
+  if bytes.size < end { return Read.incomplete }
+  increment = stream_of(be32(bytes, 9))
+  if increment == 0 { return refused("a WINDOW_UPDATE that adds nothing") }
+  if stream == 0 { return done(.window_update(Window(target: .connection, increment: increment)), end) }
+  done(.window_update(Window(target: .stream(stream), increment: increment)), end)
+}
+
+pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc> {
+  if bytes.size < 9 { return Read.incomplete }
+  n = be24(bytes, 0)
+  if n > largest { return refused("a frame longer than the most that is read") }
+  kind = bytes[3]
+  flags = bytes[4]
+  stream = stream_of(be32(bytes, 5))
+  if kind >= 10 {
+    end = wrapping_add(9, n)
+    if bytes.size < end { return Read.incomplete }
+    return done(.unknown(kind), end)
+  }
+  if needs_stream(kind) {
+    if stream == 0 { return refused("a frame that must be on a stream is on stream 0") }
+    return on_stream(bytes, n, kind, flags, stream)
+  }
+  if needs_connection(kind) {
+    if stream != 0 { return refused("a frame that must be on stream 0 is on a stream") }
+    return on_connection(bytes, n, kind, flags)
+  }
+  window_update(bytes, n, stream)
 }
 
 // The headers.

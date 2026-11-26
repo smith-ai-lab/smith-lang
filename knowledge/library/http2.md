@@ -14,19 +14,21 @@ The module `std.http2` turns bytes into the frames of HTTP/2, as RFC 9113 writes
 ## Frames
 
 ```
+type Stream = 1..2147483648
+
 enum Frame {
   data: Data
   headers: Headers
-  priority: Nat
+  priority: Stream
   reset: Reset
-  settings: List[(Nat, Nat)]
+  settings: List[(u16, u32)]
   settings_ack
   push_promise: Promise
   ping: Ping
   go_away: GoAway
   window_update: Window
   continuation: Continuation
-  unknown: Nat
+  unknown: 10..256
 }
 
 fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc>
@@ -34,28 +36,29 @@ fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc>
 ```
 
 - `frame` reads one frame and gives it with how many bytes it took, in the [`Read`](http1.md#reading) of `std.http1`. A frame's bytes, as the data of `data`, are a piece of what was given.
-- Each case holds what its frame holds: its stream, its flags as `bool`s by name, and its fields. A stream is a `0..2147483648`, as the standard keeps the highest bit back.
-- A frame of a kind the standard does not name is `unknown` with its kind, and is passed over, as the standard says. Flags that mean nothing in a kind, and the reserved bit of a number, are ignored.
-- `priority` holds its stream, and its dependency and weight, which RFC 9113 deprecates, are not kept: it is written with a dependency of 0 and a weight of 0. `unknown` is written as an empty frame of its kind on stream 0.
+- Each case holds what its frame holds: its stream, its flags as `bool`s by name, and its fields. A stream is a `Stream`, a `1..2147483648`, as the standard keeps the highest bit back and gives stream 0 to the connection. A frame that must be on a stream holds one, so a frame on stream 0 cannot be written; a frame that must be on stream 0 holds none.
+- A frame of a kind the standard does not name is `unknown` with its kind, a `10..256`, and is passed over, as the standard says. Flags that mean nothing in a kind, and the reserved bit of a number, are ignored.
+- `priority` holds its stream as a `Stream`, and its dependency and weight, which RFC 9113 deprecates, are not kept: it is written with a dependency of 0 and a weight of 0. `unknown` is written as an empty frame of its kind on stream 0. A setting is a `(u16, u32)`, its identifier and its value, so one that the wire has no room for is refused where it is written.
 - A padded frame holds its padding as `padding: Option[Byte]`, the number of bytes of padding, which are written as zeros, or `.none` when the frame is not padded. A `ping` holds its 8 bytes as a `u64`.
-- A frame is refused where RFC 9113 says the connection is in error: one longer than `largest`, a kind whose size is fixed that has another size, a frame on stream 0 that must be on a stream or the other way round, and padding longer than the frame.
-- For every frame `f` this module writes, reading what it wrote gives `f`. That holds where each number is of the size its place in the frame has: a kind of 10 to 255, a setting's identifier of 16 bits and its value of 32, a payload of under 16777216 bytes.
+- A frame is refused where RFC 9113 says the connection is in error: one longer than `largest`, a kind whose size is fixed that has another size, a frame on stream 0 that must be on a stream or the other way round, padding longer than the frame, and a `window_update` that adds 0, which a `Window` cannot hold.
+- For every frame `f` this module writes, reading what it wrote gives `f`. That holds for every frame that can be written, as each number has the size of its place in the frame: a kind of 10 to 255, a setting's identifier of 16 bits and its value of 32, a stream of 1 to 2147483647, and an increment of 1 to 2147483647. The one limit a type does not state is a payload of under 16777216 bytes.
 
 The cases hold these, each with its fields public:
 
 ```
 struct Data { stream, end_stream: bool, padding: Option[Byte], data: Slice[Byte] }
 struct Headers { stream, end_stream: bool, end_headers: bool, padding: Option[Byte], priority: Option[Dependency], block: Slice[Byte] }
-struct Dependency { exclusive: bool, stream, weight: Byte }
+struct Dependency { exclusive: bool, stream: 0..2147483648, weight: Byte }
 struct Reset { stream, code: u32 }
 struct Promise { stream, end_headers: bool, padding: Option[Byte], promised: 0..2147483648, block: Slice[Byte] }
 struct Ping { ack: bool, data: u64 }
 struct GoAway { last: 0..2147483648, code: u32, debug: Slice[Byte] }
-struct Window { stream, increment: 0..2147483648 }
+enum Target { connection, stream: Stream }
+struct Window { target: Target, increment: 1..2147483648 }
 struct Continuation { stream, end_headers: bool, block: Slice[Byte] }
 ```
 
-`stream` is a `0..2147483648`. A `block` is a field block fragment, which `decode` reads once a `headers` or a `push_promise` and the `continuation`s that follow it are joined.
+A `Dependency` may name stream 0, the root of the tree of dependencies. A `window_update` is to the connection or to one stream, as its `Target` says, and is read as the connection when it is on stream 0. A `block` is a field block fragment, which `decode` reads once a `headers` or a `push_promise` and the `continuation`s that follow it are joined.
 
 ## Headers
 
