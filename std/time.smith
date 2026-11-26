@@ -1,11 +1,12 @@
 use std.bits (bit_and, shift_right, u64)
-use std.int (wrapping_add, wrapping_mul)
+use std.instant (Duration, Instant, instant, milliseconds as span_ms)
+use std.int (clamp, wrapping_add, wrapping_mul)
 use std.list (push)
 use std.task (task, wait_for_time)
 
 pub effect time {
-  pub fn now() -> u64
-  pub fn sleep(ms: u64)
+  pub fn now() -> Instant
+  pub fn sleep(span: Duration)
 }
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
@@ -36,18 +37,22 @@ fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
   wrapping_add(wrapping_mul(seconds, 1000), part)
 }
 
-fn system_now() -> u64 <alloc> {
+// A reading of the clock past the end of what an `Instant` holds is taken for
+// that end.
+fn system_now() -> Instant <alloc> {
   var stamp: List[Byte] = __reserve(16)
   stamp = put(put(stamp, 0), 0)
   __system(10, 0, stamp)
-  milliseconds(word(stamp, 0), word(stamp, 8))
+  reading: 0..4611686018427387904 = clamp(milliseconds(word(stamp, 0), word(stamp, 8)))
+  instant(reading)
 }
 
-fn system_sleep(ms: u64) <alloc, task> {
+fn system_sleep(span: Duration) <alloc, task> {
+  ms: u64 = span_ms(span)
   // A task that a scheduler runs waits for the time and lets the others run, and
   // any other call waits on the thread.
   if __scheduled() {
-    wait_for_time(ms)
+    wait_for_time(span)
     return
   }
   var left = ms

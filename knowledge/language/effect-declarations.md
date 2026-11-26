@@ -16,7 +16,7 @@ built:
 
 # Declaring an effect
 
-An effect is declared by listing its operations. The standard library declares `time` this way, shown here with only its operation for reading the clock.
+An effect is declared by listing its operations. The standard library declares `time` this way, as [Time](../library/time.md) says. A clock of a program's own, which counts ticks and gives a number, is declared the same way, and this page and the pages after it use one.
 
 ```
 effect time {

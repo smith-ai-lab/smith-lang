@@ -25,7 +25,7 @@ fn verify(token: str, key: Key, issuer: str, audience: str) -> Result[Claims, Jw
 struct Claims {
   subject: str
   scopes: List[str]
-  expires: u64
+  expires: Instant
 }
 
 enum Key {
@@ -45,7 +45,7 @@ enum JwtError {
 
 - `verify` checks in this order, and stops at the first that fails: the text is three parts of [base64 for an address](base64.md) with a header and claims that are JSON; the algorithm the header names is the one the key is for; the signature is that of the first two parts under the key; the time now, from [`time`](../language/effect-declarations.md), is before `exp` and not before `nbf`; `iss` is the issuer; `aud` is or holds the audience.
 - A token whose header names the algorithm `none`, or any algorithm the key is not for, is `.err(.algorithm)`. The key says the algorithm and the token never does.
-- `Claims` holds what a server acts on: `sub`, the scopes of `scope` cut at each space, and `exp`. Its fields are read and it is made only by `verify`.
+- `Claims` holds what a server acts on: `sub`, the scopes of `scope` cut at each space, and `exp`, which is an [`Instant`](instant.md) as every time of the library is. Its fields are read and it is made only by `verify`.
 - `Key` has one case today, `hmac`, for the algorithm HS256, which signs with [`hmac_sha256`](sha2.md). The algorithms that sign with a key of two halves, RS256 and ES256, are cases it has not yet.
 
 ## The forms

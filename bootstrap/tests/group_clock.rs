@@ -36,6 +36,7 @@ fn a_time_is_come_exactly_when_none_of_it_is_left_and_a_time_between_two_reads_o
 {
     let source = "use std.bits (u64)
 use std.console (console, print)
+use std.instant (instant, ms)
 use std.int (wrapping_add)
 use std.task (time_left)
 
@@ -46,12 +47,12 @@ fn main() <console, alloc> {
   loop d in 0..8 {
     loop a in 0..8 {
       come = d <= a
-      left = time_left(d, a)
-      if come and left != 0 { wrong = wrapping_add(wrong, 1) }
-      if not come and left == 0 { wrong = wrapping_add(wrong, 1) }
-      if left != 0 and time_left(d, a) == 0 { lost_one = wrapping_add(lost_one, 1) }
+      left = time_left(instant(d), instant(a))
+      if come and left != ms(0) { wrong = wrapping_add(wrong, 1) }
+      if not come and left == ms(0) { wrong = wrapping_add(wrong, 1) }
+      if left != ms(0) and time_left(instant(d), instant(a)) == ms(0) { lost_one = wrapping_add(lost_one, 1) }
       loop b in 0..8 {
-        if a <= b and time_left(d, a) != 0 and time_left(d, b) == 0 { lost_two = wrapping_add(lost_two, 1) }
+        if a <= b and time_left(instant(d), instant(a)) != ms(0) and time_left(instant(d), instant(b)) == ms(0) { lost_two = wrapping_add(lost_two, 1) }
       }
     }
   }
@@ -78,12 +79,13 @@ fn main() <console, alloc> {
 }
 
 const PROGRAM: &str = "use std.console (console, print)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn main() <console, alloc, time> {
   with tasks()
-  t = spawn { sleep(600) }
+  t = spawn { sleep(ms(600)) }
   join(t)
   print(\"slept\")
 }

@@ -1,7 +1,8 @@
 use std.bits (u64)
 use std.der (Value, bits, children, object, text, value, whole)
 use std.base64 (decode)
-use std.int (wrapping_add, wrapping_mul)
+use std.instant (Instant, instant)
+use std.int (narrow, wrapping_add, wrapping_mul)
 use std.list (push)
 use std.text (Text, append_ascii, finish, text as new_text)
 
@@ -12,8 +13,8 @@ pub struct Certificate {
   pub serial: Slice[Byte]
   pub issuer: Slice[Byte]
   pub subject: Slice[Byte]
-  pub not_before: u64
-  pub not_after: u64
+  pub not_before: Instant
+  pub not_after: Instant
   pub key_algorithm: List[Nat]
   pub key: Slice[Byte]
   pub names: List[str]
@@ -137,9 +138,8 @@ fn days_in(leap: bool, month: Nat) -> Nat {
   }
 }
 
-// The seconds since 1970 of a time written `YYMMDDHHMMSSZ`, or with a year of
-// four digits.
-fn seconds(v: Value) -> Result[u64, str] {
+// The instant of a time written `YYMMDDHHMMSSZ`, or with a year of four digits.
+fn moment(v: Value) -> Result[Instant, str] {
   b = v.bytes
   var year: Nat = 0
   var at: Nat = 0
@@ -200,7 +200,11 @@ fn seconds(v: Value) -> Result[u64, str] {
     days = wrapping_add(days, days_in(is_leap, m))
   }
   days = wrapping_add(days, day - 1)
-  .ok(wrapping_add(wrapping_mul(days, 86400), hour * 3600 + minute * 60 + second))
+  seconds: u64 = wrapping_add(wrapping_mul(days, 86400), hour * 3600 + minute * 60 + second)
+  match narrow(wrapping_mul(seconds, 1000)) {
+    .some(ms) { .ok(instant(ms)) }
+    .none { .err("a time too far from 1970") }
+  }
 }
 
 // The identifier of an extension is `2.5.29.<n>`.
@@ -301,10 +305,10 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
 }
 
 // The two times of a validity.
-fn validity(v: Value) -> Result[(u64, u64), str] <alloc> {
+fn validity(v: Value) -> Result[(Instant, Instant), str] <alloc> {
   xs = try parts(v, 2, 2)
   if xs.size < 2 { return .err("a validity of too few parts") }
-  .ok((try seconds(xs[0]), try seconds(xs[1])))
+  .ok((try moment(xs[0]), try moment(xs[1])))
 }
 
 pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {

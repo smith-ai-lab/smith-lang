@@ -209,11 +209,12 @@ fn program(c: &Case) -> String {
         Some(id) => format!("  g = opened({id})\n  spawn {{ n{root}(g) }}"),
         None => format!("  spawn {{ n{root}() }}"),
     };
-    let wait = if c.waits { "  late = test_ready_by(999999, 10)\n" } else { "" };
+    let wait = if c.waits { "  late = test_ready_by(999999, ms(10))\n" } else { "" };
     let ready: Vec<String> = c.ready.iter().map(u64::to_string).collect();
     format!(
         "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.int (wrapping_add)
 use std.net (Connection, close, connection, handle, net, release)
 use std.list (push)

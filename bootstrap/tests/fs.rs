@@ -599,6 +599,7 @@ fn a_task_that_waits_to_read_a_file_suspends_only_itself() {
     use std::os::unix::fs::OpenOptionsExt;
     let source = "use std.console (console, print)
 use std.fs (FsError, fs, open, read)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
@@ -613,7 +614,7 @@ fn main() <console, alloc, fs, time> {
   with tasks()
   a = spawn { pull(\"PIPE\") }
   b = spawn {
-    sleep(50)
+    sleep(ms(50))
     print(\"other ran\")
     7
   }
@@ -708,10 +709,11 @@ fn a_function_that_holds_a_file_while_it_may_wait_and_does_not_carry_fs_is_refus
     let waiting = |effects: &str| {
         format!(
             "use std.fs (File, close_file, file, fs)
+use std.instant (ms)
 use std.time (sleep, time)
 
 fn pause(f: take File) -> File <{effects}> {{
-  sleep(10)
+  sleep(ms(10))
   f
 }}
 

@@ -1,9 +1,10 @@
 use std.console (console, print)
+use std.instant (ms, since_1970)
 use std.time (now, sleep, time)
 
 fn main() <console, time, alloc> {
   before = now()
-  sleep(150)
+  sleep(ms(150))
   after = now()
-  print("{before} {after}")
+  print("{since_1970(before)} {since_1970(after)}")
 }

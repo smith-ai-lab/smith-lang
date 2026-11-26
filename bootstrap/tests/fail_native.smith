@@ -1,5 +1,6 @@
 use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.list (push)
 use std.task (join, spawn, tasks)
 use std.time (sleep, time)
@@ -18,6 +19,6 @@ fn eat() <alloc> {
 fn main() <console, alloc, time> {
   with tasks()
   child = spawn { eat() }
-  sleep(100)
+  sleep(ms(100))
   print("the parent went on")
 }

@@ -43,4 +43,5 @@ The modules of the standard library, one file each, named for the module. A modu
 - [task.md](task.md): `std.task`, with `tasks`, `spawn`, and `join`, which open a task group, start a child in it, and wait for the child's value.
 - [console.md](console.md): the `console` effect, for a program's standard input, output, and error.
 - [time.md](time.md): the `time` effect, by which a program reads the clock and waits for a time.
+- [instant.md](instant.md): `std.instant`, with `Instant` and `Duration`, the types of a point and of a span of time.
 - [entropy.md](entropy.md): the `entropy` effect, which gives a program bytes nobody can predict from the operating system or the WebAssembly host.

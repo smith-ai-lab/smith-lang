@@ -529,6 +529,7 @@ fn main() <console, alloc> {
 /// A handler answers `net` and `time`, and the code under it is what a
 /// program with no handler would have.
 const HANDLED: &str = "use std.console (console, print)
+use std.instant (instant, since_1970)
 use std.list (freeze)
 use std.net (Connection, NetError, close, connect, net, read, release, write)
 use std.time (now, time)
@@ -553,10 +554,10 @@ fn main() <console, alloc> {
     receive: fn(s, most) { .err(.refused(s.host)) },
     unbind: fn(s) { n = release(s) }
   ) {
-    time(now: { 11 }, sleep: fn(ms) { }) {
+    time(now: { instant(11) }, sleep: fn(span) { }) {
       match ask(\"x\") {
         .ok(bytes) { print(\"answered\") }
-        .err(.refused(address)) { print(\"refused {address} {now()}\") }
+        .err(.refused(address)) { print(\"refused {address} {since_1970(now())}\") }
         .err(e) { print(\"another\") }
       }
     }

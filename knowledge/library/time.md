@@ -5,36 +5,38 @@ description: The time effect, by which a program reads the clock and waits for a
 status: partial
 built:
   - "`std.time` declares `time`, with `now` and `sleep` as the page shows them"
-  - "on Linux and macOS, on x86-64 and arm64, the system answers both: `now` gives the milliseconds since 1970 of the system's clock, and `sleep` blocks for at least the milliseconds it is given where no group of tasks is in force; a handler answers both on every target"
-  - "`sleep` in a task of a group, which no scheduler is in force of, suspends the task for the milliseconds and runs the others meanwhile, so two tasks that sleep 300 and 100 milliseconds wake in that order and the program takes about 300, and a thousand tasks that each sleep wake once each; the group waits in `epoll` or `kqueue` with the timeout of the nearest time, and under `test_scheduler` the time of the test goes forward to the nearest time when no task can run, so a thousand sleeps of a test take no time"
+  - "on Linux and macOS, on x86-64 and arm64, the system answers both: `now` gives the `Instant` of the system's clock, and `sleep` blocks for at least the `Duration` it is given where no group of tasks is in force; a handler answers both on every target"
+  - "`sleep` in a task of a group, which no scheduler is in force of, suspends the task for the duration and runs the others meanwhile, so two tasks that sleep 300 and 100 milliseconds wake in that order and the program takes about 300, and a thousand tasks that each sleep wake once each; the group waits in `epoll` or `kqueue` with the timeout of the nearest time, and under `test_scheduler` the time of the test goes forward to the nearest time when no task can run, so a thousand sleeps of a test take no time"
   - "not Windows, or a `sleep` that a cancelled task ends"
 ---
 
 # Time
 
-The module `std.time` declares the `time` [effect](../language/effect-declarations.md). It is how a program reads the clock and waits for a time.
+The module `std.time` declares the `time` [effect](../language/effect-declarations.md). It is how a program reads the clock and waits for a time. A time is an `Instant` and a span of time is a `Duration`, as [Instants and durations](instant.md) says, so a point is never waited for and a span is never read from the clock.
 
 ```
 effect time {
-  fn now() -> u64
-  fn sleep(ms: u64)
+  fn now() -> Instant
+  fn sleep(span: Duration)
 }
 ```
 
 | Operation | Does |
 | --- | --- |
-| `now` | Gives the clock's reading, in milliseconds |
-| `sleep` | Waits for `ms` milliseconds, and then returns |
+| `now` | Gives the clock's reading, as an `Instant` since the start of 1970 |
+| `sleep` | Waits for the `Duration`, and then returns |
 
 ```
-use std.bits (u64)
+use std.instant (Instant, ms)
 use std.time (now, sleep, time)
 
-fn pause_and_read() -> u64 <time> {
-  sleep(250)
+fn pause_and_read() -> Instant <time> {
+  sleep(ms(250))
   now()
 }
 ```
+
+`sleep(now())` is refused, as an `Instant` is where a `Duration` is needed, and so is `sleep(250)`, as a number is. `now() + now()` is refused, as two points have no sum.
 
 - `sleep` suspends the task that calls it, as a wait for a file or the network does, so it does not hold up the other tasks. A task that is cancelled while it sleeps ends at once, as [Cancellation](../language/cancellation.md) says of any task that is waiting, and the rest of the `sleep` does not run.
 - A function that calls `sleep` lists `time`, as one that calls `now` does, and a function that lists no effect never waits for a time.
