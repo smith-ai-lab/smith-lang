@@ -47,10 +47,10 @@ fn main() <console> {
   u24 = first(u23)
   u25 = second((u20.name, Cat(name: u20.name)))
   u26 = drop(u20.name)
-  r29 = h0(note, f0: fn(a27) { u20 }) fn(a28) { Cat(name: note) }
-  print(h1(note, f0: pet_of) fn(a30) { u20 })
+  r29 = h0(note, f0: fn(a27) { u20 }, f1: fn(a28) { Cat(name: note) })
+  print(h1(note, f0: pet_of, f1: fn(a30) { u20 }))
   r44 = h2(u25, f0: fn(a31, a32, a33) {
-    note = h2(a32, f0: fn(a34, a35, a36) { h0(u21, f0: fn(a37) { Cat(name: u19) }, f1: cat_of) }) fn(a38, a39) {
+    note = h2(a32, f0: fn(a34, a35, a36) { h0(u21, f0: fn(a37) { Cat(name: u19) }, f1: cat_of) }, f1: fn(a38, a39) {
       note = h1(Pet.none, f0: fn(a40) { Pet.none }, f1: cat_of)
       print(match Pet.cat(Cat(name: "")) {
         .cat(c41) { u25.name }
@@ -58,31 +58,31 @@ fn main() <console> {
       })
       print(h1(Cat(name: ""), f0: pet_of, f1: cat_of))
       (u20.name, Cat(name: u20.name))
-    }
+    })
     Pet.cat(Cat(name: u20.name))
-  }) fn(a42, a43) { (u20.name, Cat(name: u20.name)) }
+  }, f1: fn(a42, a43) { (u20.name, Cat(name: u20.name)) })
   print(note)
 }
 
-fn h0[T](p0: T, f0: fn(Pet) -> Cat, f1: fn(str) -> Cat) -> Pet <console> {
-  print(h2(Cat(name: ""), f0: fn(a1, a2, a3) { Pet.cat(a2) }) fn(a4, a5) { ("", Cat(name: "")) })
+fn h0[T](p0: T; f0: fn(Pet) -> Cat, f1: fn(str) -> Cat) -> Pet <console> {
+  print(h2(Cat(name: ""), f0: fn(a1, a2, a3) { Pet.cat(a2) }, f1: fn(a4, a5) { ("", Cat(name: "")) }))
   v6 = f0(Pet.cat(Cat(name: "hello")))
   v7 = f1(v6.name)
   print(h1(f1(""), f0: pet_of, f1: f1))
   Pet.none
 }
 
-fn h1[T](p0: T, f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str <console> {
+fn h1[T](p0: T; f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str <console> {
   var v8 = ""
   v9 = f0(f1(""))
   v15 = f1(h2(Cat(name: "a"), f0: fn(a10, a11, a12) {
     print("")
     Pet.cat(Cat(name: a11.name))
-  }) fn(a13, a14) { (v8, Cat(name: "hello")) })
+  }, f1: fn(a13, a14) { (v8, Cat(name: "hello")) }))
   v8
 }
 
-fn h2(p0: Cat, f0: fn(str, Cat, ()) -> Pet, f1: fn(Pet, (str, Cat)) -> (str, Cat)) -> str <console> {
+fn h2(p0: Cat; f0: fn(str, Cat, ()) -> Pet, f1: fn(Pet, (str, Cat)) -> (str, Cat)) -> str <console> {
   v16 = f0("", Cat(name: ""), say("hello"))
   v18 = match v16 {
     .cat(c17) { f1(f0(p0.name, p0, say(p0.name)), f1(Pet.none, (p0.name, Cat(name: p0.name)))) }

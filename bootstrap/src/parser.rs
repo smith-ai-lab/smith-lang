@@ -280,6 +280,9 @@ pub struct Param {
     pub takes: Vec<bool>,
     /// For a parameter of a function type, the effects the function carries.
     pub effects: Effects,
+    /// Whether it is written after the `;` of the parameter list, so that a
+    /// call gives it by name and never by position.
+    pub by_name: bool,
 }
 
 /// A type: a name, and the types in brackets after it, if any. A tuple

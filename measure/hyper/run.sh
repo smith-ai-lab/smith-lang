@@ -27,7 +27,7 @@ use std.project (Package)
 
 package = Package(name: "users")
 
-pub fn serve(port: Nat = 8080) ! net, alloc, diverge {
+pub fn serve(; port: 1..65536 = 8080) <net, alloc, diverge> {
   with listen(port: port)
   main()
 }

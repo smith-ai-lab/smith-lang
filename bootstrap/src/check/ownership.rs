@@ -1942,7 +1942,13 @@ impl<'a> Walk<'a> {
         for arg in &call.args {
             let ix = match (&arg.name, params) {
                 (Some((n, _)), Some(ps)) => ps.iter().position(|p| p.name == *n),
-                (None, Some(ps)) if arg.after => ps.len().checked_sub(1),
+                (None, Some(ps)) if arg.after => {
+                    // A lambda after the call is for the last parameter given by position.
+                    ps.iter()
+                        .position(|p| p.by_name)
+                        .unwrap_or(ps.len())
+                        .checked_sub(1)
+                }
                 (None, Some(_)) => {
                     position += 1;
                     Some(position - 1)

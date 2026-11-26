@@ -80,19 +80,20 @@ fn calls(g: &mut Gen) -> Vec<Call> {
 }
 
 /// The program: `p` writes its `class` and `inside`, then runs its function,
-/// whose default writes `D`.
+/// whose default writes `D`. The function is the one parameter given by
+/// position, and `inside` and `class` are given by name.
 fn source(calls: &[Call]) -> String {
     let mut text = String::from(
         "use std.console (console, print)\n\n\
          effect markup {\n  fn emit(text: str)\n}\n\n\
-         fn p(inside: str = \"i\", class: str = \"c\", body: fn() <markup> = { emit(\"D\") }) <markup> {\n  \
+         fn p(body: fn() <markup> = { emit(\"D\") }; inside: str = \"i\", class: str = \"c\") <markup> {\n  \
          emit(class)\n  emit(inside)\n  body()\n}\n\n\
          fn page() <markup> {\n",
     );
     for call in calls {
         let mut args = Vec::new();
         if let Some(inside) = &call.inside {
-            args.push(format!("\"{inside}\""));
+            args.push(format!("inside: \"{inside}\""));
         }
         if let Some(class) = &call.class {
             args.push(format!("class: \"{class}\""));

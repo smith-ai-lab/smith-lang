@@ -587,12 +587,12 @@ effect lines {
 // `mcp` answers the message `messages` gives with what the lines after it say,
 // and the lines are run for that one message.
 pub fn mcp(
+  body: fn() <lines, alloc>;
   name: str,
   version: str,
   instructions: Option[str] = .none,
   ttl: Nat = 0,
   origins: take List[str] = [],
-  body: fn() <lines, alloc>
 ) <messages, alloc> {
   server = Server(name: name, version: version, instructions: instructions, ttl: ttl, origins: origins)
   match route(server, message()) {

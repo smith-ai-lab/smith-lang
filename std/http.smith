@@ -1364,7 +1364,7 @@ fn unasked[T](body: fn() -> T <http>) -> T {
 // for the system, and one request after another on each. It ends only with the program: a port that cannot be
 // listened on ends the program with a failing status, and the error on
 // standard error.
-pub fn listen[T](port: 1..65536, body: fn() -> T <http>) -> T <net, alloc, diverge>
+pub fn listen[T](body: fn() -> T <http>; port: 1..65536) -> T <net, alloc, diverge>
   requires Discard[T]
 {
   match open(port) {

@@ -83,6 +83,7 @@ enum Punct {
   bang
   pipe_arrow
   percent
+  semicolon
 }
 
 // A number is kept in its source spelling, and a string has its escapes
@@ -783,6 +784,8 @@ fn punct_at(src: List[Byte], at: Nat) -> Option[(Punct, Nat)] {
     .some((.pipe_arrow, 2))
   } else if starts_with(src, at, "%") {
     .some((.percent, 1))
+  } else if starts_with(src, at, ";") {
+    .some((.semicolon, 1))
   } else {
     .none
   }

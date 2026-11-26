@@ -127,6 +127,9 @@ struct FnDef {
     rank: usize,
     generics: Vec<Generic>,
     params: Vec<(&'static str, Ty)>,
+    /// How many parameters are given by position only: the rest follow a `;`
+    /// and are given by name only.
+    split: usize,
     result: Option<Ty>,
     console: bool,
     body: Vec<Stmt>,
@@ -439,11 +442,23 @@ fn construct(g: &mut Gen, m: &Model, ctx: &Ctx, s: usize, types: &[Ty], depth: u
     }
 }
 
-/// Arguments for parameters of these types, some by position and the
-/// rest by name in any order.
-fn args(g: &mut Gen, m: &Model, ctx: &Ctx, params: &[Ty], depth: usize) -> Vec<Arg> {
+/// How a parameter list is written: the first `split` parameters are given by
+/// position, and the rest, which follow a `;`, by name.
+fn param_list(params: &[String], split: usize) -> String {
+    let split = split.min(params.len());
+    let (before, after) = params.split_at(split);
+    if after.is_empty() {
+        before.join(", ")
+    } else {
+        format!("{}; {}", before.join(", "), after.join(", "))
+    }
+}
+
+/// Arguments for parameters of these types, the first `split` by position and
+/// the rest by name in any order.
+fn args(g: &mut Gen, m: &Model, ctx: &Ctx, params: &[Ty], split: usize, depth: usize) -> Vec<Arg> {
     let count = params.len();
-    let by_position = count - g.below(count + 1);
+    let by_position = split;
     let mut rest: Vec<usize> = (by_position..count).collect();
     let mut order: Vec<usize> = (0..by_position).collect();
     while !rest.is_empty() {
@@ -468,7 +483,7 @@ fn trait_args(
     params: &[Ty],
     depth: usize,
 ) -> Vec<Arg> {
-    let mut args = args(g, m, ctx, params, depth);
+    let mut args = args(g, m, ctx, params, 1, depth);
     if m.traits[of].fns[func].default.is_some() && g.one_in(2) {
         // `note` is the last parameter, so the rest stay as they were.
         args.retain(|a| a.param != 1);
@@ -510,7 +525,7 @@ fn call(g: &mut Gen, m: &Model, ctx: &Ctx, ty: &Ty, depth: usize) -> Option<Expr
         types.push(t);
     }
     let params: Vec<Ty> = def.params.iter().map(|(_, t)| t.subst(&types)).collect();
-    let args = args(g, m, ctx, &params, depth);
+    let args = args(g, m, ctx, &params, def.split, depth);
     Some(Expr::Call { f, types, args })
 }
 
@@ -774,6 +789,7 @@ fn model(g: &mut Gen, kind: Option<Kind>) -> Model {
         rank: 0,
         generics: Vec::new(),
         params: Vec::new(),
+        split: 0,
         result: None,
         console: true,
         body: Vec::new(),
@@ -805,11 +821,13 @@ fn model(g: &mut Gen, kind: Option<Kind>) -> Model {
             }
         }
         let result = (!g.one_in(3)).then(|| some_type(g, &m, count, 1));
+        let split = g.below(params.len() + 1);
         m.fns.push(FnDef {
             name: format!("f{i}"),
             rank,
             generics,
             params,
+            split,
             result,
             console: g.one_in(2),
             body: Vec::new(),
@@ -891,7 +909,7 @@ fn model(g: &mut Gen, kind: Option<Kind>) -> Model {
         let gives = def.result.as_ref().map(|r| r.subst(&types));
         let call = Expr::Call {
             f,
-            args: args(g, &m, &main, &params, DEPTH),
+            args: args(g, &m, &main, &params, def.split, DEPTH),
             types,
         };
         first.push(match gives {
@@ -1190,7 +1208,7 @@ impl WrittenOut<'_> {
 
     fn function(&mut self, ((t, env), name): &(Copy, String)) {
         let m = self.m;
-        let (params, result, console): (Vec<(&str, Ty)>, Option<Ty>, bool) = match *t {
+        let (params, result, console, split): (Vec<(&str, Ty)>, Option<Ty>, bool, usize) = match *t {
             Template::Fn(f) => {
                 let def = &m.fns[f];
                 let params = def
@@ -1202,6 +1220,7 @@ impl WrittenOut<'_> {
                     params,
                     def.result.as_ref().map(|r| r.subst(env)),
                     def.console,
+                    def.split,
                 )
             }
             Template::Impl(i, func) => {
@@ -1210,13 +1229,18 @@ impl WrittenOut<'_> {
                 let params = (f.params.iter())
                     .map(|(p, ty)| (*p, ty.subst(&im.args).subst(env)))
                     .collect();
-                (params, Some(f.result.subst(&im.args).subst(env)), f.console)
+                (
+                    params,
+                    Some(f.result.subst(&im.args).subst(env)),
+                    f.console,
+                    1,
+                )
             }
         };
         let params: Vec<String> = (params.iter())
             .map(|(p, ty)| format!("{p}: {}", self.type_name(ty)))
             .collect();
-        let mut text = format!("fn {name}({})", params.join(", "));
+        let mut text = format!("fn {name}({})", param_list(&params, split));
         if let Some(r) = &result {
             text.push_str(&format!(" -> {}", self.type_name(r)));
         }
@@ -1596,7 +1620,7 @@ fn trait_fn_text(m: &Model, f: &TraitFn, args: &[Ty], names: &[&str]) -> String 
     let mut text = format!(
         "fn {}({}) -> {}",
         f.name,
-        params.join(", "),
+        param_list(&params, 1),
         type_text(m, &f.result.subst(args), names)
     );
     if f.console {
@@ -1719,7 +1743,7 @@ fn differing(
         _ => params.push(("extra".to_string(), "str".to_string())),
     }
     let params: Vec<String> = params.iter().map(|(p, t)| format!("{p}: {t}")).collect();
-    let mut text = format!("{}({}) -> {result}", f.name, params.join(", "));
+    let mut text = format!("{}({}) -> {result}", f.name, param_list(&params, 1));
     if console {
         text.push_str(" <console>");
     }
@@ -1757,7 +1781,7 @@ fn function(b: &mut Builder, m: &Model, f: usize, reached: bool, sites: &Sites) 
     let params: Vec<String> = (def.params.iter())
         .map(|(p, t)| format!("{p}: {}", type_text(m, t, &names)))
         .collect();
-    b.push(&format!("({})", params.join(", ")));
+    b.push(&format!("({})", param_list(&params, def.split)));
     if let Some(r) = &def.result {
         b.push(&format!(" -> {}", type_text(m, r, &names)));
     }
@@ -1802,7 +1826,7 @@ fn main_statement(b: &mut Builder, m: &Model, sites: &Sites) {
             let call = Expr::TraitCall {
                 of: k,
                 func: 0,
-                args: args(b.g, m, &main, &params, DEPTH),
+                args: args(b.g, m, &main, &params, 1, DEPTH),
                 types,
             };
             b.push("  wrong = ");
@@ -1851,7 +1875,7 @@ fn main_statement(b: &mut Builder, m: &Model, sites: &Sites) {
                 .collect();
             let call = Expr::Call {
                 f,
-                args: args(b.g, m, &main, &params, DEPTH),
+                args: args(b.g, m, &main, &params, m.fns[f].split, DEPTH),
                 types,
             };
             b.push(if m.fns[f].result.is_some() {
@@ -1900,7 +1924,7 @@ fn main_statement(b: &mut Builder, m: &Model, sites: &Sites) {
             let call = Expr::TraitCall {
                 of: 0,
                 func: 0,
-                args: args(b.g, m, &main, &params, DEPTH),
+                args: args(b.g, m, &main, &params, 1, DEPTH),
                 types,
             };
             let (stated, mentions) = if gives == Ty::Str {

@@ -31,7 +31,7 @@ impl Fmt[FsError] {
 
 pub effect fs {
   pub fn open_file(path: str) -> Result[File, FsError]
-  pub fn create_file(path: str, executable: bool = false) -> Result[File, FsError]
+  pub fn create_file(path: str; executable: bool = false) -> Result[File, FsError]
   pub fn close_file(f: take File)
   pub fn size(f: File) -> Result[Nat, FsError]
   pub fn read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc>
@@ -45,8 +45,8 @@ pub fn open[T](path: str, body: fn(File) -> Result[T, FsError]) -> Result[T, FsE
   result
 }
 
-pub fn create[T](path: str, executable: bool = false, body: fn(File) -> Result[T, FsError]) -> Result[T, FsError] <fs> {
-  f = try create_file(path, executable)
+pub fn create[T](path: str, body: fn(File) -> Result[T, FsError]; executable: bool = false) -> Result[T, FsError] <fs> {
+  f = try create_file(path, executable: executable)
   result = body(f)
   close_file(f)
   result
@@ -58,8 +58,8 @@ pub fn read_all(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   read(f, 0..n)
 }
 
-pub fn write_all(path: str, bytes: List[Byte], executable: bool = false) -> Result[(), FsError] <fs> {
-  with f = create(path, executable)
+pub fn write_all(path: str, bytes: List[Byte]; executable: bool = false) -> Result[(), FsError] <fs> {
+  with f = create(path, executable: executable)
   write(f, 0, bytes)
 }
 

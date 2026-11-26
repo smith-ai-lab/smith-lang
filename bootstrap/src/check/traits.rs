@@ -1830,7 +1830,11 @@ impl<'a> Checker<'a> {
             set.dedup();
             set
         }
+        let written_from = (f.params.iter())
+            .position(|p| p.by_name)
+            .unwrap_or(f.params.len());
         let same = written == wanted
+            && sig.named_from == Some(written_from)
             && written_gives == gives
             && set(&f.effects) == set(&trait_fn.effects);
         if same {
@@ -1839,12 +1843,14 @@ impl<'a> Checker<'a> {
         let params: Vec<String> = (wanted.iter())
             .map(|(n, t)| format!("{n}: {}", defs.text(t, scope)))
             .collect();
-        let mut text = format!(
-            "fn {}{}({})",
-            f.name,
-            generics_written(&f.generics),
-            params.join(", ")
-        );
+        let split = sig.named_from.unwrap_or(params.len()).min(params.len());
+        let (before, after) = params.split_at(split);
+        let params = if after.is_empty() {
+            before.join(", ")
+        } else {
+            format!("{}; {}", before.join(", "), after.join(", "))
+        };
+        let mut text = format!("fn {}{}({params})", f.name, generics_written(&f.generics));
         if gives != Ty::Nothing {
             text.push_str(&format!(" -> {}", defs.text(&gives, scope)));
         }

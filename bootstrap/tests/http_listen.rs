@@ -776,7 +776,7 @@ fn the_deployment_of_the_page_built_by_its_name_answers_on_the_port_it_is_given(
         .replace("use std.net (net)\n", "")
         .replace("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n", "")
         .replace("fn app()", "pub fn main()");
-    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(port: 1..65536 = 8080) <net, alloc, diverge> {\n  with listen(port: port)\n  main()\n}\n";
+    let project = "use main (main)\nuse std.http (listen)\nuse std.net (net)\nuse std.project (Package)\n\npackage = Package(name: \"users\")\n\npub fn serve(; port: 1..65536 = 8080) <net, alloc, diverge> {\n  with listen(port: port)\n  main()\n}\n";
     std::fs::write(dir.join("main.smith"), main).unwrap();
     std::fs::write(dir.join("project.smith"), project).unwrap();
     let built = smith(&dir, &["build", "serve"]);

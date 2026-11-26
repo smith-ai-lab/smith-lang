@@ -1329,6 +1329,9 @@ fn file_with_check_errors(g: &mut Gen) -> (String, Vec<(Pos, String)>) {
             if (callee, i) == ("main", 0) {
                 expected.push((arg, "takes 0 arguments".to_string()));
             }
+            if (callee, i) == ("print", 1) {
+                expected.push((arg, "`end` of `print` is given by name".to_string()));
+            }
             source.push_str("\"a\"");
         }
         match callee {

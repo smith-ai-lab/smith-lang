@@ -481,7 +481,7 @@ fn two_lambdas_of_one_call_that_use_a_name_one_gave_away_are_refused_at_the_seco
         src.push(USES);
         src.push(KEY);
         src.push(&format!(
-            "fn both(f: {marked}fn() -> u64, g: {marked}fn() -> u64) -> u64 {{ wrapping_add(f(), g()) }}\n\nfn user(a: take Key, b: take Key, s: take Key) -> u64 {{\n  r = both(f: "
+            "fn both(g: {marked}fn() -> u64; f: {marked}fn() -> u64) -> u64 {{ wrapping_add(f(), g()) }}\n\nfn user(a: take Key, b: take Key, s: take Key) -> u64 {{\n  r = both(f: "
         ));
         let mut wanted = Vec::new();
         let mut uses_at: Vec<(usize, bool, Pos)> = Vec::new();
