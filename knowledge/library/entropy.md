@@ -29,7 +29,7 @@ use std.fmt (hex)
 fn main() <console, entropy, alloc> {
   bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   var line = ""
-  loop b in fill(bytes) { line = "{line}{hex(b, 2, false)}" }
+  loop b in fill(bytes) { line = "{line}{hex(b, width: 2, upper: false)}" }
   print(line)
 }
 ```
