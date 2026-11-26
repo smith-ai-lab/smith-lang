@@ -94,7 +94,7 @@ This prints `7 1`. In `pick` the blocks give a `1..2` and a `0..256`, so the `if
 
 ## An `if` with no `else`
 
-An `if` with no `else` gives `()`, and what its block gives is not read. It is for what its block does.
+An `if` with no `else` gives `()`, and its block ends in `()`, since what the block gives is not read. It is for what its block does.
 
 ```
 use std.console (console, print)
@@ -105,7 +105,7 @@ fn main() <console> {
 }
 ```
 
-This prints `shown`. Its block may end with a value, as `if true { "a" }` does, and the value is dropped. Using the `if` where a value is needed is refused.
+This prints `shown`. Using the `if` where a value is needed is refused.
 
 ```
 use std.bits (i32)
@@ -116,6 +116,17 @@ fn describe(n: i32) -> str {
 ```
 
 This gives "this gives nothing, where text is needed".
+
+A block that ends in a value is refused too, as a value that nothing uses, whether it is a text or a `Result` that a failure would be dropped from.
+
+```
+fn log(v: bool, a: Option[str]) -> Result[str, str] {
+  if v { find("a", a) }
+  .ok("done")
+}
+```
+
+This gives "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away". `if v { _ = find("a", a) }` is allowed, and so is `if v { try find("a", a) }`.
 
 ## Changing a `var`
 
@@ -145,7 +156,7 @@ fn grade(n: i32) -> str {
 }
 ```
 
-`grade(10)` is `"fail"`, `grade(60)` is `"pass"`, and `grade(90)` is `"distinction"`. As for a plain `if`, every block gives the same type, or for whole numbers the smallest range that holds them all, and a chain with no last `else` gives `()`.
+`grade(10)` is `"fail"`, `grade(60)` is `"pass"`, and `grade(90)` is `"distinction"`. As for a plain `if`, every block gives the same type, or for whole numbers the smallest range that holds them all, and a chain with no last `else` gives `()`, and so each of its blocks ends in `()`.
 
 The `else` is written on the line where the block before it ends. On a line of its own it is refused: "expected a statement, found `else`".
 

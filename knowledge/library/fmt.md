@@ -23,10 +23,8 @@ Both allocate, as the text is new memory. `width` and `upper` have defaults, so 
 ```
 use std.fmt (hex)
 
-fn demo() <alloc> {
-  hex(255)
-  hex(233, width: 4)
-  hex(255, upper: false)
+fn demo() -> (str, str, str) <alloc> {
+  (hex(255), hex(233, width: 4), hex(255, upper: false))
 }
 ```
 
@@ -39,9 +37,8 @@ fn demo() <alloc> {
 ```
 use std.fmt (binary)
 
-fn demo() <alloc> {
-  binary(5)
-  binary(5, width: 8)
+fn demo() -> (str, str) <alloc> {
+  (binary(5), binary(5, width: 8))
 }
 ```
 

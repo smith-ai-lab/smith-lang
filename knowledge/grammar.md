@@ -18,9 +18,9 @@ This grammar is the single source of truth for syntax. It is a first draft, and 
 - Source text is UTF-8. Spaces and tabs separate tokens, and a line break is a line feed. A carriage return is an error anywhere in a file, inside a string or a comment too. Any other character that belongs to no token, string, or comment is an error.
 - A newline ends a statement, except inside `( )` or `[ ]`, after an operator or comma, or before `|>`, `requires`, `ensures`, `decreases`, `invariant`, and the `{` that opens a function's body, or that opens an `impl`'s after a `requires`, or a `loop`'s after an `invariant`. A block inside `( )` or `[ ]` separates its own statements by newlines as usual.
 - Commas appear only inside `( )` and `[ ]`, in a list of effects in `< >`, and between the indices of a `for`.
-- An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword. The letters are `a` to `z` and `A` to `Z`.
+- An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword, and is not `_` alone, which is a token of its own: the place of a pipeline's value, and the pattern that throws a value away. The letters are `a` to `z` and `A` to `Z`.
 - The keywords are `and`, `as`, `break`, `decreases`, `derive`, `effect`, `effects`, `else`, `ensures`, `enum`, `fn`, `for`, `foreign`, `if`, `impl`, `in`, `invariant`, `loop`, `match`, `not`, `or`, `out`, `pub`, `requires`, `return`, `struct`, `take`, `trait`, `try`, `use`, `var`, `with`, and `without`. The word `type` is a keyword only where an item starts and a name follows it, so it is an identifier anywhere else, as in a parameter named `type`.
-- A comment starts with `//`, stands on its own line, and attaches to the definition, parameter, field, case, or statement that follows it.
+- A comment starts with `//`, stands on its own line, and attaches to the definition, parameter, field, case, `requires`, or statement that follows it.
 - A whole number is written in decimal, as `1000`, in hexadecimal after `0x`, as `0xff`, or in binary after `0b`, as `0b1010`. A float has a digit on both sides of its point, as `2.5`, and may end with an exponent, as `2.5e3`, and a decimal number with an exponent alone is a float too, as `1e-5`. An `_` may stand between two digits, as in `1_000_000`. There is no octal form and no suffix that names a type.
 - A whole number is also written as one character between single quotes, as `'a'`, and it is that character's code. The character is any but `'`, `\`, and a line break, or one of the escapes `\'`, `\\`, `\n`, and `\t`.
 - A `-` written where a value may begin, directly before a number, is part of the literal, so `-128` is one literal. After a value, `-` is subtraction.
@@ -69,7 +69,7 @@ generic    = [ "out" ] IDENT [ ":" type ] [ "=" type ] ;
 params     = param { "," param } [ "," ] ;
 param      = ( IDENT | tuple_pat ) ":" [ "take" ] type [ "=" expr ] ;
 tuple_pat  = "(" bind_pat { "," bind_pat } ")" ;
-bind_pat   = IDENT | "var" IDENT | tuple_pat ;
+bind_pat   = IDENT | "_" | "var" IDENT | tuple_pat ;
 effects    = "<" IDENT { "," IDENT } [ "," ] ">" ;
 contract   = ( "requires" | "ensures" ) expr | "decreases" expr { "," expr } ;
 

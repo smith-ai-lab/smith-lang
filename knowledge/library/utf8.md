@@ -21,10 +21,8 @@ fn encode(code: u32) -> Option[str] <alloc>
 ```
 use std.utf8 (decode)
 
-fn demo() {
-  decode("abc", 1)
-  decode("é", 0)
-  decode("a€", 1)
+fn demo() -> (Option[(u32, Nat)], Option[(u32, Nat)], Option[(u32, Nat)]) {
+  (decode("abc", 1), decode("é", 0), decode("a€", 1))
 }
 ```
 
@@ -43,10 +41,8 @@ fn demo() {
 ```
 use std.utf8 (encode)
 
-fn demo() <alloc> {
-  encode(97)
-  encode(233)
-  encode(55296)
+fn demo() -> (Option[str], Option[str], Option[str]) <alloc> {
+  (encode(97), encode(233), encode(55296))
 }
 ```
 

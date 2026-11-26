@@ -15,8 +15,7 @@ fn write_bytes(buf: Ptr[Byte], len: usize) -> isize <foreign> {
 }
 
 fn announce(buf: Ptr[Byte], len: usize) <foreign> {
-  write_bytes(buf, len)
-  ()
+  _ = write_bytes(buf, len)
 }
 ```
 

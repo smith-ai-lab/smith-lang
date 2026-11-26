@@ -101,7 +101,7 @@ fn report(a: Option[str]) -> str {
 }
 ```
 
-A statement that gives a `Result` and does nothing with it is an error, so a failure is never dropped by leaving `try` out.
+A statement that gives a `Result` and does nothing with it is an error, as every [value that nothing uses](bindings.md#a-value-that-nothing-uses) is, so a failure is never dropped by leaving `try` out.
 
 ```
 fn check(a: Option[str]) -> Result[str, str] {
@@ -110,7 +110,7 @@ fn check(a: Option[str]) -> Result[str, str] {
 }
 ```
 
-This is refused: "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, or match on it".
+This is refused: "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away". A block that ends in a `Result`, as the block of an `if` with no `else` or of a `match` written as a statement does, is refused in the same way.
 
 ## What try means
 

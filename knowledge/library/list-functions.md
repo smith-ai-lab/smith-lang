@@ -32,10 +32,8 @@ fn index_of[T: Eq](xs: List[T], x: T) -> Option[Nat]
 ```
 use std.list (contains, index_of)
 
-fn demo() {
-  contains([3, 5, 8], 5)
-  index_of([3, 5, 8, 5], 5)
-  index_of("a=b", '=')
+fn demo() -> (bool, Option[Nat], Option[Nat]) {
+  (contains([3, 5, 8], 5), index_of([3, 5, 8, 5], 5), index_of("a=b", '='))
 }
 ```
 
@@ -54,10 +52,8 @@ fn ends_with[T: Eq](xs: List[T], suffix: List[T]) -> bool
 ```
 use std.list (ends_with, find, starts_with)
 
-fn demo() {
-  find("let x = 1", "x =")
-  starts_with([1, 2, 3], [1, 2])
-  ends_with("main.smith", ".smith")
+fn demo() -> (Option[Nat], bool, bool) {
+  (find("let x = 1", "x ="), starts_with([1, 2, 3], [1, 2]), ends_with("main.smith", ".smith"))
 }
 ```
 
@@ -83,9 +79,8 @@ fn append[T: Copy](a: take List[T], b: List[T]) -> List[T] <alloc>
 ```
 use std.list (append)
 
-fn demo() <alloc> {
-  append([1, 2], [3])
-  append([], [3])
+fn demo() -> (List[Nat], List[Nat]) <alloc> {
+  (append([1, 2], [3]), append([], [3]))
 }
 ```
 
