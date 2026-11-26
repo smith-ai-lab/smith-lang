@@ -283,8 +283,15 @@ fn window_lines(sizes: &[usize]) -> String {
     lines.push_str("    match head(\"DIR/a\") {\n      .ok(h) { print(\"head {n} {h.size}\") }\n      .err(e) { print(\"head {kind(e)}\") }\n    }\n  }\n");
     for n in sizes {
         for (from, to) in windows(*n) {
+            // Nothing of an empty file is checked, and the comparison would be
+            // one that no number can change.
+            let check = if *n == 0 {
+                String::new()
+            } else {
+                format!("        if {from} + k < {n} {{\n          if w[k] != byte_at({from} + k) {{ same = false }}\n        }}\n")
+            };
             lines.push_str(&format!(
-                "  match write_all(\"DIR/w{n}\", content({n})) {{\n    .ok(_) {{ }}\n    .err(e) {{ print(\"write {{kind(e)}}\") }}\n  }}\n  match window(\"DIR/w{n}\", {from}, {to}) {{\n    .ok(w) {{\n      var same = true\n      loop k in 0..w.size {{\n        if {from} + k < {n} {{\n          if w[k] != byte_at({from} + k) {{ same = false }}\n        }}\n      }}\n      print(\"window {n} {from} {to} {{w.size}} {{same}}\")\n    }}\n    .err(e) {{ print(\"window {{kind(e)}}\") }}\n  }}\n"
+                "  match write_all(\"DIR/w{n}\", content({n})) {{\n    .ok(_) {{ }}\n    .err(e) {{ print(\"write {{kind(e)}}\") }}\n  }}\n  match window(\"DIR/w{n}\", {from}, {to}) {{\n    .ok(w) {{\n      var same = true\n      loop k in 0..w.size {{\n{check}      }}\n      print(\"window {n} {from} {to} {{w.size}} {{same}}\")\n    }}\n    .err(e) {{ print(\"window {{kind(e)}}\") }}\n  }}\n"
             ));
         }
     }

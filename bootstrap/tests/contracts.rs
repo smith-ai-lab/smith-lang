@@ -89,9 +89,26 @@ pub fn statement(g: &mut Gen, ty: Int, x: &str, depth: usize) -> Statement {
             }
         };
     }
-    let at = near(g, ty);
+    let mut at = near(g, ty);
     let op = *g.pick(&COMPARISONS);
-    if g.one_in(2) {
+    let variable_first = g.one_in(2);
+    // The compiler refuses a comparison that the type decides, as one with
+    // the least number of the type that nothing is below, so the number is
+    // moved in from the limit it is at.
+    let mirrored = match op {
+        "<" => ">",
+        "<=" => ">=",
+        ">" => "<",
+        ">=" => "<=",
+        other => other,
+    };
+    let as_written = if variable_first { op } else { mirrored };
+    let decided = (at == ty.min() && matches!(as_written, ">=" | "<"))
+        || (at == ty.max() && matches!(as_written, "<=" | ">"));
+    if decided {
+        at = if at == ty.min() { at + 1 } else { at - 1 };
+    }
+    if variable_first {
         (
             format!("{x} {op} {at}"),
             Box::new(move |v| compare(op, v, at)),
@@ -271,9 +288,20 @@ fn inside(g: &mut Gen) -> Inside {
     } else {
         format!("not (i > {hi})")
     };
+    // A side that the type keeps already is not said.
+    let lower_line = if lo > ty.min() {
+        format!("  requires {lo} <= i\n")
+    } else {
+        String::new()
+    };
+    let upper_line = if hi < ty.max() {
+        format!("  requires {upper}\n")
+    } else {
+        String::new()
+    };
     Inside {
         source: with_header(format!(
-            "fn f(i: {t}) -> {t}\n  requires {lo} <= i\n  requires {upper}\n{{\n  {written}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({lo})}}\")\n}}\n"
+            "fn f(i: {t}) -> {t}\n{lower_line}{upper_line}{{\n  {written}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({lo})}}\")\n}}\n"
         )),
         fits,
         written,
@@ -312,7 +340,7 @@ fn gives(g: &mut Gen) -> Gives {
     let t = ty.name;
     let top = ty.max() - 3;
     // The branch is on a comparison of the parameter, whichever way it goes.
-    let split = near(g, ty).min(top);
+    let split = near(g, ty).min(top).max(ty.min() + 1);
     let mut holds = true;
     let mut lines = String::new();
     for _ in 0..1 + g.below(3) {
@@ -439,11 +467,11 @@ fn guarded(g: &mut Gen) -> (String, String) {
     let at = near(g, ty);
     let (requires, ensures) = match g.below(3) {
         0 => (
-            format!("  requires i >= {}\n", ty.min()),
+            "  requires i >= i\n".to_string(),
             "  ensures r >= i\n".to_string(),
         ),
         1 => (
-            format!("  requires i <= {} and i >= {}\n", ty.max(), ty.min()),
+            "  requires i <= i and i >= i\n".to_string(),
             "  ensures r >= i and r <= i + 1\n".to_string(),
         ),
         _ => (

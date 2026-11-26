@@ -271,6 +271,11 @@ fn boxed(g: &mut Gen) -> Boxed {
             continue;
         }
         for (upper, at) in [(false, lo), (true, hi)] {
+            // A bound that the type already keeps says nothing, and a
+            // comparison that says nothing is refused.
+            if (upper && at >= ty.max()) || (!upper && at <= ty.min()) {
+                continue;
+            }
             let (h, b) = bound(g, name, upper, at, ty);
             held.push(h);
             broken.push(b);
@@ -278,6 +283,7 @@ fn boxed(g: &mut Gen) -> Boxed {
     }
     let t = ty.name;
     let body = match g.below(3) {
+        _ if held.is_empty() => format!("  {operation}\n"),
         0 => format!(
             "  if {} {{\n    {operation}\n  }} else {{\n    0\n  }}\n",
             held.join(" and ")
@@ -558,8 +564,14 @@ fn each_operation_of_an_expression_is_proven_by_itself() {
 /// range is not one that a type holds, as a product of two numbers of 64 bits.
 fn a_product_of_two_values_that_are_not_constants_is_refused() {
     for ty in INTS.iter().filter(|t| t.bits == 64) {
+        // Only a type with numbers below 0 has a lower bound to say.
+        let (low_x, low_y) = if ty.signed {
+            ("x >= 0 and ", "y >= 0 and ")
+        } else {
+            ("", "")
+        };
         let source = with_header(format!(
-            "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 0 and x <= 1 and y >= 0 and y <= 1 {{\n    x * y\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
+            "fn f(x: {0}, y: {0}) -> {0} {{\n  if {low_x}x <= 1 and {low_y}y <= 1 {{\n    x * y\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
             ty.name
         ));
         let errors = check(source.as_bytes()).expect_err("a product of two unknowns");
@@ -589,10 +601,11 @@ fn size(program: &scalar::Program) -> (usize, usize, usize) {
 /// the result.
 fn an_accepted_operation_is_the_one_instruction_and_tests_nothing() {
     for ty in INTS.iter().filter(|t| t.bits == 64) {
+        let low_y = if ty.signed { "y >= 0 and " } else { "" };
         for op in OPS {
             let lowered = |operation: &str| {
                 let source = with_header(format!(
-                    "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 1 and x <= 2 and y >= 0 and y <= 1 {{\n    {operation}\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(2, 1)}}\")\n}}\n",
+                    "fn f(x: {0}, y: {0}) -> {0} {{\n  if x >= 1 and x <= 2 and {low_y}y <= 1 {{\n    {operation}\n  }} else {{\n    0\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(2, 1)}}\")\n}}\n",
                     ty.name
                 ));
                 lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"))

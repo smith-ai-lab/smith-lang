@@ -241,6 +241,86 @@ impl Int {
         other.holds_in(self)
     }
 
+    /// The range as `a..b`, which is how it is said to be a range.
+    fn range(self) -> String {
+        match self.above {
+            0 => format!("{}..{}", self.min, self.max + 1),
+            _ => self.name(),
+        }
+    }
+
+    /// How a number `self`, that is one number, stands to the range `other`.
+    fn stands(self, other: Int, equal: bool) -> &'static str {
+        let (n, low, high) = (self.bottom(), other.bottom(), other.top());
+        if other.bottom() == other.top() && n == low {
+            "is the one number in it"
+        } else if equal {
+            "is not in it"
+        } else if high.less(n) {
+            "is above every number in it"
+        } else if n.less(low) {
+            "is below every number in it"
+        } else if n == high {
+            "is at least every number in it"
+        } else if n == low {
+            "is at most every number in it"
+        } else {
+            "is not in it"
+        }
+    }
+
+    /// What `op`, one of `==`, `!=`, `<`, `<=`, `>`, and `>=`, answers for
+    /// every pair of a number of the range and a number of `other`, when it
+    /// is the same for them all.
+    pub(super) fn decides(self, op: &str, other: Int) -> Option<bool> {
+        let (a, b) = ((self.bottom(), self.top()), (other.bottom(), other.top()));
+        if a.1.less(a.0) || b.1.less(b.0) {
+            return None;
+        }
+        // `x` is below `y`, and `x` is not above `y`, for the edges given.
+        let below = |x: Edge, y: Edge| x.less(y);
+        let within = |x: Edge, y: Edge| !y.less(x);
+        let (a_low, a_high, b_low, b_high) = (a.0, a.1, b.0, b.1);
+        match op {
+            "==" | "!=" => {
+                let answer = if below(a_high, b_low) || below(b_high, a_low) {
+                    false
+                } else if a_low == a_high && b_low == b_high && a_low == b_low {
+                    true
+                } else {
+                    return None;
+                };
+                Some(answer == (op == "=="))
+            }
+            "<" | ">" | "<=" | ">=" => {
+                let (low, high, from, to) = if matches!(op, "<" | "<=") {
+                    (a_low, a_high, b_low, b_high)
+                } else {
+                    (b_low, b_high, a_low, a_high)
+                };
+                let strict = matches!(op, "<" | ">");
+                let always = if strict {
+                    below(high, from)
+                } else {
+                    within(high, from)
+                };
+                let never = if strict {
+                    within(to, low)
+                } else {
+                    below(to, low)
+                };
+                if always {
+                    Some(true)
+                } else if never {
+                    Some(false)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// The smallest range that holds every number of both, if a type holds it.
     pub(super) fn hull(self, other: Int) -> Option<Int> {
         let (low, high) = (
@@ -702,6 +782,58 @@ pub(super) fn narrowing(defs: &Defs, call: &Call) -> Option<Narrowing> {
 }
 
 impl<'a> Checker<'a> {
+    /// Refuses a comparison of two whole numbers that the two ranges decide,
+    /// whatever the values are, as a `narrow` that is needless is.
+    pub(super) fn refuse_decided_comparison(&mut self, expr: &Expr) {
+        let Some((call, op)) = comparison_of(expr) else {
+            return;
+        };
+        if matches!(expr, Expr::Call(_)) && self.negated.contains(&addr(expr)) {
+            return;
+        }
+        let side = |this: &Self, i: usize| match &call.args[i].value {
+            value @ Expr::Number { .. } => literal_range(value),
+            value => match this.types.get(&addr(value)) {
+                Some(Ty::Int(int)) => Some(*int),
+                _ => None,
+            },
+        };
+        let (Some(a), Some(b)) = (side(self, 0), side(self, 1)) else {
+            return;
+        };
+        let Some(answer) = a.decides(op, b) else {
+            return;
+        };
+        let equal = matches!(op, "==" | "!=");
+        let literal = |i: usize| matches!(call.args[i].value, Expr::Number { .. });
+        let words = |i: usize, int: Int| match &call.args[i].value {
+            Expr::Name { name, .. } => format!("`{name}` is a `{}`", int.range()),
+            _ => format!("the {} side is a `{}`", ["left", "right"][i], int.range()),
+        };
+        let reason = match (literal(0), literal(1)) {
+            (false, true) => format!(
+                "{} and `{}` {}",
+                words(0, a),
+                written_expr(&call.args[1].value),
+                b.stands(a, equal)
+            ),
+            (true, false) => format!(
+                "{} and `{}` {}",
+                words(1, b),
+                written_expr(&call.args[0].value),
+                a.stands(b, equal)
+            ),
+            _ => format!("{} and {}", words(0, a), words(1, b)),
+        };
+        self.errors.push(
+            Error::new(
+                expr.pos(),
+                format!("this comparison is always `{answer}`, as {reason}"),
+            )
+            .with_fix("delete the comparison"),
+        );
+    }
+
     /// Checks a whole number literal bound to `name` with no type written.
     /// While the uses are looked at, it is an undecided number. Once they
     /// have decided its type, it is that type, and the literal must fit.
@@ -1785,4 +1917,67 @@ impl<'a> Checker<'a> {
             _ => "a whole number",
         }
     }
+}
+
+/// The call that a comparison is, with the operator written, if the
+/// expression is one.
+fn comparison_of(expr: &Expr) -> Option<(&Call, &'static str)> {
+    let is = |c: &Call, trait_name: &str, name: &str| {
+        c.args.len() == 2
+            && c.callee == name
+            && c.qualifier.as_ref().is_some_and(|(q, _)| q == trait_name)
+    };
+    match expr {
+        Expr::Call(c) if is(c, "Eq", "eq") => Some((c, "==")),
+        Expr::Match(m) => match (m.form, &m.of) {
+            (Form::Not, Expr::Call(c)) if is(c, "Eq", "eq") => Some((c, "!=")),
+            (Form::Match, Expr::Call(c)) if is(c, "Ord", "compare") => {
+                let holds = |case: &str| {
+                    m.arms.iter().any(|a| {
+                        matches!(&a.pattern, Pattern::Case { name, .. } if name == case)
+                            && matches!(a.body.as_slice(),
+                                [Stmt::Expr(Expr::Name { name, .. })] if name == "true")
+                    })
+                };
+                let op = match (holds("less"), holds("equal"), holds("greater")) {
+                    (true, false, false) => "<",
+                    (true, true, false) => "<=",
+                    (false, false, true) => ">",
+                    (false, true, true) => ">=",
+                    _ => return None,
+                };
+                Some((c, op))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// What a whole number written in a comparison is checked as: its own range
+/// where the other side cannot hold it, so that the comparison is refused for
+/// what it is and not for the number.
+pub(super) fn own_range(value: &Expr, want: Want, comparing: bool) -> Want {
+    let (true, Expr::Number { .. }, Want::Ty(Ty::Int(held))) = (comparing, value, &want) else {
+        return want;
+    };
+    match literal_range(value) {
+        Some(own) if !held.holds(own) => Want::Ty(Ty::Int(own)),
+        _ => want,
+    }
+}
+
+/// The range that holds a whole number written out alone.
+fn literal_range(value: &Expr) -> Option<Int> {
+    let Expr::Number {
+        magnitude,
+        negative,
+        ..
+    } = value
+    else {
+        return None;
+    };
+    let n = i128::try_from(*magnitude).ok()?;
+    let n = if *negative { -n } else { n };
+    Int::between(n, n)
 }

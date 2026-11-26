@@ -12,6 +12,7 @@ built:
   - "not a whole number as the range that holds it alone where its uses decide a type that holds it, or where it is written in place"
   - "a float written out, with a point or an exponent, with a `-` before it, which is the `f32` or `f64` its use decides, an `f64` when nothing does, rounded once to the nearest, ties to even, and refused where it is too large for its type; not a whole number where a float is expected, and not an array of floats written in brackets with no type to say what it is"
   - "an array of nothing, `[]`, given to a name whose element type a later use in the same body settles, as [Inference](inference.md#a-list-or-an-option-that-a-later-use-settles) says"
+  - "a comparison of two whole numbers that the two ranges decide, whatever the values are, which is refused in a body, a `requires`, an `ensures`, and the statement of a proof, with the fix to delete it, and a comparison that only a fact decides is not"
 ---
 
 # Literals
@@ -171,7 +172,7 @@ fn main() <console, alloc> {
 }
 ```
 
-This is refused: "this comparison is always `false`, as `x` is a `0..256` and `300` is not in it", with the fix "delete the comparison". `x < 300` and `x >= 0` are refused in the same way, as always `true`. The compiler does not build this yet, so the words are not quoted.
+This is refused: "this comparison is always `false`, as `x` is a `0..256` and `300` is not in it", with the fix "delete the comparison". `x < 300` and `x >= 0` are refused in the same way, as always `true`, and so is a comparison of two names whose ranges decide it. A comparison in a `requires`, an `ensures`, or a proof is under the same rule, and one that only a fact decides is not, as the two ranges do not say it: with `requires x < 10`, the `x < 20` of the body is true, and is not refused.
 
 ## A literal beside a value of a program's own type
 

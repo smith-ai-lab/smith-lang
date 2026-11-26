@@ -64,7 +64,7 @@ use effects_with_and_try::{
 use lists_and_text::{as_read, is_freeze, is_push, is_utf8};
 use names::{Naming, Resolution, own_final, renamed_tokens};
 use numbers_and_operators::{
-    Int, Narrowing, Numbers, flexible, is_float_call, literal_blocks, narrowing,
+    Int, Narrowing, Numbers, flexible, is_float_call, literal_blocks, narrowing, own_range,
 };
 use traits::{
     Found, ImplInfo, PRELUDE_TRAITS, Requirement, TRAITS_NOT_BUILT, bounds_named, impl_info,
@@ -7219,6 +7219,7 @@ impl<'a> Checker<'a> {
             types: HashMap::new(),
             drops: ownership::Drops::default(),
             widened: HashMap::new(),
+            negated: Set::default(),
             infer_on: false,
             solve: None,
             solved: infer::Solved::default(),
@@ -7295,6 +7296,9 @@ struct Checker<'a> {
     /// The expressions that give a range where a wider one is needed, by
     /// their addresses, with the wider range each is taken as.
     widened: HashMap<usize, Int>,
+    /// The `==` calls that a `!=` negates, by their addresses, which the
+    /// `!=` reports and not the call.
+    negated: Set<usize>,
     /// Whether the body being checked has a `var` with no type written,
     /// whose range its values give it.
     infer_on: bool,
@@ -8989,6 +8993,7 @@ impl<'a> Checker<'a> {
         if let Expr::Call(call) = expr {
             self.types.insert(addr(call), ty.clone());
         }
+        self.refuse_decided_comparison(expr);
         if body.tails.contains(&addr(expr)) {
             self.ensure(body, expr);
         }
@@ -9790,6 +9795,9 @@ impl<'a> Checker<'a> {
     /// which gives a `bool`.
     fn logic(&mut self, body: &mut Body<'a>, m: &Match) -> Ty {
         let truth = self.defs.bool_ty();
+        if matches!(m.form, Form::Not) {
+            self.negated.insert(addr(&m.of));
+        }
         self.condition(body, &m.of);
         let known = body.facts.mark();
         let blocks: Vec<&[Stmt]> = m.arms.iter().map(|a| a.body.as_slice()).collect();

@@ -464,6 +464,26 @@ fn known(r: &Range) -> Option<i128> {
     }
 }
 
+/// A `requires` of the facts that bound `x` to `least..=most` in `ty`, with
+/// no fact for a side that the type already keeps, as a comparison that says
+/// nothing is refused. It is empty when both sides are kept.
+fn bounded(x: &str, ty: Int, least: i128, most: i128) -> Option<String> {
+    let low = (least > ty.min()).then(|| format!("{x} >= {least}"));
+    let high = (most < ty.max()).then(|| format!("{x} <= {most}"));
+    let facts: Vec<String> = [low, high].into_iter().flatten().collect();
+    (!facts.is_empty()).then(|| facts.join(" and "))
+}
+
+/// The lines of a `requires` that holds every fact given.
+fn requiring(facts: &[Option<String>]) -> String {
+    let facts: Vec<&str> = facts.iter().flatten().map(String::as_str).collect();
+    if facts.is_empty() {
+        String::new()
+    } else {
+        format!("  requires {}\n", facts.join(" and "))
+    }
+}
+
 fn program(r: &Range) -> String {
     let t = r.ty.name;
     let function = match r.op {
@@ -477,19 +497,22 @@ fn program(r: &Range) -> String {
     let (params, requires, second) = if shift || r.literal {
         (
             format!("x: {t}"),
-            format!("x >= {} and x <= {}", r.least, r.most),
+            requiring(&[bounded("x", r.ty, r.least, r.most)]),
             r.other.to_string(),
         )
     } else {
         (
             format!("x: {t}, z: {t}"),
-            format!("x >= {0} and x <= {1} and z >= {0} and z <= {2}", r.least, r.most, r.other),
+            requiring(&[
+                bounded("x", r.ty, r.least, r.most),
+                bounded("z", r.ty, r.least, r.other),
+            ]),
             "z".to_string(),
         )
     };
+    let needs = requiring(&[(r.needs < r.ty.max()).then(|| format!("y <= {}", r.needs))]);
     with_header(format!(
-        "fn g(y: {t}) -> {t}\n  requires y <= {needs}\n{{\n  y\n}}\n\nfn f({params}) -> {t}\n  requires {requires}\n{{\n  g({function}(x, {second}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n",
-        needs = r.needs,
+        "fn g(y: {t}) -> {t}\n{needs}{{\n  y\n}}\n\nfn f({params}) -> {t}\n{requires}{{\n  g({function}(x, {second}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({args})}}\")\n}}\n",
         args = if params.contains("z") {
             format!("{}, {}", r.least, r.least)
         } else {
@@ -828,11 +851,11 @@ fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small() {
 
 fn holds_least(l: &Least) {
     let t = l.ty.name;
+    let needs = requiring(&[(l.needs > l.ty.min()).then(|| format!("y >= {}", l.needs))]);
+    let requires = requiring(&[bounded("x", l.ty, l.least, l.most)]);
     let source = with_header(format!(
-        "fn g(y: {t}) -> {t}\n  requires y >= {needs}\n{{\n  y\n}}\n\nfn f(x: {t}) -> {t}\n  requires x >= {least} and x <= {most}\n{{\n  g(shift_right(x, {by}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({least})}}\")\n}}\n",
-        needs = l.needs,
+        "fn g(y: {t}) -> {t}\n{needs}{{\n  y\n}}\n\nfn f(x: {t}) -> {t}\n{requires}{{\n  g(shift_right(x, {by}))\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f({least})}}\")\n}}\n",
         least = l.least,
-        most = l.most,
         by = l.by,
     ));
     let compiled = check(source.as_bytes()).is_ok();

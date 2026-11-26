@@ -177,9 +177,22 @@ fn an_operator_between_two_types_compiles_exactly_when_they_are_one_type_for_nat
                     "-" => a.min < 0,
                     _ => false,
                 };
+                // The least of a type that has nothing below 0 is not said.
+                let mut facts = Vec::new();
+                if a.min < 0 {
+                    facts.push("0 <= x");
+                }
+                facts.push("x < 9");
+                if b.min < 0 {
+                    facts.push("0 <= y");
+                }
+                facts.push("y < 9");
                 with_header(format!(
-                    "fn f(x: {}, y: {}) -> {}\n  requires 0 <= x and x < 9 and 0 <= y and y < 9\n{{\n  x {op} y\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
-                    a.name, b.name, a.name
+                    "fn f(x: {}, y: {}) -> {}\n  requires {}\n{{\n  x {op} y\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1, 1)}}\")\n}}\n",
+                    a.name,
+                    b.name,
+                    a.name,
+                    facts.join(" and ")
                 ))
             } else {
                 compared = true;

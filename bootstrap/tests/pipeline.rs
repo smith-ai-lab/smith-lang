@@ -223,14 +223,16 @@ fn a_pipeline_binds_more_loosely_than_every_operator_and_groups_from_the_left() 
              fn g(a: bool, b: Byte) -> Byte {{ if a {{ b }} else {{ 0 }} }}\n\
              fn h(a: bool) -> Byte {{ if a {{ 1 }} else {{ 2 }} }}\n\
              fn n(a: Byte) -> bool {{ a < 3 }}\n\
-             fn main() <console, alloc> {{\n  print(\"{{{expr}}}\")\n}}\n"
+             fn main() <console, alloc> {{\n  \
+             a: Byte = 1\n  b: Byte = 2\n  c: Byte = 3\n  d: Byte = 4\n  \
+             print(\"{{{expr}}}\")\n}}\n"
         )
     };
     for (piped, written) in [
-        ("1 < 2 |> g(7)", "g(1 < 2, 7)"),
-        ("1 < 2 and 2 < 3 |> g(7)", "g(1 < 2 and 2 < 3, 7)"),
-        ("1 < 2 or 4 < 3 |> g(7)", "g(1 < 2 or 4 < 3, 7)"),
-        ("not 1 < 2 |> g(7)", "g(not 1 < 2, 7)"),
+        ("a < b |> g(7)", "g(a < b, 7)"),
+        ("a < b and b < c |> g(7)", "g(a < b and b < c, 7)"),
+        ("a < b or d < c |> g(7)", "g(a < b or d < c, 7)"),
+        ("not a < b |> g(7)", "g(not a < b, 7)"),
         ("1 |> n() |> h()", "h(n(1))"),
         ("1 |> n() |> g(5)", "g(n(1), 5)"),
     ] {

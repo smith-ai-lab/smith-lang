@@ -719,6 +719,17 @@ fn sum_to(n: u64) -> u64 {
 }
 
 impl Item {
+    /// The condition, in the round `r`, under which a hold that waits on one
+    /// is joined: for the rounds of a run, never for a drop and always for a
+    /// join, said so that no number the type holds can change the answer.
+    fn when(&self) -> String {
+        match self.end {
+            End::Below(c) => format!("r < {c}"),
+            End::Join | End::Half => "r < 1000000".to_string(),
+            End::Drop => "r > 1000000".to_string(),
+        }
+    }
+
     /// The work of a child of the item, the `which`th, which gives a number of its own.
     fn work(&self, which: u64) -> String {
         format!("spawn {{ total(build({})) }}", self.size + which)
@@ -870,25 +881,17 @@ impl Item {
                 ends(add(&format!("join(h{id})")), String::new())
             ),
             Hold::Looped => {
-                let c = match self.end {
-                    End::Below(c) => c,
-                    End::Join | End::Half => u64::MAX,
-                    End::Drop => 0,
-                };
+                let when = self.when();
                 format!(
-                    "h{id} = {}\nloop i{id} in 0..3 {{\nif r < {c} {{\n{}\nbreak\n}} else {{ }}\n}}",
+                    "h{id} = {}\nloop i{id} in 0..3 {{\nif {when} {{\n{}\nbreak\n}} else {{ }}\n}}",
                     w(0),
                     add(&format!("join(h{id})"))
                 )
             }
             Hold::OverBreak => {
-                let c = match self.end {
-                    End::Below(c) => c,
-                    End::Join | End::Half => u64::MAX,
-                    End::Drop => 0,
-                };
+                let when = self.when();
                 format!(
-                    "t{id} = {}\nxs{id} = build(3)\nloop x{id} in xs{id} {{\nif r < {c} {{\n{}\nbreak\n}} else {{ }}\n}}",
+                    "t{id} = {}\nxs{id} = build(3)\nloop x{id} in xs{id} {{\nif {when} {{\n{}\nbreak\n}} else {{ }}\n}}",
                     w(0),
                     add(&format!("join(t{id})"))
                 )
