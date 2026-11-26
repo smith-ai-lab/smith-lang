@@ -20,7 +20,7 @@ fn who(token: str, key: Key) -> Result[Claims, JwtError] <time, alloc> {
 `who` gives `.ok` of the claims when the token was signed with the key, names that issuer and that audience, and is inside its time. It gives `.err` otherwise, and the error says which of these failed.
 
 ```
-fn verify(token: str, key: Key, issuer: str, audience: str) -> Result[Claims, JwtError] <time, alloc>
+fn verify(token: str, key: Key; issuer: str, audience: str) -> Result[Claims, JwtError] <time, alloc>
 
 struct Claims {
   subject: str

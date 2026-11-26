@@ -169,7 +169,7 @@ fn bearer[T](check: fn(token: str) -> Option[Caller], body: fn() -> T <identity>
 `routes` asks for each request and gives each response through the effect `http`, and does not know where they come from. What answers `http` is the deployment and not the program. A native executable, for every system Smith builds for, listens on a socket. In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) the operations of `http` are imports, which a host that is called for each request supplies. A test answers `http` with a handler of its own that gives the requests it wants, so a server is tested with no network. The source is the same for all of them, and what a deployment needs told, as the port a socket listens on, is said in `project.smith` and not in the program, as [Deployments](../language/deployments.md) says.
 
 ```
-fn listen[T](port: 1..65536, body: fn() -> T <http>) -> T <net, alloc, diverge>
+fn listen[T](body: fn() -> T <http>; port: 1..65536) -> T <net, alloc, diverge>
   requires Discard[T]
 ```
 

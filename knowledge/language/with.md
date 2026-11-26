@@ -145,7 +145,7 @@ An opener that lends its function, as `on_ok` does, is refused this block, as [A
 
 ## The last parameter
 
-`with` always fills a call's last parameter, so a final lambda parameter may come after parameters that have defaults, and a call can leave those out.
+`with` always fills the last parameter before the `;` of a call, so a final lambda parameter may come after parameters that have defaults, and a call can leave those out.
 
 ```
 fn repeat(times: str = "two", body: fn(str) -> str) -> str { body(times) }
@@ -156,7 +156,7 @@ fn run() -> str {
 }
 ```
 
-`run()` is `two`, since `repeat()` uses the default. Naming one of the arguments sets it, and `with x = repeat("three")` makes `run()` give `three`.
+`run()` is `two`, since `repeat()` uses the default. Giving the argument sets it, and `with x = repeat("three")` makes `run()` give `three`.
 
 ## What is refused
 

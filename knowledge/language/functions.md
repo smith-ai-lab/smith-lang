@@ -1,10 +1,11 @@
 ---
 type: specification
 title: Functions
-description: Typed parameters, a return type, a block whose last expression is its value, named arguments, defaults, and comments.
+description: Typed parameters, a return type, a block whose last expression is its value, parameters by position and by name, defaults, and comments.
 status: partial
 built:
   - "typed parameters and return types over `str`, `bool`, and the types a program defines, blocks, named arguments, defaults, a final lambda parameter after them, a name for the result, `requires` and `ensures` over whole numbers, and `//` comments"
+  - "a list of parameters split by `;`, those before it given by position only and those after it by name only, with a call refused that gives either the other way, a parameter after it that has no default named at every call, and the last parameter before it as the one that a block after a call is for, as `p(class: \"note\") { ... }` is"
   - "the comment on a function, a parameter, a struct, a field, an enum, and a case, found from the lines of `//` directly above it, which a library asks for by the line the item starts on, and which a program that asks for none pays nothing for; a parameter, a field, or a case that does not start its own line has none of its own"
   - "a default for a parameter that takes a function, a lambda that uses no parameter and carries only the effects the type of the parameter lists, filled in where the call is written, so a call that leaves it out costs what the call that writes the lambda after it costs"
 ---
@@ -99,42 +100,14 @@ fn main() <console> {
 
 This prints `one`, `two`, and `one`.
 
-## Named arguments
+## Parameters by position and by name
 
-An argument may be named, as in `area(w: 2.0, h: 3.0)`. A call that names its arguments gives the same value as one that does not, and either way of writing it is allowed. Named arguments are written in any order, and are evaluated in the order they are written.
-
-```
-use std.console (console, print)
-
-fn main() <console> {
-  print(first(b: "y", a: "x"))
-}
-```
-
-This prints `x`.
-
-Arguments by position come first, in the order of the parameters. Once one argument is named, every argument after it is named too, as in `area(2.0, h: 3.0)`.
-
-- `first(b: "y", "x")` is refused: "an argument by position comes after a named one", with the fix "name it, or move it before the named arguments".
-- `first("x", width: "y")` is refused: "`first` has no parameter named `width`".
-- `first("x", a: "y")` is refused: "the `a` argument is given twice".
-
-## Defaults
-
-A parameter may have a default, written after its type with `=`. A call that leaves the argument out gets the default.
-
-```
-fn scale(x: f32, by: f32 = 2.0) -> f32 { x * by }
-```
-
-`scale(3.0)` is `6.0`, and `scale(3.0, 10.0)` and `scale(3.0, by: 10.0)` are both `30.0`.
-
-A call that names an argument may skip one before it. Here `m` is set, and `n` keeps its default.
+A list of parameters is split by `;`. What comes before it is given only by position, and what comes after it only by name. A list with no `;` is all by position.
 
 ```
 use std.console (console, print)
 
-fn show(label: str, n: str = "x", m: str = "y") <console> {
+fn show(label: str; n: str = "x", m: str = "y") <console> {
   print(label)
   print(n)
   print(m)
@@ -145,21 +118,65 @@ fn main() <console> {
 }
 ```
 
-This prints `a`, `x`, and `Z`. `show("a")` prints `a`, `x`, and `y`, and `show("a", "N")` prints `a`, `N`, and `y`.
+This prints `a`, `x`, and `Z`. `label` is given by position, and `n` and `m` by name, so `show("a")` prints `a`, `x`, and `y`, and `show("a", n: "N")` prints `a`, `N`, and `y`.
 
-Two rules keep defaults simple.
+Arguments by position come first, in the order of the parameters. Named arguments follow in any order, and are evaluated in the order they are written, so `show("a", m: "Z", n: "N")` works out `"Z"` before `"N"` and gives what `show("a", n: "N", m: "Z")` gives. A call may leave out any parameter after `;` that has a default.
 
-- Parameters with defaults come after those without. The one exception is a final lambda parameter, described under [`with`](with.md). `fn f(a: str = "p", b: str)` is refused: "`b` has no default, and comes after `a`, which has one", with the fix "move `b` before `a`, or give it a default".
+- `show(label: "a")` is refused: "`label` of `show` is given by position", with the fix "write `"a"` without its name, `label:`".
+- `show("a", "N")` is refused: "`n` of `show` is given by name", with the fix "write `show(n: "N")`".
+- `show(m: "Z", "a")` is refused: "an argument by position comes after a named one", with the fix "name it, or move it before the named arguments".
+- `show("a", width: "y")` is refused: "`show` has no parameter named `width`".
+- `show("a", n: "x", n: "y")` is refused: "the `n` argument is given twice".
+
+A parameter after `;` that has no default is named at every call.
+
+```
+fn pair(a: str; b: str) -> str { a }
+```
+
+`pair("x")` is refused: "`pair` needs `b`", and `pair("x", b: "y")` is built.
+
+`;` stands in a list of parameters, once, and nowhere else. A call, a function type, and a block of statements never hold one, so `show("a"; n: "x")` is refused: "expected `,` or `)`, found `;`". A struct is built with its fields named, as `Cursor(at: 4)`, and has no `;`. A function type, as `fn(Nat) -> Nat`, has no names, so its arguments are by position.
+
+The last parameter before `;` may take a function, and is then given as a block after the call, as [`with`](with.md) and [Lambdas](lambdas.md) describe. The parameters after `;` are written in the parentheses.
+
+```
+fn p(block: fn(); class: str = "", id: str = "") { ... }
+```
+
+`p(class: "note") { ... }` writes the block after the call, and `p("Hello") { ... }` is refused: "`class` of `p` is given by name", with the fix "write `p(class: "Hello")`".
+
+## Defaults
+
+A parameter may have a default, written after its type with `=`. A call that leaves the argument out gets the default.
+
+```
+fn scale(x: f32; by: f32 = 2.0) -> f32 { x * by }
+```
+
+`scale(3.0)` is `6.0`, and `scale(3.0, by: 10.0)` is `30.0`.
+
+A parameter before `;` may have a default too, and is then left out from the end, as the last of the parameters by position.
+
+```
+fn greet(name: str, greeting: str = "hello") -> str { "{greeting} {name}" }
+```
+
+`greet("Ada")` is `"hello Ada"`, and `greet("Ada", "hi")` is `"hi Ada"`.
+
+Three rules keep defaults simple.
+
+- Among the parameters by position, those with defaults come after those without. The one exception is a final parameter before `;` that takes a function, described under [`with`](with.md). `fn f(a: str = "p", b: str)` is refused: "`b` has no default, and comes after `a`, which has one", with the fix "move `b` before `a`, or give it a default". The parameters after `;` are given by name, so they stand in any order.
 - A default is a fixed value. It is an expression that uses no parameter, and it is worked out when the program is built, so it never depends on when or where the call happens. `fn tag(label: str, n: str = label)` is refused: "a default uses no parameter, and `label` is one".
 - A default carries no effect. A list that holds elements needs `alloc`, so `fn f(a: List[u8] = [1, 2])`, with a call of `f()` in `main`, is refused: "a default carries no effect, and a list that holds elements needs the `alloc` effect", at the `[`. So is a text that holds an expression, and so is a call of `push`. `[]` needs none, and is allowed.
 
 The default of a parameter that takes a function is a lambda. It uses no parameter, as any default, and it carries the effects that the type of the parameter lists and no other, since the function that is given it calls it under them.
 
 ```
-fn p(inside: str = "", class: str = "", body: fn() <markup> = { }) <markup> { ... }
+fn p(body: fn() <markup> = { }; inside: str = "", class: str = "") <markup> { ... }
 ```
 
-`p("x")` and `p() { ... }` both call it, and a call that leaves `body` out gets `{ }` where the call is written. A function that takes a function cannot be passed as a value yet, with a default or without one.
+`p(class: "x")` and `p() { ... }` both call it, and a call that leaves `body` out gets `{ }` where the call is written. A function that takes a function cannot be passed as a value yet, with a default or without one.
 
 The compiler fills in a missing argument where the call is written. The function always receives every argument, so a default costs nothing at run time.
 
@@ -213,8 +230,10 @@ fn first(
 | `fn f(a: T) { e }` | A function that gives nothing |
 | `fn f(a: T) -> V <console> { e }` | A function with an effect |
 | `f(x, y)` | A call with arguments by position |
-| `f(x, b: y)` and `f(b: y, a: x)` | A call with named arguments, after any by position |
-| `fn f(a: T, b: U = e) -> V { e }` | A function whose `b` defaults to `e` |
+| `fn f(a: T; b: U) -> V { e }` | A function whose `a` is given by position and `b` by name |
+| `f(x, b: y)` and `f(x, c: z, b: y)` | A call with arguments by name after those by position, in any order |
+| `fn f(a: T, b: U = e) -> V { e }` | A function whose `b` is given by position, and defaults to `e` |
+| `fn f(a: T; b: U = e) -> V { e }` | A function whose `b` is given by name, and defaults to `e` |
 | `// text` | A comment, on its own line |
 
 Next: [Bindings](bindings.md)

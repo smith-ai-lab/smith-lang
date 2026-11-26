@@ -59,10 +59,10 @@ enum Body {
   chunked
 }
 
-fn request_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[RequestHead] <alloc>
-fn response_head(bytes: Slice[Byte], limit: Nat = 16384) -> Read[ResponseHead] <alloc>
+fn request_head(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[RequestHead] <alloc>
+fn response_head(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[ResponseHead] <alloc>
 fn body_of(headers: List[(str, str)]) -> Result[Body, str]
-fn chunk(bytes: Slice[Byte], limit: Nat = 16384) -> Read[Slice[Byte]]
+fn chunk(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[Slice[Byte]]
 ```
 
 - `complete` holds the value and how many of the bytes it took, so the caller goes on from there. `incomplete` says the bytes so far are right and there are not enough of them. `refused` says the bytes are no message, with why, and more bytes will not make them one.

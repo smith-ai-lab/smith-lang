@@ -58,7 +58,7 @@ enum FsError {
 
 effect fs {
   fn open_file(path: str) -> Result[File, FsError]
-  fn create_file(path: str, executable: bool = false) -> Result[File, FsError]
+  fn create_file(path: str; executable: bool = false) -> Result[File, FsError]
   fn close_file(f: take File)
   fn size(f: File) -> Result[Nat, FsError]
   fn read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc>
