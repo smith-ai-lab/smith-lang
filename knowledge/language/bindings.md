@@ -153,11 +153,47 @@ fn mended(x: str) -> str {
 }
 ```
 
+## A value that nothing uses
+
+A statement that is not the last of its block has the value `()`, or it is refused. A call whose value is a `str`, a `Result`, or anything but `()`, written alone on a line, is a value that nothing uses.
+
+```
+use std.console (console, print)
+
+fn shout() -> str { "hey" }
+
+fn main() <console> {
+  shout()
+  print("done")
+}
+```
+
+This gives "this gives a `str`, which nothing uses", with the fix "bind it to a name, or write `_ =` before it to throw it away". An assignment, a `break`, `_ = e`, and a call of a function that gives nothing have the value `()`, so they stand alone as they are.
+
+`_ = e` throws a value away on purpose. `_` is no name: it defines nothing, and any number of them may stand in a block.
+
+```
+use std.console (console, print)
+
+fn shout() -> str { "hey" }
+
+fn main() <console> {
+  _ = shout()
+  _ = shout()
+  print("done")
+}
+```
+
+This prints `done`. A value that [must be taken exactly once](resources.md) cannot be thrown away, so `_ = e` of one is refused as any drop of it is.
+
+A block whose value is not read ends in `()`, so that what it gives is not thrown away by being last. The blocks of an [`if`](if.md#an-if-with-no-else) with no `else`, of a [`match`](match.md#a-match-as-a-value-and-as-a-statement) written as a statement, and of a `loop` are such blocks.
+
 ## The forms
 
 | Written | Is |
 | --- | --- |
 | `x = e` | A name for the value of `e`, which never changes |
 | `x: T = e` | The same, with its type stated |
+| `_ = e` | `e` is run and its value thrown away |
 
 Next: [Mutable locals](var.md)

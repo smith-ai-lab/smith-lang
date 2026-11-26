@@ -75,7 +75,7 @@ fn go(l: Light) -> str {
 }
 ```
 
-This gives "this is a number, where text is needed". Used as a statement, nothing its blocks give is read, so they need not agree.
+This gives "this is a number, where text is needed". Used as a statement, nothing its blocks give is read, so each block ends in `()`, and they agree in that.
 
 ```
 use std.console (console, print)
@@ -89,7 +89,20 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints `stop`.
+This prints `stop`. A block of a `match` written as a statement that ends in another value is refused, as a value that nothing uses.
+
+```
+fn log(l: Light, a: Option[str]) -> Result[str, str] {
+  match l {
+    .green { find("a", a) }
+    .yellow { }
+    .red { }
+  }
+  .ok("done")
+}
+```
+
+This gives "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away".
 
 ## Every case is covered
 
