@@ -748,7 +748,13 @@ impl<'a> Walk<'a> {
             };
             let (why, fix) = why_dropped(self.defs, self.scope, &h.ty, cause);
             let place = written(&(h.name.clone(), h.fields.clone()));
-            let message = format!("`{place}` is dropped here, as nothing takes it{why}");
+            // `_ =` is no name, so it says what it was written to do.
+            let message = if h.name == "_" && h.fields.is_empty() {
+                let ty = self.defs.text(&h.ty, self.scope);
+                format!("`_ =` throws this `{ty}` away{why}")
+            } else {
+                format!("`{place}` is dropped here, as nothing takes it{why}")
+            };
             if let Some(error) = self.error(h.pos, message) {
                 error.fix = Some(fix);
             }
