@@ -27,6 +27,10 @@ pub const ONCE: &[Test] = &[
         bytes_of_any_kind_are_read_as_a_frame_or_refused_and_never_end_the_program,
     ),
     (
+        "a_number_a_frame_has_no_size_for_is_refused_where_it_is_written_and_the_ends_of_its_range_are_taken",
+        a_number_a_frame_has_no_size_for_is_refused_where_it_is_written_and_the_ends_of_its_range_are_taken,
+    ),
+    (
         "the_frame_types_settings_and_error_codes_of_rfc_9113_are_read_and_written_as_the_numbers_it_gives",
         the_frame_types_settings_and_error_codes_of_rfc_9113_are_read_and_written_as_the_numbers_it_gives,
     ),
@@ -341,7 +345,8 @@ impl F {
                 format!("Frame.go_away(GoAway(last: {last}, code: {code}, debug: {}))", list(debug))
             }
             F::Window { stream, increment } => {
-                format!("Frame.window_update(Window(stream: {stream}, increment: {increment}))")
+                let target = if *stream == 0 { ".connection".to_string() } else { format!(".stream({stream})") };
+                format!("Frame.window_update(Window(target: {target}, increment: {increment}))")
             }
             F::Continuation { stream, end_headers, block } => format!(
                 "Frame.continuation(Continuation(stream: {stream}, end_headers: {end_headers}, block: {}))",
@@ -380,7 +385,7 @@ fn frame(g: &mut Gen) -> F {
         3 => F::Reset { stream: stream(g), code: *g.pick(&[0, 1, 8, 4294967295, 65536]) },
         4 => F::Settings(
             (0..g.below(4))
-                .map(|_| (*g.pick(&[1, 2, 3, 4, 5, 6, 65535, 7]), *g.pick(&[0, 1, 100, 65535, 4294967295])))
+                .map(|_| (*g.pick(&[0, 1, 2, 3, 4, 5, 6, 65535, 7]), *g.pick(&[0, 1, 100, 65535, 4294967295])))
                 .collect(),
         ),
         5 => F::SettingsAck,
@@ -393,16 +398,16 @@ fn frame(g: &mut Gen) -> F {
         },
         7 => F::Ping { ack: g.one_in(2), data: *g.pick(&[0, 1, 258, u64::MAX, 1 << 40]) },
         8 => F::GoAway { last: stream(g), code: *g.pick(&[0, 2, 4294967295]), debug: some_bytes(g, 10) },
-        9 => F::Window { stream: *g.pick(&[0, 1, 2147483647]), increment: *g.pick(&[0, 1, 65535, 2147483647]) },
+        9 => F::Window { stream: *g.pick(&[0, 1, 2147483647]), increment: *g.pick(&[1, 2, 65535, 2147483647]) },
         10 => F::Continuation { stream: stream(g), end_headers: g.one_in(2), block: some_bytes(g, 12) },
-        _ => F::Unknown(10 + g.below(246) as u8),
+        _ => F::Unknown(if g.one_in(4) { *g.pick(&[10, 255]) } else { 10 + g.below(246) as u8 }),
     }
 }
 
 /// The start of every program that reads frames: how a frame is printed.
 const FRAMES: &str = "use std.console (console, print)
 use std.http1 (Read)
-use std.http2 (Continuation, Data, Dependency, Frame, GoAway, Headers, Ping, Promise, Reset, Window, frame, write_frame)
+use std.http2 (Continuation, Data, Dependency, Frame, GoAway, Headers, Ping, Promise, Reset, Target, Window, frame, write_frame)
 use std.int (wrapping_add)
 use std.list (freeze)
 
@@ -448,7 +453,13 @@ fn describe(f: Frame) <console, alloc> {
       print(\"go_away {g.last} {g.code}\")
       bytes_of(g.debug)
     }
-    .window_update(w) { print(\"window {w.stream} {w.increment}\") }
+    .window_update(w) {
+      stream: Nat = match w.target {
+        .connection { 0 }
+        .stream(s) { s }
+      }
+      print(\"window {stream} {w.increment}\")
+    }
     .continuation(c) {
       print(\"continuation {c.stream} {c.end_headers}\")
       bytes_of(c.block)
@@ -579,7 +590,13 @@ fn faults(f: &F) -> Vec<(&'static str, Vec<u8>, usize)> {
         [be(length as u64, 3), bytes[3..9].to_vec(), p].concat()
     };
     match f {
-        F::Priority(_) | F::Reset { .. } | F::Ping { .. } | F::Window { .. } => {
+        F::Window { .. } => {
+            out.push(("shorter", resized(n - 1), 16384));
+            out.push(("longer", resized(n + 1), 16384));
+            out.push(("empty", resized(0), 16384));
+            out.push(("adding nothing", resized(n).iter().enumerate().map(|(i, b)| if i < 9 { *b } else { 0 }).collect(), 16384));
+        }
+        F::Priority(_) | F::Reset { .. } | F::Ping { .. } => {
             out.push(("shorter", resized(n - 1), 16384));
             out.push(("longer", resized(n + 1), 16384));
             out.push(("empty", resized(0), 16384));
@@ -676,6 +693,88 @@ fn bytes_of_any_kind_are_read_as_a_frame_or_refused_and_never_end_the_program() 
             for (line, b) in out.iter().filter(|l| l.starts_with("complete ")).zip(inputs.iter().filter(|b| b.len() >= 9)) {
                 let used: usize = line["complete ".len()..].parse().unwrap();
                 assert!(used >= 9 && used <= b.len() || used <= 9 + 16384, "{line} of {b:?}");
+            }
+        },
+    );
+}
+
+/// Each place in a frame that holds a number the wire gives a size to: how a frame
+/// that holds `{}` is written, and the least and the greatest number it may be.
+const PLACES: &[(&str, &str, u64, u64)] = &[
+    ("a setting's identifier", "Frame.settings([({}, 1)])", 0, 65535),
+    ("a setting's value", "Frame.settings([(1, {})])", 0, 4294967295),
+    ("the kind of an unknown frame", "Frame.unknown({})", 10, 255),
+    ("the stream of data", "Frame.data(Data(stream: {}, end_stream: false, padding: .none, data: []))", 1, 2147483647),
+    (
+        "the stream of headers",
+        "Frame.headers(Headers(stream: {}, end_stream: false, end_headers: true, padding: .none, priority: .none, block: []))",
+        1,
+        2147483647,
+    ),
+    ("the stream of a priority", "Frame.priority({})", 1, 2147483647),
+    ("the stream of a reset", "Frame.reset(Reset(stream: {}, code: 0))", 1, 2147483647),
+    (
+        "the stream of a push promise",
+        "Frame.push_promise(Promise(stream: {}, end_headers: true, padding: .none, promised: 2, block: []))",
+        1,
+        2147483647,
+    ),
+    ("the stream of a continuation", "Frame.continuation(Continuation(stream: {}, end_headers: true, block: []))", 1, 2147483647),
+    ("the stream of a window update", "Frame.window_update(Window(target: .stream({}), increment: 1))", 1, 2147483647),
+    ("the increment of a window update", "Frame.window_update(Window(target: .connection, increment: {}))", 1, 2147483647),
+];
+
+/// A program that writes a frame with `number` in `template`, and the place of the number.
+fn writing(template: &str, number: u64) -> (String, smith::diag::Pos) {
+    let (head, tail) = template.split_once("{}").expect("a place");
+    let before = "use std.console (console, print)
+use std.http2 (Continuation, Data, Frame, Headers, Promise, Reset, Window, write_frame)
+
+fn written() -> Frame <alloc> {
+  ";
+    let start = format!("{before}{head}");
+    let source = format!("{start}{number}{tail}\n}}\n\nfn main() <console, alloc> {{\n  l: List[Byte] = []\n  print(\"{{write_frame(l, written()).size}}\")\n}}\n");
+    (source, crate::programs::pos_after(&start))
+}
+
+/// A number the wire has no room for in a frame is refused where it is written, with a message
+/// that names it, and the least and the greatest that the wire has room for are taken.
+fn a_number_a_frame_has_no_size_for_is_refused_where_it_is_written_and_the_ends_of_its_range_are_taken() {
+    for &(what, template, least, greatest) in PLACES {
+        for ok in [least, greatest] {
+            let (source, _) = writing(template, ok);
+            if let Err(errors) = smith::check(source.as_bytes()) {
+                panic!("{what}: {ok} is refused: {errors:?}\n{source}");
+            }
+        }
+    }
+    generate::check(
+        59611,
+        4,
+        |g| {
+            PLACES
+                .iter()
+                .map(|&(_, _, least, greatest)| {
+                    // Below the least, which is 0 where the least is 0 and so nothing is below,
+                    // or above the greatest, by a little or by a great deal.
+                    if least > 0 && g.one_in(2) {
+                        g.below(least as usize) as u64
+                    } else {
+                        greatest + 1 + *g.pick(&[0, 1, 5, 70000, 1 << 32, 1 << 40])
+                    }
+                })
+                .collect::<Vec<u64>>()
+        },
+        |wrong| {
+            for (&(what, template, _, _), &number) in PLACES.iter().zip(wrong) {
+                let (source, at) = writing(template, number);
+                let Err(errors) = smith::check(source.as_bytes()) else {
+                    panic!("{what}: {number} is accepted\n{source}");
+                };
+                assert_eq!(errors.len(), 1, "{what}: {errors:?} for\n{source}");
+                assert_eq!(errors[0].pos, at, "{what}: {:?} for\n{source}", errors[0]);
+                assert!(errors[0].message.contains(&number.to_string()), "{what}: {}", errors[0]);
+                assert!(errors[0].message.contains("does not fit"), "{what}: {}", errors[0]);
             }
         },
     );
