@@ -7,7 +7,7 @@ built:
   - "a public function of `project.smith`, read as the module `project` from the nearest `project.smith` at or above the folder the command runs in, built with `smith build <task>` and run with `smith <task> --<flag> <value>`, whose parameters of `str`, a whole number, `bool`, one with a default, and an `Option` are its flags, spelled as the parameter is, with a `bool` bare and one with a default or of type `Option` left out as the page says"
   - "a flag spelled another way, a flag given twice, a value that does not read as its parameter's type, and a missing required flag, each one error that names the flag, and a task that gives `.err(e)` printing `e` and ending with a status that is not 0"
   - "a task named as a command, refused where it is written"
-  - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages"
+  - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages, or `smith watch`"
 ---
 
 # Project tasks
@@ -72,6 +72,18 @@ struct BuildError {
 
 A `Result` error prints its message and exits non-zero. When `deploy` above gives an error, `smith deploy` prints the error's message and exits non-zero.
 
+## Watching a task
+
+`smith watch serve --port 9000` runs the task `serve` as `smith serve --port 9000` does, and runs it again each time a file it was built from changes. It is for any task: `smith watch serve` serves the newest program, and `smith watch report` writes the report again on every save.
+
+- **The files watched are those the build read:** `project.smith` and each file a `use` reached from it. Saving any other file changes nothing.
+- **The program is built before the run is replaced.** While it builds, the run before goes on. A build that fails is printed as `smith build` prints it, and the run before goes on until a build succeeds.
+- **A task that carries `diverge` is stopped** when the next run is built, as it never ends by itself. Any other task still running is let end, then run again.
+- **A socket the task listens on is kept by `smith watch`** and given to the next run, which listens on the same address. A run that is stopped is told so by its listener: `accept` gives `.closed`, so `listen` takes no more connections, serves those it took, and returns, as [HTTP server](../library/http.md#where-the-requests-come-from) says. A connection made in the meantime waits in the socket for the next run, so a page loaded while the program is built again is answered, by one run or the other, and never refused.
+- **Nothing a run holds in memory is given to the next.** What it keeps through `store` is kept by the handler of `store`, as between two runs of `smith serve`.
+
+`smith watch` ends when it is interrupted, and ends the run with it.
+
 ## The names of commands
 
 Built-in command names are reserved, so a task named `build` is a compile error.
@@ -114,6 +126,7 @@ serving/
 | `verbose: bool` | A bare flag, `--verbose` |
 | `region: str = "eu"` or `note: Option[str]` | A flag that may be left out |
 | `<exec>` | The task may run another program |
+| `smith watch name --flag value` | `smith name --flag value`, run again each time a file it was built from changes |
 | A task named like a built-in command | A compile error |
 
 Next: [Tests](tests.md)
