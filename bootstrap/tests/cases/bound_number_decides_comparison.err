@@ -1,0 +1,4 @@
+bound_number_decides_comparison.smith:6:6: this comparison is always `false`, as `a` is a `-15..-13` and `k` is a `-15..-14`
+  6 |   if a < k { print("less") } else { print("not") }
+    |      ^
+  fix: delete the comparison
