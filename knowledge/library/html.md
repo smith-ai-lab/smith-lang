@@ -8,7 +8,7 @@ built:
   - "`render`, the handler of `markup`, which keeps the page in a `Text` its operations append to and gives it as an `Html`, whose field is private to `std.html`, and which has `Fmt`, so `print(\"{page}\")` writes the page as its text"
   - "the operations of `markup` are private to `std.html`: a program that imports one, or handles `markup`, is refused, so `render` is the only handler and no function writes a text as HTML"
   - "a tag stays open until something that is not an attribute is written, so an attribute follows the tag it belongs to, and a handler answers `markup` with the operations `start`, `attribute`, `emit`, `include`, `void`, and `end`"
-  - "the elements `html`, `head`, `title`, `body`, `h1`, `h2`, `p`, `b`, `span`, `ul`, `li`, `article`, and `a`, each one function that takes its attributes as named arguments and a block as its last argument, as `h1 { text(\"Hi\") }`, with text written only by `text`, and `br` and `input`, which hold nothing and take no block, with attributes as named arguments, each written only when it is given and not empty; every function that writes a page carries `alloc`"
+  - "the elements `html`, `head`, `title`, `body`, `h1`, `h2`, `p`, `b`, `span`, `ul`, `li`, `article`, and `a`, each one function that takes its attributes by name, after the `;` of its parameters, and a block as its one parameter by position, as `h1 { text(\"Hi\") }`, with text written only by `text`, and `br` and `input`, which hold nothing and take no block, with attributes by name, each written only when it is given and not empty; every function that writes a page carries `alloc`"
   - "`Link`, which `a` takes as its `href`, made by `link` from a link written out, which is refused where it is written when it holds a space or a control character or has a scheme but `http`, `https`, or `mailto`, and by `check_link` from a text known when the program runs, as a `Result` with a `LinkError`; no element has `src` yet"
   - "not `div`, whose name the prelude holds for division, not `attr`, whose name is a text written in the source and checked when the program is built, which waits on functions over code"
 ---
@@ -39,7 +39,7 @@ fn hello(name: str) -> Html <alloc> {
 
 ## An element
 
-An element is one function, named for it, that takes its attributes as named arguments and a block as its last argument. It writes its opening tag, runs the block, and writes its closing tag. `body { ... }` writes `<body>`, runs the block, and writes `</body>`, and it reads as the page does: the body, and in it these lines. The block is a lambda, written after the call as [Lambdas](../language/lambdas.md) says, and a call whose only argument is a block has no parentheses. Each line of the block writes what stands inside the element.
+An element is one function, named for it, that takes its attributes by name and a block by position. It writes its opening tag, runs the block, and writes its closing tag. `body { ... }` writes `<body>`, runs the block, and writes `</body>`, and it reads as the page does: the body, and in it these lines. The block is a lambda, written after the call as [Lambdas](../language/lambdas.md) says, and a call whose only argument is a block has no parentheses. Each line of the block writes what stands inside the element.
 
 Text is not an argument of an element. It is written by `text`, in its place among the children, so text and elements mix in the order they are written.
 
@@ -51,13 +51,19 @@ p {
 }
 ```
 
-This writes `<p>Hello, <b>Ana</b>!</p>` for the name `Ana`. There is one name for each element and one way to write what it holds, so a model has no choice to make between a form for a text and a form for a block, and a text that stands among elements is written as it is anywhere else. `h1("Hi")` is refused, as `h1` takes a block, and `h1()` is refused, as `h1` needs its block.
+This writes `<p>Hello, <b>Ana</b>!</p>` for the name `Ana`. There is one name for each element and one way to write what it holds, so a model has no choice to make between a form for a text and a form for a block, and a text that stands among elements is written as it is anywhere else. `h1("Hi") { text("Hi") }` is refused: "`class` of `h1` is given by name", as the one argument of an element that is given by position is its block, and `h1("Hi")` and `h1()` are refused, as `h1` needs its block.
 
 A block is statements and gives no value, so what an element holds is never the value of its block. An element that holds nothing, as `br` and `input`, takes no block, and `br { }` is refused.
 
 ## Attributes
 
-An attribute is an argument with a name, so the name of one is checked when the program is built.
+An attribute is a parameter after the `;`, so it is given by name, and the name of one is checked when the program is built.
+
+```
+fn p(block: fn() <markup>; class: str = "", id: str = "") <markup, alloc>
+fn a(block: fn() <markup>; href: Link, class: str = "", id: str = "") <markup, alloc>
+fn input(; name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") <markup, alloc>
+```
 
 ```
 a(href: link("/notes/7"), class: "button") { text("Open") }

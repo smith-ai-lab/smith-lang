@@ -214,13 +214,13 @@ trait Function[F, out Args, out R] {
 // Makes a length longer or shorter.
 fn scale(
   // The length.
-  x: f32,
+  x: f32;
   // How many times as long.
   by: f32 = 2.0,
 ) -> f32 { x * by }
 ```
 
-`Args` is a struct with a field `x` and a field `by`, whose default is `2.0`, and `R` is `f32`. A function of no parameters has a struct of no fields. So one trait is declared for functions of every number of parameters, and nothing about how a function is called changes: `scale(3.0, 2.0)` is written as it always was.
+`Args` is a struct with a field `x` and a field `by`, whose default is `2.0`, and `R` is `f32`. A function of no parameters has a struct of no fields. So one trait is declared for functions of every number of parameters, and nothing about how a function is called changes: `scale(3.0, by: 2.0)` is written as it always was.
 
 - `Function.name(f)` is the name the function was given, `"scale"`, and `Function.about(f)` is the comment on it, `"Makes a length longer or shorter."`, or the empty text where it has none.
 - `Function.call(f, args)` calls the function with the fields of `args` as its arguments, so `call(scale, args)` with `x` of `3.0` and `by` of `2.0` is `6.0`.
@@ -243,11 +243,11 @@ A trait may give a function's parameter a default, as [Functions](functions.md) 
 
 ```
 trait Named[T] {
-  fn name_of(x: T, title: str = "Dr") -> str
+  fn name_of(x: T; title: str = "Dr") -> str
 }
 
 impl Named[Cat] {
-  fn name_of(x: Cat, title: str) -> str { title }
+  fn name_of(x: Cat; title: str) -> str { title }
 }
 ```
 

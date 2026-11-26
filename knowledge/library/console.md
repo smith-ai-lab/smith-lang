@@ -23,7 +23,7 @@ enum Stream {
 }
 
 effect console {
-  fn print(text: str, end: str = "\n", to: Stream = .stdout)
+  fn print(text: str; end: str = "\n", to: Stream = .stdout)
   fn input(prompt: str = "") -> Option[str] <alloc>
 }
 ```

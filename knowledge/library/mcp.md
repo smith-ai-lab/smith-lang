@@ -54,7 +54,7 @@ A tool is a function with a name. Each parameter is a member of the object a cli
 
 ## The tools of a server
 
-`mcp` is written with [`with`](../language/with.md), so the lines after it are what the server offers, and they are run for one message, the one `messages` gives, which they answer, and then `main` ends. A server does not loop: whatever carries the messages runs `main` again for the next. `tool(f)` answers a message that calls `f`, adds `f` to the answer of one that lists the tools, and does nothing for any other.
+`mcp` takes what it needs by name, `name` and `version`, and `instructions`, `ttl`, and `origins` where they are wanted, as `fn mcp(body: fn() <lines, alloc>; name: str, version: str, ...)` says, and it is written with [`with`](../language/with.md), so the lines after it are what the server offers, and they are run for one message, the one `messages` gives, which they answer, and then `main` ends. A server does not loop: whatever carries the messages runs `main` again for the next. `tool(f)` answers a message that calls `f`, adds `f` to the answer of one that lists the tools, and does nothing for any other.
 
 ```
 fn main() <messages, net, alloc> {

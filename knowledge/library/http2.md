@@ -31,7 +31,7 @@ enum Frame {
   unknown: 10..256
 }
 
-fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc>
+fn frame(bytes: Slice[Byte]; largest: Nat = 16384) -> Read[Frame] <alloc>
 fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc>
 ```
 
@@ -66,10 +66,10 @@ A `Dependency` may name stream 0, the root of the tree of dependencies. A `windo
 struct Decoder
 struct Encoder
 
-fn decoder(table: Nat = 4096) -> Decoder
-fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc>
+fn decoder(; table: Nat = 4096) -> Decoder
+fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc>
 
-fn encoder(table: Nat = 4096) -> Encoder
+fn encoder(; table: Nat = 4096) -> Encoder
 fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) <alloc>
 ```
 
