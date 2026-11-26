@@ -1,0 +1,9 @@
+use std.console (console, print)
+
+fn show_from(from: Nat, to: Nat) <console, alloc> {
+  loop i in from..to { print("{i}") }
+}
+
+fn main() <console, alloc> {
+  show_from(1, 3)
+}
