@@ -8,6 +8,7 @@ built:
   - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
   - "a `var` that starts as a number written out and is given itself plus a value, or itself less a value, in a loop or after a branch, given the range its linear templates over the count of passes bound, where the passes are those of an array, a range, or a `List`, a `str`, or a `Slice` of a size below 2 to the 48, and refused, with the range, why, and the choices, where that range is not finite within 64 bits"
   - "a `var` that starts as a number written out and is given a value that depends on it in any other way, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
+  - "a function that takes a whole number as a type parameter, written `[n: Nat]` or `[n: Pos]`, which a call writes in brackets after the name, as `top[4]()`, which is a `Nat` in the body, which is checked as if the number were written where the name is, and a call that leaves the number out, which takes it from the type of an argument or from the type the call must give and is refused where neither says it"
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
@@ -185,6 +186,35 @@ fn steps(from: 0..100) -> 0..100 {
 
 `steps(5)` is `8`. `i` is a `0..100`, the range of `from`, and the `if` shows that `i + 1` fits it.
 
+## A whole number a call leaves out
+
+A function takes a whole number as a type parameter, written `[n: Nat]`, and `n` is a `Nat` in its body. A call writes the number in brackets after the name, and the body is checked as if the number were written where `n` is.
+
+```
+struct Box[most: Nat] {
+  at: 0..most
+}
+
+fn top[most: Nat]() -> Box[most] { Box(at: most - 1) }
+```
+
+`top[4]()` is a `Box[4]` whose `at` is `3`. `top[0]()` is refused: "cannot prove that `most - 1 >= 0`, so `most - 1` may not fit `0..0`, with `most` as 0". The error is at the place the function is written, and says which number it was found for.
+
+A call that leaves the number out takes it as it takes any type parameter: from the type of an argument, or from the type the call must give.
+
+```
+fn size[n: Nat](b: Box[n]) -> Nat { n }
+
+fn both() -> Nat {
+  a: Box[10] = top()
+  size(a)
+}
+```
+
+`both()` is `10`: `top()` is `top[10]()`, as `a` is a `Box[10]`, and `size(a)` is `size[10](a)`, as its argument is a `Box[10]`. A call whose number neither says is refused: `x = top()` gives "the whole number `most` of `top` is not known here, as no argument and no type that the call must give says it", with the fix "write it after the name, as `top[4]`".
+
+A function that declares `[n: Pos]` is refused for `0`: `top[0]()` where `most` is a `Pos` gives "`0` is not a `Pos`, which `most` of `top` is". A type parameter and a whole number in one list, as `[T, n: Nat]`, is not supported yet.
+
 ## When to write an invariant
 
 The templates bound one name by the passes of a loop. They do not find how one name stands to another, or a bound that each pass keeps and that the passes do not add up to. A program, most often one written by a model, states that once, as an [`invariant`](loop.md#an-invariant), and nothing runs for it.
@@ -303,6 +333,8 @@ This is refused at the `try`: "this block gives `u64`, which `try` cannot return
 | `n = n + 1`, twice, with no loop | Solved in order: `0`, `1`, and `2` give a `0..3` |
 | `acc = acc + x` in a loop, `acc` starting as a number written out | The start, and what the passes add or take away, by a template |
 | A `var` a loop changes in a way no template covers | Refused, with the range to state |
+| `fn f[n: Nat]() { ... }` and `f[4]()` | The body of `f` checked as if `4` were written where `n` is |
+| `f()` where `n` is left out | `n` taken from the type of an argument or the type the call gives, or refused |
 | `loop i in a..b invariant e { ... }` | `e` is proven before the first pass and at the end of each pass, and is known in the block and after the loop |
 | `double = fn(v) { v * 2 }` and `double(a)` | `v` has the range of what it is called with |
 | `xs = []` and a later `push` | The element is the range of what is pushed |
