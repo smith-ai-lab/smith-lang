@@ -8,6 +8,7 @@ built:
   - "`smith build --target wasm`, which writes a module and the file of JavaScript that loads it"
   - "`smith build --map`, which writes `<name>.map` beside the executable with a `fn` line for each function of its code, and after it an `at` line for each run of its instructions that was built from one place in the source"
   - "`smith check` warning of an effect a function lists and nothing in it needs"
+  - "not the flags of `smith` before the command, `--watch`, or `--timings` on a task"
 ---
 
 # The command line
@@ -83,6 +84,16 @@ w.smith:4:3: `y` is defined in `main` and never read
 
 `smith build` and `smith run` fail only on errors, so both build this program. What each command compiles, and what the reporting commands print, is described in [compiler.md](../compiler.md#structure).
 
+## Where a flag goes
+
+A flag belongs to the word before it. The flags of `smith` itself, `--timings` and `--watch`, come right after `smith`. A command's flags come after the command, and every word after the file is the program's, as [Run](#run) says.
+
+```
+smith --watch run --target linux_x64 hello.smith one two
+```
+
+Here `--watch` is `smith`'s, `--target` is `run`'s, and `one` and `two` are the program's. A flag written anywhere else is refused, with the place it goes: `smith build --timings hello.smith` prints "`--timings` is a flag of `smith`, written before the command: smith --timings build".
+
 ## The target
 
 `--target` chooses what to build for, as in `smith build --target macos_arm64 hello.smith`. Its values are the [target names](../compiler.md#backends). Without it, the target is the machine the compiler is running on, and it is an error if that machine is not a target: "this machine, ..., is not a target; choose one with --target".
@@ -115,13 +126,28 @@ This prints "unknown flag `--target`" and then how the commands are used.
 
 ## Timings
 
-`--timings` prints how long each stage of the build took.
+`--timings` prints how long each stage of the build took, for every command that builds: `build`, `run`, `check`, and a [task](project-tasks.md).
 
 ```
-smith build --timings hello.smith
+smith --timings build hello.smith
 ```
 
 This prints a line for each stage, `lex`, `parse`, `check`, `inline`, `trim`, `thread`, `fold`, `common`, `remove`, `emit`, and `write`, with its time, and a `total`.
+
+## Watching
+
+`--watch` runs the command again each time a file it read changes.
+
+```
+smith --watch run hello.smith
+```
+
+- **The files watched are those the build read:** the file named, each file a `use` reached from it, and `project.smith` for a task. Saving any other file changes nothing.
+- **The program is built before the run is replaced.** While it builds, the run before goes on. A build that fails is printed as the command prints it, and the run before goes on until a build succeeds.
+- **A run still going when a file changes is let end,** then run again, except a task that never ends, which [Watching a task](project-tasks.md#watching-a-task) describes.
+- **`smith --watch` ends when it is interrupted,** and ends the run with it.
+
+`smith --watch check` checks again on every save, and `smith --watch build` writes the executable again.
 
 ## The map
 
@@ -182,7 +208,9 @@ smith deploy --env staging   a task from project.smith
 | `smith run [file] [word...]` | Builds, then runs, with the words passed to the program |
 | `smith check [file]` | Reports errors, or else warnings, and writes no code |
 | `--target <name>` | On `build` and `run` only: builds for that target, and `smith run` rejects one the machine cannot run |
-| `--timings` | Prints how long each stage took |
+| `smith --timings <command>` | Prints how long each stage of the build took |
+| `smith --watch <command>` | Runs the command again each time a file it read changes |
+| A flag of `smith` after the command, or a command's before it | An error that says where the flag goes |
 | `--map` | On `build` only: also writes `<name>.map`, which names the function and the source line of each part of the executable |
 | `smith new`, `smith vendor`, `smith test`, a task | Described on the pages above |
 
