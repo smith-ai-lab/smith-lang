@@ -103,6 +103,8 @@ struct Bad[A = str, B] {
 
 This is refused, as `B` has no default and comes after `A`, which has one.
 
+A whole number parameter has a default in the same way, as [Inference](inference.md#a-whole-number-a-call-leaves-out) says.
+
 ## The forms
 
 | Written | Is |

@@ -11,6 +11,7 @@ built:
   - "a function that takes a whole number as a type parameter, written `[n: Nat]` or `[n: Pos]`, which a call writes in brackets after the name, as `top[4]()`, which is a `Nat` in the body, which is checked as if the number were written where the name is, and a call that leaves the number out, which takes it from the type of an argument or from the type the call must give and is refused where neither says it"
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
+  - "a default for a whole number parameter, written `[n: Nat = 10]`, which a use that leaves the number out and that no argument and no type settles gets, and which a type written with some or all of its numbers left off gets, refused where it is written when its kind does not hold it, or when a parameter with no default comes after one with a default"
   - "a whole number bound to a name with no type, which keeps its own range, `n..n+1`, wherever the name is used, as [Literals](literals.md#where-the-type-comes-from) says"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
   - "the parameters of a lambda bound to a name that leaves their types out, each the smallest range that holds every argument of the calls of it in the same body, joined before the lambda is checked once with it, with its result what its body gives, and an error that names the range, the calls it was inferred from, and the use that needs less"
@@ -216,6 +217,16 @@ fn both() -> Nat {
 
 A function that declares `[n: Pos]` is refused for `0`: `top[0]()` where `most` is a `Pos` gives "`0` is not a `Pos`, which `most` of `top` is". A type parameter and a whole number in one list, as `[T, n: Nat]`, is not supported yet.
 
+A whole number parameter may have a default, written with `=` as a type parameter's is, and a call that leaves the number out and that nothing settles gets it.
+
+```
+fn top[most: Nat = 10]() -> Box[most] { Box(at: most - 1) }
+```
+
+`top().at` is `9`, as `top()` is `top[10]()`, and `top[4]().at` is `3`. A call that an argument or the type the call must give settles takes that number, as it does without a default: `a: Box[3] = top()` is `top[3]()`. A `Box` written with its numbers left off is the one written with the defaults, and `Grid[4]` for a `Grid[w: Nat, h: Nat = 2]` is `Grid[4, 2]`.
+
+A default that its kind does not hold is refused where it is written: `[n: Pos = 0]` gives "`0` is not a `Pos`, which `n` is". A parameter with a default comes after every one without, as for a type: `[a: Nat = 1, b: Nat]` is refused, as `b` has no default and comes after `a`, which has one.
+
 ## When to write an invariant
 
 The templates bound one name by the passes of a loop. They do not find how one name stands to another, or a bound that each pass keeps and that the passes do not add up to. A program, most often one written by a model, states that once, as an [`invariant`](loop.md#an-invariant), and nothing runs for it.
@@ -335,7 +346,8 @@ This is refused at the `try`: "this block gives `u64`, which `try` cannot return
 | `acc = acc + x` in a loop, `acc` starting as a number written out | The start, and what the passes add or take away, by a template |
 | A `var` a loop changes in a way no template covers | Refused, with the range to state |
 | `fn f[n: Nat]() { ... }` and `f[4]()` | The body of `f` checked as if `4` were written where `n` is |
-| `f()` where `n` is left out | `n` taken from the type of an argument or the type the call gives, or refused |
+| `f()` where `n` is left out | `n` taken from the type of an argument or the type the call gives, or its default, or refused where it has none |
+| `fn f[n: Nat = 10]()` and `f()` | `f[10]()`, where nothing settles `n` |
 | `loop i in a..b invariant e { ... }` | `e` is proven before the first pass and at the end of each pass, and is known in the block and after the loop |
 | `double = fn(v) { v * 2 }` and `double(a)` | `v` has the range of what it is called with |
 | `xs = []` and a later `push` | The element is the range of what is pushed |

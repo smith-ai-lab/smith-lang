@@ -65,7 +65,7 @@ fn_sig     = "fn" IDENT [ generics ] "(" [ params ] ")" [ "->" result ]
 result     = [ IDENT ":" ] type | statement ;
 statement  = expr ;   (* a comparison, or comparisons joined with `and`, `or`, `not` *)
 generics   = "[" generic { "," generic } "]" ;
-generic    = [ "out" ] IDENT [ ":" type ] [ "=" type ] ;
+generic    = [ "out" ] IDENT [ ":" type ] [ "=" ( type | LITERAL ) ] ;   (* a LITERAL is the default of a whole number parameter *)
 params     = param { "," param } [ "," ] ;
 param      = ( IDENT | tuple_pat ) ":" [ "take" ] type [ "=" expr ] ;
 tuple_pat  = "(" bind_pat { "," bind_pat } ")" ;
