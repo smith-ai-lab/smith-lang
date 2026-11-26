@@ -31,6 +31,10 @@ pub const ONCE: &[Test] = &[
         alike_requires_that_fail_are_one_error_and_a_comment_apart_from_its_requires_is_not_told,
     ),
     (
+        "alike_requires_with_another_that_fails_between_them_are_one_error",
+        alike_requires_with_another_that_fails_between_them_are_one_error,
+    ),
+    (
         "the_goal_is_written_under_the_comment",
         the_goal_is_written_under_the_comment,
     ),
@@ -100,9 +104,24 @@ struct Call {
     arg: i128,
 }
 
-/// A `requires` as a failed call says it, with the number in the place of `i`.
-/// Two that say the same are one error, so they are one here.
+/// A `requires` as a failed call says it, with the number in the place of `i`,
+/// and `not (a == b)` said as `a != b`. Two that say the same are one error, so
+/// they are one here.
 fn asked(text: &str, arg: i128) -> String {
+    // `not (a == b)` is said as `a != b`, and no other `not` is said otherwise.
+    let text = match text.strip_prefix("not (").and_then(|t| t.strip_suffix(')')) {
+        Some(inner) if inner.split(' ').count() == 3 && !inner.contains('(') => {
+            let [left, op, right] = inner.split(' ').collect::<Vec<_>>()[..] else {
+                unreachable!("three words");
+            };
+            if op == "==" {
+                format!("{left} != {right}")
+            } else {
+                text.to_string()
+            }
+        }
+        _ => text.to_string(),
+    };
     let mut said = String::new();
     let mut word = String::new();
     let flush = |said: &mut String, word: &mut String| {
@@ -160,36 +179,23 @@ fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() 
             }
             Err(errors) => errors,
         };
-        // Errors that are the same, in the message and the goal, are one, and
-        // two `requires` that are written differently may say the same of the
-        // argument, as `not (2 == i)` and `2 != i` do, so what is counted is
-        // between one error for all the `requires` of a kind and one for each.
+        // Errors that are the same, in the place, the message, and the goal, are
+        // reported once, wherever they are in the list, so `requires` that say
+        // the same of the argument are one error.
         let told: BTreeSet<(String, String)> = (failed.iter())
             .filter_map(|(over, text)| over.told().map(|t| (t, asked(text, c.arg))))
             .collect();
-        let comments: BTreeSet<&String> = told.iter().map(|(t, _)| t).collect();
         let plain: BTreeSet<String> = (failed.iter())
             .filter(|(over, _)| over.told().is_none())
             .map(|(_, text)| asked(text, c.arg))
             .collect();
-        let distinct: BTreeSet<(&String, &Option<String>)> =
-            errors.iter().map(|e| (&e.message, &e.goal)).collect();
-        let with_goal = distinct.iter().filter(|(_, goal)| goal.is_some()).count();
-        let without = distinct.iter().filter(|(_, goal)| goal.is_none()).count();
-        assert!(
-            (comments.len()..=told.len()).contains(&with_goal),
-            "{errors:?}"
-        );
-        assert!(
-            (usize::from(!plain.is_empty())..=plain.len()).contains(&without),
-            "{errors:?}"
-        );
+        let with_goal = errors.iter().filter(|e| e.goal.is_some());
+        let without = errors.iter().filter(|e| e.goal.is_none());
+        assert_eq!(with_goal.clone().count(), told.len(), "{errors:?}");
+        assert_eq!(without.clone().count(), plain.len(), "{errors:?}");
         // The comment of each is the message of an error with a goal, and no
         // other comment is.
-        let messages: BTreeSet<&String> = (errors.iter())
-            .filter(|e| e.goal.is_some())
-            .map(|e| &e.message)
-            .collect();
+        let messages: BTreeSet<&String> = with_goal.map(|e| &e.message).collect();
         assert_eq!(
             messages,
             told.iter().map(|(t, _)| t).collect::<BTreeSet<_>>(),
@@ -254,6 +260,22 @@ fn alike_requires_that_fail_are_one_error_and_a_comment_apart_from_its_requires_
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(errors[0].goal.is_none(), "{errors:?}");
     assert!(errors[0].message.contains("needs"), "{errors:?}");
+}
+
+/// Errors that are alike in the place, the message, and the goal are one
+/// wherever they are in the list, and not only where they are next to each
+/// other: `not (2 == i)` and `2 != i` say the same of 2, with a `requires` that
+/// says another between them, and are one error, and the other is one.
+fn alike_requires_with_another_that_fails_between_them_are_one_error() {
+    let source = with_header(
+        "fn needs(i: u32) -> u32\n  requires not (2 == i)\n  requires i > 5\n  requires 2 != i\n{\n  i\n}\n\nfn main() <console, alloc> {\n  print(\"{needs(2)}\")\n}\n"
+            .to_string(),
+    );
+    let errors = check(source.as_bytes()).expect_err("a call that fails its `requires`");
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    let alike = errors.iter().filter(|e| e.message.contains("2 != 2")).count();
+    assert_eq!(alike, 1, "{errors:?}");
+    assert!(errors.iter().all(|e| e.message.contains("needs")), "{errors:?}");
 }
 
 /// The comment is written first, and the goal after it, before the line of

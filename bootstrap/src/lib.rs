@@ -381,9 +381,12 @@ fn with_function_args(file: &mut parser::File, source: &[u8]) {
     }
 }
 
+/// The errors in the order of their places, each once: errors that are alike
+/// in place, message, fix, and goal are one, wherever they are in the list.
 fn in_order(mut errors: Vec<diag::Error>) -> Vec<diag::Error> {
     errors.sort_by_key(|e| e.pos);
-    errors.dedup();
+    let mut seen = std::collections::HashSet::new();
+    errors.retain(|e| seen.insert(e.clone()));
     errors
 }
 
