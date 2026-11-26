@@ -94,6 +94,7 @@ fn punct_place(p: Punct) -> Nat {
     .bang { 28 }
     .pipe_arrow { 29 }
     .percent { 30 }
+    .semicolon { 31 }
   }
 }
 

@@ -117,13 +117,21 @@ impl Program {
         let mut text = String::from("use std.bits (i32)\nuse std.console (console, print)\n\n");
         text += "effect fx {\n";
         for (k, op) in self.operations.iter().enumerate() {
+            // The parameters with a default come last, and are given by name,
+            // after the `;`.
+            let first = op.params.iter().position(Option::is_some).unwrap_or(op.params.len());
             let params: Vec<String> = (op.params.iter().enumerate())
                 .map(|(i, d)| match d {
                     Some(d) => format!("a{i}: i32 = {}", written(*d)),
                     None => format!("a{i}: i32"),
                 })
                 .collect();
-            text += &format!("  fn op{k}({}) -> i32\n", params.join(", "));
+            let params = if first == params.len() {
+                params.join(", ")
+            } else {
+                format!("{}; {}", params[..first].join(", "), params[first..].join(", "))
+            };
+            text += &format!("  fn op{k}({params}) -> i32\n");
         }
         text += "}\n\nfn handler[T](body: fn() -> T <fx>) -> T {\n  fx(\n";
         for (k, op) in self.operations.iter().enumerate() {

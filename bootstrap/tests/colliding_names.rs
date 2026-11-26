@@ -75,7 +75,7 @@ fn a_name_that_is_also_a_case_a_field_a_parameter_or_a_local_means_each_where_it
         }
         if c.param {
             shapes.push_str(&format!(
-                "\nfn echo({n}: Nat) -> Nat {{ {n} }}\n\npub fn param() -> Nat {{ echo({n}: 9) }}\n"
+                "\nfn echo(; {n}: Nat) -> Nat {{ {n} }}\n\npub fn param() -> Nat {{ echo({n}: 9) }}\n"
             ));
             roles.push(("param", 9));
         }
@@ -85,7 +85,7 @@ fn a_name_that_is_also_a_case_a_field_a_parameter_or_a_local_means_each_where_it
         }
         if c.contract {
             shapes.push_str(&format!(
-                "\npub fn res() -> Nat {{ 5 }}\n\nfn guard({n}: 0..10) -> res: 0..10\n  requires {n} > 0\n  ensures res > 0\n{{\n  {n}\n}}\n\npub fn contract() -> Nat {{ guard({n}: 3) }}\n"
+                "\npub fn res() -> Nat {{ 5 }}\n\nfn guard(; {n}: 0..10) -> res: 0..10\n  requires {n} > 0\n  ensures res > 0\n{{\n  {n}\n}}\n\npub fn contract() -> Nat {{ guard({n}: 3) }}\n"
             ));
             roles.push(("contract", 3));
         }

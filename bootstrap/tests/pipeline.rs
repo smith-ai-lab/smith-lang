@@ -55,9 +55,9 @@ const USES: &str = "use std.console (console, print)\n\n";
 /// Three functions of three whole numbers each, which use their parameters in
 /// different ways, so that a value in another place gives other code.
 const FUNCTIONS: &str = "\
-fn f0(a: Byte, b: Byte, c: Byte) -> Byte { if a < b { c } else { a } }
-fn f1(a: Byte, b: Byte, c: Byte) -> Byte { if b < c { a } else { b } }
-fn f2(a: Byte, b: Byte, c: Byte) -> Byte { if c < a { b } else { c } }
+fn f0(a: Byte, b: Byte; c: Byte) -> Byte { if a < b { c } else { a } }
+fn f1(a: Byte, b: Byte; c: Byte) -> Byte { if b < c { a } else { b } }
+fn f2(a: Byte, b: Byte; c: Byte) -> Byte { if c < a { b } else { c } }
 ";
 
 /// A step of a pipeline: a function, the place the value goes to, and how
@@ -68,7 +68,7 @@ struct Step {
     place: usize,
     /// 0 leaves `_` out where the place is the first, 1 writes it, and 2
     /// writes it with the name of the parameter, where the place is the
-    /// last.
+    /// last, which is given by name.
     form: usize,
     others: [u8; 2],
 }
@@ -78,7 +78,7 @@ fn step(g: &mut Gen) -> Step {
     let place = g.below(3);
     let form = match place {
         0 => g.below(2),
-        2 => 1 + g.below(2),
+        2 => 2,
         _ => 1,
     };
     Step {
@@ -95,14 +95,16 @@ impl Step {
         let mut others = self.others.iter();
         let mut args = Vec::new();
         for at in 0..3 {
-            args.push(if at == self.place {
-                if named && self.form == 2 {
-                    format!("{}: {value}", ["a", "b", "c"][at])
-                } else {
-                    value.to_string()
-                }
+            let given = if at == self.place {
+                value.to_string()
             } else {
                 others.next().expect("two others").to_string()
+            };
+            // The last parameter is given by name.
+            args.push(if at == 2 {
+                format!("c: {given}")
+            } else {
+                given
             });
         }
         if !named && self.place == 0 && self.form == 0 {

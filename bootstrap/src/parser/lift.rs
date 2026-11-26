@@ -219,6 +219,7 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
             take: false,
             takes: Vec::new(),
             effects: Vec::new(),
+            by_name: false,
         })
         .collect();
     let own: HashSet<&str> = l.generics.iter().map(|g| g.name.as_str()).collect();

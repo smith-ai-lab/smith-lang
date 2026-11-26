@@ -469,7 +469,7 @@ fn describe(f: Frame) <console, alloc> {
 }
 
 fn verdict(b: Slice[Byte], largest: Nat) <console, alloc> {
-  r = if largest == 16384 { frame(b) } else { frame(b, largest) }
+  r = if largest == 16384 { frame(b) } else { frame(b, largest: largest) }
   match r {
     .complete((f, used)) {
       print(\"complete {used}\")
@@ -873,7 +873,7 @@ fn reference(i: Nat) -> Slice[Byte] <alloc> {
 fn probe(d: take Decoder, places: Nat) -> Decoder <console, alloc> {
   var t = d
   loop i in 0..wrapping_add(places, 1) {
-    (next, r) = decode(t, reference(wrapping_add(62, i)), 65536)
+    (next, r) = decode(t, reference(wrapping_add(62, i)), largest: 65536)
     t = next
     show(r)
   }
@@ -894,7 +894,7 @@ fn the_examples_of_rfc_7541_appendix_c_decode_to_the_headers_and_the_table_it_gi
         let mut source = HEADERS.to_string();
         source += "fn main() <console, alloc> {\n";
         let table = series.table;
-        source += &if table == 4096 { "  d0 = decoder()\n".to_string() } else { format!("  d0 = decoder({table})\n") };
+        source += &if table == 4096 { "  d0 = decoder()\n".to_string() } else { format!("  d0 = decoder(table: {table})\n") };
         let mut expected = Vec::new();
         for (n, example) in series.examples.iter().enumerate() {
             source += &format!(
@@ -931,14 +931,14 @@ fn the_headers_of_appendix_c_are_encoded_to_blocks_that_read_back_and_to_the_byt
         for (n, example) in series.examples.iter().enumerate() {
             source += &function(&format!("headers{n}"), &example.headers);
         }
-        let make = |name: &str| if table == 4096 { format!("{name}()") } else { format!("{name}({table})") };
+        let make = |name: &str| if table == 4096 { format!("{name}()") } else { format!("{name}(table: {table})") };
         source += &format!("\nfn main() <console, alloc> {{\n  e0 = {}\n  d0 = {}\n", make("encoder"), make("decoder"));
         let mut expected = Vec::new();
         for (n, example) in series.examples.iter().enumerate() {
             let secret = example.headers.iter().any(|(name, _)| name == "set-cookie");
             let update = if n == 0 && table != 4096 { number(0x20, 5, table) } else { Vec::new() };
             source += &format!(
-                "  (e{m}, w{n}) = encode(e{n}, empty(), headers{n}())\n  dump(w{n})\n  (a{n}, r{n}) = decode(d{n}, freeze(w{n}), 65536)\n  show(r{n})\n",
+                "  (e{m}, w{n}) = encode(e{n}, empty(), headers{n}())\n  dump(w{n})\n  (a{n}, r{n}) = decode(d{n}, freeze(w{n}), largest: 65536)\n  show(r{n})\n",
                 m = n + 1
             );
             if secret {
@@ -977,10 +977,10 @@ fn the_headers_of_appendix_c_are_encoded_to_blocks_that_read_back_and_to_the_byt
 
 fn the_static_table_is_the_one_of_rfc_7541_appendix_a() {
     let mut source = HEADERS.to_string();
-    source += "fn main() <console, alloc> {\n  d0 = decoder(4096)\n";
+    source += "fn main() <console, alloc> {\n  d0 = decoder(table: 4096)\n";
     let mut expected = Vec::new();
     for (i, (name, value)) in rfc::static_table().iter().enumerate() {
-        source += &format!("  (d{}, r{i}) = decode(d{i}, {}, 65536)\n  show(r{i})\n", i + 1, list(&[0x80 | (i as u8 + 1)]));
+        source += &format!("  (d{}, r{i}) = decode(d{i}, {}, largest: 65536)\n  show(r{i})\n", i + 1, list(&[0x80 | (i as u8 + 1)]));
         expected.extend(shown(&[(name, value)]));
     }
     source += "}\n";
@@ -998,7 +998,7 @@ fn the_numbers_of_rfc_7541_appendix_c_1_are_read_from_their_bytes() {
     for (i, n) in numbers.iter().enumerate() {
         let block = number(0x20, 5, *n);
         for (j, table) in [*n, n - 1].into_iter().enumerate() {
-            source += &format!("  (d{i}x{j}, r{i}x{j}) = decode(decoder({table}), {}, 65536)\n  show(r{i}x{j})\n", list(&block));
+            source += &format!("  (d{i}x{j}, r{i}x{j}) = decode(decoder(table: {table}), {}, largest: 65536)\n  show(r{i}x{j})\n", list(&block));
         }
         expected.extend(["end", "error"].map(String::from));
     }
@@ -1038,12 +1038,12 @@ fn the_short_code_of_rfc_7541_appendix_b_is_read_and_written_for_every_byte() {
     source += &format!("fn value() -> str <alloc> {{ text({}) }}\n\n", list(&text));
     source += "fn main() <console, alloc> {\n  (e, w) = encode(encoder(), empty(), [(\"x\", value())])\n  dump(w)\n";
     let block = [vec![0x00], string(b"x", false), string(&text, true)].concat();
-    source += &format!("  (d, r) = decode(decoder(), {}, 65536)\n  show(r)\n", list(&block));
+    source += &format!("  (d, r) = decode(decoder(), {}, largest: 65536)\n  show(r)\n", list(&block));
     // A symbol that no text holds, between two texts of one byte.
     let mut expected = Vec::new();
     for (i, b) in unreachable.iter().enumerate() {
         let block = [vec![0x00], string(b"x", false), string(&[b'a', *b, b'a'], true)].concat();
-        source += &format!("  (d{i}, r{i}) = decode(decoder(), {}, 65536)\n  show(r{i})\n", list(&block));
+        source += &format!("  (d{i}, r{i}) = decode(decoder(), {}, largest: 65536)\n  show(r{i})\n", list(&block));
         expected.push("error".to_string());
     }
     source += "}\n";
@@ -1226,11 +1226,11 @@ fn decoding_what_was_encoded_gives_the_headers_over_blocks_with_one_encoder_and_
             for (i, h) in blocks.iter().enumerate() {
                 source += &function(&format!("headers{i}"), h);
             }
-            source += &format!("\nfn main() <console, alloc> {{\n  e0 = encoder({table})\n  d0 = decoder({table})\n");
+            source += &format!("\nfn main() <console, alloc> {{\n  e0 = encoder(table: {table})\n  d0 = decoder(table: {table})\n");
             let mut expected = Vec::new();
             for (i, h) in blocks.iter().enumerate() {
                 source += &format!(
-                    "  (e{n}, w{i}) = encode(e{i}, empty(), headers{i}())\n  (d{n}, r{i}) = decode(d{i}, freeze(w{i}), 65536)\n  show(r{i})\n",
+                    "  (e{n}, w{i}) = encode(e{i}, empty(), headers{i}())\n  (d{n}, r{i}) = decode(d{i}, freeze(w{i}), largest: 65536)\n  show(r{i})\n",
                     n = i + 1
                 );
                 expected.extend(shown(&nested(h)));
@@ -1307,10 +1307,10 @@ fn a_block_is_an_error_where_the_page_says_and_a_block_without_that_fault_is_rea
     source += "fn main() <console, alloc> {\n";
     let mut expected = Vec::new();
     for (c, (_, table, blocks)) in cases.iter().enumerate() {
-        source += &format!("  d{c}x0 = decoder({table})\n");
+        source += &format!("  d{c}x0 = decoder(table: {table})\n");
         for (i, (block, gives)) in blocks.iter().enumerate() {
             source += &format!(
-                "  (d{c}x{n}, r{c}x{i}) = decode(d{c}x{i}, {}, 65536)\n  show(r{c}x{i})\n",
+                "  (d{c}x{n}, r{c}x{i}) = decode(d{c}x{i}, {}, largest: 65536)\n  show(r{c}x{i})\n",
                 list(block),
                 n = i + 1
             );
@@ -1364,7 +1364,7 @@ fn a_text_in_the_short_code_is_read_and_one_with_wrong_padding_or_its_end_is_an_
             };
             let block = [vec![0x00], string(b"a", false), number(0x80, 7, bad.len()), bad].concat();
             let source = HEADERS.to_string()
-                + &format!("fn main() <console, alloc> {{\n  (d, r) = decode(decoder(4096), {}, 65536)\n  show(r)\n}}\n", list(&block));
+                + &format!("fn main() <console, alloc> {{\n  (d, r) = decode(decoder(table: 4096), {}, largest: 65536)\n  show(r)\n}}\n", list(&block));
             let expected = if fault_is_there { vec!["error".to_string()] } else { shown(&[("a", value)]) };
             assert_eq!(lines(&source), expected, "{value:?} {fault}");
         },
@@ -1386,9 +1386,9 @@ fn a_block_of_more_than_largest_bytes_is_an_error_and_of_largest_or_fewer_is_rea
             let total: usize = h.iter().map(|(n, v)| n.len() + v.len()).sum();
             let mut source = HEADERS.to_string();
             source += "fn main() <console, alloc> {\n";
-            source += &format!("  (a, r) = decode(decoder(4096), {}, {total})\n  show(r)\n", list(&block));
+            source += &format!("  (a, r) = decode(decoder(table: 4096), {}, largest: {total})\n  show(r)\n", list(&block));
             if total > 0 {
-                source += &format!("  (b, s) = decode(decoder(4096), {}, {})\n  show(s)\n", list(&block), total - 1);
+                source += &format!("  (b, s) = decode(decoder(table: 4096), {}, largest: {})\n  show(s)\n", list(&block), total - 1);
             }
             source += "}\n";
             let mut expected = shown(&nested(h));
@@ -1408,7 +1408,7 @@ fn a_block_that_comes_to_more_than_largest_bytes_is_an_error_before_that_much_me
         let characters = 8 * m;
         let block = [vec![0x00], string(b"a", false), number(0x80, 7, value.len()), value].concat();
         let source = HEADERS.to_string()
-            + &format!("fn main() <console, alloc> {{\n  (d, r) = decode(decoder(4096), {}, {largest})\n  show(r)\n}}\n", list(&block));
+            + &format!("fn main() <console, alloc> {{\n  (d, r) = decode(decoder(table: 4096), {}, largest: {largest})\n  show(r)\n}}\n", list(&block));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
         let (outcome, taken) = scalar::run_taking(&program, usize::MAX);
         assert_eq!(outcome.status, 0);
@@ -1449,7 +1449,7 @@ fn a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_an
             source += "fn empty() -> List[Byte] { [] }\n\n";
             source += &function("headers", h);
             source += &format!(
-                "\nfn dump(w: List[Byte]) <console, alloc> {{\n  loop b in w {{ print(\"{{b}}\") }}\n  print(\"end\")\n}}\n\nfn main() <console, alloc> {{\n  e0 = encoder({table})\n  (e1, w1) = encode(e0, empty(), headers())\n  (e2, w2) = encode(e1, empty(), headers())\n  dump(w1)\n  dump(w2)\n  d0 = decoder({table})\n  (d1, r1) = decode(d0, freeze(w1), 65536)\n  (d2, r2) = decode(d1, freeze(w2), 65536)\n  show(r2)\n  d3 = probe(d2, 40)\n}}\n"
+                "\nfn dump(w: List[Byte]) <console, alloc> {{\n  loop b in w {{ print(\"{{b}}\") }}\n  print(\"end\")\n}}\n\nfn main() <console, alloc> {{\n  e0 = encoder(table: {table})\n  (e1, w1) = encode(e0, empty(), headers())\n  (e2, w2) = encode(e1, empty(), headers())\n  dump(w1)\n  dump(w2)\n  d0 = decoder(table: {table})\n  (d1, r1) = decode(d0, freeze(w1), largest: 65536)\n  (d2, r2) = decode(d1, freeze(w2), largest: 65536)\n  show(r2)\n  d3 = probe(d2, 40)\n}}\n"
             );
             let out = lines(&source);
             let mut blocks: Vec<Vec<u8>> = Vec::new();
@@ -1509,7 +1509,7 @@ fn blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program() {
             let mut source = HEADERS.to_string();
             source += "fn main() <console, alloc> {\n";
             for (i, b) in blocks.iter().enumerate() {
-                source += &format!("  (d{i}, r{i}) = decode(decoder(256), {}, 64)\n  show(r{i})\n", list(b));
+                source += &format!("  (d{i}, r{i}) = decode(decoder(table: 256), {}, largest: 64)\n  show(r{i})\n", list(b));
             }
             source += "}\n";
             let out = lines(&source);

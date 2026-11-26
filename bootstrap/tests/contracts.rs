@@ -511,11 +511,7 @@ fn a_function_with_a_requires_is_refused_wherever_it_is_used_as_a_value() {
         let t = ty.name;
         let max = ty.max();
         // How the function is used as a value, in `main`.
-        let uses = [
-            "apply(1, f: lift)",
-            "apply(x: 1, f: lift)",
-            "apply(1, lift)",
-        ];
+        let uses = ["apply(1, f: lift)", "through(lift, 1)"];
         for usage in uses {
             for requires in [true, false] {
                 let line = if requires {
@@ -525,7 +521,8 @@ fn a_function_with_a_requires_is_refused_wherever_it_is_used_as_a_value() {
                 };
                 let source = with_header(format!(
                     "fn lift(i: {t}) -> r: {t}\n{line}  ensures r >= i\n{{\n  if i < {max} {{ i + 1 }} else {{ i }}\n}}\n\n\
-                     fn apply(x: {t}, f: fn({t}) -> {t}) -> {t} {{\n  f(x)\n}}\n\n\
+                     fn apply(x: {t}; f: fn({t}) -> {t}) -> {t} {{\n  f(x)\n}}\n\n\
+                     fn through(f: fn({t}) -> {t}, x: {t}) -> {t} {{\n  f(x)\n}}\n\n\
                      fn main() <console, alloc> {{\n  print(\"{{{usage}}}\")\n}}\n"
                 ));
                 match check(source.as_bytes()) {

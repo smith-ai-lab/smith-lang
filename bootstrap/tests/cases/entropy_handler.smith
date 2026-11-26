@@ -17,7 +17,7 @@ fn fixed[T](body: fn() -> T <entropy>) -> T <alloc> {
 fn draw() -> str <entropy, alloc> {
   bytes: List[Byte] = [0, 0, 0, 0]
   var line = ""
-  loop b in fill(bytes) { line = "{line}{hex(b, 2, false)}" }
+  loop b in fill(bytes) { line = "{line}{hex(b, width: 2, upper: false)}" }
   line
 }
 

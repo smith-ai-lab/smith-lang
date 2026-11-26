@@ -364,7 +364,7 @@ fn window_update(bytes: Slice[Byte], n: Nat, stream: 0..2147483648) -> Read[Fram
   done(.window_update(Window(target: .stream(stream), increment: increment)), end)
 }
 
-pub fn frame(bytes: Slice[Byte], largest: Nat = 16384) -> Read[Frame] <alloc> {
+pub fn frame(bytes: Slice[Byte]; largest: Nat = 16384) -> Read[Frame] <alloc> {
   if bytes.size < 9 { return Read.incomplete }
   n = be24(bytes, 0)
   if n > largest { return refused("a frame longer than the most that is read") }
@@ -489,9 +489,9 @@ pub struct Encoder {
   update: bool
 }
 
-pub fn decoder(table: Nat = 4096) -> Decoder { Decoder(table: table_new(table)) }
+pub fn decoder(; table: Nat = 4096) -> Decoder { Decoder(table: table_new(table)) }
 
-pub fn encoder(table: Nat = 4096) -> Encoder {
+pub fn encoder(; table: Nat = 4096) -> Encoder {
   Encoder(table: table_new(table), update: table != 4096)
 }
 
@@ -689,7 +689,7 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
   }
 }
 
-pub fn decode(d: take Decoder, block: Slice[Byte], largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc> {
+pub fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc> {
   var r = Run(table: d.table, acc: [], used: 0, at: 0, updates: true)
   loop k in 0..block.size {
     if r.at >= block.size { break }

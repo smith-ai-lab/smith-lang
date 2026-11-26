@@ -220,7 +220,7 @@ impl Facts {
             "shift_right" => BitOp::ShiftRight,
             _ => return,
         };
-        let Some(places) = params_of(&sig.params, &call.args) else {
+        let Some(places) = params_of(&sig.params, sig.by_position(), &call.args) else {
             return;
         };
         let (Some(first), Some(second)) = (
@@ -978,7 +978,7 @@ impl<'a> Checker<'a> {
         if sig.gives != defs.bool_ty() {
             return None;
         }
-        let places = params_of(&sig.params, &call.args)?;
+        let places = params_of(&sig.params, sig.by_position(), &call.args)?;
         // The text, the type, and the sum of what each argument is.
         let mut texts = Vec::new();
         let mut sol: Vec<Option<Ty>> = vec![None; sig.scope.names.len()];
@@ -1134,7 +1134,7 @@ impl<'a> Checker<'a> {
         {
             return None;
         }
-        let places = params_of(&sig.params, &call.args)?;
+        let places = params_of(&sig.params, sig.by_position(), &call.args)?;
         let mut sums = HashMap::new();
         for (arg, place) in call.args.iter().zip(places) {
             let (name, ty) = &sig.params[place];
@@ -2328,7 +2328,7 @@ impl<'a> Checker<'a> {
         sig: &Signature,
     ) {
         // A call with an argument for no parameter is reported, and proves nothing.
-        let Some(places) = params_of(&sig.params, &call.args) else {
+        let Some(places) = params_of(&sig.params, sig.by_position(), &call.args) else {
             return;
         };
         let args = call.args.iter().map(|a| &a.value).zip(places).collect();
@@ -2424,8 +2424,7 @@ impl<'a> Checker<'a> {
                 let note = callee.note(requirement);
                 if said.is_none()
                     && let Some(call) = call
-                    && let Some(mut pending) =
-                        self.for_the_kernel(requirement, call, &sig.params, &goal)
+                    && let Some(mut pending) = self.for_the_kernel(requirement, call, sig, &goal)
                 {
                     pending.note = note.map(str::to_string);
                     self.kernel_calls.push(pending);
@@ -2556,14 +2555,15 @@ impl<'a> Checker<'a> {
         &self,
         requirement: &Expr,
         call: &Call,
-        params: &[(String, Ty)],
+        sig: &Signature,
         written: &str,
     ) -> Option<KernelCall> {
+        let params = &sig.params;
         let Expr::Call(r) = requirement else {
             return None;
         };
         let f = self.kernel_predicate(r)?;
-        let given = params_of(params, &call.args)?;
+        let given = params_of(params, sig.by_position(), &call.args)?;
         let args: Option<Vec<crate::kernel::Value>> = r
             .args
             .iter()

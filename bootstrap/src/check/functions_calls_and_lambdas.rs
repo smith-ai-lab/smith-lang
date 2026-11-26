@@ -50,7 +50,7 @@ impl<'a> Checker<'a> {
             return;
         }
         // A call with an argument for no parameter is reported, and proves nothing.
-        let Some(places) = params_of(&sig.params, &call.args) else {
+        let Some(places) = params_of(&sig.params, sig.by_position(), &call.args) else {
             return;
         };
         let mut given: Vec<Option<&Expr>> = vec![None; target.params.len()];
@@ -340,10 +340,15 @@ impl<'a> Checker<'a> {
     pub(super) fn defaults(&mut self, f: &'a Function, sig: &'a Signature) {
         let names: Vec<&str> = f.params.iter().map(|p| p.name.as_str()).collect();
         let mut first = None;
+        let positional = (f.params.iter())
+            .position(|p| p.by_name)
+            .unwrap_or(f.params.len());
         for (i, (p, (_, ty))) in f.params.iter().zip(&sig.params).enumerate() {
-            // A final parameter that takes a function may come after those
-            // with defaults, as a lambda after a call is for it.
-            let last_fn = i + 1 == f.params.len() && p.ty.function;
+            // A final parameter before `;` that takes a function may come after
+            // those with defaults, as a lambda after a call is for it.
+            let last_fn = i + 1 == positional && p.ty.function;
+            // The parameters after `;` are given by name, in any order.
+            let ordered = i < positional;
             match (&p.default, first) {
                 (None, Some(_)) if last_fn => {}
                 // The default of a proof is `arith`, which the parser reads and
@@ -357,7 +362,7 @@ impl<'a> Checker<'a> {
                     let extra = sig.fn_effects.get(i).cloned().unwrap_or_default();
                     self.default(value, ty, &sig.scope, names.clone(), extra);
                 }
-                (None, Some(q)) => self.errors.push(
+                (None, Some(q)) if ordered => self.errors.push(
                     Error::new(
                         p.pos,
                         format!(
@@ -370,7 +375,7 @@ impl<'a> Checker<'a> {
                         p.name
                     )),
                 ),
-                (None, None) => {}
+                (None, _) => {}
             }
         }
     }
@@ -961,7 +966,7 @@ impl<'a> Checker<'a> {
         sig: &Signature,
         i: usize,
     ) -> (Option<Ty>, &'c Expr) {
-        let places = params_of(&sig.params, &call.args).unwrap_or_default();
+        let places = params_of(&sig.params, sig.by_position(), &call.args).unwrap_or_default();
         let a = places.iter().position(|&p| p == i).unwrap_or(0);
         let value = &call.args[a].value;
         let known = match value {
@@ -1450,6 +1455,14 @@ impl<'a> Checker<'a> {
                 Expr::Lambda(_) | Expr::Case { .. } | Expr::List { .. }
             )
         });
+        // How many parameters take an argument by position, and how many of
+        // them a block after the call leaves to arguments written in the
+        // parentheses.
+        let by_position = signature.named_from.unwrap_or(signature.params.len());
+        let block = by_position > 0
+            && call.args.iter().any(|a| a.after)
+            && matches!(signature.params[by_position - 1].1, Ty::Fn(_) | Ty::Unknown);
+        let positional = by_position - usize::from(block);
         let mut named = false;
         // Whether an argument named a parameter there is not. The mistake is
         // one, so a parameter written as a pattern, which no name can reach,
@@ -1464,18 +1477,26 @@ impl<'a> Checker<'a> {
             let mut param = None;
             let callee = &call.callee;
             if arg.after {
-                // A lambda after a call is for its last parameter.
-                let last = signature.params.len().checked_sub(1);
+                // A lambda after a call is for its last parameter before `;`.
+                let last = by_position.checked_sub(1);
                 let error = match last {
-                    None => Some(format!(
+                    None if signature.params.is_empty() => Some(format!(
                         "`{callee}` takes no arguments, so no lambda goes after the call"
+                    )),
+                    None => Some(format!(
+                        "no lambda goes after a call of `{callee}`, as every parameter of it is given by name"
                     )),
                     Some(i) if !matches!(signature.params[i].1, Ty::Fn(_) | Ty::Unknown) => {
                         // The parameter is not then reported missing.
                         given[i] = true;
+                        let last = if by_position < signature.params.len() {
+                            "last parameter before the `;`"
+                        } else {
+                            "last parameter"
+                        };
                         Some(format!(
-                            "a lambda after a call is for its last parameter, and {}, the last \
-                             parameter of `{callee}`, takes no function",
+                            "a lambda after a call is for its last parameter, and {}, the {last} \
+                             of `{callee}`, takes no function",
                             param_words(&signature.params[i].0, i)
                         ))
                     }
@@ -1503,10 +1524,31 @@ impl<'a> Checker<'a> {
                         )
                         .with_fix("name it, or move it before the named arguments"),
                     ),
-                    None if next < given.len() => {
+                    None if next < positional => {
                         given[next] = true;
                         param = Some(next);
                         next += 1;
+                    }
+                    None if signature
+                        .named_from
+                        .is_some_and(|k| k + (next - positional) < given.len()) =>
+                    {
+                        // The argument fills a parameter that is given by name.
+                        let i = signature.named_from.expect("checked") + (next - positional);
+                        next += 1;
+                        look_into = false;
+                        given[i] = true;
+                        let name = &signature.params[i].0;
+                        self.errors.push(
+                            Error::new(
+                                arg.value.pos(),
+                                format!("`{name}` of `{callee}` is given by name"),
+                            )
+                            .with_fix(format!(
+                                "write `{callee}({name}: {})`",
+                                written_expr(&arg.value)
+                            )),
+                        );
                     }
                     None if is_print && signature.params.len() == 1 => {
                         look_into = false;
@@ -1534,6 +1576,20 @@ impl<'a> Checker<'a> {
                     Some((name, pos)) => {
                         named = true;
                         match signature.params.iter().position(|(p, _)| p == name) {
+                            Some(i) if signature.named_from.is_some_and(|k| i < k) => {
+                                given[i] = true;
+                                look_into = false;
+                                self.errors.push(
+                                    Error::new(
+                                        *pos,
+                                        format!("`{name}` of `{callee}` is given by position"),
+                                    )
+                                    .with_fix(format!(
+                                        "write `{}` without its name, `{name}:`",
+                                        written_expr(&arg.value)
+                                    )),
+                                );
+                            }
                             Some(i) if given[i] => self.errors.push(Error::new(
                                 *pos,
                                 format!("the `{name}` argument is given twice"),
@@ -1785,11 +1841,20 @@ impl<'a> Checker<'a> {
             .filter(|((_, (p, _)), _)| !(unknown && p.contains('@')))
             .map(|((i, (p, _)), _)| param_words(p, i))
             .collect();
+        let all_by_name = !missing.is_empty()
+            && signature
+                .named_from
+                .is_some_and(|k| (0..k).all(|i| given[i] || signature.defaults[i]));
         if is_print && !missing.is_empty() {
             self.errors.push(
                 Error::new(call.end, "`print` needs the text to write")
                     .with_fix("write `print(\"hello\")`"),
             );
+        } else if all_by_name {
+            self.errors.push(Error::new(
+                call.end,
+                format!("`{}` needs {}", call.callee, sentence(missing)),
+            ));
         } else if !missing.is_empty() {
             self.errors.push(Error::new(
                 call.end,

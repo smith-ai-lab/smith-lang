@@ -864,6 +864,11 @@ struct Signature {
     /// not settle it, among the type parameters, for those that have a
     /// default.
     param_defaults: Vec<Option<Ty>>,
+    /// Where the parameters that a call gives by name begin: those before it
+    /// are given by position only, and those from it by name only. A
+    /// signature that is not a function's own, as a handler's, has none, and
+    /// its parameters are given either way.
+    named_from: Option<usize>,
     gives: Ty,
     /// The parameter of a function type that the function gives, when its
     /// result is one of its parameters: the function is that of the argument.
@@ -882,6 +887,11 @@ struct Signature {
 }
 
 impl Signature {
+    /// How many of the parameters are given by position: those before the `;`.
+    fn by_position(&self) -> usize {
+        self.named_from.unwrap_or(self.params.len())
+    }
+
     /// What `__end` takes: the status, a byte.
     fn end() -> Signature {
         Signature {
@@ -890,6 +900,7 @@ impl Signature {
             written: Vec::new(),
             defaults: vec![false],
             param_defaults: Vec::new(),
+            named_from: Some(1),
             gives: Ty::Nothing,
             gives_param: None,
             gives_held: Vec::new(),
@@ -905,6 +916,7 @@ impl Signature {
             written: Vec::new(),
             defaults: vec![false],
             param_defaults: Vec::new(),
+            named_from: Some(1),
             gives: Ty::Nothing,
             gives_param: None,
             gives_held: Vec::new(),
@@ -1661,6 +1673,11 @@ impl<'a> Defs<'a> {
                 .map(|p| (p.name.clone(), self.quietly(&p.ty, &scope)))
                 .collect(),
             defaults: f.params.iter().map(|p| p.default.is_some()).collect(),
+            named_from: Some(
+                (f.params.iter())
+                    .position(|p| p.by_name)
+                    .unwrap_or(f.params.len()),
+            ),
             param_defaults: (f.generics.iter())
                 .map(|g| g.default.as_ref().map(|d| self.quietly(d, &scope)))
                 .collect(),
@@ -1867,6 +1884,9 @@ impl<'a> Defs<'a> {
                         .iter()
                         .map(|p| (p.name.clone(), Ty::Unknown))
                         .collect::<Vec<_>>(),
+                    (def.params.iter())
+                        .position(|p| p.by_name)
+                        .unwrap_or(def.params.len()),
                     &call.args,
                 )?;
                 for (a, &p) in places.iter().enumerate() {
@@ -1905,6 +1925,7 @@ impl<'a> Defs<'a> {
                 .iter()
                 .map(|d| (d.name.clone(), Ty::Unknown))
                 .collect::<Vec<_>>(),
+            def.fields.len(),
             &call.args,
         )?;
         let value_of = |field: usize| {
@@ -2196,7 +2217,19 @@ fn written(f: &Function, effects: &[&str]) -> String {
     if !generics.is_empty() {
         text.push_str(&format!("[{}]", generics.join(", ")));
     }
-    text.push_str(&format!("({})", params.join(", ")));
+    // The parameters given by name come after a `;`.
+    let split = f
+        .params
+        .iter()
+        .position(|p| p.by_name)
+        .unwrap_or(params.len());
+    let (by_position, by_name) = params.split_at(split);
+    let mut list = by_position.join(", ");
+    if !by_name.is_empty() {
+        list.push_str("; ");
+        list.push_str(&by_name.join(", "));
+    }
+    text.push_str(&format!("({list})"));
     if let Some(t) = &f.result {
         text.push_str(&format!(" -> {}", written_type(t)));
     }
@@ -6552,14 +6585,16 @@ enum Callee {
 
 /// For each argument of a call, the place of its parameter, or none when an
 /// argument is for no parameter: a name that is not one, or more arguments by
-/// position than there are parameters. Such a call is reported where its
+/// position than there are parameters. `by_position` is how many of the
+/// parameters are given by position, which come before the `;`. Such a call is reported where its
 /// arguments are checked, so a call that was not reported gives some.
-fn params_of(params: &[(String, Ty)], args: &[Arg]) -> Option<Vec<usize>> {
+fn params_of(params: &[(String, Ty)], by_position: usize, args: &[Arg]) -> Option<Vec<usize>> {
     let mut next = 0;
     (args.iter())
         .map(|arg| match &arg.name {
             Some((name, _)) => params.iter().position(|(p, _)| p == name),
-            None if arg.after => params.len().checked_sub(1),
+            // A lambda after the call is for the last parameter given by position.
+            None if arg.after => by_position.checked_sub(1),
             None => {
                 next += 1;
                 (next <= params.len()).then(|| next - 1)
@@ -6574,19 +6609,29 @@ impl<'a> Defs<'a> {
     /// names nothing there is leaves out nothing.
     fn left_out(&self, call: &Call) -> Vec<(usize, &'a Expr)> {
         let file = self.file;
+        let position = |f: &Function| {
+            (f.params.iter())
+                .position(|p| p.by_name)
+                .unwrap_or(f.params.len())
+        };
         let params = |f: &'a Function| -> Vec<(&'a str, Option<&'a Expr>)> {
             (f.params.iter())
                 .map(|p| (p.name.as_str(), p.default.as_ref()))
                 .collect()
         };
         let name = call.callee.as_str();
+        // The parameters, and how many are given by position when they are a
+        // function's, which the fields of a struct are not.
         let (slots, by_position) = match &call.qualifier {
             Some((q, at)) => {
                 let Some(k) = self.trait_at(*at, q) else {
                     return Vec::new();
                 };
                 match traits::trait_function(&file.traits[k], name) {
-                    Some(fi) => (params(&file.traits[k].functions[fi]), true),
+                    Some(fi) => {
+                        let f = &file.traits[k].functions[fi];
+                        (params(f), Some(position(f)))
+                    }
                     None => return Vec::new(),
                 }
             }
@@ -6595,15 +6640,19 @@ impl<'a> Defs<'a> {
                     let fields = (file.structs[s].fields.iter())
                         .map(|f| (f.name.as_str(), f.default.as_ref()))
                         .collect();
-                    (fields, false)
+                    (fields, None)
                 } else if is_stream_call(call) {
                     return Vec::new();
                 } else if let Some(f) = self.function(call.name_pos, name) {
-                    (params(&file.functions[f]), true)
+                    (
+                        params(&file.functions[f]),
+                        Some(position(&file.functions[f])),
+                    )
                 } else if let Some([(k, fi)]) =
                     self.trait_fns_at(call.name_pos, name).map(Vec::as_slice)
                 {
-                    (params(&file.traits[*k].functions[*fi]), true)
+                    let f = &file.traits[*k].functions[*fi];
+                    (params(f), Some(position(f)))
                 } else {
                     return Vec::new();
                 }
@@ -6613,8 +6662,10 @@ impl<'a> Defs<'a> {
         let mut next = 0;
         for arg in &call.args {
             match &arg.name {
-                None if arg.after && by_position => {
-                    if let Some(g) = given.last_mut() {
+                None if arg.after && by_position.is_some() => {
+                    // A lambda after the call is for the last parameter given by position.
+                    let at = by_position.and_then(|k| k.checked_sub(1));
+                    if let Some(g) = at.and_then(|i| given.get_mut(i)) {
                         *g = true;
                     }
                 }
@@ -6623,7 +6674,7 @@ impl<'a> Defs<'a> {
                         given[i] = true;
                     }
                 }
-                None if by_position => {
+                None if by_position.is_some() => {
                     if let Some(g) = given.get_mut(next) {
                         *g = true;
                     }
@@ -6665,6 +6716,21 @@ impl<'a> Defs<'a> {
 
     /// The parameters of a function with a body, among its type
     /// parameters, which those of a copy of it replace.
+    /// How many of the parameters of a function with a body are given by
+    /// position.
+    fn by_position(&self, t: Template) -> usize {
+        match t {
+            Template::Given(k, fi) => self.trait_sigs[k][fi].by_position(),
+            Template::Free(f) => self.signatures[f].by_position(),
+            Template::Impl(i, fi) => {
+                let info = self.impls[i]
+                    .as_ref()
+                    .expect("an implementation that is known");
+                self.trait_sigs[info.of][fi].by_position()
+            }
+        }
+    }
+
     fn params(&self, t: Template) -> Vec<(String, Ty)> {
         match t {
             Template::Given(k, fi) => self.trait_sigs[k][fi].params.clone(),
@@ -6856,9 +6922,9 @@ impl<'a> Typed<'a> {
                 None => self.type_of(arg, env),
             }
         };
-        let solve = |params: &[(String, Ty)], vars: usize| {
+        let solve = |params: &[(String, Ty)], by_position: usize, vars: usize| {
             let mut sol = vec![None; vars];
-            let places = params_of(params, &call.args).expect("checked");
+            let places = params_of(params, by_position, &call.args).expect("checked");
             for (i, p) in places.into_iter().enumerate() {
                 unify(&params[p].1, &as_read(&given(i), &params[p].1), &mut sol);
             }
@@ -6883,7 +6949,7 @@ impl<'a> Typed<'a> {
         }
         let run = |f: usize| {
             let sig = &defs.signatures[f];
-            let args = solve(&sig.params, sig.scope.names.len());
+            let args = solve(&sig.params, sig.by_position(), sig.scope.names.len());
             let args = defaulted(args, sig.param_defaults.clone());
             // What only a requirement names is what its implementation says.
             let args = if sig.scope.requires.is_empty() {
@@ -6988,7 +7054,7 @@ impl<'a> Typed<'a> {
             }
         };
         let sig = &defs.trait_sigs[k][fi];
-        let mut types = solve(&sig.params, sig.scope.names.len());
+        let mut types = solve(&sig.params, sig.by_position(), sig.scope.names.len());
         for (i, j) in defs.defaulted(k) {
             if types[i] == Ty::Unknown {
                 types[i] = types[j].clone();
