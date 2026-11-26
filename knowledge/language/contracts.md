@@ -94,7 +94,7 @@ main.smith:11:38: The first number must not be below the second.
 
 ## A requires is a proof parameter
 
-`requires e` is a parameter of the statement `e` that has no name and the default `arith`, so these two are one feature.
+`requires e` is a proof parameter of the statement `e` with the default `arith` that no call writes, so these two differ only in whether a call may write it.
 
 ```
 fn gap(a: Byte, b: Byte) -> Byte
@@ -103,10 +103,13 @@ fn gap(a: Byte, b: Byte) -> Byte
   a - b
 }
 
-fn gap_named(a: Byte, b: Byte, _: a >= b = arith) -> Byte { a - b }
+fn gap_named(a: Byte, b: Byte, p: a >= b = arith) -> Byte { a - b }
 ```
 
-At each call `arith` proves `a >= b`, and no proof is passed by hand for it. `gap(5, 3)` and `gap_named(5, 3)` are both `2`, and `gap(3, 5)` and `gap_named(3, 5)` are both refused with the goal `3 >= 5`. A proof parameter that has a name, as [Statements](statements.md#a-proof-parameter-may-have-a-default) says, may also be passed: `gap_named(a, b, q)` gives the proof `q` that `a >= b`, which a `requires` has no way to do, as it has no name to pass.
+`gap(5, 3)` and `gap_named(5, 3)` are both `2`, and `gap(3, 5)` and `gap_named(3, 5)` are both refused with the goal `3 >= 5`. The two rules are these.
+
+- A `requires` is never written at a call. It is not in the argument list, and `arith` proves it from what is in scope, proofs bound by a [`check`](check.md) or given by a lemma included.
+- A proof parameter is in the argument list. With the default `arith` it may be left out, or passed by position: `gap_named(a, b, q)` gives the proof `q` that `a >= b`, as [Statements](statements.md#a-proof-parameter-may-have-a-default) says.
 
 ## What the function gives
 

@@ -27,7 +27,7 @@ fn first(xs: List[Byte], p: xs.size > 0 = arith) -> Byte { xs[0] }
 
 `first([7, 8])` is `7`, since `arith` proves `[7, 8].size > 0` where the call is written. `first(xs, q)` passes a proof `q` of `xs.size > 0` and leaves `arith` out. A call that leaves the proof out where `arith` cannot prove it is refused with the goal for the call's arguments: "cannot prove that `ys.size > 0`, which `first` requires of its arguments". A proof parameter with no default is always passed. The default is written where the parameter is declared, so no proof is passed that the declaration does not show.
 
-`requires e` is this parameter with no name: it is the same as `_: e = arith`, as [Contracts](contracts.md#a-requires-is-a-proof-parameter) says.
+`requires e` is the same as a proof parameter with the default `arith` that no call writes, as [Contracts](contracts.md#a-requires-is-a-proof-parameter) says.
 
 ## What a statement may compare
 

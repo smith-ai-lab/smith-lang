@@ -60,6 +60,6 @@ That is how `arith` proves the `valid` of an [index](indexing.md): `valid(c, i)`
 | `p: a > 0` as a parameter | A proof the caller passes |
 | `p: a > 0 = arith` as a parameter | A proof the caller may leave out, where `arith` proves it |
 | `-> a > 0` as a result | A proof the function gives |
-| `requires f(x)` | A parameter with no name and the default `arith`, of the comparison that `f(x)` returns |
+| `requires f(x)` | A proof parameter of the comparison that `f(x)` returns, with the default `arith` that no call writes |
 
 Next: [Statements](statements.md)
