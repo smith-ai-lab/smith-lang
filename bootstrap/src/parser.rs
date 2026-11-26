@@ -613,6 +613,10 @@ pub struct Match {
     pub of: Expr,
     pub arms: Vec<Arm>,
     pub form: Form,
+    /// The name of the proof, where it was written `match check(c) { .some(p)
+    /// { a } .none { b } }`, which is read as `if c { a } else { b }` and is
+    /// held to what `check` may test.
+    pub checked: Option<(String, Pos)>,
 }
 
 /// How a `match` is written.
@@ -1163,6 +1167,86 @@ fn arm(name: &str, pos: Pos, body: Vec<Stmt>, end: Pos) -> Arm {
     }
 }
 
+/// `match check(c) { .some(p) { a } .none { b } }`, which tests `c` once and
+/// runs `a` where it holds and `b` where it does not, as `if c { a } else { b }`
+/// does. The proof `p` is used by nothing but `arith`, so it is not kept.
+fn checked_match(pos: Pos, call: &Call, arms: Vec<Arm>) -> Result<Match, Error> {
+    let shape = |fix: &str| {
+        Error::new(
+            call.name_pos,
+            "`check` is matched with the two arms `.some(p)` and `.none`",
+        )
+        .with_fix(fix.to_string())
+    };
+    let [test] = call.args.as_slice() else {
+        return Err(
+            Error::new(call.name_pos, "`check` takes the one statement to test")
+                .with_fix("write `check(a < b)`".to_string()),
+        );
+    };
+    if test.name.is_some() || test.after {
+        return Err(shape(
+            "write the statement as the one argument, with no name",
+        ));
+    }
+    // Whether the arm is the case `want`, and what it holds: nothing, or a
+    // name that is not a `var`.
+    let holds = |arm: &Arm, want: &str| match &arm.pattern {
+        Pattern::Case { name, inner, .. } if name == want => match inner.as_deref() {
+            None => Some(false),
+            Some(Pattern::Bind { var: None, .. }) => Some(true),
+            Some(_) => None,
+        },
+        _ => None,
+    };
+    let [first, second] = arms.as_slice() else {
+        return Err(shape("write `.some(p) { ... }` and `.none { ... }`"));
+    };
+    let (some, none) = if holds(first, "some") == Some(true) && holds(second, "none") == Some(false)
+    {
+        (first, second)
+    } else if holds(first, "none") == Some(false) && holds(second, "some") == Some(true) {
+        (second, first)
+    } else {
+        return Err(shape("write `.some(p) { ... }` and `.none { ... }`"));
+    };
+    let Some(Pattern::Case {
+        inner: Some(inner), ..
+    }) = Some(&some.pattern)
+    else {
+        unreachable!("`.some` holds a name")
+    };
+    let Pattern::Bind { name, pos: at, .. } = &**inner else {
+        unreachable!("`.some` holds a name")
+    };
+    let proof = (name.clone(), *at);
+    Ok(Match {
+        pos,
+        of: test.value.clone(),
+        arms: vec![
+            Arm {
+                pattern: bool_case("true", some.pattern.pos()),
+                ..some.clone()
+            },
+            Arm {
+                pattern: bool_case("false", none.pattern.pos()),
+                ..none.clone()
+            },
+        ],
+        form: Form::If { otherwise: true },
+        checked: Some(proof),
+    })
+}
+
+/// The pattern of the case of `bool` named `name`.
+fn bool_case(name: &str, pos: Pos) -> Pattern {
+    Pattern::Case {
+        name: name.to_string(),
+        pos,
+        inner: None,
+    }
+}
+
 /// The case of `bool` named `name`, as a statement.
 fn truth(name: &str, pos: Pos) -> Vec<Stmt> {
     vec![Stmt::Expr(Expr::Case {
@@ -1183,6 +1267,7 @@ fn negated(pos: Pos, operand: Expr) -> Expr {
             arm("false", at, truth("true", at), at),
         ],
         form: Form::Not,
+        checked: None,
     }))
 }
 
@@ -1206,6 +1291,7 @@ fn logic(form: Form, left: Expr, right: Expr) -> Expr {
         of: left,
         arms,
         form,
+        checked: None,
     }))
 }
 
@@ -2585,6 +2671,7 @@ impl Parser<'_> {
             form: Form::If {
                 otherwise: has_else,
             },
+            checked: None,
         })
     }
 
@@ -2811,11 +2898,19 @@ impl Parser<'_> {
             arms.push(Arm { pattern, body, end });
         }
         self.bump();
+        if let Expr::Call(call) = &of
+            && call.callee == "check"
+            && call.qualifier.is_none()
+            && call.through.is_none()
+        {
+            return checked_match(pos, call, arms);
+        }
         Ok(Match {
             pos,
             of,
             arms,
             form: Form::Match,
+            checked: None,
         })
     }
 

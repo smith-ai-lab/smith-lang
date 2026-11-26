@@ -70,6 +70,7 @@ pub(super) fn split(pos: Pos, operand: Expr) -> Expr {
         }),
         arms: vec![case("go", &go, name(&go)), case("stop", &stop, leave)],
         form: Form::Try,
+        checked: None,
     }))
 }
 

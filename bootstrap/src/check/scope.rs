@@ -49,6 +49,7 @@ pub(super) fn used_names(file: &File) -> Vec<(String, Pos)> {
         for e in exprs(values(&f.body)) {
             match e {
                 Expr::Match(m) => {
+                    bound.extend(m.checked.iter().map(|(n, _)| n.as_str()));
                     for arm in &m.arms {
                         patterns(&arm.pattern, &mut bound);
                     }
