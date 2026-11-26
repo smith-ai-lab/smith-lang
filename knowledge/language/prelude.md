@@ -8,6 +8,7 @@ built:
   - "not a prelude without functions: today the functions of these traits, as `add`, `div`, `compare`, and `convert`, are bare names in every file, so a file's own function of one of those names is refused"
   - "`Range`, a struct with `start` and `end`, both `Nat`, which `a..b` written as a value builds"
   - "not `Pos`"
+  - "`check`, which is built in and needs no `use`, in `match check(e) { .some(p) { ... } .none { ... } }`, as [check](check.md) says"
   - "a name of the standard library outside the table, such as `print`, `console`, `push`, `narrow`, a `wrapping_` function, or the name of a size, is refused where a file uses it with no `use`, and the error names the module to import it from"
 ---
 
