@@ -44,6 +44,108 @@ pub struct Html {
   page: str
 }
 
+// A link that a page may hold in `href` or `src`: it has no scheme, or the
+// scheme is `http`, `https`, or `mailto`, so it never runs code. Only `link`
+// and `check_link` make one.
+pub struct Link {
+  target: str
+}
+
+// Why a text is not a link.
+pub enum LinkError {
+  not_plain: str
+  scheme: str
+}
+
+impl Fmt[LinkError] {
+  fn fmt(value: LinkError) -> str <alloc> {
+    match value {
+      .not_plain(t) { "{t}: not a link, which holds no space and no control character" }
+      .scheme(t) { "{t}: not a link, whose scheme is http, https, or mailto, or none" }
+    }
+  }
+}
+
+fn lowered(b: Byte) -> Byte {
+  if b >= 'A' and b <= 'Z' { b + 32 } else { b }
+}
+
+// Whether a text holds no space and no control character, which a browser
+// would skip over inside a scheme.
+pub fn plain(t: str) -> bool {
+  var yes = true
+  loop b in t {
+    if b <= 32 or b == 127 {
+      yes = false
+      break
+    }
+  }
+  yes
+}
+
+// Whether a text begins with a scheme, which is what stands before a `:` that
+// comes before any `/`, `?`, or `#`.
+fn has_scheme(t: str) -> bool {
+  var yes = false
+  loop b in t {
+    if b == ':' {
+      yes = true
+      break
+    }
+    if b == '/' or b == '?' or b == '#' {
+      break
+    }
+  }
+  yes
+}
+
+// Whether a text begins with the scheme `name`, whatever the case of its letters.
+fn is_scheme(t: str, name: str) -> bool {
+  have = t.bytes
+  want = name.bytes
+  var yes = have.size > want.size
+  loop i in 0..have.size {
+    if i >= want.size {
+      if have[i] != ':' {
+        yes = false
+        break
+      }
+      break
+    }
+    if lowered(have[i]) != want[i] {
+      yes = false
+      break
+    }
+  }
+  yes
+}
+
+// Whether a text has no scheme, or one that runs no code.
+pub fn runs_no_code(t: str) -> bool {
+  not has_scheme(t) or is_scheme(t, "http") or is_scheme(t, "https") or is_scheme(t, "mailto")
+}
+
+// A link, written out. A text with a space or a control character, or with a
+// scheme other than `http`, `https`, and `mailto`, is refused where the call is
+// written.
+pub fn link(t: str) -> Link
+  requires plain(t)
+  requires runs_no_code(t)
+{
+  Link(target: t)
+}
+
+// A link that is known only when the program runs, or the reason it is not one.
+pub fn check_link(t: str) -> Result[Link, LinkError] {
+  if not plain(t) {
+    .err(.not_plain(t))
+  } else if not runs_no_code(t) {
+    .err(.scheme(t))
+  } else {
+    .ok(Link(target: t))
+  }
+}
+
 // What a page is written through, as it runs. A tag is left open until
 // something that is not an attribute is written, so that `attribute` may
 // follow `start`. A handler writes what it is given as it is: the texts are
@@ -137,88 +239,191 @@ fn given(name: str, value: str) <markup, alloc> {
   }
 }
 
-// What every element holds after its attributes: the attributes every element
-// may have, the text, what the block writes, and the end of the tag.
-fn finish_element(tag: str, inside: str, class: str, id: str, block: fn() <markup>) <markup, alloc> {
+// A link that is written as the attribute `name`, which is never empty.
+fn linked(name: str, to: Link) <markup, alloc> {
+  attribute(name, escape(to.target))
+}
+
+// The attributes every element may have, written after its own.
+fn common(class: str, id: str) <markup, alloc> {
   given("class", class)
   given("id", id)
-  if inside.size > 0 {
-    text(inside)
-  }
+}
+
+// An element that holds a text, which is escaped.
+fn holds_text(tag: str, inside: str) <markup, alloc> {
+  text(inside)
+  end(tag)
+}
+
+// An element that holds what its block writes.
+fn holds_block(tag: str, block: fn() <markup>) <markup> {
   block()
   end(tag)
 }
 
-// An element with no attributes of its own.
-fn element(tag: str, inside: str, class: str, id: str, block: fn() <markup>) <markup, alloc> {
-  start(tag)
-  finish_element(tag, inside, class, id, block)
+pub fn html(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("html")
+  common(class, id)
+  holds_text("html", inside)
 }
 
-// An element that holds nothing, which is a tag with its attributes.
-fn empty_element(tag: str, class: str, id: str) <markup, alloc> {
-  start(tag)
-  given("class", class)
-  given("id", id)
-  void()
+pub fn in_html(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("html")
+  common(class, id)
+  holds_block("html", block)
 }
 
-pub fn html(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("html", inside, class, id, block)
+pub fn head(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("head")
+  common(class, id)
+  holds_text("head", inside)
 }
 
-pub fn head(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("head", inside, class, id, block)
+pub fn in_head(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("head")
+  common(class, id)
+  holds_block("head", block)
 }
 
-pub fn title(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("title", inside, class, id, block)
+pub fn title(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("title")
+  common(class, id)
+  holds_text("title", inside)
 }
 
-pub fn body(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("body", inside, class, id, block)
+pub fn in_title(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("title")
+  common(class, id)
+  holds_block("title", block)
 }
 
-pub fn h1(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("h1", inside, class, id, block)
+pub fn body(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("body")
+  common(class, id)
+  holds_text("body", inside)
 }
 
-pub fn h2(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("h2", inside, class, id, block)
+pub fn in_body(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("body")
+  common(class, id)
+  holds_block("body", block)
 }
 
-pub fn p(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("p", inside, class, id, block)
+pub fn h1(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("h1")
+  common(class, id)
+  holds_text("h1", inside)
 }
 
-pub fn b(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("b", inside, class, id, block)
+pub fn in_h1(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("h1")
+  common(class, id)
+  holds_block("h1", block)
 }
 
-pub fn span(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("span", inside, class, id, block)
+pub fn h2(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("h2")
+  common(class, id)
+  holds_text("h2", inside)
 }
 
-pub fn ul(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("ul", inside, class, id, block)
+pub fn in_h2(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("h2")
+  common(class, id)
+  holds_block("h2", block)
 }
 
-pub fn li(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("li", inside, class, id, block)
+pub fn p(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("p")
+  common(class, id)
+  holds_text("p", inside)
 }
 
-pub fn article(inside: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
-  element("article", inside, class, id, block)
+pub fn in_p(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("p")
+  common(class, id)
+  holds_block("p", block)
 }
 
-pub fn a(inside: str = "", href: str = "", class: str = "", id: str = "", block: fn() <markup> = { }) <markup, alloc> {
+pub fn b(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("b")
+  common(class, id)
+  holds_text("b", inside)
+}
+
+pub fn in_b(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("b")
+  common(class, id)
+  holds_block("b", block)
+}
+
+pub fn span(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("span")
+  common(class, id)
+  holds_text("span", inside)
+}
+
+pub fn in_span(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("span")
+  common(class, id)
+  holds_block("span", block)
+}
+
+pub fn ul(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("ul")
+  common(class, id)
+  holds_text("ul", inside)
+}
+
+pub fn in_ul(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("ul")
+  common(class, id)
+  holds_block("ul", block)
+}
+
+pub fn li(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("li")
+  common(class, id)
+  holds_text("li", inside)
+}
+
+pub fn in_li(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("li")
+  common(class, id)
+  holds_block("li", block)
+}
+
+pub fn article(inside: str, class: str = "", id: str = "") <markup, alloc> {
+  start("article")
+  common(class, id)
+  holds_text("article", inside)
+}
+
+pub fn in_article(class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("article")
+  common(class, id)
+  holds_block("article", block)
+}
+
+pub fn a(inside: str, href: Link, class: str = "", id: str = "") <markup, alloc> {
   start("a")
-  given("href", href)
-  finish_element("a", inside, class, id, block)
+  linked("href", href)
+  common(class, id)
+  holds_text("a", inside)
+}
+
+pub fn in_a(href: Link, class: str = "", id: str = "", block: fn() <markup>) <markup, alloc> {
+  start("a")
+  linked("href", href)
+  common(class, id)
+  holds_block("a", block)
 }
 
 pub fn br(class: str = "", id: str = "") <markup, alloc> {
-  empty_element("br", class, id)
+  start("br")
+  common(class, id)
+  void()
 }
 
 pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str = "", class: str = "", id: str = "") <markup, alloc> {
@@ -227,8 +432,7 @@ pub fn input(name: str = "", placeholder: str = "", type: str = "", value: str =
   given("placeholder", placeholder)
   given("type", type)
   given("value", value)
-  given("class", class)
-  given("id", id)
+  common(class, id)
   void()
 }
 
