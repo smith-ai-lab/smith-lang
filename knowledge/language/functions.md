@@ -159,7 +159,7 @@ fn scale(x: f32; by: f32 = 2.0) -> f32 { x * by }
 A parameter before `;` may have a default too, and is then left out from the end, as the last of the parameters by position.
 
 ```
-fn greet(name: str, greeting: str = "hello") -> str { "{greeting} {name}" }
+fn greet(name: str, greeting: str = "hello") -> str <alloc> { "{greeting} {name}" }
 ```
 
 `greet("Ada")` is `"hello Ada"`, and `greet("Ada", "hi")` is `"hi Ada"`.
