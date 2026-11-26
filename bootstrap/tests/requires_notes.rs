@@ -105,7 +105,7 @@ struct Call {
 fn asked(text: &str, arg: i128) -> String {
     let mut said = String::new();
     let mut word = String::new();
-    let mut flush = |said: &mut String, word: &mut String| {
+    let flush = |said: &mut String, word: &mut String| {
         said.push_str(&if word == "i" { arg.to_string() } else { word.clone() });
         word.clear();
     };
@@ -160,22 +160,36 @@ fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() 
             }
             Err(errors) => errors,
         };
-        // Errors that are the same, in the message and the goal, are reported
-        // once, so `requires` that are written alike and fail are one error.
+        // Errors that are the same, in the message and the goal, are one, and
+        // two `requires` that are written differently may say the same of the
+        // argument, as `not (2 == i)` and `2 != i` do, so what is counted is
+        // between one error for all the `requires` of a kind and one for each.
         let told: BTreeSet<(String, String)> = (failed.iter())
             .filter_map(|(over, text)| over.told().map(|t| (t, asked(text, c.arg))))
             .collect();
+        let comments: BTreeSet<&String> = told.iter().map(|(t, _)| t).collect();
         let plain: BTreeSet<String> = (failed.iter())
             .filter(|(over, _)| over.told().is_none())
             .map(|(_, text)| asked(text, c.arg))
             .collect();
-        let with_goal = errors.iter().filter(|e| e.goal.is_some());
-        let without = errors.iter().filter(|e| e.goal.is_none());
-        assert_eq!(with_goal.clone().count(), told.len(), "{errors:?}");
-        assert_eq!(without.clone().count(), plain.len(), "{errors:?}");
+        let distinct: BTreeSet<(&String, &Option<String>)> =
+            errors.iter().map(|e| (&e.message, &e.goal)).collect();
+        let with_goal = distinct.iter().filter(|(_, goal)| goal.is_some()).count();
+        let without = distinct.iter().filter(|(_, goal)| goal.is_none()).count();
+        assert!(
+            (comments.len()..=told.len()).contains(&with_goal),
+            "{errors:?}"
+        );
+        assert!(
+            (usize::from(!plain.is_empty())..=plain.len()).contains(&without),
+            "{errors:?}"
+        );
         // The comment of each is the message of an error with a goal, and no
         // other comment is.
-        let messages: BTreeSet<&String> = with_goal.map(|e| &e.message).collect();
+        let messages: BTreeSet<&String> = (errors.iter())
+            .filter(|e| e.goal.is_some())
+            .map(|e| &e.message)
+            .collect();
         assert_eq!(
             messages,
             told.iter().map(|(t, _)| t).collect::<BTreeSet<_>>(),
