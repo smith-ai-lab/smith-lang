@@ -99,7 +99,7 @@ This prints `Tom` and then `something`. `Named[Cat]` is for fewer types than `Na
 - **It is chosen at the concrete type.** The `impl` is chosen once every type of the call is known, and never inside a generic function: `fn send[T](x: T)` that calls `name_of(x)` uses the `impl` of the type it is called with, so `send(Cat(name: "Tom"))` is `Tom`.
 - **The more specific `impl` is in the module of the trait or of a type it is for,** as every `impl` is, so an import never changes which `impl` a call uses.
 
-When two `impl`s fit and neither is for fewer types than the other, as `Named[(T, Cat)]` and `Named[(Cat, U)]` for `(Cat, Cat)`, or when both are for the same types, the `impl`s are refused: "`Named` is already implemented for `(Cat, U)`", or, when a `requires` lets both fit, "both fit this use".
+Two `impl`s for ranges of whole numbers that overlap are refused whatever they are for, as [Number types](number-types.md#the-traits-of-a-range) says. When two `impl`s fit and neither is for fewer types than the other, as `Named[(T, Cat)]` and `Named[(Cat, U)]` for `(Cat, Cat)`, or when both are for the same types, the `impl`s are refused: "`Named` is already implemented for `(Cat, U)`", or, when a `requires` lets both fit, "both fit this use".
 
 ## What an impl must write
 

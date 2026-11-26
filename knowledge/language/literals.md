@@ -147,18 +147,31 @@ This prints `1`, with `A` the range `1..2` and `B` the range `2..3`.
 
 ## A literal beside another value
 
-A literal beside another number is a range of its own, and the operator gives the exact range of the two, as [Integer arithmetic](arithmetic.md) says. Any two ranges are compared, so a literal that the other side cannot hold is a comparison that gives `false`.
+A literal beside another number is a range of its own, and the operator gives the exact range of the two, as [Integer arithmetic](arithmetic.md) says. Any two ranges are compared, unless their ranges already decide the answer.
 
 ```
 use std.console (console, print)
 
 fn main() <console, alloc> {
   x: 0..256 = 7
-  print("{x == 5} {x < 'a'} {x == 300}")
+  print("{x == 5} {x < 'a'}")
 }
 ```
 
-This prints `false true false`. A whole number may become a float where a float is expected, as the table says.
+This prints `false true`. A whole number may become a float where a float is expected, as the table says.
+
+A comparison that the two ranges decide, whatever the values are, is refused, as a `narrow` that is needless is. A literal that the other side cannot hold is such a comparison.
+
+```
+use std.console (console, print)
+
+fn main() <console, alloc> {
+  x: 0..256 = 7
+  print("{x == 300}")
+}
+```
+
+This is refused: "this comparison is always `false`, as `x` is a `0..256` and `300` is not in it", with the fix "delete the comparison". `x < 300` and `x >= 0` are refused in the same way, as always `true`. The compiler does not build this yet, so the words are not quoted.
 
 ## A literal beside a value of a program's own type
 

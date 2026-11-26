@@ -125,6 +125,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [async.md](async.md): all I/O is async and reads as sequential code, suspending a task under an async handler and blocking under a blocking one.
 - [cancellation.md](cancellation.md): ending a group's block is the one way to cancel, and when a cancelled task ends.
 - [task-ending.md](task-ending.md): the three things that end a task before its work is done, and what is dropped and closed when one does.
+- [abandon.md](abandon.md): the `Abandon` trait, which the scheduler calls on a use-exactly-once value a task still owns when it ends, and which a function that holds one across a wait needs its type to have.
 - [task-failures.md](task-failures.md): what `join` gives for a child that failed, `outcome`, which lets a task recover, and a child that is never joined.
 - [events.md](events.md): a native application as a task that waits for the next event, with no callbacks, and a window that lives as long as `main`.
 

@@ -136,28 +136,32 @@ This is refused, as `0..256` holds 101 to 255 and `0..101` does not.
 A range has every trait that is implemented for a range that holds it. So a trait written for `Byte` is had by a `0..10`, as a `0..10` is taken wherever a `Byte` is needed.
 
 ```
-trait Double {
-  fn double(self) -> Nat
+trait Double[T] {
+  fn double(x: T) -> Nat
 }
 
-impl Double for Byte {
-  fn double(self) -> Nat { self * 2 }
+impl Double[Byte] {
+  fn double(x: Byte) -> Nat { x * 2 }
 }
 
-fn twice(x: 0..10) -> Nat { x.double() }
+fn twice(x: 0..10) -> Nat { double(x) }
 ```
 
 `twice(3)` is `6`. The implementation is given `x` as the `Byte` it was written for, with nothing written.
 
-Where more than one implementation is for a range that holds it, the one for the narrowest is used, as it says the most about the value.
+Two implementations for ranges that overlap are refused, whether one range is inside the other or each holds numbers of the other. So the implementation a call uses never depends on how narrow a range was inferred. This is refused with the `impl` above.
 
 ```
-impl Double for 0..100 {
-  fn double(self) -> Nat { self + self }
+impl Double[0..100] {
+  fn double(x: 0..100) -> Nat { x + x }
 }
 ```
 
-With both, `twice` uses this one, as `0..100` is inside `Byte` and still holds `0..10`. Where two such ranges each hold the value's and neither is inside the other, as `0..100` and `-50..50` for a `0..10`, no one of them is the narrowest and the use is refused, naming both, until the value is given the type of one.
+The error is "`Double` is already implemented for `Byte`, which `0..100` is inside", and so it is for `-50..50` beside `0..100`, which overlap in `0..50`: "`Double` is already implemented for `0..100`, which `-50..50` overlaps". A variant for a smaller range gets a function of its own, as `double_small`, which takes that range and is called with a value that is proven to be in it.
+
+```
+fn double_small(x: 0..100) -> Nat { x + x }
+```
 
 `Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` are had by every range in this way and no other: each is written once for the sizes, and a range is held by the size it is kept at.
 

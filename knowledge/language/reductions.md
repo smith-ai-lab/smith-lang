@@ -27,6 +27,26 @@ fn average(a: [3]f32) -> f32 { mean(for i { a[i] }) }
 
 `largest([1.0, 3.0, 2.0])` is `3.0`, and `average([1.0, 2.0, 3.0])` is `2.0`.
 
+## A view that is not empty
+
+`max` and `mean` take a view of at least 1 element, as a size declared `[n: Pos]` is. An empty view has no largest element, and the mean of an empty view of whole numbers would divide by zero. `sum` of an empty view is `0`, so it takes any size.
+
+```
+fn top[n: Pos](x: [n]f32) -> f32 { max(x) }
+```
+
+With `n: Nat` the same function is refused: "`max` needs a view of at least 1 element, and `n` may be 0", with the fix "declare `n` as `Pos`, or state `requires n > 0`".
+
+```
+fn top[n: Nat](x: [n]f32) -> f32
+  requires n > 0
+{
+  max(x)
+}
+```
+
+A caller whose size is a `Nat` states the same `requires`, or checks `n > 0` with an `if` first.
+
 ## Reducing what is computed
 
 The `for` that is reduced may compute each element. This is the sum of squares.
@@ -56,8 +76,8 @@ A float reduction is regrouped for speed. [The rules floats keep](float-rules.md
 | Written | Is |
 | --- | --- |
 | `sum(v)` | The elements of the view `v` added |
-| `max(v)` | The largest element of `v` |
-| `mean(v)` | The sum of `v` divided by the number of its elements |
+| `max(v)` | The largest element of `v`, which has at least 1 |
+| `mean(v)` | The sum of `v` divided by the number of its elements, which are at least 1 |
 | `for r { sum(for c { e }) }` | A reduction for each `r` |
 
 Next: [Accumulation](accumulation.md)

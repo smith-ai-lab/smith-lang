@@ -15,7 +15,7 @@ built:
   - "a task that is cancelled, by the end of the block of its scheduler or by a parent that ends, ends each child it holds and each handle of `net` that it owns, closed by the handler in force, and what a task that has not run yet was given, as [Cancellation](../language/cancellation.md) and [How a task ends](../language/task-ending.md) say"
   - "`join` of a child that ended by a failure ends the task that joins it by the same failure, and `outcome(t)` waits as `join` does and gives `.ok` of the value or `.err` of a `Failure`, `out_of_memory` or `refused_write`, so the task that calls it goes on, as [A failed task](../language/task-failures.md) says"
   - "not built: the ending of the values a cancelled task held other than children and handles of `net`, as [Cancellation](../language/cancellation.md) says"
-  - "not built: `first`, a child that runs at the same time as its parent, and a handler that holds state installed under the scheduler of a child, which is refused as not built yet"
+  - "not built: `first`, which gives the value of the child that finished and the others as `(T, List[Task[T]])`, a child that runs at the same time as its parent, and a handler that holds state installed under the scheduler of a child, which is refused as not built yet"
 ---
 
 # Task
@@ -32,6 +32,7 @@ fn tasks[T](body: take fn() -> T <task>) -> T
 fn spawn[T](work: take fn() -> T) -> Task[T] <task>
 fn join[T](child: take Task[T]) -> T <task>
 fn outcome[T](child: take Task[T]) -> Result[T, Failure] <task>
+fn first[T](child: take Task[T], rest: take List[Task[T]]) -> (T, List[Task[T]]) <task>
 
 pub enum Failure { out_of_memory, refused_write }
 ```
