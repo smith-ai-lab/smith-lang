@@ -96,6 +96,29 @@ struct Call {
     /// For each `requires`, what is above it, how it is written, and whether
     /// the argument meets it.
     requires: Vec<(Above, String, bool)>,
+    /// The number the call gives, which is what `i` is in each.
+    arg: i128,
+}
+
+/// A `requires` as a failed call says it, with the number in the place of `i`.
+/// Two that say the same are one error, so they are one here.
+fn asked(text: &str, arg: i128) -> String {
+    let mut said = String::new();
+    let mut word = String::new();
+    let mut flush = |said: &mut String, word: &mut String| {
+        said.push_str(&if word == "i" { arg.to_string() } else { word.clone() });
+        word.clear();
+    };
+    for c in text.chars() {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+        } else {
+            flush(&mut said, &mut word);
+            said.push(c);
+        }
+    }
+    flush(&mut said, &mut word);
+    said
 }
 
 fn call(g: &mut Gen) -> Call {
@@ -116,6 +139,7 @@ fn call(g: &mut Gen) -> Call {
             "fn needs(i: {t}) -> {t}\n{lines}{{\n  i\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{needs({arg})}}\")\n}}\n"
         )),
         requires,
+        arg,
     }
 }
 
@@ -138,12 +162,12 @@ fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() 
         };
         // Errors that are the same, in the message and the goal, are reported
         // once, so `requires` that are written alike and fail are one error.
-        let told: BTreeSet<(String, &String)> = (failed.iter())
-            .filter_map(|(over, text)| over.told().map(|t| (t, *text)))
+        let told: BTreeSet<(String, String)> = (failed.iter())
+            .filter_map(|(over, text)| over.told().map(|t| (t, asked(text, c.arg))))
             .collect();
-        let plain: BTreeSet<&String> = (failed.iter())
+        let plain: BTreeSet<String> = (failed.iter())
             .filter(|(over, _)| over.told().is_none())
-            .map(|(_, text)| *text)
+            .map(|(_, text)| asked(text, c.arg))
             .collect();
         let with_goal = errors.iter().filter(|e| e.goal.is_some());
         let without = errors.iter().filter(|e| e.goal.is_none());
