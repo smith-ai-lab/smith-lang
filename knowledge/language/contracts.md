@@ -61,6 +61,10 @@ fn gap_again(a: Byte, b: Byte) -> Byte
 
 `gap_again(9, 3)` is `6`. A `requires` may join comparisons with `and`, `or`, and `not`.
 
+## What a contract may compare
+
+A `requires` or an `ensures` compares two values of any type that has [`Ord`](comparisons.md), as [Statements](statements.md#what-a-statement-may-compare) says, so `requires earlier <= later` is written for two `Instant`s as it is for two numbers.
+
 ## What the caller is told
 
 A comment above a `requires` is the message a caller sees when a call fails it. The goal that failed is shown under the message. A `requires` with no comment shows only the goal.

@@ -17,6 +17,20 @@ fn first(xs: List[Byte], p: xs.size > 0) -> Byte { xs[0] }
 
 `xs.size > 0` is a statement, and `p` is a proof of it. Most statements a program needs are of this kind, and [`arith`](arith.md) finds their proofs, so they are written in a `requires` and no proof is named.
 
+## What a statement may compare
+
+A statement compares two values of any type that has [`Ord`](comparisons.md), and not only numbers. So `earlier <= later` is a statement for two `Instant`s, and a `requires` may state it.
+
+```
+fn wait_after(earlier: Instant, later: Instant) -> Duration
+  requires earlier <= later
+{
+  between(earlier, later)
+}
+```
+
+A caller proves it as it proves any statement: with an `if`, with a [`check`](check.md), or with a fact it already has.
+
 ## Why a statement is a type
 
 A statement about one value is a boolean: `i < xs.size` is true or it is not. A statement about every value of some kind is not one. "Every element of `xs` is below `n`" cannot be worked out once and held as `true`, and "for every two lists, `append(a, b)` has the size of both" cannot be worked out at all.
