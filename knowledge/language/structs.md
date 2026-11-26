@@ -5,6 +5,7 @@ description: Structs with named fields and defaults, reading a field, assigning 
 status: partial
 built:
   - "structs with fields and defaults, reading a field, and assigning to a field of a `var` with `=`"
+  - "a struct that takes a whole number as a parameter, written `[n: Nat]` or `[n: Pos]`, which a type names with the number written out, as `Box[10]`, and whose name is a bound in the type of a field, as `0..n`, and a construction that leaves the number out, which takes it from the type it must give"
   - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes a type after the name; one that states its type is not built yet"
 ---
 
@@ -148,6 +149,26 @@ fn main() <console, alloc> {
 
 This prints `1 2 4 3`. A field with no default still has to be given: `Margin()` gives "`Margin` needs a value for `inset`".
 
+## A struct that takes a whole number
+
+A struct may take a whole number as a parameter, written in brackets after its name as `[n: Nat]`. The number is known when the program is built, so it costs nothing when the program runs. Its name stands for the number in the type of a field, wherever a number may be written, as `0..most` is.
+
+```
+struct Box[most: Nat] {
+  at: 0..most
+}
+```
+
+A type names the number by writing it out. `Box[10]` is a `Box` whose `at` is a `0..10`, and a `Box[10]` is a `Box[3]` never: two types are one type exactly when their numbers are equal.
+
+```
+fn top() -> Box[10] { Box(at: 9) }
+```
+
+The construction leaves the number out and takes it from the type it must give, so `Box(at: 9)` is a `Box[10]` here, and `9` is proven to be below 10. `Box(at: 10)` is refused: "`10` does not fit `0..10`, which holds 0 to 9". A construction that nothing gives a type is refused: "the whole number `most` of `Box` is not known here, as no argument and no type that the call must give says it", with the fix "write it after the name, as `Box[4]`". `Box[4](at: 1)` writes it.
+
+A number that must not be zero is declared `[n: Pos]`. `Row[0]` is refused for `struct Row[n: Pos]`: "`0` is not a `Pos`, which `n` of `Row` is". A function takes a number the same way, as [Inference](inference.md#a-whole-number-a-call-leaves-out) says.
+
 ## At the top level of a file
 
 A value may be defined at the top level of a file, outside every function, and it states its type, as every other definition at the top level does: a function states its parameters and result, a struct its fields. What is written at the top level is the contract, and what is inside a body is solved, so changing a value from `100` to `200` cannot change its type where it is read. Here `unit` is a `Rect` that any function of the file can read.
@@ -181,6 +202,8 @@ A top-level value that needs an effect is refused: one that prints, reads a file
 | `S(a: e)` | A `S` whose field `a` is `e`, every field named |
 | `s.a` | The field `a` of `s` |
 | `s.a = e` | Replaces the field `a` of the `var` `s` |
+| `struct S[n: Nat] { a: 0..n }` | A struct whose field has a bound that is a whole number the type names |
+| `S[10]` | The type of that struct for `n` as 10, which is no other type |
 | `x: T = e` at the top level | A fixed value, worked out when the program is built, from what carries no effect |
 
 Next: [Tuples](tuples.md)
