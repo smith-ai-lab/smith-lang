@@ -24,7 +24,7 @@ fn spoil(c: take Connection) <net, console> {
 fn one(l: Listener) -> Result[(), NetError] <net, time, console> {
   with tasks()
   c = try accept(l)
-  spawn { spoil(c) }
+  _ = spawn { spoil(c) }
   sleep(ms(200))
   .ok(())
 }

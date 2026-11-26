@@ -516,7 +516,7 @@ fn a_return_is_refused_exactly_where_its_value_does_not_fit_or_a_line_cannot_run
         // A line after a `return` in its block, at its first line.
         placed(
             "fn f(x: Int) -> Int {\n  if x > 1 {\n    return 1\n    ",
-            &format!("2\n  }}\n  x\n}}\n{main}"),
+            &format!("()\n  }}\n  x\n}}\n{main}"),
         ),
         placed(
             "fn f(x: Int) -> Int {\n  return 1\n  ",

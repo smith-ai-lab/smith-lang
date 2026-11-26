@@ -340,7 +340,7 @@ fn a_handler_of_task_written_in_a_program_is_refused() {
 }
 
 fn a_child_that_assigns_a_var_is_refused() {
-    let source = program("fn counted() -> u64 {\n  var n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  join(t)\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{counted()}\")\n}\n");
+    let source = program("fn counted() -> u64 {\n  var n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  _ = join(t)\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{counted()}\")\n}\n");
     let errors = refused(&source);
     assert!(errors.contains("this child assigns `n`"), "{errors}");
 }
@@ -364,7 +364,7 @@ fn a_value_used_once_moves_into_the_child_and_a_second_use_is_refused() {
 fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_one_does_not() {
     let source = |effect: &str| {
         program(&format!(
-            "fn start(n: u64){effect} {{\n  spawn {{ wrapping_mul(n, 2) }}\n  ()\n}}\n\nfn start_two() {{\n  with tasks()\n  start(1)\n  start(2)\n}}\n\nfn main() <console, alloc> {{\n  start_two()\n  print(\"done\")\n}}\n"
+            "fn start(n: u64){effect} {{\n  _ = spawn {{ wrapping_mul(n, 2) }}\n  ()\n}}\n\nfn start_two() {{\n  with tasks()\n  start(1)\n  start(2)\n}}\n\nfn main() <console, alloc> {{\n  start_two()\n  print(\"done\")\n}}\n"
         ))
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)")
     };
@@ -372,7 +372,7 @@ fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_o
     let errors = refused(&source(""));
     assert!(errors.contains("`spawn` needs the `task` effect, which `start` does not declare"), "{errors}");
     // A caller with no group of its own carries it too.
-    let caller = program("fn start(n: u64) <task> {\n  spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() <console, alloc> {\n  start_two()\n}\n")
+    let caller = program("fn start(n: u64) <task> {\n  _ = spawn { n }\n  ()\n}\n\nfn start_two() {\n  start(1)\n}\n\nfn main() <console, alloc> {\n  start_two()\n}\n")
         .replace("use std.task (join, spawn, tasks)", "use std.task (join, spawn, task, tasks)");
     let errors = refused(&caller);
     assert!(errors.contains("`start` needs the `task` effect"), "{errors}");

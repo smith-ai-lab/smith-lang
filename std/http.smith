@@ -1119,7 +1119,7 @@ fn answer_with[T](request: Request, body: fn() -> T <http>) -> Response <alloc>
   requires Discard[T]
 {
   var response = Response(status: 500, headers: [], body: "")
-  http(
+  _ = http(
     request: { copy_of(request) },
     send: fn(r) { response = r },
     body: body,
@@ -1215,7 +1215,7 @@ fn serve_one[T](c: Connection, body: fn() -> T <http>) -> bool <net, alloc>
     .err(fault) {
       match fault {
         .ended { }
-        .refused { sent(c, response_bytes(refusal(), false)) }
+        .refused { _ = sent(c, response_bytes(refusal(), false)) }
       }
       return false
     }
@@ -1224,20 +1224,20 @@ fn serve_one[T](c: Connection, body: fn() -> T <http>) -> bool <net, alloc>
         .err(fault) {
           match fault {
             .ended { }
-            .refused { sent(c, response_bytes(refusal(), false)) }
+            .refused { _ = sent(c, response_bytes(refusal(), false)) }
           }
           return false
         }
         .ok((payload, after_body)) {
           match utf8(payload) {
             .err(e) {
-              sent(c, response_bytes(refusal(), false))
+              _ = sent(c, response_bytes(refusal(), false))
               return false
             }
             .ok(text) {
               match method_of(head.method) {
                 .none {
-                  sent(c, response_bytes(not_implemented(), false))
+                  _ = sent(c, response_bytes(not_implemented(), false))
                   return false
                 }
                 .some(method) {
@@ -1321,7 +1321,7 @@ fn serve_in_tasks[T](l: Listener, body: fn() -> T <http>) <net, alloc, diverge>
   loop {
     match accept(l) {
       .ok(c) {
-        spawn {
+        _ = spawn {
           serve_connection(c, body)
           close(c)
         }

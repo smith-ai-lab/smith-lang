@@ -226,7 +226,7 @@ fn main() <console, alloc, time> {{
     t = spawn {{ sleeper(i) }}
   }}
   last = spawn {{ nap(400) }}
-  join(last)
+  _ = join(last)
   print(\"done\")
 }}
 "
@@ -327,7 +327,7 @@ fn main(args: List[str]) <console, alloc, time, diverge> {
     t = spawn { sleeper(i) }
   }
   last = spawn { sleeper(5000) }
-  join(last)
+  _ = join(last)
   end: u64 = since_1970(now())
   start: u64 = since_1970(before)
   print(\"done {wrapping_sub(end, start)}\")
@@ -366,7 +366,7 @@ fn main() <console, alloc, time> {
   with tasks()
   a = spawn { long() }
   b = spawn { short() }
-  join(b)
+  _ = join(b)
   print(\"done\")
 }
 ";
@@ -409,7 +409,7 @@ fn main() <console, alloc, time, diverge> {{
   with test_scheduler({seed})
   a = spawn {{ long() }}
   b = spawn {{ short() }}
-  join(b)
+  _ = join(b)
   print(\"done\")
 }}
 "

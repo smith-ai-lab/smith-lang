@@ -110,7 +110,7 @@ const HOLD: &str = "fn hold(n: u64) -> u64 <net, task> {
 
 fn a_cancelled_task_closes_the_connection_it_holds_through_the_handler_in_force_once() {
     for seed in 0..8 {
-        let source = program(HOLD, "  spawn { hold(5) }\n  spawn { hold(6) }", seed);
+        let source = program(HOLD, "  _ = spawn { hold(5) }\n  _ = spawn { hold(6) }", seed);
         assert_eq!(
             sorted(said(&source)),
             ["1", "closed 5", "closed 6"],
@@ -135,7 +135,7 @@ fn hold_two(n: u64) -> u64 <net, task> {
 
 fn a_cancelled_task_closes_both_connections_of_a_struct_it_holds() {
     for seed in 0..8 {
-        let source = program(PAIR, "  spawn { hold_two(10) }", seed);
+        let source = program(PAIR, "  _ = spawn { hold_two(10) }", seed);
         assert_eq!(
             sorted(said(&source)),
             ["1", "closed 10", "closed 11"],
@@ -161,7 +161,7 @@ fn a_connection_given_to_a_parent_by_join_is_closed_once_by_the_parent_and_not_b
     for seed in 0..8 {
         let source = program(
             &format!("{GIVEN}\n{HOLD}"),
-            "  spawn { parent(7) }\n  spawn { hold(8) }",
+            "  _ = spawn { parent(7) }\n  _ = spawn { hold(8) }",
             seed,
         );
         assert_eq!(
@@ -208,7 +208,7 @@ const FINISH: &str = "fn finish(n: u64) -> u64 <net, task> {
 /// A task that is never asked to end, which waits for its handle and then closes
 /// it itself, closes it once: the handler is asked once, and by the function.
 fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_is_asked_to_end() {
-    let source = program(FINISH, "  spawn { finish(4) }", 0)
+    let source = program(FINISH, "  _ = spawn { finish(4) }", 0)
         .replace("test_scheduler_with_io(0, [])", "test_scheduler_with_io(0, [4])");
     assert_eq!(sorted(said(&source)), ["1", "closed 4"]);
 }
@@ -245,7 +245,7 @@ const SERVE: &str = "fn serve(c: take Connection) -> u64 <net, task> {
 /// child does nothing else.
 fn a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given() {
     for seed in 0..8 {
-        let source = program(SERVE, "  c = connection(9)\n  spawn { serve(c) }", seed)
+        let source = program(SERVE, "  c = connection(9)\n  _ = spawn { serve(c) }", seed)
             .replace("  late = test_ready_by(99, ms(10))\n", "");
         assert_eq!(sorted(said(&source)), ["1", "closed 9"], "seed {seed}");
     }

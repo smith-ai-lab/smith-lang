@@ -181,7 +181,7 @@ fn a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it
             (format!("with test_scheduler({seed})"), "alloc, diverge", "console, alloc, diverge"),
         ] {
             let source = program(&format!(
-                "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <{run_effects}> {{\n  with recording()\n  {opening}\n  a = spawn {{ pusher({v}) }}\n  n1 = spawn {{ noise(5) }}\n  b = spawn {{ pusher({v} + 1) }}\n  n2 = spawn {{ noise(6) }}\n  join(a)\n  join(n1)\n  join(b)\n  join(n2)\n  c = spawn {{ noise(7) }}\n  d = spawn {{ noise(8) }}\n  join(c)\n  join(d)\n  all()\n}}\n\nfn main() <{main_effects}> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
+                "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <{run_effects}> {{\n  with recording()\n  {opening}\n  a = spawn {{ pusher({v}) }}\n  n1 = spawn {{ noise(5) }}\n  b = spawn {{ pusher({v} + 1) }}\n  n2 = spawn {{ noise(6) }}\n  _ = join(a)\n  _ = join(n1)\n  _ = join(b)\n  _ = join(n2)\n  c = spawn {{ noise(7) }}\n  d = spawn {{ noise(8) }}\n  _ = join(c)\n  _ = join(d)\n  all()\n}}\n\nfn main() <{main_effects}> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
             ));
             assert_eq!(run(&source), expected, "for {source}");
         }
@@ -193,7 +193,7 @@ fn a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it
 fn a_list_a_handler_gives_out_of_its_block_is_read_whole_after_more_is_built() {
     generate::check(1044, 3, |g| (g.below(8) as u64, 1 + g.below(50) as u64), |&(seed, k)| {
         let source = program(&format!(
-            "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ pusher(1) }}\n  b = spawn {{ pusher(2) }}\n  join(a)\n  join(b)\n  c = spawn {{ noise(3) }}\n  join(c)\n  all()\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  ys = build(500, {k})\n  zs = build(400, 1)\n  print(\"{{xs.size}} {{total(xs)}} {{total(ys)}} {{total(zs)}}\")\n}}\n"
+            "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ pusher(1) }}\n  b = spawn {{ pusher(2) }}\n  _ = join(a)\n  _ = join(b)\n  c = spawn {{ noise(3) }}\n  _ = join(c)\n  all()\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  ys = build(500, {k})\n  zs = build(400, 1)\n  print(\"{{xs.size}} {{total(xs)}} {{total(ys)}} {{total(zs)}}\")\n}}\n"
         ));
         let expected = format!("4 206 {} {}\n", built(500, k), built(400, 1));
         assert_eq!(run(&source), expected, "for {source}");
@@ -205,7 +205,7 @@ fn a_list_a_handler_gives_out_of_its_block_is_read_whole_after_more_is_built() {
 fn two_handlers_that_hold_lists_are_in_force_at_once() {
     generate::check(1045, 3, |g| g.below(8) as u64, |&seed| {
         let source = program(&format!(
-            "{LOG}{BUILD}{PUSHER}effect tally {{\n  fn bump(v: u64)\n  fn tallied() -> List[u64] <alloc>\n}}\n\nfn counting[T](body: fn() -> T <tally>) -> T <alloc> {{\n  var marks: List[u64] = []\n  tally(\n    bump: fn(v) {{\n      marks = push(marks, wrapping_mul(v, 10))\n    }},\n    tallied: {{\n      marks\n    }},\n    body: body,\n  )\n}}\n\nfn both(v: u64) -> u64 <log, tally, alloc> {{\n  bump(v)\n  pusher(v)\n}}\n\nfn run() -> List[u64] <alloc, diverge> {{\n  with counting()\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ both(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ both(2) }}\n  join(a)\n  join(n)\n  join(b)\n  c = spawn {{ noise(9) }}\n  join(c)\n  first = all()\n  second = tallied()\n  var joined: List[u64] = []\n  loop i in 0..first.size {{ joined = push(joined, first[i]) }}\n  loop i in 0..second.size {{ joined = push(joined, second[i]) }}\n  joined\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
+            "{LOG}{BUILD}{PUSHER}effect tally {{\n  fn bump(v: u64)\n  fn tallied() -> List[u64] <alloc>\n}}\n\nfn counting[T](body: fn() -> T <tally>) -> T <alloc> {{\n  var marks: List[u64] = []\n  tally(\n    bump: fn(v) {{\n      marks = push(marks, wrapping_mul(v, 10))\n    }},\n    tallied: {{\n      marks\n    }},\n    body: body,\n  )\n}}\n\nfn both(v: u64) -> u64 <log, tally, alloc> {{\n  bump(v)\n  pusher(v)\n}}\n\nfn run() -> List[u64] <alloc, diverge> {{\n  with counting()\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ both(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ both(2) }}\n  _ = join(a)\n  _ = join(n)\n  _ = join(b)\n  c = spawn {{ noise(9) }}\n  _ = join(c)\n  first = all()\n  second = tallied()\n  var joined: List[u64] = []\n  loop i in 0..first.size {{ joined = push(joined, first[i]) }}\n  loop i in 0..second.size {{ joined = push(joined, second[i]) }}\n  joined\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
         ));
         assert_eq!(run(&source), "6 236\n", "for {source}");
     });
@@ -217,7 +217,7 @@ fn two_handlers_that_hold_lists_are_in_force_at_once() {
 /// built to read what is not there.
 fn a_handler_that_holds_a_list_and_is_installed_inside_a_child_under_the_scheduler_is_refused_as_not_built_yet() {
     let source = program(&format!(
-        "{LOG}{BUILD}{PUSHER}fn inner(base: u64) -> u64 <alloc, task> {{\n  with recording()\n  with tasks()\n  a = spawn {{ pusher(base) }}\n  b = spawn {{ pusher(wrapping_add(base, 1)) }}\n  join(a)\n  join(b)\n  xs = all()\n  wrapping_add(xs.size, total(xs))\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  x = spawn {{ inner(1) }}\n  y = spawn {{ inner(10) }}\n  wrapping_add(join(x), join(y))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{LOG}{BUILD}{PUSHER}fn inner(base: u64) -> u64 <alloc, task> {{\n  with recording()\n  with tasks()\n  a = spawn {{ pusher(base) }}\n  b = spawn {{ pusher(wrapping_add(base, 1)) }}\n  _ = join(a)\n  _ = join(b)\n  xs = all()\n  wrapping_add(xs.size, total(xs))\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  x = spawn {{ inner(1) }}\n  y = spawn {{ inner(10) }}\n  wrapping_add(join(x), join(y))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     ));
     let errors = refused(&source);
     assert!(errors.contains("installed under its scheduler"), "{errors}");
@@ -273,7 +273,7 @@ fn keeping[T](body: fn() -> T <keep>) -> T <alloc> {
 fn a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_the_region_as_a_list_is() {
     generate::check(1046, 3, |g| (g.below(8) as u64, 1 + g.below(90) as u64), |&(seed, v)| {
         let source = program(&format!(
-            "{BUILD}{KEEPING}fn fill(v: u64) -> u64 <keep> {{\n  loop i in 0..20 {{ add(wrapping_add(v, i)) }}\n  v\n}}\n\nfn run() -> (str, Box, Held) <alloc, diverge> {{\n  with keeping()\n  with test_scheduler({seed})\n  a = spawn {{ fill({v}) }}\n  n = spawn {{ noise(1) }}\n  join(a)\n  join(n)\n  c = spawn {{ noise(2) }}\n  join(c)\n  d = spawn {{ noise(3) }}\n  join(d)\n  e = spawn {{ noise(4) }}\n  join(e)\n  f = spawn {{ noise(5) }}\n  join(f)\n  (said(), boxed(), held())\n}}\n\nfn main() <console, alloc, diverge> {{\n  (t, b, h) = run()\n  zs = build(400, 1)\n  print(\"{{t}} {{b.name}} {{b.items.size}} {{total(b.items)}}\")\n  match h {{\n    .nothing {{ print(\"none\") }}\n    .some(xs) {{ print(\"held {{xs.size}} {{total(xs)}} {{zs.size}}\") }}\n  }}\n}}\n"
+            "{BUILD}{KEEPING}fn fill(v: u64) -> u64 <keep> {{\n  loop i in 0..20 {{ add(wrapping_add(v, i)) }}\n  v\n}}\n\nfn run() -> (str, Box, Held) <alloc, diverge> {{\n  with keeping()\n  with test_scheduler({seed})\n  a = spawn {{ fill({v}) }}\n  n = spawn {{ noise(1) }}\n  _ = join(a)\n  _ = join(n)\n  c = spawn {{ noise(2) }}\n  _ = join(c)\n  d = spawn {{ noise(3) }}\n  _ = join(d)\n  e = spawn {{ noise(4) }}\n  _ = join(e)\n  f = spawn {{ noise(5) }}\n  _ = join(f)\n  (said(), boxed(), held())\n}}\n\nfn main() <console, alloc, diverge> {{\n  (t, b, h) = run()\n  zs = build(400, 1)\n  print(\"{{t}} {{b.name}} {{b.items.size}} {{total(b.items)}}\")\n  match h {{\n    .nothing {{ print(\"none\") }}\n    .some(xs) {{ print(\"held {{xs.size}} {{total(xs)}} {{zs.size}}\") }}\n  }}\n}}\n"
         ));
         let numbers: Vec<String> = (0..20).map(|i| (v + i).to_string()).collect();
         let expected = format!(
@@ -294,7 +294,7 @@ fn a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_th
 fn a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region() {
     generate::check(1047, 3, |g| (g.below(8) as u64, 1 + g.below(40) as u64), |&(seed, k)| {
         let source = program(&format!(
-            "{BUILD}effect shelf {{\n  fn put(xs: take List[u64])\n  fn shelved() -> List[List[u64]] <alloc>\n}}\n\nfn shelving[T](body: fn() -> T <shelf>) -> T <alloc> {{\n  var shelves: List[List[u64]] = []\n  shelf(\n    put: fn(xs) {{\n      shelves = push(shelves, xs)\n    }},\n    shelved: {{\n      shelves\n    }},\n    body: body,\n  )\n}}\n\nfn stocker(n: u64, k: u64) -> u64 <shelf, alloc> {{\n  xs = build(n, k)\n  put(xs)\n  1\n}}\n\nfn run() -> List[List[u64]] <alloc, diverge> {{\n  with shelving()\n  with test_scheduler({seed})\n  a = spawn {{ stocker(40, {k}) }}\n  b = spawn {{ stocker(50, {k}) }}\n  join(a)\n  join(b)\n  n = spawn {{ noise(1) }}\n  join(n)\n  m = spawn {{ noise(2) }}\n  join(m)\n  shelved()\n}}\n\nfn main() <console, alloc, diverge> {{\n  all = run()\n  zs = build(400, 3)\n  var sum: u64 = 0\n  loop i in 0..all.size {{\n    inner = all[i]\n    sum = wrapping_add(sum, total(inner))\n  }}\n  print(\"{{all.size}} {{sum}} {{total(zs)}}\")\n}}\n"
+            "{BUILD}effect shelf {{\n  fn put(xs: take List[u64])\n  fn shelved() -> List[List[u64]] <alloc>\n}}\n\nfn shelving[T](body: fn() -> T <shelf>) -> T <alloc> {{\n  var shelves: List[List[u64]] = []\n  shelf(\n    put: fn(xs) {{\n      shelves = push(shelves, xs)\n    }},\n    shelved: {{\n      shelves\n    }},\n    body: body,\n  )\n}}\n\nfn stocker(n: u64, k: u64) -> u64 <shelf, alloc> {{\n  xs = build(n, k)\n  put(xs)\n  1\n}}\n\nfn run() -> List[List[u64]] <alloc, diverge> {{\n  with shelving()\n  with test_scheduler({seed})\n  a = spawn {{ stocker(40, {k}) }}\n  b = spawn {{ stocker(50, {k}) }}\n  _ = join(a)\n  _ = join(b)\n  n = spawn {{ noise(1) }}\n  _ = join(n)\n  m = spawn {{ noise(2) }}\n  _ = join(m)\n  shelved()\n}}\n\nfn main() <console, alloc, diverge> {{\n  all = run()\n  zs = build(400, 3)\n  var sum: u64 = 0\n  loop i in 0..all.size {{\n    inner = all[i]\n    sum = wrapping_add(sum, total(inner))\n  }}\n  print(\"{{all.size}} {{sum}} {{total(zs)}}\")\n}}\n"
         ));
         let expected = format!("2 {} {}\n", built(40, k) + built(50, k), built(400, 3));
         assert_eq!(run(&source), expected, "for {source}");
@@ -422,10 +422,10 @@ fn generated(cases: &[(u64, Vec<Vec<Act>>)]) -> String {
             s += &format!("  t{at} = spawn {{ child{case}_{at}() }}\n");
         }
         for at in 0..children.len() {
-            s += &format!("  join(t{at})\n");
+            s += &format!("  _ = join(t{at})\n");
         }
         // Others build over what the children gave back before the state is read.
-        s += "  n1 = spawn { noise(11) }\n  join(n1)\n  n2 = spawn { noise(12) }\n  join(n2)\n";
+        s += "  n1 = spawn { noise(11) }\n  _ = join(n1)\n  n2 = spawn { noise(12) }\n  _ = join(n2)\n";
         s += "  (shelved(), pairs(), noted())\n}\n\n";
         s += &format!("fn report{case}() <console, alloc, diverge> {{\n  (shelves, held, notes) = run{case}()\n  zs = build(400, 3)\n");
         s += "  var shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
@@ -514,7 +514,7 @@ fn the_whole_state_of_generated_handlers_matches_a_model_part_4() {
 fn a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends() {
     let asked = |rounds: u64| {
         let source = program(&format!(
-            "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..{rounds} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    join(a)\n    join(b)\n    c = spawn {{ total(build(20, r)) }}\n    join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+            "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..{rounds} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    _ = join(a)\n    _ = join(b)\n    c = spawn {{ total(build(20, r)) }}\n    _ = join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
@@ -572,10 +572,10 @@ fn serve(l: Listener) -> Result[u64, NetError] <net, alloc, task> {
         .ok(c2) {
           a = spawn { session(c1, 65) }
           b = spawn { session(c2, 66) }
-          join(a)
-          join(b)
+          _ = join(a)
+          _ = join(b)
           n = spawn { noise(3) }
-          join(n)
+          _ = join(n)
           .ok(2)
         }
       }
@@ -602,7 +602,7 @@ fn a_handler_of_net_keeps_what_write_was_given_while_listen_serves_two_connectio
 fn every_executable_gives_what_the_evaluator_gives_for_a_handler_whose_state_holds_a_list() {
     let sources = [
         program(&format!(
-            "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <alloc, diverge> {{\n  with recording()\n  with test_scheduler(3)\n  a = spawn {{ pusher(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ pusher(2) }}\n  join(a)\n  join(n)\n  join(b)\n  all()\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  ys = build(500, 9)\n  print(\"{{xs.size}} {{total(xs)}} {{total(ys)}}\")\n}}\n"
+            "{LOG}{BUILD}{PUSHER}fn run() -> List[u64] <alloc, diverge> {{\n  with recording()\n  with test_scheduler(3)\n  a = spawn {{ pusher(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ pusher(2) }}\n  _ = join(a)\n  _ = join(n)\n  _ = join(b)\n  all()\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  ys = build(500, 9)\n  print(\"{{xs.size}} {{total(xs)}} {{total(ys)}}\")\n}}\n"
         )),
         net_program(5),
     ];

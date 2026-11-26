@@ -362,6 +362,8 @@ enum Stmt {
         value: Expr,
     },
     Expr(Expr),
+    /// `_ = e`, which runs a call and throws away what it gives.
+    Throw(Expr),
 }
 
 enum Expr {
@@ -561,7 +563,19 @@ fn model(g: &mut Gen, shaped: bool, with_field: bool, field_defaults: bool) -> M
 
 fn stmt_expr(stmt: &Stmt) -> &Expr {
     match stmt {
-        Stmt::Define { value, .. } | Stmt::Assign { value, .. } | Stmt::Expr(value) => value,
+        Stmt::Define { value, .. }
+        | Stmt::Assign { value, .. }
+        | Stmt::Expr(value)
+        | Stmt::Throw(value) => value,
+    }
+}
+
+/// A statement that calls function `j`, throwing away what it gives.
+fn called(m: &Model, j: usize, call: Expr) -> Stmt {
+    if m.fns[j].result.is_some() {
+        Stmt::Throw(call)
+    } else {
+        Stmt::Expr(call)
     }
 }
 
@@ -690,11 +704,11 @@ fn body(g: &mut Gen, m: &Model, i: usize) -> Vec<Stmt> {
             }
             2 if !later(false).is_empty() => {
                 let j = *g.pick(&later(false));
-                Stmt::Expr(call_of(g, m, i, j, &names, DEPTH))
+                called(m, j, call_of(g, m, i, j, &names, DEPTH))
             }
             3 if !later(true).is_empty() && !last => {
                 let j = *g.pick(&later(true));
-                Stmt::Expr(call_of(g, m, i, j, &names, DEPTH))
+                called(m, j, call_of(g, m, i, j, &names, DEPTH))
             }
             _ => {
                 let value = value(g, m, i, &names, Type::Str, DEPTH);
@@ -856,6 +870,9 @@ fn run(m: &Model, f: usize, args: Vec<Val>, out: &mut Vec<u8>) -> Val {
                 *place = value;
             }
             Stmt::Expr(value) => last = eval(m, &names, value, out),
+            Stmt::Throw(value) => {
+                eval(m, &names, value, out);
+            }
         }
     }
     last
@@ -1382,6 +1399,11 @@ fn function(b: &mut Builder, m: &Model, f: usize, site: bool, around: Option<&Ex
                 expr(b, m, value, &console_site);
             }
             Stmt::Expr(value) => expr(b, m, value, &console_site),
+            Stmt::Throw(value) => {
+                b.push("_ =");
+                b.pick(&[" ", "  "]);
+                expr(b, m, value, &console_site);
+            }
         }
     }
     for kind in extra {

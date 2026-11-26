@@ -5,6 +5,7 @@ description: How x = e defines an immutable name, which is never defined again w
 status: partial
 built:
   - "`x = e` and `x: str = e`, refused where the name can already be used, and a name defined again once the block that defined it has ended"
+  - "a value that nothing uses: a statement that is not the last of its block and gives other than `()` is refused unless it is `_ = e`, which defines no name, so any number may stand in a block, and the block of an `if` with no `else`, of a `match` written as a statement, and of a `loop` ends in `()`"
 ---
 
 # Bindings

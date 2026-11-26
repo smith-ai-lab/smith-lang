@@ -8684,6 +8684,27 @@ impl<'a> Checker<'a> {
                     ty,
                     var,
                     value,
+                } if name == "_" && !*var => {
+                    // `_ = e` runs `e` and throws its value away, and defines
+                    // no name.
+                    let gives = match ty {
+                        Some(t) => {
+                            let needed = self.ty(t, body.scope);
+                            let gives = self.expr(body, value, &Want::Ty(needed.clone()));
+                            self.expect(body, value, &gives, &needed);
+                            needed
+                        }
+                        None => self.expr(body, value, &Want::Any),
+                    };
+                    self.not_stored(value, gives);
+                    End::Binding(*pos)
+                }
+                Stmt::Define {
+                    name,
+                    pos,
+                    ty,
+                    var,
+                    value,
                 } => {
                     let defined = body.names.iter().position(|(n, _)| n == name);
                     match (defined, ty, var) {
@@ -8876,7 +8897,7 @@ impl<'a> Checker<'a> {
                 Stmt::Expr(value) => {
                     let want = if is_last { last } else { &Want::Unused };
                     let gives = self.expr(body, value, want);
-                    if !is_last && self.defs.is_result(&gives) {
+                    if !is_last {
                         self.dropped(body, value, &gives);
                     }
                     End::Value(gives, value)
@@ -9434,7 +9455,11 @@ impl<'a> Checker<'a> {
                 return;
             }
         }
-        if !matches!(want, Want::Unused) {
+        if matches!(want, Want::Unused) {
+            if let End::Value(gives, value) = &end {
+                self.dropped(body, value, gives);
+            }
+        } else {
             let gives = self.arm_gives(body, arm, end, want, first, what);
             if !proof::ends_in_exit(&arm.body) {
                 first.get_or_insert(gives);
@@ -9469,9 +9494,7 @@ impl<'a> Checker<'a> {
         if !otherwise {
             let arm = &m.arms[0];
             self.assume(body, &m.of, true);
-            if let End::Value(gives, value) = self.block(body, &arm.body, &Want::Unused)
-                && self.defs.is_result(&gives)
-            {
+            if let End::Value(gives, value) = self.block(body, &arm.body, &Want::Unused) {
                 self.dropped(body, value, &gives);
             }
             if proof::ends_in_exit(&arm.body) {
@@ -9594,9 +9617,7 @@ impl<'a> Checker<'a> {
         let start = measure.and_then(|e| self.measure_of(body, std::slice::from_ref(e), &[]));
         body.loops += 1;
         self.rounds.push(passes.1);
-        if let End::Value(gives, value) = self.block(body, &l.body, &Want::Unused)
-            && self.defs.is_result(&gives)
-        {
+        if let End::Value(gives, value) = self.block(body, &l.body, &Want::Unused) {
             self.dropped(body, value, &gives);
         }
         self.rounds.pop();
@@ -9787,18 +9808,33 @@ impl<'a> Checker<'a> {
         self.expect(body, value, &gives, &truth);
     }
 
-    /// Reports a `Result` that a statement gives and nothing uses.
+    /// Reports a value that a statement gives and nothing uses, when it is not
+    /// `()`: a `Result` says that a failure would be dropped.
     fn dropped(&mut self, body: &Body, value: &Expr, gives: &Ty) {
-        self.errors.push(
-            Error::new(
-                value.pos(),
+        // A value that cannot be dropped is reported where it is dropped, as
+        // ownership says.
+        if matches!(gives, Ty::Nothing)
+            || gives.unknown()
+            || !ownership::discards(self.defs, body.scope, gives)
+        {
+            return;
+        }
+        let described = format!("a `{}`", self.defs.text(gives, body.scope));
+        let (message, fix) = if self.defs.is_result(gives) {
+            (
                 format!(
-                    "this gives {}, which nothing uses, so a failure would be dropped",
-                    self.defs.describe(gives, body.scope)
+                    "this gives {described}, which nothing uses, so a failure would be dropped"
                 ),
+                "write `try` before it, match on it, or write `_ =` before it to throw it away",
             )
-            .with_fix("write `try` before it, or match on it"),
-        );
+        } else {
+            (
+                format!("this gives {described}, which nothing uses"),
+                "bind it to a name, or write `_ =` before it to throw it away",
+            )
+        };
+        self.errors
+            .push(Error::new(value.pos(), message).with_fix(fix));
     }
 
     /// Checks what the block of an arm gives, where the `match` or the `if`

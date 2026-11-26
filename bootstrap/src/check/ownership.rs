@@ -88,6 +88,11 @@ fn lacking(defs: &Defs, scope: &Scope, which: usize, ty: &Ty) -> Option<usize> {
         .flatten()
 }
 
+/// Whether a value of the type may be dropped.
+pub(crate) fn discards(defs: &Defs, scope: &Scope, ty: &Ty) -> bool {
+    undiscardable(defs, scope, ty).is_none()
+}
+
 /// Why a type has no `Discard`: `None` when it has it, and otherwise the type
 /// parameter that lacks it, if that is why.
 fn undiscardable(defs: &Defs, scope: &Scope, ty: &Ty) -> Option<Option<usize>> {

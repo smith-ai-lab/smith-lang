@@ -76,7 +76,7 @@ fn main(args: List[str]) <console, alloc, task, time> {
         with tasks()
         a = spawn { look(args[1], args[3], args[2], port) }
         b = spawn { ticker() }
-        join(b)
+        _ = join(b)
         join(a)
       } else if args.size > 4 and args[4] == "group" {
         with tasks()

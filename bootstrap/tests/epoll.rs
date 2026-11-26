@@ -44,7 +44,7 @@ fn turn(c: take Connection) -> u64 <net, alloc> {
   match read(c, 64) {
     .ok(bytes) {
       size = bytes.size
-      write(c, freeze(bytes))
+      _ = write(c, freeze(bytes))
     }
     .err(e) { }
   }
@@ -95,7 +95,7 @@ fn turn(c: take Connection) -> u64 <net, alloc> {
   match read(c, 64) {
     .ok(bytes) {
       size = bytes.size
-      write(c, freeze(bytes))
+      _ = write(c, freeze(bytes))
     }
     .err(e) { }
   }

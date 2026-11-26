@@ -5,6 +5,7 @@ description: if as an expression that chooses between blocks, else if, and the w
 status: partial
 built:
   - "`if` with and without `else`, `else if`, and `not`, `and`, and `or`"
+  - "the block of an `if` with no `else` ends in `()`, so a value that it ends in is refused as a value that nothing uses"
 ---
 
 # If

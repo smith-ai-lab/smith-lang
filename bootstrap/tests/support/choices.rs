@@ -711,7 +711,7 @@ fn write_stmt(m: &Model, s: &Stmt, depth: usize, out: &mut String) {
                 format!("\"{{x{i}}}\"")
             };
             out.push_str(&format!(
-                "{at}x{i} = if {} {{ \"{}\" }}\n{at}print({shown})\n",
+                "{at}x{i} = if {} {{ _ = \"{}\" }}\n{at}print({shown})\n",
                 c(given),
                 LABELS[*a]
             ));

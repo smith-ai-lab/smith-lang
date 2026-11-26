@@ -184,7 +184,7 @@ fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
                 NAMES[*v]
             ),
             Step::Grow(v, d) => format!("{0} = {0} + {d}", NAMES[*v]),
-            Step::Use(v) => format!("need({})", NAMES[*v]),
+            Step::Use(v) => format!("_ = need({})", NAMES[*v]),
         };
         out.push_str(&format!("  {line}\n"));
     }
@@ -320,7 +320,7 @@ fn long_body(lines: usize) -> String {
         } else {
             out.push_str(&format!("  v{v} = {}\n", k % 50));
         }
-        out.push_str(&format!("  need(v{v})\n"));
+        out.push_str(&format!("  _ = need(v{v})\n"));
     }
     out.push_str("}\n\nfn main() {\n  f(1)\n}\n");
     with_header(out)
