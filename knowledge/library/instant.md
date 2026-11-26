@@ -6,6 +6,7 @@ status: partial
 built:
   - "`std.instant`: `Instant` and `Duration`, each with a private field of `0..4611686018427387904` milliseconds; `ms`, `seconds`, `instant`, `milliseconds`, and `since_1970`; `after`, `between`, and `until`; and the comparison of two of one type"
   - "`now`, `sleep`, `x509.Certificate.not_before` and `not_after`, `wait_for_time`, `wait_to_read_by`, `wait_to_write_by`, `test_ready_by`, and `time_left` use them"
+  - "not built: `between` with `requires earlier <= later`, giving a `Duration`, which the `Option` form below stands for until it is built"
   - "not built: the claims of `std.jwt`, which has no code yet; and the `Wait.time` and `limit` of `std.task`, and the sums of the name lookup of `std.net`, which are the milliseconds of the library's own scheduler and lookup and not times that a program holds"
 ---
 
@@ -33,25 +34,26 @@ The field of each is private, as [Public and private](../language/pub.md) says: 
 | `milliseconds(d)` | The milliseconds of a `Duration`, for what writes one down or hands one to the system |
 | `since_1970(i)` | The milliseconds from the start of 1970 to an `Instant`, for the same |
 | `after(at, span)` | `.some` of the `Instant` a `Duration` after `at`, and `.none` when that is past `2^62` milliseconds |
-| `between(earlier, later)` | `.some` of the `Duration` from `earlier` to `later`, and `.none` when `later` is before `earlier` |
+| `between(earlier, later)` | The `Duration` from `earlier` to `later`, which requires `earlier <= later` |
 | `until(deadline, now)` | The `Duration` from `now` to `deadline`, and `ms(0)` once the deadline has passed, which is what it is for: the time left to wait |
 
 ```
 use std.instant (Duration, between, ms)
 use std.time (now, sleep, time)
 
-fn how_long() -> Option[Duration] <time, alloc> {
+fn how_long() -> Duration <time, alloc> {
   start = now()
   sleep(ms(250))
-  between(start, now())
+  later = now()
+  if start <= later { between(start, later) } else { ms(0) }
 }
 ```
 
-A subtraction that has no answer is `.none` and not a zero, so a later point taken from an earlier one is a case the program handles and never a number that looks right. `until` is the one function that answers none for a deadline that has passed, as the time left to wait is none then.
+A subtraction that has no answer is refused and not a zero, so a later point taken from an earlier one is proven by the caller, with an `if` as here, with a [`check`](../language/check.md), or with a fact it already has, and is never a number that looks right. `until` is the one function that answers `ms(0)` for a deadline that has passed, as the time left to wait is none then.
 
 ## There are no operators
 
-An `Instant` and a `Duration` have no `+`, `-`, `*`, or `/`: each is refused with "there is no implementation", `Instant + Instant` among them. `after` and `between` are what add and subtract, and give an `Option` because the answer may not be a time.
+An `Instant` and a `Duration` have no `+`, `-`, `*`, or `/`: each is refused with "there is no implementation", `Instant + Instant` among them. `after` and `between` are what add and subtract. `after` gives an `Option` because the answer may be past `2^62` milliseconds, and `between` requires `earlier <= later`, so it always has an answer.
 
 `==`, `<`, and the rest compare two `Instant`s or two `Duration`s. An `Instant` compared with a `Duration`, or with a number, is refused, as two types meet in no comparison.
 
