@@ -6018,7 +6018,7 @@ fn warnings(file: &File, reached: &[Item]) -> Vec<Error> {
     let bodies =
         (file.functions.iter().map(|f| &**f)).chain(file.impls.iter().flat_map(|im| &im.functions));
     for f in bodies.filter(|f| !of_library(f.pos)) {
-        unused_bindings(f, &mut out);
+        unused_bindings(file, f, &mut out);
     }
     out
 }
@@ -6026,7 +6026,19 @@ fn warnings(file: &File, reached: &[Item]) -> Vec<Error> {
 /// A warning for each binding of the function whose name its body never
 /// reads. A name is defined once in a function, so any read of it is a
 /// read of that binding.
-fn unused_bindings(f: &Function, out: &mut Vec<Error>) {
+fn unused_bindings(file: &File, f: &Function, out: &mut Vec<Error>) {
+    // What `arith` is asked to prove in the body: a sum, an index, or a call of
+    // a function that owes something. A proof a call gave is read by it, as it
+    // is a fact `arith` may use, though no line writes its name.
+    let asks_arith = exprs(values(&f.body)).into_iter().any(|e| match e {
+        Expr::Arith { .. } | Expr::Index { .. } | Expr::Slice { .. } => true,
+        Expr::Call(c) => file
+            .functions
+            .iter()
+            .any(|g| g.name == c.callee && !g.requires.is_empty() && !is_proof(g)),
+        _ => false,
+    });
+    let proof_given = |value: &Expr| matches!(value, Expr::Call(c) if file.functions.iter().any(|g| g.name == c.callee && is_proof(g)));
     let read: Vec<&str> = (exprs(values(&f.body)).into_iter())
         .filter_map(|e| match e {
             Expr::Name { name, .. } => Some(name.as_str()),
@@ -6040,6 +6052,7 @@ fn unused_bindings(f: &Function, out: &mut Vec<Error>) {
         .collect();
     for stmt in statements(&f.body) {
         let defined = match stmt {
+            Stmt::Define { value, .. } if asks_arith && proof_given(value) => Vec::new(),
             Stmt::Define { name, pos, .. } => vec![(name.as_str(), *pos)],
             Stmt::Destructure { pattern, .. } => pattern_names(pattern),
             Stmt::Assign { .. } | Stmt::Expr(_) => Vec::new(),
@@ -7152,6 +7165,13 @@ impl<'a> Typed<'a> {
         let (calls, cycles) = self.calls_of(instance, at);
         errors.extend(cycles.into_iter().map(default_cycle));
         for (pos, callee) in calls {
+            // A proof is never built, so no copy of the function that gives one
+            // is made, and what it calls is for the kernel to check.
+            if let Template::Free(f) = callee.template
+                && is_proof(&self.defs.file.functions[f])
+            {
+                continue;
+            }
             let size = |i: &Instance| i.args.iter().map(Ty::size).sum::<usize>();
             let grows = |p: &Instance| {
                 !matches!(callee.template, Template::Given(..)) && size(&callee) > size(p)
