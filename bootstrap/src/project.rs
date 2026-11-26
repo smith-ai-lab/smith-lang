@@ -259,33 +259,47 @@ impl Task {
         for k in 0..self.flags.len() {
             t.push_str(&format!("  var s{k}: Option[str] = .none\n"));
         }
-        t.push_str("  var failure: Option[str] = .none\n  var waiting = 0\n");
-        t.push_str("  loop i in 0..args.size {\n    arg = args[i]\n    if waiting > 0 {\n");
-        for (k, f) in self.flags.iter().enumerate() {
-            if !f.boolean {
-                t.push_str(&format!(
-                    "      if waiting == {} {{ s{k} = .some(arg) }}\n",
-                    k + 1
-                ));
-            }
+        // Only a flag that takes a value leaves the loop waiting for it.
+        let waits = self.flags.iter().any(|f| !f.boolean);
+        t.push_str("  var failure: Option[str] = .none\n");
+        if waits {
+            t.push_str("  var waiting = 0\n");
         }
-        t.push_str("      waiting = 0\n    }");
+        t.push_str("  loop i in 0..args.size {\n    arg = args[i]\n");
+        let mut branches: Vec<String> = Vec::new();
+        if waits {
+            let mut waiting = String::from("if waiting > 0 {\n");
+            for (k, f) in self.flags.iter().enumerate() {
+                if !f.boolean {
+                    waiting.push_str(&format!(
+                        "      if waiting == {} {{ s{k} = .some(arg) }}\n",
+                        k + 1
+                    ));
+                }
+            }
+            waiting.push_str("      waiting = 0\n    }");
+            branches.push(waiting);
+        }
         for (k, f) in self.flags.iter().enumerate() {
             let take = if f.boolean {
                 format!("s{k} = .some(\"true\")")
             } else {
                 format!("waiting = {}", k + 1)
             };
-            t.push_str(&format!(
-                " else if arg == \"--{name}\" {{\n      match s{k} {{\n        .some(x) {{ {twice} }}\n        .none {{ {take} }}\n      }}\n    }}",
+            branches.push(format!(
+                "if arg == \"--{name}\" {{\n      match s{k} {{\n        .some(x) {{ {twice} }}\n        .none {{ {take} }}\n      }}\n    }}",
                 name = f.name,
                 twice = fail(&format!("--{} is given twice", f.name)),
             ));
         }
-        t.push_str(&format!(
-            " else {{\n      {}\n    }}\n  }}\n",
-            fail_with("\"{arg} is not a flag of this task\"")
-        ));
+        let unknown = fail_with("\"{arg} is not a flag of this task\"");
+        // With no branch before it, nothing is else.
+        branches.push(if branches.is_empty() {
+            unknown
+        } else {
+            format!("{{\n      {unknown}\n    }}")
+        });
+        t.push_str(&format!("    {}\n  }}\n", branches.join(" else ")));
         for (k, f) in self.flags.iter().enumerate() {
             if !f.boolean {
                 t.push_str(&format!(

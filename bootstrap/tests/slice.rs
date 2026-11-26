@@ -167,7 +167,13 @@ fn frozen_source(f: &Frozen) -> String {
     for k in 0..f.others.len() {
         main += &format!("  dump(o{k})\n");
     }
-    main += &format!("  if {n} <= s.size {{ read(s) }}\n");
+    // No size is below 0, so a slice always has as many as none.
+    if n == 0 {
+        main += "  read(s)\n";
+    } else {
+        main += &format!("  if {n} <= s.size {{ read(s) }}\n");
+    }
+    let requires = at_least(n);
     let uses = header(
         &[
             ("std.bits", &["u64"]),
@@ -189,8 +195,7 @@ fn build(n: u64, base: {t}) -> List[{t}] <alloc> {{
 }}
 
 fn read(s: Slice[{t}]) <console, alloc>
-  requires s.size >= {n}
-{{
+{requires}{{
 {reads}}}
 
 fn main() <console, alloc> {{
@@ -225,6 +230,16 @@ enum Ends {
     End,
 }
 
+/// The `requires` that a slice has `n` elements, which a slice has no need to
+/// say of none, as no size is below 0.
+fn at_least(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!("  requires s.size >= {n}\n")
+    }
+}
+
 /// A piece of a slice of `n` elements, with ends that may lie outside: it
 /// compiles exactly when `arith` proves `a <= b` and `b <= size`, and then
 /// has the elements between them.
@@ -245,6 +260,7 @@ fn a_piece_compiles_exactly_when_both_ends_are_proven_inside_and_has_the_element
             };
             let items: Vec<String> = (0..n).map(|k| (k + 1).to_string()).collect();
             let uses = header(&[("std.console", &["console", "print"])], t);
+            let requires = at_least(n);
             let source = format!(
                 "{uses}fn dump(xs: List[{t}]) <console, alloc> {{
   print(\"{{xs.size}}\")
@@ -252,8 +268,7 @@ fn a_piece_compiles_exactly_when_both_ends_are_proven_inside_and_has_the_element
 }}
 
 fn cut(s: Slice[{t}]) <console, alloc>
-  requires s.size >= {n}
-{{
+{requires}{{
   dump({written})
 }}
 

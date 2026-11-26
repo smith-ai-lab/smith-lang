@@ -225,10 +225,19 @@ fn a_range_is_compared_and_shown_whatever_its_bounds() {
     generate::check(4003, 30, range, |(low, high)| {
         let r = format!("{low}..{}", high + 1);
         let (a, b) = (*low, *high);
+        // A range of one number says the answer of every comparison by itself,
+        // and a comparison that it decides is refused.
+        let (said, want) = if a == b {
+            ("{x} {y}", format!("{a} {b}\n"))
+        } else {
+            (
+                "{x} {y} {x == y} {x != y} {x < y} {x <= y} {x > y} {x >= y}",
+                format!("{a} {b} {} {} {} {} {} {}\n", a == b, a != b, a < b, a <= b, a > b, a >= b),
+            )
+        };
         let source = with_header(format!(
-            "fn main() <console, alloc> {{\n  x: {r} = {a}\n  y: {r} = {b}\n  print(\"{{x}} {{y}} {{x == y}} {{x != y}} {{x < y}} {{x <= y}} {{x > y}} {{x >= y}}\")\n}}\n"
+            "fn main() <console, alloc> {{\n  x: {r} = {a}\n  y: {r} = {b}\n  print(\"{said}\")\n}}\n"
         ));
-        let want = format!("{a} {b} {} {} {} {} {} {}\n", a == b, a != b, a < b, a <= b, a > b, a >= b);
         assert_eq!(stdout(&source), want, "for\n{source}");
     });
 }
@@ -416,11 +425,29 @@ fn a_value_enters_a_narrower_range_exactly_when_a_condition_or_a_requires_shows_
         let lead = format!(
             "fn takes(v: {narrow}) -> {narrow} {{ v }}\n\nfn result(x: {wide}) -> {narrow}"
         );
-        let facts = format!("requires x >= {ilow} and x <= {ihigh}");
+        // Only a side that the narrow range cuts off is said, as a comparison
+        // that the type decides is refused.
+        let mut said = Vec::new();
+        if ilow > low {
+            said.push(format!("x >= {ilow}"));
+        }
+        if ihigh < high {
+            said.push(format!("x <= {ihigh}"));
+        }
+        let cond = said.join(" and ");
+        let (facts, checked, assigned) = if said.is_empty() {
+            (String::new(), "x".to_string(), "  y = x\n".to_string())
+        } else {
+            (
+                format!("  requires {cond}\n"),
+                format!("if {cond} {{ x }} else {{ {ilow} }}"),
+                format!("  if {cond} {{ y = x }}\n"),
+            )
+        };
         let tail = format!(
-            "fn checked(x: {wide}) -> {narrow} {{\n  if x >= {ilow} and x <= {ihigh} {{ x }} else {{ {ilow} }}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  var y: {narrow} = {ilow}\n  if x >= {ilow} and x <= {ihigh} {{ y = x }}\n  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n  {facts}\n{{\n  takes(x)\n}}\n\nfn main() <console, alloc> {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
+            "fn checked(x: {wide}) -> {narrow} {{\n  {checked}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  var y: {narrow} = {ilow}\n{assigned}  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n{facts}{{\n  takes(x)\n}}\n\nfn main() <console, alloc> {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
         );
-        let proven = with_header(format!("{lead}\n  {facts}\n{{ x }}\n\n{tail}"));
+        let proven = with_header(format!("{lead}\n{facts}{{ x }}\n\n{tail}"));
         assert_eq!(stdout(&proven), format!("{}\n", vec![n.to_string(); 4].join(" ")), "for\n{proven}");
         let unproven = with_header(format!("{lead} {{ x }}\n\n{tail}"));
         if strictly {
@@ -457,7 +484,13 @@ fn narrow_name(low: i128, high: i128) -> String {
 /// `==`, `!=`, `<`, `<=`, `>`, and `>=` between two different ranges say what
 /// the numbers say, and are refused only where no type holds both ranges.
 fn any_two_ranges_are_compared_as_the_numbers_they_hold_are() {
-    generate::check(4010, 40, |g: &mut Gen| (range(g), range(g), g.below(2), g.below(2)), |((a, b), (c, d), x, y)| {
+    // Two ranges are far enough into each other that no comparison of them is
+    // the same for every pair of numbers, as a comparison that is is refused.
+    let overlapping = |g: &mut Gen| {
+        let ((a, b), (c, d)) = (range(g), range(g));
+        ((a, b.max(c + 1)), (c, d.max(a + 1)), g.below(2), g.below(2))
+    };
+    generate::check(4010, 40, overlapping, |((a, b), (c, d), x, y)| {
         let (x, y) = ([*a, *b][*x], [*c, *d][*y]);
         let source = with_header(format!(
             "fn main() <console, alloc> {{\n  p: {a}..{} = {x}\n  q: {c}..{} = {y}\n  print(\"{{p == q}} {{p != q}} {{p < q}} {{p <= q}} {{p > q}} {{p >= q}}\")\n}}\n",
@@ -851,8 +884,10 @@ fn a_range_has_every_trait_a_whole_number_has_in_every_place_and_what_the_number
         part % 3,
         1,
         |g: &mut Gen| {
+            // More than one number, as a range of one is decided by what
+            // it is, and comparing it with itself is refused.
             let (low, high) = range(g);
-            (low, high, g.below(3))
+            (low, high.max(low + 1), g.below(3))
         },
         |&(low, high, at)| {
             let value = [low, low + (high - low) / 2, high][at];

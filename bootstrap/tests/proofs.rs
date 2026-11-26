@@ -88,7 +88,7 @@ fn a_statement_is_read_where_a_result_type_is_written_and_is_checked_over_the_pa
     for statement in [
         "n == 0",
         "n + 1 == 1 + n",
-        "n < 10 and n >= 0",
+        "n < 10 and n >= 1",
         "n < 10 or n > 20",
         "not (n == 3)",
         "2 * n == n + n",
@@ -155,14 +155,17 @@ struct Closed {
 /// Two proofs by `same` of a statement that has no parameter: one over a sum of
 /// two numbers, and one over a call of a function of the file.
 fn closed(g: &mut Gen) -> Closed {
-    let (x, y, z) = (g.below(20) as i128, g.below(20) as i128, g.below(20) as i128);
+    let (x, y) = (g.below(20) as i128, g.below(20) as i128);
+    // A number that the type of the other side may be neither above nor below
+    // for ever, as a comparison that it decides is refused.
+    let (z, above) = (1 + g.below(20) as i128, y + 1 + g.below(20) as i128);
     let (op, holds) = OPERATIONS[g.below(6)];
     // `identity` gives its argument, so the second proof says the same of `x`.
     Closed {
         source: format!(
-            "fn identity(n: u64) -> u64 {{ n }}\n\nfn p() -> {x} + {y} {op} {z} {{ same }}\n\nfn q() -> identity({x}) {op} {z} {{ same }}\n\n{MAIN}"
+            "fn identity(n: u64) -> u64 {{ n }}\n\nfn p() -> identity({x}) + {y} {op} {above} {{ same }}\n\nfn q() -> identity({x}) {op} {z} {{ same }}\n\n{MAIN}"
         ),
-        false_ones: usize::from(!holds(x + y, z)) + usize::from(!holds(x, z)),
+        false_ones: usize::from(!holds(x + y, above)) + usize::from(!holds(x, z)),
     }
 }
 
@@ -340,8 +343,8 @@ fn a_proof_that_changes_a_step_is_refused_and_says_the_statement_owed() {
     // A proof that calls itself and has no `decreases` is refused.
     let found = refused(|s| {
         s.replace(
-            "  requires n >= 0 and n <= 255\n  decreases n\n{\n  if n == 0 {\n    same",
-            "  requires n >= 0 and n <= 255\n{\n  if n == 0 {\n    same",
+            "  requires n <= 255\n  decreases n\n{\n  if n == 0 {\n    same",
+            "  requires n <= 255\n{\n  if n == 0 {\n    same",
         )
     });
     assert!(
@@ -432,7 +435,7 @@ fn unfold_gives_a_name_the_body_binds_as_the_value_it_is_given() {
 
 const CHAIN: &str = "fn b(n: u64) -> u64\n  requires n < 100\n{\n  n + 1\n}\n\n\
 fn a(n: u64) -> u64\n  requires n < 100\n{\n  b(n)\n}\n\n\
-fn small() -> 1 < 2 { same }\n\n\
+fn small() -> b(1) < 3 { same }\n\n\
 fn through(n: u64) -> a(n) == n + 1\n  requires n < 100\n{\n  opened_b = unfold(b(n))\n  opened_a = unfold(a(n))\n  q = replace(opened_b, opened_a)\n  arith(q)\n}\n\n";
 
 /// `replace(eq, p)` gives the statement `p` proves with the right side of `eq`

@@ -1650,6 +1650,7 @@ impl<'a> Checker<'a> {
             if let (Some(i), Expr::Lambda(l), Want::Ty(Ty::Fn(_))) = (param, &arg.value, &wanted) {
                 lambdas.push((i, l));
             }
+            let wanted = own_range(&arg.value, wanted, comparing);
             let mark = body.extra.len();
             body.extra
                 .extend(self.lambda_effects(signature, param, &arg.value));
@@ -1720,6 +1721,7 @@ impl<'a> Checker<'a> {
             let defs = self.defs;
             let written = signature.written.get(i).cloned().flatten();
             let here = signature.params[i].1.clone();
+            let wanted = own_range(value, wanted, comparing);
             let gives = defs.writing(&here, written.clone(), || self.expr(body, value, &wanted));
             self.comparing = comparing;
             defs.writing(&here, written, || {

@@ -358,6 +358,50 @@ fn operand(g: &mut Gen, vars: &[Var], ty: Int) -> (String, i128) {
     }
 }
 
+/// Whether `op` gives the same answer for every pair of a number of the first
+/// range and a number of the second, which the compiler refuses to compare.
+fn decided(op: &str, (a_low, a_high): (i128, i128), (b_low, b_high): (i128, i128)) -> bool {
+    match op {
+        "==" | "!=" => a_high < b_low || b_high < a_low || (a_low == a_high && b_low == b_high && a_low == b_low),
+        "<" => a_high < b_low || a_low >= b_high,
+        "<=" => a_high <= b_low || a_low > b_high,
+        ">" => b_high < a_low || b_low >= a_high,
+        _ => b_high <= a_low || b_low > a_high,
+    }
+}
+
+/// The other side of a comparison of a name of type `ty` that no type decides:
+/// a number written out or a name of the same type, which a number of the
+/// type is not always above, below, or equal to.
+fn operand_to_compare(
+    g: &mut Gen,
+    vars: &[Var],
+    ty: Int,
+    op: &str,
+    on_the_left: bool,
+) -> (String, i128) {
+    let me = (ty.min(), ty.max());
+    for _ in 0..8 {
+        let (text, v) = operand(g, vars, ty);
+        let other = if vars.iter().any(|x| x.name == text) {
+            me
+        } else {
+            (v, v)
+        };
+        let answered = if on_the_left {
+            decided(op, other, me)
+        } else {
+            decided(op, me, other)
+        };
+        if !answered {
+            return (text, v);
+        }
+    }
+    let same: Vec<&Var> = vars.iter().filter(|v| v.ty == ty).collect();
+    let other = *g.pick(&same);
+    (other.name.clone(), other.value)
+}
+
 pub fn compare(op: &str, a: i128, b: i128) -> bool {
     match op {
         "==" => a == b,
@@ -460,11 +504,13 @@ fn line(g: &mut Gen, vars: &[Var], at: usize) -> Line {
         2 => {
             let op = *g.pick(&["==", "!=", "<", "<=", ">", ">="]);
             // A literal on the left takes its type from the name on the right.
-            let (left, a, other, b) = if g.one_in(4) {
-                let v = value(g, first.ty);
+            let me = (first.ty.min(), first.ty.max());
+            let literal_left = g.one_in(4);
+            let v = value(g, first.ty);
+            let (left, a, other, b) = if literal_left && !decided(op, (v, v), me) {
                 (spelled(g, v), v, first.name.clone(), first.value)
             } else {
-                let (other, b) = operand(g, vars, first.ty);
+                let (other, b) = operand_to_compare(g, vars, first.ty, op, false);
                 (first.name.clone(), first.value, other, b)
             };
             line.braced(
@@ -857,7 +903,7 @@ fn quiet_line(g: &mut Gen, vars: &[Var]) -> (String, &'static str) {
     match g.below(5) {
         0 | 1 => {
             let op = *g.pick(&["==", "!=", "<", "<=", ">", ">="]);
-            let (other, b) = operand(g, vars, first.ty);
+            let (other, b) = operand_to_compare(g, vars, first.ty, op, false);
             let test = format!("{} {op} {other}", first.name);
             choose(&test, compare(op, first.value, b))
         }
