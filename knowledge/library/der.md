@@ -5,7 +5,7 @@ description: std.der, which reads the tagged values of DER as pieces of the byte
 status: built
 built:
   - "`std.der`: `Value` and `Tag`, `value`, `children`, `whole`, `text`, `object`, and `bits`, with every `Slice` of a `Value` a piece of the bytes given and each way DER is not written right that the page lists an `.err`"
-  - "`std.x509`: `Certificate` and `certificate`, which reads a certificate of version 3 to the parts the struct lists, with its times as the seconds since 1970 from 1970 to the year 9999, and gives `.err` for a certificate that is not written as DER writes it, an extension marked critical that is not read, and an extension that is written twice"
+  - "`std.x509`: `Certificate` and `certificate`, which reads a certificate of version 3 to the parts the struct lists, with its times as `Instant`s from 1970 to the year 9999, and gives `.err` for a certificate that is not written as DER writes it, an extension marked critical that is not read, and an extension that is written twice"
   - "`pem`, which reads the text of one certificate or of several to the bytes of each, with the lines between them and blocks of another kind not read"
 ---
 
@@ -77,7 +77,7 @@ fn pem(text: str) -> Result[List[List[Byte]], str] <alloc>
 ```
 
 - `certificate` reads one certificate of version 3. `signed` is the part the signature is over, as the bytes it was, and `issuer` and `subject` are the bytes of each name, as two names are the same when their bytes are.
-- `not_before` and `not_after` are seconds since 1970, as the clock of [`time`](../language/effect-declarations.md) gives.
+- `not_before` and `not_after` are `Instant`s, as the clock of [`time`](time.md) gives, so `now() < c.not_after` compares two `Instant`s.
 - `names` are the DNS names of the extension for other names, each as written, a `*` at the front among them. `authority` and `path_length` are the extension that says a certificate may sign others: `authority` is `.none` when the certificate has none, and `.some(false)` or `.some(true)` when it has.
 - An extension marked critical that this module does not read makes the certificate `.err`, as RFC 5280 asks, so a rule this module does not know is never passed over in silence. It reads the extensions for other names, for whether a certificate may sign others, for key usage, and for extended key usage, and passes over any other that is not critical. Key usage and extended key usage are checked to be written as they should be, and give nothing to the struct.
 - `not_before` and `not_after` are read from a `utc_time` of 13 bytes, which is 19 from a year of 50 and 20 below, or a `general_time` of 15, each ending in `Z` with its seconds, as DER writes them, and a time before 1970 or a day that its month does not have is `.err`. `serial` has its zero at the front taken off, as `whole` does, and `signature` and `key` are the bytes of their bit strings, which `certificate` takes only when no bits are left over.

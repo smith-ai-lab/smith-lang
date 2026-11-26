@@ -1,4 +1,5 @@
 use std.bits (bit_and, bit_xor, i64, shift_right, u64)
+use std.instant (Duration, Instant, milliseconds, until)
 use std.int (checked_rem, saturating_add, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
 use std.list (push)
 
@@ -391,13 +392,21 @@ fn has_waiter(first: u64, fd: u64) -> bool {
   found
 }
 
-// For the library and its tests: the milliseconds from `now` to `deadline`, and
-// none, which is 0, when the time has come. A group asks it of every task that
-// waits for a time, with the one `now` it read for the turn: `expire` wakes the
-// task that has 0 left and `nearest` waits for the least of those that have more,
-// so each task is woken or waited for, and none is neither, which two reads of
-// the clock in a turn can make of a time that comes between them.
-pub fn time_left(deadline: u64, now: u64) -> u64 {
+// For the library and its tests: the span from `now` to `deadline`, and none when
+// the time has come.
+pub fn time_left(deadline: Instant, now: Instant) -> Duration {
+  until(deadline, now)
+}
+
+// The milliseconds from `now` to `deadline` on the clock of a scheduler, and none,
+// which is 0, when the time has come. A group asks it of every task that waits
+// for a time, with the one `now` it read for the turn: `expire` wakes the task
+// that has 0 left and `nearest` waits for the least of those that have more, so
+// each task is woken or waited for, and none is neither, which two reads of the
+// clock in a turn can make of a time that comes between them. The clock of a
+// scheduler counts from when it starts and a moment may be the largest number, so
+// they are numbers here and not `Instant`s.
+fn ms_left(deadline: u64, now: u64) -> u64 {
   if deadline > now { wrapping_sub(deadline, now) } else { 0 }
 }
 
@@ -408,7 +417,7 @@ fn expire(first: u64, moment: u64) -> u64 {
   var at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
-    if waits_for_time(at) and time_left(deadline(at), moment) == 0 {
+    if waits_for_time(at) and ms_left(deadline(at), moment) == 0 {
       if waits_for_descriptor(at) { woken = wrapping_add(woken, 1) }
       woken_by(at, true)
     }
@@ -426,7 +435,7 @@ fn nearest(first: u64, moment: u64) -> u64 {
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_time(at) {
-      left = time_left(deadline(at), moment)
+      left = ms_left(deadline(at), moment)
       if left > 0 and (found == 0 or left < found) { found = left }
     }
     at = after(at)
@@ -636,25 +645,25 @@ pub fn test_ready(handle: u64) <task> {
 // A task waits until the test says the handle is ready or the milliseconds have
 // gone, whichever comes first, in the time of the test, which goes forward only
 // when no task can run. It is told which: true when the handle was ready.
-pub fn test_ready_by(handle: u64, ms: u64) -> bool <task> {
-  wait_to_read_by(handle, ms)
+pub fn test_ready_by(handle: u64, span: Duration) -> bool <task> {
+  wait_to_read_by(handle, span)
 }
 
 // For the library: waits for the milliseconds, as a task that a scheduler runs.
-pub fn wait_for_time(ms: u64) <task> {
-  __wait(.time(ms))
+pub fn wait_for_time(span: Duration) <task> {
+  __wait(.time(milliseconds(span)))
 }
 
 // Waits until the descriptor can be read or the milliseconds have gone, whichever
 // comes first, and says which: true when it can be read.
-pub fn wait_to_read_by(handle: u64, ms: u64) -> bool <task> {
-  limit(ms)
+pub fn wait_to_read_by(handle: u64, span: Duration) -> bool <task> {
+  limit(milliseconds(span))
   __wait(.read_by(Handle(number: handle)))
   not timed_out()
 }
 
-pub fn wait_to_write_by(handle: u64, ms: u64) -> bool <task> {
-  limit(ms)
+pub fn wait_to_write_by(handle: u64, span: Duration) -> bool <task> {
+  limit(milliseconds(span))
   __wait(.write_by(Handle(number: handle)))
   not timed_out()
 }

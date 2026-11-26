@@ -45,6 +45,7 @@ fn program(functions: &str, tasks: &str, seed: u64) -> String {
     format!(
         "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.int (wrapping_add)
 use std.fs (close_file, file, fs, handle, release, File)
 use std.list (freeze, push)
@@ -54,7 +55,7 @@ use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_
 fn run() -> u64 <fs, diverge, alloc> {{
   with test_scheduler_with_io({seed}, [])
 {tasks}
-  late = test_ready_by(99, 10)
+  late = test_ready_by(99, ms(10))
   1
 }}
 
@@ -168,7 +169,7 @@ const SERVE: &str = "fn serve(f: take File) -> u64 <fs, task> {
 fn a_task_cancelled_before_it_ran_closes_the_file_its_lambda_was_given() {
     for seed in 0..8 {
         let source = program(SERVE, "  f = file(9)\n  spawn { serve(f) }", seed)
-            .replace("  late = test_ready_by(99, 10)\n", "");
+            .replace("  late = test_ready_by(99, ms(10))\n", "");
         assert_eq!(sorted(said(&source)), ["1", "closed 9"], "seed {seed}");
     }
 }
@@ -214,7 +215,7 @@ fn outer(n: u64) -> u64 <fs, alloc> {
   }
 ";
     let source = program(functions, tasks, 3)
-        .replace("  late = test_ready_by(99, 10)\n", "")
+        .replace("  late = test_ready_by(99, ms(10))\n", "")
         .replace("use std.task (join,", "use std.task (outcome, join,")
         .replace("test_scheduler_with_io(3, [])", "test_scheduler(3)")
         .replace("test_ready_by, test_scheduler_with_io)", "test_ready_by, test_scheduler_with_io, test_scheduler)")
@@ -233,6 +234,7 @@ fn a_cancelled_task_closes_the_file_of_memory_fs_as_release() {
     let source = "use std.bits (u64)
 use std.console (console, print)
 use std.fs (MemoryFile, fs, memory_fs, open_file, close_file)
+use std.instant (ms)
 use std.task (spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 fn hold() -> u64 <fs, task, alloc> {
@@ -249,7 +251,7 @@ fn hold() -> u64 <fs, task, alloc> {
 fn run() -> u64 <fs, diverge, alloc> {
   with test_scheduler_with_io(0, [])
   spawn { hold() }
-  late = test_ready_by(99, 10)
+  late = test_ready_by(99, ms(10))
   1
 }
 

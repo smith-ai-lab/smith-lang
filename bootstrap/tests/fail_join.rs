@@ -37,6 +37,7 @@ fn program(joins: &str) -> String {
     format!(
         "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.list (push)
 use std.task (join, spawn, test_ready_by, test_scheduler)
 
@@ -74,7 +75,7 @@ fn a_join_of_a_child_that_ran_out_of_memory_gives_no_value_and_ends_the_program_
 }
 
 fn a_child_that_ran_out_of_memory_and_is_never_joined_leaves_its_parent_to_go_on() {
-    let (status, text) = said(&program("  late = test_ready_by(99, 10)\n"));
+    let (status, text) = said(&program("  late = test_ready_by(99, ms(10))\n"));
     assert_eq!((status, text.as_str()), (0, "the parent went on\n"));
 }
 

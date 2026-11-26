@@ -1,6 +1,7 @@
 use std.bits (u64)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
+use std.instant (ms)
 use std.list (push)
 use std.net (Connection, Listener, NetError, accept, close, listen, net, read)
 use std.task (spawn, task, tasks)
@@ -35,7 +36,7 @@ fn one(l: Listener) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
   spawn { spoil(c) }
-  sleep(200)
+  sleep(ms(200))
   .ok(())
 }
 
@@ -51,7 +52,7 @@ fn main(args: List[str]) -> Result[(), NetError] <net, time, alloc, diverge> {
   match port {
     .ok(p) {
       done = session(p)
-      sleep(2500)
+      sleep(ms(2500))
       done
     }
     _ { .ok(()) }

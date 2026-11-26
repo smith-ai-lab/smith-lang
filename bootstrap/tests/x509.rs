@@ -96,6 +96,7 @@ fn certificates_program(inputs: &[Vec<u8>]) -> String {
     let mut source = String::from(
         "use std.bits (bit_and, shift_right)
 use std.console (console, print)
+use std.instant (since_1970)
 use std.int (wrapping_add)
 use std.list (freeze, push)
 use std.utf8 (utf8)
@@ -145,7 +146,7 @@ fn show(b: Slice[Byte]) <console, alloc> {
         .some(n) { \"{n}\" }
         .none { \"none\" }
       }
-      print(\"ok serial={hex(c.serial)} not_before={c.not_before} not_after={c.not_after} algorithm={dotted(c.algorithm)} key_algorithm={dotted(c.key_algorithm)} key={hex(c.key)} names={joined(c.names)} authority={authority} path={path} signed={hex(c.signed)} signature={hex(c.signature)} issuer={hex(c.issuer)} subject={hex(c.subject)}\")
+      print(\"ok serial={hex(c.serial)} not_before={since_1970(c.not_before) / 1000} not_after={since_1970(c.not_after) / 1000} algorithm={dotted(c.algorithm)} key_algorithm={dotted(c.key_algorithm)} key={hex(c.key)} names={joined(c.names)} authority={authority} path={path} signed={hex(c.signed)} signature={hex(c.signature)} issuer={hex(c.issuer)} subject={hex(c.subject)}\")
     }
   }
 }

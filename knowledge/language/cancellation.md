@@ -31,6 +31,7 @@ Giving up on work that takes too long is ordinary code: spawn the work and a wai
 
 ```
 use std.fetch (FetchError, Request, Response, fetch, send)
+use std.instant (seconds)
 use std.time (sleep, time)
 
 enum Outcome {
@@ -42,7 +43,7 @@ fn fetch_within_5_seconds(url: str) -> Result[Response[65536], FetchError] <fetc
   with tasks()
   work = spawn { Outcome.page(send(Request(url: url), 65536)) }
   wait = spawn {
-    sleep(5000)
+    sleep(seconds(5))
     Outcome.late
   }
   match first(work, [wait]) {

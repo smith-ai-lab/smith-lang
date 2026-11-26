@@ -45,6 +45,7 @@ fn program(functions: &str, tasks: &str, seed: u64) -> String {
     format!(
         "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.int (wrapping_add)
 use std.net (close, connection, handle, net, release, write, Connection)
 use std.list (freeze, push)
@@ -54,7 +55,7 @@ use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_
 fn run() -> u64 <net, diverge, alloc> {{
   with test_scheduler_with_io({seed}, [])
 {tasks}
-  late = test_ready_by(99, 10)
+  late = test_ready_by(99, ms(10))
   1
 }}
 
@@ -173,10 +174,11 @@ fn a_connection_given_to_a_parent_by_join_is_closed_once_by_the_parent_and_not_b
 
 fn a_function_that_holds_a_connection_while_it_may_wait_and_does_not_carry_net_is_refused() {
     let source = "use std.net (Connection, close, connection, net)
+use std.instant (ms)
 use std.time (sleep, time)
 
 fn relay(c: take Connection) -> Connection <time> {
-  sleep(10)
+  sleep(ms(10))
   c
 }
 
@@ -244,7 +246,7 @@ const SERVE: &str = "fn serve(c: take Connection) -> u64 <net, task> {
 fn a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given() {
     for seed in 0..8 {
         let source = program(SERVE, "  c = connection(9)\n  spawn { serve(c) }", seed)
-            .replace("  late = test_ready_by(99, 10)\n", "");
+            .replace("  late = test_ready_by(99, ms(10))\n", "");
         assert_eq!(sorted(said(&source)), ["1", "closed 9"], "seed {seed}");
     }
 }

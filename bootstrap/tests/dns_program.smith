@@ -2,6 +2,7 @@ use std.bits (u64)
 use std.console (console, print)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
+use std.instant (ms)
 use std.int (wrapping_add)
 use std.list (push)
 use std.net (NetError, resolve)
@@ -53,7 +54,7 @@ fn look(name: str, hosts: str, resolv: str, port: 0..65536) <console, alloc, tas
 // A task that says it is running, five times, a tenth of a second apart.
 fn ticker() -> u64 <console, time, alloc, task> {
   loop i in 0..5 {
-    sleep(100)
+    sleep(ms(100))
     print("tick")
   }
   0

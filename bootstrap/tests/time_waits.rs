@@ -118,14 +118,15 @@ fn run_with(target: Target, source: &str, words: &[&str], limit: Option<u32>, du
 /// The names the programs share: a task that sleeps and says so.
 const NAP: &str = "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.int (wrapping_sub)
 use std.task (join, spawn, task, tasks)
 use std.time (now, sleep, time)
 
-fn nap(ms: u64) -> u64 <console, time, alloc, task> {
-  sleep(ms)
-  print(\"woke {ms}\")
-  ms
+fn nap(n: 0..1000) -> u64 <console, time, alloc, task> {
+  sleep(ms(n))
+  print(\"woke {n}\")
+  n
 }
 ";
 
@@ -135,13 +136,14 @@ fn nap(ms: u64) -> u64 <console, time, alloc, task> {
 /// by the clock of the test, and about 1,000 when each is woken early.
 fn a_task_that_sleeps_is_never_woken_before_the_time_it_asked_for() {
     let source = "use std.console (console, print)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
-    t = spawn { sleep(1) }
+    t = spawn { sleep(ms(1)) }
     join(t)
   }
   print(\"slept\")
@@ -162,13 +164,14 @@ fn main() <console, alloc, time> {
 /// descriptors may be open: it ends only if each group closes its queue.
 fn a_thousand_groups_one_after_another_each_close_the_queue_they_made() {
     let source = "use std.console (console, print)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
-    t = spawn { sleep(1) }
+    t = spawn { sleep(ms(1)) }
     join(t)
   }
   print(\"slept\")
@@ -212,7 +215,7 @@ fn a_thousand_tasks_that_each_sleep_wake_once_each_and_the_program_takes_the_tim
     let source = format!(
         "{NAP}
 fn sleeper(i: u64) -> u64 <console, time, alloc, task> {{
-  sleep(100)
+  sleep(ms(100))
   print(\"{{i}}\")
   i
 }}
@@ -250,22 +253,23 @@ use std.console (console, print)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
 use std.net (NetError, bind, handle, net)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks, wait_to_read_by)
 
-fn waiting(port: 0..65536, ms: u64) -> Result[bool, NetError] <console, net, alloc, task> {
+fn waiting(port: 0..65536, limit: 0..100000) -> Result[bool, NetError] <console, net, alloc, task> {
   with s = bind(\"127.0.0.1\", port)
   print(\"ready\")
-  .ok(wait_to_read_by(handle(s), ms))
+  .ok(wait_to_read_by(handle(s), ms(limit)))
 }
 
 fn main(args: List[str]) <console, alloc, net> {
   if args.size < 2 { return }
   number: Result[0..65536, ReadError] = from_text(\"port\", args[0])
-  limit: Result[u64, ReadError] = from_text(\"limit\", args[1])
+  limit: Result[0..100000, ReadError] = from_text(\"limit\", args[1])
   match (number, limit) {
-    (.ok(port), .ok(ms)) {
+    (.ok(port), .ok(wait)) {
       with tasks()
-      t = spawn { waiting(port, ms) }
+      t = spawn { waiting(port, wait) }
       match join(t) {
         .ok(data) { print(\"data {data}\") }
         .err(e) { print(\"failed\") }
@@ -305,12 +309,13 @@ fn a_task_that_waits_for_a_socket_with_a_deadline_wakes_by_its_time_with_no_data
 /// how long the program took by the clock that is not the test's.
 const VIRTUAL: &str = "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms, since_1970)
 use std.int (wrapping_sub)
 use std.task (join, spawn, task, test_scheduler)
 use std.time (now, sleep, time)
 
-fn sleeper(i: u64) -> u64 <console, time, alloc, task> {
-  sleep(i)
+fn sleeper(i: 0..5001) -> u64 <console, time, alloc, task> {
+  sleep(ms(i))
   print(\"{i}\")
   i
 }
@@ -323,7 +328,7 @@ fn main(args: List[str]) <console, alloc, time, diverge> {
   }
   last = spawn { sleeper(5000) }
   join(last)
-  print(\"done {wrapping_sub(now(), before)}\")
+  print(\"done {wrapping_sub(since_1970(now()), since_1970(before))}\")
 }
 ";
 
@@ -339,17 +344,18 @@ fn main(args: List[str]) <console, alloc, time, diverge> {
 fn a_group_ends_within_a_second_with_a_task_that_sleeps_the_largest_number_left_unjoined() {
     let source = "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.task (join, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn long() -> u64 <console, time, alloc, task> {
-  sleep(18446744073709551615)
+  sleep(ms(4611686018427387903))
   print(\"long woke\")
   0
 }
 
 fn short() -> u64 <console, time, alloc, task> {
-  sleep(10)
+  sleep(ms(10))
   print(\"short\")
   1
 }
@@ -380,18 +386,19 @@ fn a_task_that_sleeps_the_largest_number_is_still_waiting_when_one_that_sleeps_a
         let source = format!(
             "use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.task (join, spawn, task, test_scheduler)
 use std.time (sleep, time)
 
 fn long() -> u64 <console, time, alloc, task> {{
-  sleep(5)
-  sleep(18446744073709551615)
+  sleep(ms(5))
+  sleep(ms(4611686018427387903))
   print(\"long woke\")
   0
 }}
 
 fn short() -> u64 <console, time, alloc, task> {{
-  sleep(10)
+  sleep(ms(10))
   print(\"short\")
   1
 }}
@@ -438,10 +445,11 @@ const HANDLES: &str = "use std.bits (u64)
 use std.console (console, print)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
+use std.instant (ms)
 use std.task (join, spawn, task, test_ready_by, test_scheduler_with_io)
 
 fn waits(handle: u64) -> bool <task> {
-  test_ready_by(handle, 20)
+  test_ready_by(handle, ms(20))
 }
 
 fn main(args: List[str]) <console, alloc, diverge> {

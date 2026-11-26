@@ -662,6 +662,7 @@ fn a_thousand_connections_open_at_once_are_each_answered() {
 /// listener, as `listen_on` of `std.net` sizes it.
 const NEVER_ACCEPTS: &str = "use std.deserialize (ReadError)
 use std.fromtext (from_text)
+use std.instant (ms)
 use std.int (narrow)
 use std.net (listen_on, net, stop)
 use std.time (sleep, time)
@@ -676,7 +677,7 @@ fn main(args: List[str]) <net, time, alloc> {
         .some(p) {
           match listen_on(\"127.0.0.1\", p) {
             .ok(l) {
-              sleep(60000)
+              sleep(ms(60000))
               stop(l)
             }
             .err(e) { }

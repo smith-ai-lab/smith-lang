@@ -46,10 +46,11 @@ A task that is cancelled while it waits is ended by the handlers: each handle of
 
 ```
 use std.net (Connection)
+use std.instant (ms)
 use std.time (sleep, time)
 
 fn relay(c: take Connection) -> Connection <time> {
-  sleep(10)
+  sleep(ms(10))
   c
 }
 ```

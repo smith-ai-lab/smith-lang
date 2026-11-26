@@ -1,5 +1,6 @@
 use std.bits (u64)
 use std.console (console, print)
+use std.instant (ms)
 use std.task (spawn, tasks)
 use std.time (sleep, time)
 
@@ -13,8 +14,8 @@ fn chatter() <console> {
 
 // The reader has gone by the time the child writes.
 fn main() <console, alloc, time> {
-  sleep(300)
+  sleep(ms(300))
   with tasks()
   spawn { chatter() }
-  sleep(100)
+  sleep(ms(100))
 }

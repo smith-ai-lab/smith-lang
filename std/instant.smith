@@ -1,0 +1,46 @@
+// A point in time and a span of time, which are two types and not two numbers.
+// Both hold milliseconds, from 0 to one below 2^62, so that a point and a span
+// added always fit a `u64`. The field of each is private: nothing outside this
+// module reads or writes a number where a time is meant.
+
+pub struct Instant {
+  ms: 0..4611686018427387904
+}
+
+pub struct Duration {
+  ms: 0..4611686018427387904
+}
+
+// The span of `n` milliseconds.
+pub fn ms(n: 0..4611686018427387904) -> Duration { Duration(ms: n) }
+
+// The span of `n` seconds.
+pub fn seconds(n: 0..4611686018427387) -> Duration { Duration(ms: n * 1000) }
+
+// The point `n` milliseconds after the start of 1970.
+pub fn instant(n: 0..4611686018427387904) -> Instant { Instant(ms: n) }
+
+// The milliseconds of a span, for what writes one down or hands one to the system.
+pub fn milliseconds(d: Duration) -> 0..4611686018427387904 { d.ms }
+
+// The milliseconds from the start of 1970 to a point, for what writes one down or
+// hands one to the system.
+pub fn since_1970(i: Instant) -> 0..4611686018427387904 { i.ms }
+
+// A point and a span give the point the span after it, where that is a point.
+impl Add[Instant, Duration, Instant] {
+  fn valid(a: Instant, b: Duration) -> bool { Add.valid(a.ms, b.ms) }
+  fn add(a: Instant, b: Duration) -> Instant { Instant(ms: a.ms + b.ms) }
+}
+
+// The span from a point to one that is not before it.
+pub fn between(earlier: Instant, later: Instant) -> Duration
+  requires earlier <= later
+{
+  Duration(ms: later.ms - earlier.ms)
+}
+
+// The span from `now` to `deadline`, and none once the deadline has passed.
+pub fn until(deadline: Instant, now: Instant) -> Duration {
+  if deadline.ms > now.ms { Duration(ms: deadline.ms - now.ms) } else { Duration(ms: 0) }
+}

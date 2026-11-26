@@ -1,6 +1,7 @@
 use std.bits (u64)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
+use std.instant (ms)
 use std.net (Connection, Listener, NetError, accept, close, listen, net, read)
 use std.task (spawn, task, tasks)
 use std.time (sleep, time)
@@ -14,23 +15,23 @@ fn hold(c: take Connection) <net, task, alloc> {
 // Takes one connection and gives it to a child in a group of its own, which
 // ends after `pause` milliseconds: a child that has run waits for a read by
 // then, and one that has not, as a `pause` of 0 says, has not run at all.
-fn one_round(l: Listener, pause: u64) -> Result[(), NetError] <net, time, alloc> {
+fn one_round(l: Listener, pause: 0..100000) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
   spawn { hold(c) }
-  if pause > 0 { sleep(pause) }
+  if pause > 0 { sleep(ms(pause)) }
   .ok(())
 }
 
 // Takes `rounds` connections one after another.
-fn rounds_of(l: Listener, pause: u64, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
+fn rounds_of(l: Listener, pause: 0..100000, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
   loop round in 0..rounds {
     try one_round(l, pause)
   }
   .ok(())
 }
 
-fn session(port: 0..65536, pause: u64, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
+fn session(port: 0..65536, pause: 0..100000, rounds: u64) -> Result[(), NetError] <net, time, alloc> {
   listen("127.0.0.1", port, fn(l) { rounds_of(l, pause, rounds) })
 }
 
@@ -40,12 +41,12 @@ fn session(port: 0..65536, pause: u64, rounds: u64) -> Result[(), NetError] <net
 fn main(args: List[str]) -> Result[(), NetError] <net, time, alloc, diverge> {
   if args.size < 3 { return .ok(()) }
   port: Result[0..65536, ReadError] = from_text("port", args[0])
-  pause: Result[u64, ReadError] = from_text("pause", args[1])
+  pause: Result[0..100000, ReadError] = from_text("pause", args[1])
   rounds: Result[u64, ReadError] = from_text("rounds", args[2])
   match (port, pause, rounds) {
     (.ok(p), .ok(w), .ok(n)) {
       done = session(p, w, n)
-      sleep(2500)
+      sleep(ms(2500))
       done
     }
     _ { .ok(()) }
