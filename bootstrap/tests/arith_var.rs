@@ -19,8 +19,12 @@ pub const ONCE: &[Test] = &[
         a_program_that_compiles_never_uses_what_a_var_held_before_an_assignment_that_may_lie_between,
     ),
     (
-        "a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not",
-        a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not,
+        "a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not_part_1_of_2",
+        || a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not(0),
+    ),
+    (
+        "a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not_part_2_of_2",
+        || a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not(1),
     ),
 ];
 
@@ -321,8 +325,8 @@ fn fact(g: &mut Gen) -> Fact {
 /// greatest `n` the facts allow, and the same program with a `loop` around it
 /// is accepted and refused as the one without. A step that gives another `var`
 /// a value in between changes nothing.
-fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not() {
-    generate::check(42, 40, fact, |f| {
+fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not(part: u64) {
+    generate::check_part(42, 40, part, 2, fact, |f| {
         let greatest = f.given.unwrap_or(f.limit - 1);
         let fits = greatest + f.k <= f.ty.max();
         let build = |looped: bool| {
@@ -346,9 +350,11 @@ fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_
                 f.given.unwrap_or(0)
             ))
         };
+        let mut verdicts = Vec::new();
         for looped in [false, true] {
             let text = build(looped);
             let accepted = check(text.as_bytes()).is_ok();
+            verdicts.push(accepted);
             assert_eq!(accepted, fits, "a loop around is {looped}\n{text}");
             if accepted && f.given.is_some() {
                 assert_eq!(
@@ -359,9 +365,6 @@ fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_
             }
         }
         // Whether a loop is around it makes no difference to either side.
-        assert_eq!(
-            check(build(false).as_bytes()).is_ok(),
-            check(build(true).as_bytes()).is_ok()
-        );
+        assert_eq!(verdicts[0], verdicts[1]);
     });
 }
