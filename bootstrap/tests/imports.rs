@@ -36,36 +36,68 @@ pub const ONCE: &[Test] = &[
         every_name_of_a_module_can_be_imported_at_once,
     ),
     (
-        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_1_of_2",
+        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_1_of_4",
         || a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(0),
     ),
     (
-        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_2_of_2",
+        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_2_of_4",
         || a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(1),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_1_of_6",
+        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_3_of_4",
+        || a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(2),
+    ),
+    (
+        "a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use_part_4_of_4",
+        || a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(3),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_1_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(0),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_2_of_6",
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_2_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(1),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_3_of_6",
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_3_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(2),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_4_of_6",
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_4_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(3),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_5_of_6",
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_5_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(4),
     ),
     (
-        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_6_of_6",
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_6_of_12",
         || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(5),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_7_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(6),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_8_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(7),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_9_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(8),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_10_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(9),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_11_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(10),
+    ),
+    (
+        "a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing_part_12_of_12",
+        || a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(11),
     ),
     (
         "each_mistake_in_a_use_is_one_error_at_its_place_part_1_of_4",
@@ -376,7 +408,7 @@ fn some_program(g: &mut Gen) -> String {
 /// `use` is refused, with one error for each name of the library that it
 /// writes, which says the module the name is in and the `use` to add.
 fn a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(part: u64) {
-    generate::check_part(300, 50, part, 2, some_program, |source| {
+    generate::check_part(300, 50, part, 4, some_program, |source| {
         let bare = without_uses(source);
         let with = with_imports(&bare);
         assert_eq!(
@@ -414,12 +446,14 @@ fn a_file_that_imports_the_names_it_uses_builds_what_it_built_without_the_use(pa
 /// A name that is listed and not written anywhere else is a warning at the
 /// name, and not an error, and the executable is the one without it.
 fn a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_nothing(part: usize) {
-    // The names of all the modules, each part taking every sixth.
+    // What the file builds to without the name, which is one of two files.
+    let mut built = std::collections::HashMap::new();
+    // The names of all the modules, each part taking every twelfth.
     let mut next = 0;
     for module in library() {
         for (name, _) in &module.names {
             next += 1;
-            if (next - 1) % 6 != part {
+            if (next - 1) % 12 != part {
                 continue;
             }
             let bare = if name == "console" || name == "print" || name == "input" {
@@ -440,11 +474,10 @@ fn a_name_that_is_imported_and_not_used_is_a_warning_at_its_name_and_changes_not
             };
             assert_eq!(places, [at], "{warnings:?} for {source}");
             assert!(warnings[0].message.contains(name.as_str()), "{warnings:?}");
-            assert_eq!(
-                compile(source.as_bytes(), any()),
-                compile(bare.as_bytes(), any()),
-                "for {source}"
-            );
+            let without = built
+                .entry(bare)
+                .or_insert_with(|| compile(bare.as_bytes(), any()));
+            assert_eq!(&compile(source.as_bytes(), any()), without, "for {source}");
         }
     }
 }
@@ -835,19 +868,30 @@ fn a_name_a_module_does_not_export_costs_a_lookup_and_names_the_module_that_does
             }
         }
     }
-    for (name, home) in first.iter().filter(|(_, home)| *home != "console") {
-        // `std.bits` is not where these are, unless it is, and then another is.
-        let from = if *home == "bits" { "text" } else { "bits" };
-        let source = format!("use std.{from} ({name})\n\nfn main() {{\n}}\n");
+    // The names of each module that is not `std.bits` are listed from it in one
+    // file, and the names of `std.bits` from `std.text`, so that the library is
+    // read once for all of them and not once for each.
+    for from in ["bits", "text"] {
+        let names: Vec<(&str, &str)> = first
+            .iter()
+            .filter(|(_, home)| *home != "console")
+            .filter(|(_, home)| (*home == "bits") == (from == "text"))
+            .map(|(name, home)| (*name, *home))
+            .collect();
+        let list: Vec<&str> = names.iter().map(|(name, _)| *name).collect();
+        let source = format!("use std.{from} ({})\n\nfn main() {{\n}}\n", list.join(", "));
         let Err(errors) = check(source.as_bytes()) else {
             continue;
         };
-        for e in errors.iter().filter(|e| e.message.contains("has no name")) {
-            let fix = e.fix.as_deref().unwrap_or_default();
-            assert!(
-                fix.contains(&format!("use std.{home} ({name})")) || *home == from,
-                "{name} is in {home}: {e:?}"
-            );
+        for (name, home) in names {
+            let wanted = format!("has no name `{name}`");
+            for e in errors.iter().filter(|e| e.message.contains(&wanted)) {
+                let fix = e.fix.as_deref().unwrap_or_default();
+                assert!(
+                    fix.contains(&format!("use std.{home} ({name})")) || home == from,
+                    "{name} is in {home}: {e:?}"
+                );
+            }
         }
     }
     let plain = "use std.bits (u8)\n\nfn main() {\n}\n";
