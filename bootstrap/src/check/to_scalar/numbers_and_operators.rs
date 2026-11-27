@@ -661,6 +661,8 @@ impl<'a> Lowering<'a> {
                     FChmod,
                     CloseFile,
                     RecvMsg,
+                    FetchSend,
+                    FetchTake,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);

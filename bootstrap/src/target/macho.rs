@@ -92,7 +92,13 @@ pub fn slot(call: Raw) -> usize {
         Raw::RecvMsg => 25,
         Raw::Read => READ,
         Raw::Write => WRITE,
-        Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::GetRandom => {
+        Raw::Kind
+        | Raw::EpollCreate1
+        | Raw::EpollCtl
+        | Raw::EpollWait
+        | Raw::GetRandom
+        | Raw::FetchSend
+        | Raw::FetchTake => {
             unreachable!("which kernel it is, and what only Linux has, call nothing")
         }
     }

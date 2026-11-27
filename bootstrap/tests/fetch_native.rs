@@ -21,6 +21,10 @@ use crate::targets;
 
 pub const MACHINE: &[Test] = &[
     (
+        "a_module_makes_its_requests_through_the_import_of_its_host",
+        a_module_makes_its_requests_through_the_import_of_its_host,
+    ),
+    (
         "a_client_gives_the_status_headers_and_body_of_a_server_on_this_machine_for_each_method",
         a_client_gives_the_status_headers_and_body_of_a_server_on_this_machine_for_each_method,
     ),
@@ -155,7 +159,7 @@ fn take(listener: &TcpListener) -> Asked {
         .skip(1)
         .find_map(|l| {
             let (n, v) = l.split_once(": ")?;
-            (n.to_ascii_lowercase() == "content-length").then(|| v.parse::<usize>().unwrap())
+            n.eq_ignore_ascii_case("content-length").then(|| v.parse::<usize>().unwrap())
         })
         .unwrap_or(0);
     let mut body = vec![0u8; length];
@@ -306,5 +310,85 @@ fn a_send_that_waits_suspends_its_task_and_no_other() {
         stdout.read_to_end(&mut said).unwrap();
         assert_eq!(String::from_utf8_lossy(&said).replace("\r\n", "\n"), "early 200\nlate 200\n", "on {}", target.name());
         assert!(asker.child.wait().unwrap().success());
+    }
+}
+
+/// The program a module is built from: a request, and what it gets or why not.
+const MODULE: &str = r#"use std.console (console, print)
+use std.fetch (get, host)
+use std.utf8 (utf8)
+use std.list (freeze)
+
+fn main() <console, alloc> {
+  with host()
+  match get[8]("http://127.0.0.1:PORT/a", headers: []) {
+    .ok(r) {
+      text = match utf8(freeze(r.body.bytes)) {
+        .ok(t) { t }
+        .err(e) { "not text" }
+      }
+      print("a {r.status} {text} {r.headers.size}")
+    }
+    .err(e) { print("a {e}") }
+  }
+  match get[3]("http://127.0.0.1:PORT/b") {
+    .ok(r) { print("b {r.status}") }
+    .err(e) { print("b {e}") }
+  }
+  match get[3]("http://127.0.0.1:CLOSED/c") {
+    .ok(r) { print("c {r.status}") }
+    .err(e) { print("c {e}") }
+  }
+  match get("https://127.0.0.1/d") {
+    .ok(r) { print("d {r.status}") }
+    .err(e) { print("d {e}") }
+  }
+}
+"#;
+
+/// A module that is built to ask its host to make a request, which `node` makes
+/// with a child of its own, gets the status, headers and body of a server on this
+/// machine, `.too_big` for a body over its limit, `unreachable` for a port nobody
+/// holds, and refuses `https` as the native program does.
+fn a_module_makes_its_requests_through_the_import_of_its_host() {
+    let found = crate::clock::output_within(Command::new("node").arg("--version"), false)
+        .is_ok_and(|o| o.status.success());
+    if !found {
+        eprintln!("skipped: node is not installed");
+        return;
+    }
+    for target in smith::target::Target::ALL.iter().copied().filter(|t| !t.is_machine_code()) {
+        let (listener, port) = listening();
+        let (closed, closed_port) = listening();
+        drop(closed);
+        let source = MODULE.replace("CLOSED", &closed_port.to_string()).replace("PORT", &port.to_string());
+        let dir = folder(&format!("fetch_module_{}", target.name()));
+        std::fs::write(dir.join("m.smith"), &source).unwrap();
+        let built = smith(&dir, &["build", "--target", target.name(), "m.smith"]);
+        assert!(built.status.success(), "{}", stderr(&built));
+        let mut node = Command::new("node")
+            .arg(dir.join("m.js"))
+            .current_dir(&dir)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut a = take(&listener);
+        assert_eq!(a.line(), "GET /a HTTP/1.1");
+        assert_eq!(a.header("host").as_deref(), Some(format!("127.0.0.1:{port}").as_str()));
+        a.answer(&response("200 OK", &["x-id: 5"], b"hello"));
+        // The request says `connection: close`, so the server closes, and the host
+        // reads to the end.
+        drop(a);
+        let mut b = take(&listener);
+        assert_eq!(b.line(), "GET /b HTTP/1.1");
+        b.answer(&response("200 OK", &[], b"hello"));
+        drop(b);
+        let said = String::from_utf8(output_of(&mut node)).unwrap();
+        let wanted = format!(
+            "a 200 hello 2\nb http://127.0.0.1:{port}/b: body longer than 3 bytes\nc http://127.0.0.1:{closed_port}/c: server not reached\nd https://127.0.0.1/d: https is not built yet\n"
+        );
+        assert_eq!(said.replace("\r\n", "\n"), wanted, "on {}", target.name());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

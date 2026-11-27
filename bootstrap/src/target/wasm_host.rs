@@ -11,12 +11,25 @@ pub fn script(imports: &[(&str, &str)]) -> String {
 "use strict";
 const fs = require("fs");
 let memory;
-const imports = {
 "#,
     );
-    for (effect, operation) in imports {
+    if imports.contains(&("fetch", "send")) {
+        out.push_str(FETCH);
+    }
+    out.push_str("const imports = {\n");
+    let mut effects: Vec<&str> = Vec::new();
+    for (effect, _) in imports {
+        if !effects.contains(effect) {
+            effects.push(effect);
+        }
+    }
+    for effect in effects {
         out.push_str(&format!("  {effect}: {{\n"));
-        out.push_str(&operation_script(effect, operation));
+        for (of, operation) in imports {
+            if *of == effect {
+                out.push_str(&operation_script(of, operation));
+            }
+        }
         out.push_str("  },\n");
     }
     out.push_str(
@@ -38,6 +51,57 @@ try {
     );
     out
 }
+
+/// What the host keeps for the operations of `fetch`: the answer of the last
+/// request, and the program a child of `node` runs to make one. The request is
+/// the host, the port, and the most bytes of body, each ended by a line feed, and
+/// then the request as it is written. The child connects, writes it, and gives
+/// what the server writes until it ends or until it has written more than the
+/// most the module holds, which is the body, the head, and what its framing adds.
+const FETCH: &str = r#"let answer = Buffer.alloc(0);
+const fetchScript = `
+const net = require("net");
+const chunks = [];
+process.stdin.on("data", (d) => chunks.push(d));
+process.stdin.on("end", () => {
+  const input = Buffer.concat(chunks);
+  let at = 0;
+  const lines = [];
+  for (let k = 0; k < 3; k++) {
+    const end = input.indexOf(10, at);
+    lines.push(input.subarray(at, end).toString());
+    at = end + 1;
+  }
+  const [host, port, most] = lines;
+  const cap = Number(most) * 8 + 65536;
+  const request = input.subarray(at);
+  const socket = net.connect({ host, port: Number(port) });
+  const got = [];
+  let held = 0;
+  let done = false;
+  const finish = (status) => {
+    if (done) return;
+    done = true;
+    process.stdout.write(Buffer.concat(got), () => process.exit(status));
+  };
+  socket.on("connect", () => socket.write(request));
+  socket.on("data", (d) => {
+    got.push(d);
+    held += d.length;
+    if (held > cap) {
+      socket.destroy();
+      finish(0);
+    }
+  });
+  socket.on("end", () => finish(0));
+  socket.on("close", () => finish(0));
+  socket.on("error", (e) => {
+    if (held > 0) finish(0);
+    else process.exit(["ECONNREFUSED", "ENOTFOUND", "EHOSTUNREACH"].includes(e.code) ? 1 : 2);
+  });
+});
+`;
+"#;
 
 /// The function that supplies an operation of an effect.
 fn operation_script(effect: &str, operation: &str) -> String {
@@ -70,6 +134,31 @@ fn operation_script(effect: &str, operation: &str) -> String {
       } catch (error) {
         return 1;
       }
+    },
+"#
+        .to_string(),
+        // Makes the request that the `length` bytes at `address` hold, with a
+        // child of `node`, which the call waits for, and says how long the answer
+        // is, or minus 1 when no server was reached and minus 2 for any other
+        // failure.
+        ("fetch", "send") => r#"    send(address, length) {
+      const request = Buffer.from(new Uint8Array(memory.buffer, address, length));
+      const child = require("child_process").spawnSync(process.execPath, ["-e", fetchScript], {
+        input: request,
+        maxBuffer: 1 << 30,
+      });
+      answer = Buffer.alloc(0);
+      if (child.error || child.status === null) return -2;
+      if (child.status !== 0) return -child.status;
+      answer = child.stdout;
+      return answer.length;
+    },
+"#
+        .to_string(),
+        // Copies the answer of the last request to `address`.
+        ("fetch", "take") => r#"    take(address) {
+      new Uint8Array(memory.buffer, address, answer.length).set(answer);
+      answer = Buffer.alloc(0);
     },
 "#
         .to_string(),
