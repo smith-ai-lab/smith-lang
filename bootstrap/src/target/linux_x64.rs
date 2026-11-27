@@ -131,8 +131,9 @@ impl System for Linux {
             Raw::OpenAt => 257,
             Raw::NanoSleep => 35,
             Raw::ClockGetTime | Raw::Now => 228,
-            Raw::Kqueue | Raw::Kevent => {
-                // Linux has no `kqueue`, and what is built for it is never run there.
+            Raw::Kqueue | Raw::Kevent | Raw::FetchSend | Raw::FetchTake => {
+                // Linux has no `kqueue`, and no host that makes a request, and what is built
+                // for them is never run there.
                 asm.mov64(RAX, -38i64 as u64);
                 return;
             }

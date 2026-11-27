@@ -826,6 +826,8 @@ pub trait System {
                     | Raw::Kevent
                     | Raw::Now
                     | Raw::CloseQueue
+                    | Raw::FetchSend
+                    | Raw::FetchTake
             ),
             "a target that has no such call refuses the program before it is built"
         );

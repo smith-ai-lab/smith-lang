@@ -8,7 +8,8 @@ built:
   - "`get`, `delete`, `post`, `put`, and `patch`, each with the limit `[limit: Nat = 1048576]` and `headers: List[(HeaderName, HeaderValue)] = []` after the `;`, giving `Response[limit]`, which holds the body only when it has at most `limit` bytes, and `head`, which gives a `HeadResponse` and takes no limit; a call that does not fit its method, as `get(url, body: x)`, a `post` with no body, and the `.body` of what `head` gives, is refused where it is written with a message that names the method"
   - "`client`, the handler of a native executable, which answers `fetch` for an address that begins `http://` by writing the request to a connection of its own through `net` and reading the answer framed by its length, in chunks, or by the end of the connection, in pieces of any size, on Linux, macOS, and Windows, and holds no more than `limit` bytes of body: a body that the head says is longer is not read, and one that comes longer is `.too_big`; a connection is closed once, when the send ends or the task that sends is cancelled; a call that waits suspends its task and no other, where `client` is installed inside the group, as [Handlers and tasks](../language/task-handlers.md) says"
   - "a handler of `fetch` that a test writes, which gives each case exactly what its method has and a `Reply` that no network made, so a program that asks other servers is tested with no network, and a reply with a body past the limit the request carries is `.too_big` whatever the handler meant"
-  - "not a request over `https`, which is `.err(.failed((url, \"https is not built yet\")))` until TLS 1.3 is built, `untrusted`, or a WebAssembly module"
+  - "`host`, the handler of a WebAssembly module, which frames the request as bytes and gives it to the two imports `fetch.send` and `fetch.take` of the host, and reads the answer the host gives back as `client` does, with the same limit; under `node` the host makes the request with a child process and waits for it"
+  - "not a request over `https`, which is `.err(.failed((url, \"https is not built yet\")))` until TLS 1.3 is built, or `untrusted`"
 ---
 
 # Requests to another server
@@ -165,7 +166,7 @@ fn both(a: str, b: str) -> (Result[Response[65536], FetchError], Result[Response
 }
 ```
 
-- In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) `send` is an import, and the host makes the request. On [Cloudflare](cloudflare.md) that is the Worker's own way of asking, so a deployment there leaves `fetch` to it, as it leaves `http`.
+- In a [WebAssembly module](../compiler.md#the-host-of-a-webassembly-module) the handler is `host()` in place of `client()`: `with host()` turns each send into the two imports of the host, which are bytes in and bytes out, so a module has them exactly when it uses `host`. On [Cloudflare](cloudflare.md) the Worker supplies the same two imports with its own way of asking, so a deployment there leaves `fetch` to it, as it leaves `http`.
 
 ## The forms
 

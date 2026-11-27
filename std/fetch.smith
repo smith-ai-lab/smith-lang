@@ -4,7 +4,7 @@ use std.message (HeaderName, HeaderValue, Method, Payload, content, content_type
 use std.net (Connection, NetError, connect, net, read, write)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
-use std.int (saturating_add, saturating_sub)
+use std.int (narrow, saturating_add, saturating_sub)
 use std.utf8 (utf8)
 
 // The address of a request, the most bytes of body it will read, and the headers
@@ -241,6 +241,8 @@ enum Trouble {
   ended
   refused: str
   broke: NetError
+  absent
+  said: str
   big
 }
 
@@ -311,6 +313,8 @@ fn read_to_end(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte
           .refused(why) { return Result.err(trouble) }
           .broke(e) { return Result.err(trouble) }
           .big { return Result.err(trouble) }
+          .absent { return Result.err(trouble) }
+          .said(why) { return Result.err(trouble) }
         }
       }
     }
@@ -391,6 +395,8 @@ fn error_of(url: str, limit: Nat, trouble: Trouble) -> FetchError <alloc> {
     .ended { FetchError.failed((url, "the server closed the connection before it answered")) }
     .refused(why) { FetchError.failed((url, "not an answer: {why}")) }
     .big { FetchError.too_big((url, limit)) }
+    .absent { FetchError.unreachable(url) }
+    .said(what) { FetchError.failed((url, what)) }
     .broke(e) {
       match e {
         .unknown_host(address) { FetchError.unreachable(url) }
@@ -426,16 +432,37 @@ fn exchange(method: Method, url: str, headers: List[(HeaderName, HeaderValue)], 
   }
 }
 
+// What a request says: the method, the address, the most bytes of body to read,
+// the headers the program gave, and for a request with a body the type of it and
+// its bytes, with the type empty for one that has none.
+struct Asked {
+  method: Method
+  url: str
+  most: Nat
+  headers: List[(HeaderName, HeaderValue)]
+  type_of: str
+  body: List[Byte]
+}
+
+fn asked(request: Request) -> Asked <alloc> {
+  match request {
+    .get(u) { Asked(method: .get, url: u.url, most: u.most, headers: copied(u.headers), type_of: "", body: []) }
+    .head(u) { Asked(method: .head, url: u.url, most: u.most, headers: copied(u.headers), type_of: "", body: []) }
+    .delete(u) { Asked(method: .delete, url: u.url, most: u.most, headers: copied(u.headers), type_of: "", body: []) }
+    .post(u) { with_body(.post, u) }
+    .put(u) { with_body(.put, u) }
+    .patch(u) { with_body(.patch, u) }
+  }
+}
+
+fn with_body(method: Method, u: Upload) -> Asked <alloc> {
+  Asked(method: method, url: u.url, most: u.most, headers: copied(u.headers), type_of: "{content_type(u.payload)}", body: content(u.payload))
+}
+
 // What a request is asked of the network as.
 fn answer(request: Request) -> Result[Reply, FetchError] <net, alloc> {
-  match request {
-    .get(u) { exchange(.get, u.url, u.headers, "", [], u.most) }
-    .head(u) { exchange(.head, u.url, u.headers, "", [], u.most) }
-    .delete(u) { exchange(.delete, u.url, u.headers, "", [], u.most) }
-    .post(u) { exchange(.post, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
-    .put(u) { exchange(.put, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
-    .patch(u) { exchange(.patch, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
-  }
+  a = asked(request)
+  exchange(a.method, a.url, a.headers, a.type_of, a.body, a.most)
 }
 
 // The handler of a native executable: it answers `fetch` for the block by writing
@@ -445,6 +472,115 @@ fn answer(request: Request) -> Result[Reply, FetchError] <net, alloc> {
 pub fn client[T](body: fn() -> T <fetch>) -> T <net, alloc> {
   fetch(
     send: fn(request) { answer(request) },
+    body: body,
+  )
+}
+
+// The answer of a host that makes the request, as bytes, or why there is none. The
+// host is given the host and the port, the most bytes of body, and the request as
+// it is written, each of the first three on a line of its own, and gives back what
+// the server wrote, as many bytes as it wrote, to the end or to the most it holds.
+fn through_host(place: Place, wire: List[Byte], most: Nat) -> Result[List[Byte], Trouble] <alloc> {
+  var request: List[Byte] = []
+  request = append(request, "{place.host}\n{place.port}\n{most}\n".bytes)
+  request = append(request, wire)
+  given = __system(30, request, request.size, 0, 0, 0, 0)
+  size: Option[Nat] = narrow(given)
+  match size {
+    .some(n) {
+      buffer: List[Byte] = __reserve(n)
+      _ = __system(31, buffer, 0, 0, 0, 0, 0)
+      Result.ok(__sized(buffer, n))
+    }
+    .none {
+      if given == -1 {
+        Result.err(Trouble.absent)
+      } else if given == -38 {
+        Result.err(Trouble.said("this machine has no host that makes a request"))
+      } else {
+        Result.err(Trouble.said("the host said {given}"))
+      }
+    }
+  }
+}
+
+// The body of a response that is all in memory, after its head.
+fn buffered_body(head: ResponseHead, held: Slice[Byte], method: Method, limit: Nat) -> Result[List[Byte], Trouble] <alloc> {
+  if not has_body(method, head.status) { return Result.ok([]) }
+  match body_of(head.headers) {
+    .ok(framing) {
+      match framing {
+        .none {
+          if held.size > limit { Result.err(Trouble.big) } else { Result.ok(copy(held)) }
+        }
+        .length(n) {
+          if n > limit {
+            Result.err(Trouble.big)
+          } else if held.size >= n {
+            Result.ok(copy(held[0..n]))
+          } else {
+            Result.err(Trouble.ended)
+          }
+        }
+        .chunked { buffered_chunks(held, limit) }
+      }
+    }
+    .err(why) { Result.err(Trouble.refused(why)) }
+  }
+}
+
+// A body in chunks that is all in memory, whole.
+fn buffered_chunks(held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <alloc> {
+  var bytes = held
+  var body: List[Byte] = []
+  loop round in 0..saturating_add(held.size, 1) {
+    match chunk(bytes) {
+      .complete((piece, used)) {
+        if piece.size == 0 { return Result.ok(body) }
+        if body.size + piece.size > limit { return Result.err(Trouble.big) }
+        body = append(body, piece)
+        bytes = after(bytes, used)
+      }
+      .incomplete { return Result.err(Trouble.ended) }
+      .refused(why) { return Result.err(Trouble.refused(why)) }
+    }
+  }
+  Result.err(Trouble.ended)
+}
+
+// The reply that the bytes a server wrote are, of which the body is at most `limit`.
+fn reply_of(all: Slice[Byte], method: Method, limit: Nat) -> Result[Reply, Trouble] <alloc> {
+  match response_head(all) {
+    .complete((head, used)) {
+      body = try buffered_body(head, after(all, used), method, limit)
+      Result.ok(Reply(status: head.status, headers: head.headers, body: body))
+    }
+    .incomplete { Result.err(Trouble.ended) }
+    .refused(why) { Result.err(Trouble.refused(why)) }
+  }
+}
+
+// One request through the host, and its answer.
+fn through(request: Request) -> Result[Reply, FetchError] <alloc> {
+  a = asked(request)
+  place = try place_of(a.url)
+  wire = request_bytes(a.method, place, a.headers, a.type_of, a.body)
+  match through_host(place, wire, a.most) {
+    .ok(all) {
+      match reply_of(freeze(all), a.method, a.most) {
+        .ok(reply) { Result.ok(reply) }
+        .err(trouble) { Result.err(error_of(a.url, a.most, trouble)) }
+      }
+    }
+    .err(trouble) { Result.err(error_of(a.url, a.most, trouble)) }
+  }
+}
+
+// The handler of a WebAssembly module: it answers `fetch` for the block by giving
+// each request to the host the module imports, which makes it and gives the answer.
+pub fn host[T](body: fn() -> T <fetch>) -> T <alloc> {
+  fetch(
+    send: fn(request) { through(request) },
     body: body,
   )
 }

@@ -44,6 +44,9 @@ struct Imports {
     /// Whether the program asks for random bytes: the operation `fill` of the
     /// effect `entropy`.
     entropy: bool,
+    /// Whether the program has a request made by the host: the operations `send`
+    /// and `take` of the effect `fetch`.
+    fetch: bool,
 }
 
 /// What a module of the program asks of its host, by the effect and the
@@ -55,6 +58,10 @@ pub fn imports(program: &Program) -> Vec<(&'static str, &'static str)> {
     }
     if imports_of(program).entropy {
         found.push(("entropy", "fill"));
+    }
+    if imports_of(program).fetch {
+        found.push(("fetch", "send"));
+        found.push(("fetch", "take"));
     }
     found
 }
@@ -70,9 +77,26 @@ fn imports_of(program: &Program) -> Imports {
             }
         )
     });
+    let fetch = program
+        .functions
+        .iter()
+        .flat_map(|f| &f.blocks)
+        .flat_map(|b| &b.instructions)
+        .any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(
+                        crate::scalar::Raw::FetchSend | crate::scalar::Raw::FetchTake
+                    ),
+                    ..
+                }
+            )
+        });
     Imports {
         print,
         entropy: program.asks_for_entropy(),
+        fetch,
     }
 }
 
@@ -132,6 +156,29 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
             },
         ));
     }
+    let mut fetch = None;
+    if imports.fetch {
+        // The address and the length of the request, and how long the answer is,
+        // or minus a number when there is none; and the address the answer is
+        // copied to.
+        let send = module.import(
+            "fetch",
+            "send",
+            Signature {
+                params: vec![Kind::I32; 2],
+                results: vec![Kind::I32],
+            },
+        );
+        let take = module.import(
+            "fetch",
+            "take",
+            Signature {
+                params: vec![Kind::I32],
+                results: vec![],
+            },
+        );
+        fetch = Some((send, take));
+    }
     let frames = program
         .functions
         .iter()
@@ -155,12 +202,14 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     };
     functions.extend(&helpers);
 
-    let first = u32::from(imports.print) + u32::from(imports.entropy);
+    let first =
+        u32::from(imports.print) + u32::from(imports.entropy) + 2 * u32::from(imports.fetch);
     let ends = first + functions.len() as u32;
     let context = Context {
         starts: &image.starts,
         print,
         entropy,
+        fetch,
         high_unsigned: first + program.functions.len() as u32,
         high_signed: first + program.functions.len() as u32 + 1,
         allocate: ends,
@@ -302,6 +351,8 @@ struct Context<'a> {
     starts: &'a [u32],
     print: Option<u32>,
     entropy: Option<u32>,
+    /// The functions `send` and `take` of the host that makes a request.
+    fetch: Option<(u32, u32)>,
     high_unsigned: u32,
     high_signed: u32,
     allocate: u32,
@@ -1537,6 +1588,21 @@ impl Lowering<'_> {
                 self.set(results[0]);
             }
             System::Read => unreachable!("a module that reads is refused before it is built"),
+            System::Raw(crate::scalar::Raw::FetchSend) => {
+                let (send, _) = self.context.fetch.expect("a send is an import");
+                self.get_wrapped(args[0]);
+                self.get_wrapped(args[1]);
+                self.code.call(send);
+                self.code.op(I64_EXTEND_I32_S);
+                self.set(results[0]);
+            }
+            System::Raw(crate::scalar::Raw::FetchTake) => {
+                let (_, take) = self.context.fetch.expect("a take is an import");
+                self.get_wrapped(args[0]);
+                self.code.call(take);
+                self.code.i64_const(0);
+                self.set(results[0]);
+            }
             // The calls only Linux has are built into the scheduler for every
             // machine and never run here: they give minus the error for a call
             // the kernel does not have.

@@ -468,6 +468,15 @@ pub enum Raw {
     LSeek,
     /// `fchmod(descriptor, mode)`.
     FChmod,
+    /// `send(address, length)` of the host of a WebAssembly module, which makes
+    /// the request that the bytes at the address hold, and gives how many bytes
+    /// the answer is, or minus a number when there is none. Only that module
+    /// has it, where it is an import; any other machine gives minus 38 and
+    /// never runs it.
+    FetchSend,
+    /// `take(address)` of the host of a WebAssembly module, which copies the
+    /// answer that the last `FetchSend` said how long it is to the address.
+    FetchTake,
     /// `close(descriptor)` of a file, which is `CloseHandle` on Windows, where a
     /// socket is closed by `closesocket` and a file is not.
     CloseFile,
