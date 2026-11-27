@@ -508,11 +508,12 @@ fn early(b: Slice[Byte]) <console, alloc> {
 ";
 
 fn a_frame_is_written_as_its_bytes_and_read_from_them_and_a_front_part_of_it_is_incomplete() {
+    // A case is one program, which lowers the module, so a case holds many frames.
     generate::check(
         59601,
-        12,
+        4,
         |g| {
-            let frames: Vec<(F, u8, Vec<u8>)> = (0..g.below(10) + 4)
+            let frames: Vec<(F, u8, Vec<u8>)> = (0..g.below(24) + 10)
                 .map(|_| {
                     let f = frame(g);
                     (f, g.below(256) as u8, some_bytes(g, 5))
@@ -636,10 +637,11 @@ fn faults(f: &F) -> Vec<(&'static str, Vec<u8>, usize)> {
 }
 
 fn a_frame_with_one_fault_the_page_lists_is_refused_and_without_it_is_read() {
+    // A case is one program, which lowers the module, so a case holds many frames.
     generate::check(
         59602,
-        12,
-        |g| (0..g.below(8) + 4).map(|_| frame(g)).collect::<Vec<F>>(),
+        4,
+        |g| (0..g.below(20) + 10).map(|_| frame(g)).collect::<Vec<F>>(),
         |frames| {
             let mut source = FRAMES.to_string();
             source += "fn main() <console, alloc> {\n";
@@ -724,28 +726,40 @@ const PLACES: &[(&str, &str, u64, u64)] = &[
     ("the increment of a window update", "Frame.window_update(Window(target: .connection, increment: {}))", 1, 2147483647),
 ];
 
-/// A program that writes a frame with `number` in `template`, and the place of the number.
-fn writing(template: &str, number: u64) -> (String, smith::diag::Pos) {
-    let (head, tail) = template.split_once("{}").expect("a place");
-    let before = "use std.console (console, print)
+/// A program that writes a frame of each place with the number it is given for it, each in
+/// a function of its own, so that the module is lowered once, and the place of each number.
+fn writing(numbers: &[u64]) -> (String, Vec<smith::diag::Pos>) {
+    let mut source = String::from(
+        "use std.console (console, print)
 use std.http2 (Continuation, Data, Frame, Headers, Promise, Reset, Window, write_frame)
 
-fn written() -> Frame <alloc> {
-  ";
-    let start = format!("{before}{head}");
-    let source = format!("{start}{number}{tail}\n}}\n\nfn main() <console, alloc> {{\n  l: List[Byte] = []\n  print(\"{{write_frame(l, written()).size}}\")\n}}\n");
-    (source, crate::programs::pos_after(&start))
+",
+    );
+    let mut at = Vec::new();
+    for (i, (&(_, template, _, _), number)) in PLACES.iter().zip(numbers).enumerate() {
+        let (head, tail) = template.split_once("{}").expect("a place");
+        source += &format!("fn written{i}() -> Frame <alloc> {{\n  {head}");
+        at.push(crate::programs::pos_after(&source));
+        source += &format!("{number}{tail}\n}}\n\n");
+    }
+    source += "fn main() <console, alloc> {\n";
+    for i in 0..numbers.len() {
+        source += &format!("  l{i}: List[Byte] = []\n  print(\"{{write_frame(l{i}, written{i}()).size}}\")\n");
+    }
+    source += "}\n";
+    (source, at)
 }
 
 /// A number the wire has no room for in a frame is refused where it is written, with a message
 /// that names it, and the least and the greatest that the wire has room for are taken.
 fn a_number_a_frame_has_no_size_for_is_refused_where_it_is_written_and_the_ends_of_its_range_are_taken() {
-    for &(what, template, least, greatest) in PLACES {
-        for ok in [least, greatest] {
-            let (source, _) = writing(template, ok);
-            if let Err(errors) = smith::check(source.as_bytes()) {
-                panic!("{what}: {ok} is refused: {errors:?}\n{source}");
-            }
+    for ends in [
+        PLACES.iter().map(|&(_, _, least, _)| least).collect::<Vec<u64>>(),
+        PLACES.iter().map(|&(_, _, _, greatest)| greatest).collect(),
+    ] {
+        let (source, _) = writing(&ends);
+        if let Err(errors) = smith::check(source.as_bytes()) {
+            panic!("a number at the end of its range is refused: {errors:?}\n{source}");
         }
     }
     generate::check(
@@ -766,15 +780,16 @@ fn a_number_a_frame_has_no_size_for_is_refused_where_it_is_written_and_the_ends_
                 .collect::<Vec<u64>>()
         },
         |wrong| {
-            for (&(what, template, _, _), &number) in PLACES.iter().zip(wrong) {
-                let (source, at) = writing(template, number);
-                let Err(errors) = smith::check(source.as_bytes()) else {
-                    panic!("{what}: {number} is accepted\n{source}");
-                };
-                assert_eq!(errors.len(), 1, "{what}: {errors:?} for\n{source}");
-                assert_eq!(errors[0].pos, at, "{what}: {:?} for\n{source}", errors[0]);
-                assert!(errors[0].message.contains(&number.to_string()), "{what}: {}", errors[0]);
-                assert!(errors[0].message.contains("does not fit"), "{what}: {}", errors[0]);
+            let (source, at) = writing(wrong);
+            let Err(errors) = smith::check(source.as_bytes()) else {
+                panic!("a number outside its range is accepted\n{source}");
+            };
+            assert_eq!(errors.len(), PLACES.len(), "{errors:?} for\n{source}");
+            for ((&(what, _, _, _), &number), at) in PLACES.iter().zip(wrong).zip(&at) {
+                let here: Vec<_> = errors.iter().filter(|e| e.pos == *at).collect();
+                assert_eq!(here.len(), 1, "{what}: {errors:?} for\n{source}");
+                assert!(here[0].message.contains(&number.to_string()), "{what}: {}", here[0]);
+                assert!(here[0].message.contains("does not fit"), "{what}: {}", here[0]);
             }
         },
     );
@@ -1212,31 +1227,41 @@ fn nested(h: &[(String, String)]) -> Vec<(&str, &str)> {
 }
 
 fn decoding_what_was_encoded_gives_the_headers_over_blocks_with_one_encoder_and_one_decoder() {
+    // The cases are one program, a function each, which lowers the module once.
     generate::check(
         59604,
-        8,
+        1,
         |g| {
-            let table = *g.pick(&[4096, 0, 60, 256, 100, 8192]);
-            let blocks: Vec<_> = (0..g.below(5) + 2).map(|_| headers(g)).collect();
-            (table, blocks)
+            (0..8)
+                .map(|_| {
+                    let table = *g.pick(&[4096, 0, 60, 256, 100, 8192]);
+                    let blocks: Vec<_> = (0..g.below(5) + 2).map(|_| headers(g)).collect();
+                    (table, blocks)
+                })
+                .collect::<Vec<_>>()
         },
-        |(table, blocks)| {
+        |cases| {
             let mut source = HEADERS.to_string();
             source += "fn empty() -> List[Byte] { [] }\n\n";
-            for (i, h) in blocks.iter().enumerate() {
-                source += &function(&format!("headers{i}"), h);
-            }
-            source += &format!("\nfn main() <console, alloc> {{\n  e0 = encoder(table: {table})\n  d0 = decoder(table: {table})\n");
             let mut expected = Vec::new();
-            for (i, h) in blocks.iter().enumerate() {
-                source += &format!(
-                    "  (e{n}, w{i}) = encode(e{i}, empty(), headers{i}())\n  (d{n}, r{i}) = decode(d{i}, freeze(w{i}), largest: 65536)\n  show(r{i})\n",
-                    n = i + 1
-                );
-                expected.extend(shown(&nested(h)));
+            let mut calls = String::new();
+            for (k, (table, blocks)) in cases.iter().enumerate() {
+                for (i, h) in blocks.iter().enumerate() {
+                    source += &function(&format!("headers{k}_{i}"), h);
+                }
+                source += &format!("\nfn case{k}() <console, alloc> {{\n  e0 = encoder(table: {table})\n  d0 = decoder(table: {table})\n");
+                for (i, h) in blocks.iter().enumerate() {
+                    source += &format!(
+                        "  (e{n}, w{i}) = encode(e{i}, empty(), headers{k}_{i}())\n  (d{n}, r{i}) = decode(d{i}, freeze(w{i}), largest: 65536)\n  show(r{i})\n",
+                        n = i + 1
+                    );
+                    expected.extend(shown(&nested(h)));
+                }
+                source += "}\n\n";
+                calls += &format!("  case{k}()\n");
             }
-            source += "}\n";
-            assert_eq!(lines(&source), expected, "{table} {blocks:?}");
+            source += &format!("fn main() <console, alloc> {{\n{calls}}}\n");
+            assert_eq!(lines(&source), expected, "{cases:?}");
         },
     );
 }
@@ -1339,11 +1364,16 @@ fn a_block_is_an_error_where_the_page_says_and_a_block_without_that_fault_is_rea
 }
 
 fn a_text_in_the_short_code_is_read_and_one_with_wrong_padding_or_its_end_is_an_error() {
+    // The cases are one program, a function each, which lowers the module once.
     generate::check(
         59605,
-        16,
-        |g| (text(g), g.below(4)),
-        |(value, fault)| {
+        1,
+        |g| (0..16).map(|_| (text(g), g.below(4))).collect::<Vec<_>>(),
+        |cases| {
+            let mut source = HEADERS.to_string();
+            let mut expected = Vec::new();
+            let mut calls = String::new();
+            for (k, (value, fault)) in cases.iter().enumerate() {
             let coded = huffman(value.as_bytes());
             // The padding is the bits after the last code, which are 1: how many there
             // are is what the codes of the text leave of its last byte.
@@ -1363,39 +1393,52 @@ fn a_text_in_the_short_code_is_read_and_one_with_wrong_padding_or_its_end_is_an_
                 _ => ([coded.clone(), vec![0xff, 0xff, 0xff, 0xff]].concat(), true),
             };
             let block = [vec![0x00], string(b"a", false), number(0x80, 7, bad.len()), bad].concat();
-            let source = HEADERS.to_string()
-                + &format!("fn main() <console, alloc> {{\n  (d, r) = decode(decoder(table: 4096), {}, largest: 65536)\n  show(r)\n}}\n", list(&block));
-            let expected = if fault_is_there { vec!["error".to_string()] } else { shown(&[("a", value)]) };
-            assert_eq!(lines(&source), expected, "{value:?} {fault}");
+            source += &format!("fn case{k}() <console, alloc> {{\n  (d, r) = decode(decoder(table: 4096), {}, largest: 65536)\n  show(r)\n}}\n\n", list(&block));
+            calls += &format!("  case{k}()\n");
+            expected.extend(if fault_is_there { vec!["error".to_string()] } else { shown(&[("a", value)]) });
+            }
+            source += &format!("fn main() <console, alloc> {{\n{calls}}}\n");
+            assert_eq!(lines(&source), expected, "{cases:?}");
         },
     );
 }
 
 fn a_block_of_more_than_largest_bytes_is_an_error_and_of_largest_or_fewer_is_read() {
+    // The cases are one program, a function each, which lowers the module once.
     generate::check(
         59606,
-        10,
-        |g| (g.below(2) == 1, (0..g.below(5) + 1).map(|_| header(g)).collect::<Vec<_>>()),
-        |(short, h)| {
-            // The headers as a block that is not made by the module, so the test holds
-            // for the short code and for text as it is.
-            let mut block = Vec::new();
-            for (n, v) in h {
-                block.extend(literal(n.as_bytes(), v.as_bytes(), *short));
-            }
-            let total: usize = h.iter().map(|(n, v)| n.len() + v.len()).sum();
+        1,
+        |g| {
+            (0..10)
+                .map(|_| (g.below(2) == 1, (0..g.below(5) + 1).map(|_| header(g)).collect::<Vec<_>>()))
+                .collect::<Vec<_>>()
+        },
+        |cases| {
             let mut source = HEADERS.to_string();
-            source += "fn main() <console, alloc> {\n";
-            source += &format!("  (a, r) = decode(decoder(table: 4096), {}, largest: {total})\n  show(r)\n", list(&block));
-            if total > 0 {
-                source += &format!("  (b, s) = decode(decoder(table: 4096), {}, largest: {})\n  show(s)\n", list(&block), total - 1);
+            let mut expected = Vec::new();
+            let mut calls = String::new();
+            for (k, (short, h)) in cases.iter().enumerate() {
+                // The headers as a block that is not made by the module, so the test holds
+                // for the short code and for text as it is.
+                let mut block = Vec::new();
+                for (n, v) in h {
+                    block.extend(literal(n.as_bytes(), v.as_bytes(), *short));
+                }
+                let total: usize = h.iter().map(|(n, v)| n.len() + v.len()).sum();
+                source += &format!("fn case{k}() <console, alloc> {{\n");
+                source += &format!("  (a, r) = decode(decoder(table: 4096), {}, largest: {total})\n  show(r)\n", list(&block));
+                if total > 0 {
+                    source += &format!("  (b, s) = decode(decoder(table: 4096), {}, largest: {})\n  show(s)\n", list(&block), total - 1);
+                }
+                source += "}\n\n";
+                calls += &format!("  case{k}()\n");
+                expected.extend(shown(&nested(h)));
+                if total > 0 {
+                    expected.push("error".to_string());
+                }
             }
-            source += "}\n";
-            let mut expected = shown(&nested(h));
-            if total > 0 {
-                expected.push("error".to_string());
-            }
-            assert_eq!(lines(&source), expected, "{h:?}");
+            source += &format!("fn main() <console, alloc> {{\n{calls}}}\n");
+            assert_eq!(lines(&source), expected, "{cases:?}");
         },
     );
 }
