@@ -30,6 +30,10 @@ pub const ONCE: &[Test] = &[
         each_flag_is_spelled_as_its_parameter_and_gives_it_its_value,
     ),
     (
+        "a_parameter_of_a_task_is_a_flag_whether_it_stands_before_the_semicolon_or_after_it",
+        a_parameter_of_a_task_is_a_flag_whether_it_stands_before_the_semicolon_or_after_it,
+    ),
+    (
         "a_command_line_that_does_not_fit_is_one_error_that_names_the_flag",
         a_command_line_that_does_not_fit_is_one_error_that_names_the_flag,
     ),
@@ -198,6 +202,34 @@ fn each_flag_is_spelled_as_its_parameter_and_gives_it_its_value() {
         let out = String::from_utf8(said.stdout).unwrap();
         assert_eq!(out.lines().collect::<Vec<_>>(), fits.printed, "for {:?}", fits.words);
     });
+}
+
+/// A task with its parameters written before the `;`, or on both sides of it,
+/// is run with flags as one with every parameter after it is.
+fn a_parameter_of_a_task_is_a_flag_whether_it_stands_before_the_semicolon_or_after_it() {
+    if !runs_here() {
+        return;
+    }
+    let after = TASKS;
+    let before = after.replace("deploy(; env: str, verbose: bool, note: Option[str],", "deploy(env: str, verbose: bool, note: Option[str];");
+    let both = after.replace("deploy(; env: str, verbose: bool,", "deploy(env: str, verbose: bool;");
+    assert_ne!(before, after);
+    assert_ne!(both, after);
+    let words: Vec<String> = ["--count", "7", "--env", "e1", "--verbose", "--note", "n"]
+        .iter()
+        .map(|w| w.to_string())
+        .collect();
+    let expected = run(&deploy(), &words, b"");
+    assert!(expected.status.success(), "{}", String::from_utf8_lossy(&expected.stderr));
+    for (name, source) in [("before", before), ("both", both)] {
+        let dir = project(&format!("tasks_{name}"), &[("main.smith", TASKS_MAIN), ("project.smith", &source)]);
+        let built = smith(&dir, &["build", "deploy"]);
+        assert!(built.status.success(), "{}", stderr(&built));
+        let executable = dir.join(if Target::host().is_some_and(|t| t.name().contains("windows")) { "tasks.exe" } else { "tasks" });
+        let said = run(&executable, &words, b"");
+        assert!(said.status.success(), "{}", String::from_utf8_lossy(&said.stderr));
+        assert_eq!(said.stdout, expected.stdout, "{name}");
+    }
 }
 
 /// A command line that does not fit, and the flag the error must name.

@@ -29,7 +29,7 @@ fn keys_of(issuer: str) -> Result[List[Byte], FetchError] <fetch, alloc> {
 
 ## The functions of a method
 
-Each method is a function that takes only what that method has, so a request that is wrong cannot be written. `get`, `head`, and `delete` take a `url` and `headers`, and have no body parameter. `post`, `put`, and `patch` take a `url`, a body that is required, and `headers`. What comes before the `;` is given by position and what comes after it by name, as [Functions](../language/functions.md#parameters-by-position-and-by-name) says.
+Each method is a function that takes only what that method has, so a request that is wrong cannot be written. `get`, `head`, and `delete` take a `url` and `headers`, and have no body parameter. `post`, `put`, and `patch` take a `url`, a body that is required, and `headers`. What comes before the `;` is given by position or by name and what comes after it by name only, as [Functions](../language/functions.md#parameters-by-position-and-by-name) says.
 
 `get`, `post`, `put`, `patch`, and `delete` take the limit on the body as a [type parameter](../language/inference.md#a-whole-number-a-call-leaves-out), `[limit: Nat]`, fixed when the program is compiled, with the default `1048576`, 1 MiB, so `get(url)` is `get[1048576](url)`. Each gives `Result[Response[limit], FetchError]`.
 

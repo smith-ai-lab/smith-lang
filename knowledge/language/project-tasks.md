@@ -7,7 +7,7 @@ built:
   - "a public function of `project.smith`, read as the module `project` from the nearest `project.smith` at or above the folder the command runs in, built with `smith build <task>` and run with `smith <task> --<flag> <value>`, whose parameters of `str`, a whole number, `bool`, one with a default, and an `Option` are its flags, spelled as the parameter is, with a `bool` bare and one with a default or of type `Option` left out as the page says"
   - "a flag spelled another way, a flag given twice, a value that does not read as its parameter's type, and a missing required flag, each one error that names the flag, and a task that gives `.err(e)` printing `e` and ending with a status that is not 0"
   - "a task named as a command, refused where it is written"
-  - "a parameter of a task that is written before the `;`, refused where it is written, as a flag is given by name"
+  - "a parameter of a task written before or after the `;`, each one a flag"
   - "a name that is no command and no task, said as one of three errors: no `project.smith`, one that does not compile, or one with no task of that name"
   - "`smith --watch <task>`, on Linux and macOS, which runs a task again after each change, as [Watching](command-line.md#watching) says, stops a task that carries `diverge` when the next run is built, and keeps the socket that a task listens on from one run to the next, so that no connection is refused or reset while the program is built again, and the old run, which is told it is closed by `accept` giving `.closed`, serves the connections it took"
   - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages, or a task watched on Windows"
@@ -18,7 +18,7 @@ built:
 A task is a public function in `project.smith`, run by name. `smith deploy --env staging` runs the task `deploy` with `env` set to `"staging"`.
 
 ```
-pub fn deploy(; env: str) -> Result[(), DeployError] <fs, net, alloc> {
+pub fn deploy(env: str) -> Result[(), DeployError] <fs, net, alloc> {
   binary = try build(package, target: .linux_x64)
   upload(binary, to: env)
 }
@@ -32,10 +32,10 @@ A task's parameters are named flags. `env` is the flag `--env`. A flag is spelle
 
 - A `bool` is a bare flag.
 - A parameter with a default, or of type `Option`, may be left out.
-- There are no positional arguments, so every parameter of a task is written after the `;`. A task with a parameter before it is refused: "`env` of the task `deploy` is a flag, which is given by name, so it is written after `;`".
+- There are no positional arguments on the command line, so every parameter of a task is a flag, whether it is written before the `;` or after it. `pub fn serve(port: 1..65536 = 8080)` runs as `smith serve --port 3000`.
 
 ```
-pub fn deploy(; env: str, verbose: bool, region: str = "eu", note: Option[str]) -> Result[(), DeployError] <fs, net, alloc>
+pub fn deploy(env: str, verbose: bool, region: str = "eu", note: Option[str]) -> Result[(), DeployError] <fs, net, alloc>
 ```
 
 `smith deploy --env staging` leaves out the other three flags. `smith deploy --env staging --verbose --region us` gives `verbose` and `region`.

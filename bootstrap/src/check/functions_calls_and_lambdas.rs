@@ -1589,23 +1589,9 @@ impl<'a> Checker<'a> {
                     Some((name, pos)) => {
                         named = true;
                         match signature.params.iter().position(|(p, _)| p == name) {
-                            Some(i) if signature.named_from.is_some_and(|k| i < k) => {
-                                given[i] = true;
-                                look_into = false;
-                                self.errors.push(
-                                    Error::new(
-                                        *pos,
-                                        format!("`{name}` of `{callee}` is given by position"),
-                                    )
-                                    .with_fix(format!(
-                                        "write `{}`",
-                                        self.call_with_name_taken_off(call, name)
-                                    )),
-                                );
-                            }
                             Some(i) if given[i] => self.errors.push(Error::new(
                                 *pos,
-                                format!("the `{name}` argument is given twice"),
+                                format!("`{name}` of `{callee}` is given twice"),
                             )),
                             Some(i) => {
                                 given[i] = true;
@@ -2206,14 +2192,6 @@ impl<'a> Checker<'a> {
                 .get(&i)
                 .cloned()
                 .or_else(|| arg.name.as_ref().map(|(n, _)| n.clone()))
-        })
-    }
-
-    /// The call with the argument for the parameter `name` written without it.
-    fn call_with_name_taken_off(&self, call: &Call, name: &str) -> String {
-        self.call_written(call, &|_, arg| match &arg.name {
-            Some((n, _)) if n != name => Some(n.clone()),
-            _ => None,
         })
     }
 }

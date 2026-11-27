@@ -1,7 +1,6 @@
-//! A parameter list is split by `;`: the parameters before it are given by
-//! position only, and those after it by name only. The expectation of each
-//! program is what the generator that wrote its calls says they print or
-//! refuse.
+//! A parameter list is split by `;`: a parameter before it is given by position
+//! or by name, and one after it by name only. The expectation of each program
+//! is what the generator that wrote its calls says they print or refuse.
 
 use smith::diag::{Error, Pos};
 use smith::scalar::{self, Outcome};
@@ -16,16 +15,16 @@ pub const ONCE: &[Test] = &[
         a_call_that_gives_each_parameter_as_its_place_in_the_list_says_is_built_and_evaluated_as_it_is_written,
     ),
     (
-        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_1_of_3",
-        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(0),
+        "naming_a_parameter_before_the_semicolon_builds_the_code_that_giving_it_by_position_builds",
+        naming_a_parameter_before_the_semicolon_builds_the_code_that_giving_it_by_position_builds,
     ),
     (
-        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_2_of_3",
-        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(1),
+        "a_parameter_before_the_semicolon_given_twice_or_after_a_named_one_is_refused_at_its_argument",
+        a_parameter_before_the_semicolon_given_twice_or_after_a_named_one_is_refused_at_its_argument,
     ),
     (
-        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_3_of_3",
-        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(2),
+        "a_parameter_before_the_semicolon_that_a_call_leaves_out_is_named_in_the_error",
+        a_parameter_before_the_semicolon_that_a_call_leaves_out_is_named_in_the_error,
     ),
     (
         "an_argument_by_position_for_a_parameter_after_the_semicolon_is_refused_naming_the_parameter",
@@ -36,8 +35,12 @@ pub const ONCE: &[Test] = &[
         a_parameter_after_the_semicolon_with_no_default_is_needed_at_every_call,
     ),
     (
-        "a_list_with_no_semicolon_is_all_by_position",
-        a_list_with_no_semicolon_is_all_by_position,
+        "a_list_with_no_semicolon_may_be_given_by_position_or_by_name",
+        a_list_with_no_semicolon_may_be_given_by_position_or_by_name,
+    ),
+    (
+        "a_block_after_a_call_fills_the_last_parameter_before_the_semicolon_and_naming_it_too_is_refused",
+        a_block_after_a_call_fills_the_last_parameter_before_the_semicolon_and_naming_it_too_is_refused,
     ),
     (
         "a_semicolon_is_written_in_a_parameter_list_and_nowhere_else",
@@ -140,18 +143,18 @@ fn shape(g: &mut Gen) -> Shape {
 /// by name are written.
 #[derive(Clone, Debug)]
 struct Call {
-    /// How many of the parameters by position the call gives.
+    /// How many of the first parameters the call gives by position.
     positional: usize,
-    /// The parameters by name that the call gives, in the order it writes them.
+    /// The parameters it gives by name, in the order it writes them: those
+    /// after the first `positional`, whether they stand before `;` or after it.
     named: Vec<usize>,
 }
 
 fn call(g: &mut Gen, shape: &Shape) -> Call {
-    let trailing = shape.positional_defaults;
     // A default left out before an argument by name is filled in after it, as
     // the compiler's order of arguments says, which only prints the same.
-    let positional = shape.split - g.below(trailing + 1);
-    let mut rest: Vec<usize> = (shape.split..shape.count)
+    let positional = g.below(shape.split + 1);
+    let mut rest: Vec<usize> = (positional..shape.count)
         .filter(|&i| !shape.has_default(i) || g.one_in(2))
         .collect();
     let mut named = Vec::new();
@@ -245,65 +248,136 @@ fn a_call_that_gives_each_parameter_as_its_place_in_the_list_says_is_built_and_e
     );
 }
 
-/// A parameter before `;` that a call writes with its name is refused at the
-/// name, which says the parameter is given by position.
-fn a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(part: u64) {
-    generate::check_part(8802, 60, part, 3,|g| {
+/// A parameter before `;` that a call writes with its name is checked, owned,
+/// and built to the same code as the call that gives it by position, when the
+/// arguments are written in the order of the parameters, and works out the same
+/// values in any other order.
+fn naming_a_parameter_before_the_semicolon_builds_the_code_that_giving_it_by_position_builds() {
+    generate::check(
+        8802,
+        30,
+        |g| {
             let mut shape = shape(g);
             if shape.split == 0 {
                 shape.count += 1;
                 shape.split = 1;
-                shape.named_defaults.clear();
                 shape.positional_defaults = 0;
                 shape.named_defaults = (shape.split..shape.count).map(|_| true).collect();
             }
-            let at = g.below(shape.split);
-            (shape, at)
+            let named = 1 + g.below(shape.split);
+            (shape, named)
         },
-        |(shape, at)| {
-            // Every parameter is given, the one at `at` with its name.
-            let args: Vec<String> = (0..shape.count)
-                .map(|i| match i {
-                    i if i == *at => format!("a{i}: {}", value(i)),
-                    i if i >= shape.split => format!("a{i}: {}", value(i)),
-                    i => value(i).to_string(),
-                })
-                .collect();
-            let call = format!("f({})", args.join(", "));
+        |(shape, named)| {
+            // Every parameter is given, the last `named` of those before `;`
+            // with their names, in the order of the list.
+            let from = shape.split - named;
+            let args = |names: bool| -> String {
+                let all: Vec<String> = (0..shape.count)
+                    .map(|i| match i >= from && (names || i >= shape.split) {
+                        true => format!("a{i}: noisy({})", value(i)),
+                        false => format!("noisy({})", value(i)),
+                    })
+                    .collect();
+                format!("f({})", all.join(", "))
+            };
+            let by_name = shape.text() + &main_with(&args(true));
+            let by_position = shape.text() + &main_with(&args(false));
+            let found = errors(&by_name);
+            assert!(found.is_empty(), "{found:?} for\n{by_name}");
+            let built = lower(by_name.as_bytes()).expect("a program");
+            let same = lower(by_position.as_bytes()).expect("a program");
+            assert_eq!(built, same, "for\n{by_name}");
+            assert_eq!(scalar::run(&built).stdout, scalar::run(&same).stdout);
+        },
+    );
+}
+
+/// A parameter before `;` that a call gives twice is refused at the second
+/// argument, naming the parameter and the function, and so is an argument by
+/// position after a named one.
+fn a_parameter_before_the_semicolon_given_twice_or_after_a_named_one_is_refused_at_its_argument() {
+    generate::check(
+        8807,
+        30,
+        |g| {
+            let count = 2 + g.below(3);
+            (count, g.below(count - 1), g.one_in(2))
+        },
+        |(count, at, twice)| {
+            let shape = Shape {
+                count: *count,
+                split: *count,
+                positional_defaults: 0,
+                named_defaults: Vec::new(),
+            };
+            let name = format!("a{at}");
+            let (call, wanted) = if *twice {
+                // Every parameter by position, and the one at `at` named again.
+                let all: Vec<String> = (0..*count).map(|i| value(i).to_string()).collect();
+                (format!("f({}, {name}: 99)", all.join(", ")), format!("{name}: 99"))
+            } else {
+                // The one at `at` is named, and the next is written after it
+                // by position.
+                let args: Vec<String> = (0..*count)
+                    .map(|i| match i == *at {
+                        true => format!("{name}: {}", value(i)),
+                        false if i < *at => value(i).to_string(),
+                        false => (value(i) + 100).to_string(),
+                    })
+                    .collect();
+                let wanted = (value(*at + 1) + 100).to_string();
+                (format!("f({})", args.join(", ")), wanted)
+            };
             let source = shape.text() + &main_with(&call);
-            let name = format!("a{at}: ");
             let found = errors(&source);
-            let wanted = place(&source[source.find("fn main").expect("main")..], &name);
-            let main_line = place(&source, "fn main").line;
+            let wanted = place(&source[source.find("fn main").expect("main")..], &wanted);
             let wanted = Pos {
-                line: main_line + wanted.line - 1,
+                line: place(&source, "fn main").line + wanted.line - 1,
                 col: wanted.col,
             };
+            let (said, at_name) = match twice {
+                true => ("given twice", wanted),
+                false => ("comes after a named one", wanted),
+            };
             assert!(
-                found.iter().any(|e| e.pos == wanted
-                    && e.message.contains(&format!("`a{at}`"))
-                    && e.message.contains("`f`")
-                    && e.message.contains("by position")),
+                found.iter().any(|e| e.pos == at_name
+                    && e.message.contains(said)
+                    && (!*twice || (e.message.contains(&format!("`{name}`")) && e.message.contains("`f`")))),
                 "{found:?} for\n{source}"
             );
-            // The fix is the call with that name taken off and every other
-            // argument as it was, which builds and gives what the call that
-            // names the parameters gives.
-            let fix = found
-                .iter()
-                .find(|e| e.pos == wanted)
-                .and_then(|e| e.fix.as_deref())
-                .unwrap_or_else(|| panic!("a fix in {found:?}"));
-            let fixed = shape.text() + &main_with(suggested(fix));
-            let plain: Vec<String> = (0..shape.count)
-                .map(|i| match i >= shape.split {
-                    true => format!("a{i}: {}", value(i)),
-                    false => value(i).to_string(),
-                })
+        },
+    );
+}
+
+/// A parameter before `;` with no default that a call leaves out is named in
+/// the error, as a parameter after `;` is.
+fn a_parameter_before_the_semicolon_that_a_call_leaves_out_is_named_in_the_error() {
+    generate::check(
+        8808,
+        30,
+        |g| {
+            let count = 1 + g.below(4);
+            (count, g.below(count))
+        },
+        |(count, left_out)| {
+            let shape = Shape {
+                count: *count,
+                split: *count,
+                positional_defaults: 0,
+                named_defaults: Vec::new(),
+            };
+            let args: Vec<String> = (0..*count)
+                .filter(|i| i != left_out)
+                .map(|i| format!("a{i}: {}", value(i)))
                 .collect();
-            let reference = shape.text() + &main_with(&format!("f({})", plain.join(", ")));
-            assert!(errors(&fixed).is_empty(), "{:?} for\n{fixed}", errors(&fixed));
-            assert_eq!(outcome(&fixed).stdout, outcome(&reference).stdout, "for\n{fixed}");
+            let source = shape.text() + &main_with(&format!("f({})", args.join(", ")));
+            let found = errors(&source);
+            assert!(
+                found.iter().any(|e| e.message.contains("`f`")
+                    && e.message.contains(&format!("`a{left_out}`"))
+                    && e.message.contains("needs")),
+                "{found:?} for\n{source}"
+            );
         },
     );
 }
@@ -409,9 +483,9 @@ fn a_parameter_after_the_semicolon_with_no_default_is_needed_at_every_call() {
     );
 }
 
-/// A list with no `;` is all by position: a call that names any of its
-/// parameters is refused, and a call that gives them by position is built.
-fn a_list_with_no_semicolon_is_all_by_position() {
+/// A list with no `;` is all before it, so a call may give each parameter by
+/// position or by name, and builds the same either way.
+fn a_list_with_no_semicolon_may_be_given_by_position_or_by_name() {
     generate::check(
         8805,
         40,
@@ -433,18 +507,16 @@ fn a_list_with_no_semicolon_is_all_by_position() {
             let source = shape.text() + &main_with(&written(&plain));
             assert_eq!(outcome(&source).stdout, prints(&shape, &plain), "for\n{source}");
             let args: Vec<String> = (0..*count)
-                .map(|i| match i == *named {
-                    true => format!("a{i}: {}", value(i)),
-                    false => value(i).to_string(),
+                .map(|i| match i >= *named {
+                    true => format!("a{i}: noisy({})", value(i)),
+                    false => format!("noisy({})", value(i)),
                 })
                 .collect();
             let source = shape.text() + &main_with(&format!("f({})", args.join(", ")));
-            let found = errors(&source);
-            assert!(
-                found.iter().any(|e| e.message.contains(&format!("`a{named}`"))
-                    && e.message.contains("by position")),
-                "{found:?} for\n{source}"
-            );
+            assert_eq!(outcome(&source).stdout, prints(&shape, &Call {
+                positional: *named,
+                named: (*named..*count).collect(),
+            }), "for\n{source}");
         },
     );
 }
@@ -556,6 +628,30 @@ fn the_last_parameter_before_the_semicolon_is_the_block_of_a_call() {
     );
 }
 
+/// A block after a call fills the last parameter before `;` that is a
+/// function, and a call that names that parameter and also writes a block is
+/// refused as giving it twice, while naming it with no block is built.
+fn a_block_after_a_call_fills_the_last_parameter_before_the_semicolon_and_naming_it_too_is_refused() {
+    let program = |call: &str| {
+        format!(
+            "use std.console (console, print)\n\n\
+             fn p(block: fn() <console>; class: str = \"c\") <console> {{\n  \
+             print(class)\n  block()\n}}\n\n\
+             fn main() <console> {{\n  {call}\n}}\n"
+        )
+    };
+    let block = outcome(&program("p(class: \"x\") { print(\"in\") }")).stdout;
+    let named = outcome(&program("p(block: { print(\"in\") }, class: \"x\")")).stdout;
+    assert_eq!(block, b"x\nin\n");
+    assert_eq!(named, block);
+    let source = program("p(block: { print(\"in\") }) { print(\"in\") }");
+    let found = errors(&source);
+    assert!(
+        found.iter().any(|e| e.message.contains("`block`") && e.message.contains("given twice")),
+        "{found:?} for\n{source}"
+    );
+}
+
 /// A struct is built with its fields named, and a function type has no `;`, so
 /// the arguments of a function that a name holds are by position.
 fn a_struct_is_built_with_its_fields_named_and_a_function_type_has_no_semicolon() {
@@ -574,7 +670,7 @@ fn a_struct_is_built_with_its_fields_named_and_a_function_type_has_no_semicolon(
     );
 }
 
-/// The options of the library are given by name and the rest by position: the
+/// The options of the library are given by name, and the rest by position or by name: the
 /// attributes of `std.html`, `width` and `upper` of `std.fmt`, and `end` and
 /// `to` of `print`.
 fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
@@ -600,16 +696,9 @@ fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
             "{found:?} for {body}"
         );
     }
-    let found = errors(&program("print(hex(n: 233))"));
-    assert!(
-        found.iter().any(|e| e.message.contains("`n`") && e.message.contains("`hex`") && e.message.contains("by position")),
-        "{found:?}"
-    );
-    let found = errors(&program("print(text: \"a\")"));
-    assert!(
-        found.iter().any(|e| e.message.contains("`text`") && e.message.contains("by position")),
-        "{found:?}"
-    );
+    assert!(built("print(hex(n: 233))"));
+    assert!(built("print(hex(upper: false, n: 233))"));
+    assert!(built("print(text: \"a\", end: \"\")"));
     // The attributes of an element are by name, and its block is the one
     // argument it takes by position.
     let page = |call: &str| {
@@ -662,10 +751,6 @@ fn the_fix_of_a_call_given_the_other_way_is_the_whole_call() {
     assert_eq!(
         fix_of("render { p(\"note\") { text(\"a\") } }", "is given by name"),
         "write `p(class: \"note\") { text(\"a\") }`"
-    );
-    assert_eq!(
-        fix_of("show(label: \"a\", n: \"N\")", "is given by position"),
-        "write `show(\"a\", n: \"N\")`"
     );
 }
 

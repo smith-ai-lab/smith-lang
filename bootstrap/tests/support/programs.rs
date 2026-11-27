@@ -312,8 +312,9 @@ struct StructDef {
 struct Func {
     name: String,
     params: Vec<(&'static str, Type)>,
-    /// How many parameters are given by position only: the rest, which follow
-    /// a `;` in the signature, are given by name only.
+    /// How many parameters stand before the `;`, which may be given by
+    /// position or by name: the rest follow it in the signature, and are given
+    /// by name only.
     split: usize,
     /// The default of each parameter, if it has one. Those with one come
     /// after those without.

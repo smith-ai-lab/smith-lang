@@ -865,8 +865,8 @@ struct Signature {
     /// not settle it, among the type parameters, for those that have a
     /// default.
     param_defaults: Vec<Option<Ty>>,
-    /// Where the parameters that a call gives by name begin: those before it
-    /// are given by position only, and those from it by name only. A
+    /// Where the parameters that a call gives by name only begin: those before
+    /// it are given by position or by name, and those from it by name. A
     /// signature that is not a function's own, as a handler's, has none, and
     /// its parameters are given either way.
     named_from: Option<usize>,

@@ -127,8 +127,8 @@ struct FnDef {
     rank: usize,
     generics: Vec<Generic>,
     params: Vec<(&'static str, Ty)>,
-    /// How many parameters are given by position only: the rest follow a `;`
-    /// and are given by name only.
+    /// How many parameters stand before the `;`, which may be given by
+    /// position or by name: the rest follow it and are given by name only.
     split: usize,
     result: Option<Ty>,
     console: bool,

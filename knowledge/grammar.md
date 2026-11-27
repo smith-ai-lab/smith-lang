@@ -6,7 +6,7 @@ status: partial
 built:
   - "`effect_def`: `effect IDENT { fn_sig }`, with `pub` in a module, whose operations are signatures with no body"
   - "`group_def`: `effects IDENT = effects`, with `pub` in a module, and a group in any list of `effects`"
-  - "`params`: the parameters of a function before a `;` are given by position only and those after it by name only, and a call, a statement, and a function type hold no `;`"
+  - "`params`: the parameters of a function before a `;` are given by position or by name and those after it by name only, and a call, a statement, and a function type hold no `;`"
   - "`value_def`: a value at the top level states its type, `IDENT \":\" type \"=\" expr`, and one that does not is refused at its name; the form with a type is not built yet"
 ---
 
@@ -18,7 +18,7 @@ This grammar is the single source of truth for syntax. It is a first draft, and 
 
 - Source text is UTF-8. Spaces and tabs separate tokens, and a line break is a line feed. A carriage return is an error anywhere in a file, inside a string or a comment too. Any other character that belongs to no token, string, or comment is an error.
 - A newline ends a statement, except inside `( )` or `[ ]`, after an operator or comma, or before `|>`, `requires`, `ensures`, `decreases`, `invariant`, and the `{` that opens a function's body, or that opens an `impl`'s after a `requires`, or a `loop`'s after an `invariant`. A block inside `( )` or `[ ]` separates its own statements by newlines as usual.
-- Commas appear only inside `( )` and `[ ]`, in a list of effects in `< >`, and between the indices of a `for`. A semicolon appears only in a list of parameters, where it stands once, after the parameters that are given by position.
+- Commas appear only inside `( )` and `[ ]`, in a list of effects in `< >`, and between the indices of a `for`. A semicolon appears only in a list of parameters, where it stands once, after the parameters that may be given by position.
 - An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword, and is not `_` alone, which is a token of its own: the place of a pipeline's value, and the pattern that throws a value away. The letters are `a` to `z` and `A` to `Z`.
 - The keywords are `and`, `as`, `break`, `decreases`, `derive`, `effect`, `effects`, `else`, `ensures`, `enum`, `fn`, `for`, `foreign`, `if`, `impl`, `in`, `invariant`, `loop`, `match`, `mut`, `not`, `or`, `out`, `pub`, `requires`, `return`, `struct`, `take`, `trait`, `try`, `use`, `var`, `with`, and `without`. The word `type` is a keyword only where an item starts and a name follows it, so it is an identifier anywhere else, as in a parameter named `type`.
 - A comment starts with `//`, stands on its own line, and attaches to the definition, parameter, field, case, `requires`, or statement that follows it.
@@ -69,7 +69,7 @@ generics   = "[" generic { "," generic } "]" ;
 generic    = [ "out" ] IDENT [ ":" type ] [ "=" ( type | LITERAL ) ] ;   (* a LITERAL is the default of a whole number parameter *)
 params     = param { "," param } ( [ "," ] | ";" named )
            | ";" named ;
-named      = param { "," param } [ "," ] ;   (* given by name only, as those before the `;` are given by position only *)
+named      = param { "," param } [ "," ] ;   (* given by name only, as those before the `;` may be given by position or by name *)
 param      = ( IDENT | tuple_pat ) ":" [ "take" | "mut" ] type [ "=" expr ] ;   (* the one default of a statement is `arith` *)
 tuple_pat  = "(" bind_pat { "," bind_pat } ")" ;
 bind_pat   = IDENT | "_" | "var" IDENT | tuple_pat ;
@@ -143,7 +143,7 @@ type_arg   = type | expr ;
 - **No name lookup.** Parsing never needs to know what a name refers to, so definitions parse independently and in parallel. `x = e` with a bare name is one form to the parser, and the checker decides whether it defines `x` or assigns to a `var`.
 - **One token of lookahead,** with one exception: a statement that starts like a tuple is read as an expression and converted to a pattern when `=` follows. This is still linear time.
 - **A `<` after a parameter list or a result opens effects,** since no comparison can stand there, and a comma inside the effects never ends a parameter or a type argument. A function type, as `fn() <console>`, so ends at its `>`, and a parameter, a `,` or `]`, or a `{` can follow it, with one token of lookahead.
-- **A `;` ends the parameters by position.** It stands once in a list of parameters, between two parameters or before the first, and after it a parameter is given by name only, as [Functions](language/functions.md#parameters-by-position-and-by-name) says. It stands in no other place, so a call, a statement, and a function type, which has no names, never hold one.
+- **A `;` ends the parameters that may be given by position.** It stands once in a list of parameters, between two parameters or before the first, and before it a parameter is given by position or by name, and after it by name only, as [Functions](language/functions.md#parameters-by-position-and-by-name) says. It stands in no other place, so a call, a statement, and a function type, which has no names, never hold one.
 - **A statement in a type position is a comparison,** such as `value < n`, where `CMP` is one of the comparison operators. It is the type of its proofs.
 - **A bound of a range type is a whole number or a name,** as `0..256` or `0..n`, and `a..b` is a type only where a type is expected, as it is an expression elsewhere.
 - **`f[n](x)` and `a[i]` are the same postfix form,** and the brackets may hold several expressions separated by commas. The type checker tells a type argument from an index. A `requires` that names a trait, as `requires Convert[A, B]`, is that form too, and the checker tells it from a statement about values.
