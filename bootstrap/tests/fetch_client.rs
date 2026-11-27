@@ -22,16 +22,32 @@ pub const ONCE: &[Test] = &[
         a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it,
     ),
     (
-        "a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given",
-        a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given,
+        "a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given_part_1_of_3",
+        || a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given(0),
+    ),
+    (
+        "a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given_part_2_of_3",
+        || a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given(1),
+    ),
+    (
+        "a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given_part_3_of_3",
+        || a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given(2),
     ),
     (
         "a_handler_of_a_test_answers_each_method_with_no_network_and_a_body_past_the_limit_is_too_big",
         a_handler_of_a_test_answers_each_method_with_no_network_and_a_body_past_the_limit_is_too_big,
     ),
     (
-        "a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method",
-        a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method,
+        "a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method_part_1_of_3",
+        || a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method(0),
+    ),
+    (
+        "a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method_part_2_of_3",
+        || a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method(1),
+    ),
+    (
+        "a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method_part_3_of_3",
+        || a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method(2),
     ),
     (
         "an_address_that_is_not_one_a_server_not_found_and_https_are_values_and_nothing_is_written",
@@ -325,46 +341,29 @@ fn a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too
 
 /// A request writes its line, `host`, `connection: close`, the headers the
 /// program gave, and for a request with a body the type and the length of its
-/// payload and then the payload, and nothing else.
-fn a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given() {
+/// payload and then the payload, and nothing else. Each part is one of three
+/// requests, a `post` with headers, a `get`, and a `head` with an address of the
+/// form `[::1]:9`, each in a program of its own.
+fn a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given(part: usize) {
     let reply = head(200, "OK", &[], "content-length: 0\r\n");
-    let call = "  match post[16](\"http://example.com:8080/items?x=1#frag\", text(\"hi there\"), headers: [(header_name(\"Accept\"), header_value(\"text/plain\"))]) {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n  match get(\"http://example.com\") {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n  match head(\"http://[::1]:9/a\") {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n";
-    let said = printed(&program(&[vec![reply.clone()], vec![reply.clone()], vec![reply]], ".err(.refused(\"{host}:{port}\"))", call)).replace('\r', "");
-    let wanted = "request
-POST /items?x=1 HTTP/1.1
-host: example.com:8080
-connection: close
-accept: text/plain
-content-type: text/plain; charset=utf-8
-content-length: 8
-
-hi there
-closed 38
-200
-request
-GET / HTTP/1.1
-host: example.com
-connection: close
-
-
-closed 38
-200
-request
-HEAD /a HTTP/1.1
-host: [::1]:9
-connection: close
-
-
-closed 38
-200
-wrote
-HEAD /a HTTP/1.1
-host: [::1]:9
-connection: close
-
-
-";
-    assert_eq!(said, wanted);
+    let (call, written) = [
+        (
+            "  match post[16](\"http://example.com:8080/items?x=1#frag\", text(\"hi there\"), headers: [(header_name(\"Accept\"), header_value(\"text/plain\"))]) {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n",
+            "POST /items?x=1 HTTP/1.1\nhost: example.com:8080\nconnection: close\naccept: text/plain\ncontent-type: text/plain; charset=utf-8\ncontent-length: 8\n\nhi there",
+        ),
+        (
+            "  match get[16](\"http://example.com\") {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n",
+            "GET / HTTP/1.1\nhost: example.com\nconnection: close\n\n",
+        ),
+        (
+            "  match head(\"http://[::1]:9/a\") {\n    .ok(r) { print(\"{r.status}\") }\n    .err(e) { print(\"{e}\") }\n  }\n",
+            "HEAD /a HTTP/1.1\nhost: [::1]:9\nconnection: close\n\n",
+        ),
+    ][part];
+    let said = printed(&program(&[vec![reply]], ".err(.refused(\"{host}:{port}\"))", call)).replace('\r', "");
+    // The request, the closing with the 38 bytes of the reply asked for, the
+    // status, and the last request written, which is the only one.
+    assert_eq!(said, format!("request\n{written}\nclosed 38\n200\nwrote\n{written}\n"));
 }
 
 /// An address that is not one, a server that is not there, and `https` are each
@@ -384,7 +383,7 @@ fn an_address_that_is_not_one_a_server_not_found_and_https_are_values_and_nothin
     ];
     let mut call = String::new();
     for url in urls {
-        call += &format!("  match get(\"{url}\") {{\n    .ok(r) {{ print(\"{{r.status}}\") }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n");
+        call += &format!("  match get[16](\"{url}\") {{\n    .ok(r) {{ print(\"{{r.status}}\") }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n");
     }
     let refuse = "if host == \"unknown.test\" { .err(.unknown_host(\"{host}:{port}\")) } else if host == \"refused.test\" { .err(.refused(\"{host}:{port}\")) } else { .err(.failed((\"{host}:{port}\", \"connect: error 110\"))) }";
     let said = printed(&program(&[], refuse, &call));
@@ -502,19 +501,27 @@ head 204 0
 
 /// A call that does not fit its method is refused where it is written, with a
 /// message that names the method: a body to `get`, no body to `post`, a limit to
-/// `head`, a second body to `post`, and the body of what `head` gives.
-fn a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method() {
-    let wrong = [
-        ("a = get(\"http://x/\", body: text(\"x\"))", "`get", "has no parameter named `body`"),
-        ("b = post(\"http://x/\")", "`post", "needs an argument for `payload`"),
-        ("c = post(\"http://x/\", text(\"y\"), body: text(\"z\"))", "`post", "has no parameter named `body`"),
-        ("e = head(\"http://x/\", limit: 4)", "`head", "has no parameter named `limit`"),
-        ("f = head(\"http://x/\", text(\"y\"))", "`head`", "is given by name"),
-    ];
-    for (line, method, said) in wrong {
-        let source = format!(
+/// `head`, a second body to `post`, and the body of what `head` gives. Each part
+/// checks two of the five.
+fn a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_names_the_method(part: usize) {
+    let in_main = |line: &str| {
+        format!(
             "use std.console (console, print)\nuse std.fetch (fetch, get, head, post)\nuse std.message (text)\n\nfn main() <console, fetch, alloc> {{\n  {line}\n  print(\"x\")\n}}\n"
-        );
+        )
+    };
+    let wrong = [
+        (in_main("a = get(\"http://x/\", body: text(\"x\"))"), "`get", "has no parameter named `body`"),
+        (in_main("b = post(\"http://x/\")"), "`post", "needs an argument for `payload`"),
+        (in_main("c = post(\"http://x/\", text(\"y\"), body: text(\"z\"))"), "`post", "has no parameter named `body`"),
+        (in_main("e = head(\"http://x/\", limit: 4)"), "`head", "has no parameter named `limit`"),
+        (in_main("f = head(\"http://x/\", text(\"y\"))"), "`head`", "is given by name"),
+        (
+            "use std.console (console, print)\nuse std.fetch (fetch, head)\n\nfn main() <console, fetch, alloc> {\n  match head(\"http://x/\") {\n    .ok(seen) { print(\"{seen.body.bytes.size}\") }\n    .err(e) { print(\"{e}\") }\n  }\n}\n".to_string(),
+            "HeadResponse",
+            "body",
+        ),
+    ];
+    for (source, method, said) in wrong.iter().skip(part).step_by(3) {
         let errors: Vec<String> = smith::check(source.as_bytes())
             .err()
             .unwrap_or_default()
@@ -523,17 +530,9 @@ fn a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_na
             .collect();
         assert!(
             errors.iter().any(|m| m.contains(method) && m.contains(said)),
-            "{errors:?} for {line}"
+            "{errors:?} for {source}"
         );
     }
-    let source = "use std.console (console, print)\nuse std.fetch (fetch, head)\n\nfn main() <console, fetch, alloc> {\n  match head(\"http://x/\") {\n    .ok(seen) { print(\"{seen.body.bytes.size}\") }\n    .err(e) { print(\"{e}\") }\n  }\n}\n";
-    let errors: Vec<String> = smith::check(source.as_bytes())
-        .err()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|e| e.message)
-        .collect();
-    assert!(errors.iter().any(|m| m.contains("HeadResponse") && m.contains("body")), "{errors:?}");
 }
 
 /// What the client asked of the server for each request, which the server answers
