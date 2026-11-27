@@ -97,6 +97,13 @@ impl<'a> Checker<'a> {
                     .with_fix("take away `inout`"),
                 ),
                 Some(_) => {
+                    if changed_place(&arg.value).is_none() && field_of_item(&arg.value) {
+                        self.errors.push(Error::unsupported(
+                            arg.value.pos(),
+                            "passing a field of an item `inout`",
+                        ));
+                        continue;
+                    }
                     if changed_place(&arg.value).is_none() {
                         self.errors.push(Error::new(
                             arg.value.pos(),
@@ -155,6 +162,18 @@ impl<'a> Checker<'a> {
                 .with_fix(fix),
             );
         }
+    }
+}
+
+/// Whether an expression is a field of an item of a place, as `cs[0].at` is,
+/// which is not built as a place a call changes.
+fn field_of_item(e: &Expr) -> bool {
+    match e {
+        Expr::Field { of, .. } => match &**of {
+            Expr::Index { of, .. } => changed_place(of).is_some() || field_of_item(of),
+            of => field_of_item(of),
+        },
+        _ => false,
     }
 }
 

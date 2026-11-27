@@ -1231,12 +1231,19 @@ impl<'a> Checker<'a> {
             }
             let refused = self.refusals;
             let refused_errors = self.errors.len();
+            // A call that changes a value with `inout` gives back what it is
+            // passed, so what it gives is settled by its arguments alone, and
+            // a mistake in them is the one mistake of the line.
+            let gives_back = call.args.iter().any(|a| a.given_back);
             let placed = match want {
-                Want::Ty(t) => Some(t),
+                Want::Ty(t) if !gives_back => Some(t),
                 _ => None,
             };
             let is_print = defs.provided(f).is_some_and(|p| p.through.is_none());
             let mut sol = self.arguments(body, call, sig, is_print, None, placed);
+            if gives_back && self.errors.len() > refused_errors {
+                return Ty::Unknown;
+            }
             if name == "spawn" && of_std(defs.file.functions[f].pos) {
                 self.child_assigns(body, call);
             }

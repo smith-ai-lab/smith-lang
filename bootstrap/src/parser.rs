@@ -12,7 +12,7 @@ use crate::lexer::{Piece, Tok, Token};
 mod effects_with_and_try;
 mod functions_calls_and_lambdas;
 mod inout;
-pub(crate) use inout::changed_place;
+pub(crate) use inout::{changed_place, gives_back};
 mod lift;
 pub(crate) use lift::env_name;
 mod lists_and_text;

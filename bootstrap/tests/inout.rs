@@ -31,6 +31,10 @@ pub const ONCE: &[Test] = &[
         changing_a_place_with_inout_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code,
     ),
     (
+        "a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_function_that_takes_it_with_the_signature_as_written",
+        a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_function_that_takes_it_with_the_signature_as_written,
+    ),
+    (
         "a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout",
         a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout,
     ),
@@ -146,6 +150,8 @@ struct Change {
     calls: usize,
     /// 0 for a `var`, 1 for a field of one, 2 for an item of a list.
     place: usize,
+    /// Whether the body ends with a bare `return`.
+    returns: bool,
 }
 
 fn change(g: &mut Gen) -> Change {
@@ -164,6 +170,7 @@ fn change(g: &mut Gen) -> Change {
         start: (g.below(10) as u8, g.below(10) as u8),
         calls: 1 + g.below(3),
         place: g.below(3),
+        returns: g.one_in(3),
     }
 }
 
@@ -172,10 +179,12 @@ fn change(g: &mut Gen) -> Change {
 fn change_program(c: &Change, inout: bool) -> String {
     let body: Vec<String> = c.lines.iter().map(|l| format!("  {}", l.text())).collect();
     let function = if inout {
-        format!("fn change(x: inout Cursor) {{\n{}\n}}", body.join("\n"))
+        let end = if c.returns { "\n  return" } else { "" };
+        format!("fn change(x: inout Cursor) {{\n{}{end}\n}}", body.join("\n"))
     } else {
         let body = body.join("\n").replace("{ return }", "{ return x }");
-        format!("fn change(given: take Cursor) -> Cursor {{\n  var x = given\n{body}\n  x\n}}")
+        let end = if c.returns { "return x" } else { "x" };
+        format!("fn change(given: take Cursor) -> Cursor {{\n  var x = given\n{body}\n  {end}\n}}")
     };
     let (at, line) = c.start;
     let start = format!("Cursor(at: {at}, line: {line})");
@@ -218,6 +227,112 @@ fn changing_a_place_with_inout_gives_what_taking_it_and_assigning_what_comes_bac
             );
         }
     });
+    // A body that ends with a bare `return` gives the value back there, as a
+    // function that does not change its parameter ends there.
+    let ends = Change {
+        lines: vec![Step::Copy],
+        start: (1, 2),
+        calls: 1,
+        place: 0,
+        returns: true,
+    };
+    let source = change_program(&ends, true);
+    assert_eq!(output_of(&source), "1 1\n", "for {source}");
+}
+
+/// Lines with a mistake in them, in the body of a function that changes the
+/// cursor `x`, each with whether it is a call that changes a value, whose one
+/// error is at its argument.
+const MISTAKES: &[(&str, bool)] = &[
+    ("print(\"x\")", false),
+    ("n = \"{x.at}\"", false),
+    ("x.at = \"a\"", false),
+    ("x.at = x.at + 1", false),
+    ("n = nowhere", false),
+    ("step(inout x.at)", true),
+    ("n = look(x.at)", false),
+];
+
+/// What an error says, for comparing: where it is, and the place of its
+/// column only on a line after the signature, whose spelling differs.
+fn said(e: &Error, signature: usize) -> (usize, Option<usize>, String, Option<String>) {
+    let written = |t: &str| {
+        t.replace("fn change(given: take Cursor) -> Cursor", "fn change(x: inout Cursor)")
+            .replace("fn change(given: Cursor) -> Cursor", "fn change(x: inout Cursor)")
+    };
+    let col = (e.pos.line != signature).then_some(e.pos.col);
+    (e.pos.line, col, written(&e.message), e.fix.as_deref().map(written))
+}
+
+/// A function that changes a cursor, with `lines` for its body, written with
+/// `inout` or with `take`, and called from `main`. The lines of the body are on
+/// the same lines of the file in both.
+fn mistake_program(lines: &[&str], inout: bool) -> String {
+    let body: String = lines.iter().map(|l| format!("  {l}\n")).collect();
+    let (function, call) = if inout {
+        (format!("fn change(x: inout Cursor) {{\n{body}}}"), "change(inout c)")
+    } else {
+        (
+            format!("fn change(given: take Cursor) -> Cursor {{ var x = given\n{body}  x\n}}"),
+            "c = change(c)",
+        )
+    };
+    format!(
+        "{CURSOR}
+fn step(c: inout Cursor) {{
+  if c.at < 9 {{ c.at = c.at + 1 }}
+}}
+
+fn look(c: Cursor) -> u8 {{ c.at }}
+
+{function}
+
+fn main() <alloc> {{
+  var c = Cursor(at: 0, line: 0)
+  {call}
+}}
+"
+    )
+}
+
+fn a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_function_that_takes_it_with_the_signature_as_written()
+ {
+    generate::check(
+        12334,
+        30,
+        |g: &mut Gen| {
+            let fine = ["if x.at < 9 { x.at = x.at + 1 }", "x.line = x.at"];
+            let before = (0..g.below(3)).map(|_| *g.pick(&fine)).collect::<Vec<_>>();
+            (before, *g.pick(MISTAKES))
+        },
+        |(before, (mistake, changes))| {
+            let mut lines = before.clone();
+            lines.push(mistake);
+            let (inout, taken) = (mistake_program(&lines, true), mistake_program(&lines, false));
+            let signature = 1 + (inout.lines())
+                .position(|l| l.starts_with("fn change"))
+                .expect("the signature");
+            let one: Vec<_> = errors(&inout).iter().map(|e| said(e, signature)).collect();
+            let other: Vec<_> = errors(&taken).iter().map(|e| said(e, signature)).collect();
+            assert!(!one.is_empty(), "nothing refused in {inout}");
+            assert_eq!(one, other, "for {inout} and {taken}");
+            for (_, _, message, fix) in &one {
+                let text = format!("{message} {}", fix.as_deref().unwrap_or(""));
+                assert!(
+                    !text.contains("-> Cursor") && !text.contains("given"),
+                    "an error shows the lowered function: {text} for {inout}"
+                );
+            }
+            // A call that changes a value is refused once, at the argument
+            // that does not fit.
+            if *changes {
+                let line = signature + lines.len();
+                let col = 3 + mistake.find("x.at").expect("the argument");
+                assert_eq!(one.len(), 1, "{one:?} for {inout}");
+                assert_eq!((one[0].0, one[0].1), (line, Some(col)), "for {inout}");
+            }
+        },
+    );
 }
 
 #[derive(Debug)]
@@ -337,6 +452,15 @@ fn what_is_passed_inout_is_a_var_or_a_field_or_an_item_of_one() {
             at.line
         );
     }
+    // A field of an item is a place that is not built, and is refused as one,
+    // at the argument.
+    let source = program(&format!("var ds = [{doc}]"), "ds[0].cursor");
+    let at = pos_after(&source[..source.find("ds[0].cursor").expect("call")]);
+    let errors = errors(&source);
+    assert!(
+        errors.iter().any(|e| e.pos == at && e.unbuilt),
+        "not refused as not built at {at:?} among {errors:?} for {source}"
+    );
 }
 
 /// The places two arguments may name.
