@@ -14,6 +14,10 @@ use crate::generate::{self, Gen};
 
 pub const ONCE: &[Test] = &[
     (
+        "a_body_past_the_limit_is_refused_as_soon_as_the_bytes_or_the_head_say_so_and_no_more_is_read",
+        a_body_past_the_limit_is_refused_as_soon_as_the_bytes_or_the_head_say_so_and_no_more_is_read,
+    ),
+    (
         "a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it",
         a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it,
     ),
@@ -530,4 +534,73 @@ fn a_request_that_is_wrong_is_refused_where_it_is_written_with_a_message_that_na
         .map(|e| e.message)
         .collect();
     assert!(errors.iter().any(|m| m.contains("HeadResponse") && m.contains("body")), "{errors:?}");
+}
+
+/// What the client asked of the server for each request, which the server answers
+/// in the pieces of its case, with the limit of its case: the bytes it asked, which
+/// the connection says when it is closed, and the line of the result.
+fn asked_of(cases: &[(Vec<Vec<u8>>, usize)]) -> Vec<(usize, String)> {
+    let mut call = String::new();
+    for (i, (_, limit)) in cases.iter().enumerate() {
+        call += &format!(
+            "  match get[{limit}](\"http://example.com/x{i}\") {{\n    .ok(r) {{ print(\"ok {{r.status}} {{r.body.bytes.size}}\") }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n"
+        );
+    }
+    let connections: Vec<Vec<Vec<u8>>> = cases.iter().map(|(p, _)| p.clone()).collect();
+    let source = program(&connections, ".err(.refused(\"{host}:{port}\"))", &call);
+    let said = printed(&source);
+    let lines: Vec<&str> = said.lines().collect();
+    let mut out = Vec::new();
+    let mut at = 0;
+    for _ in cases {
+        while !lines[at].starts_with("closed ") {
+            at += 1;
+        }
+        out.push((lines[at].strip_prefix("closed ").unwrap().parse().unwrap(), lines[at + 1].to_string()));
+        at += 2;
+    }
+    out
+}
+
+/// A response whose body is one byte past the limit is `.too_big` and the client
+/// asks no more of the server than it needs to know so. A head that says the body
+/// is longer than the limit is enough: a server that sends the head and nothing
+/// after it is answered at once, with not a byte of the body asked for. A body to
+/// the end of the connection is refused when it has the limit and one byte, and a
+/// chunk that takes the body past the limit is refused when it is whole, and in
+/// neither is a byte asked that the server had not said was there: the server has
+/// more to send, and what is asked says the client did not wait for it. Each
+/// check fails when its limit is one more.
+fn a_body_past_the_limit_is_refused_as_soon_as_the_bytes_or_the_head_say_so_and_no_more_is_read() {
+    let mut cases = Vec::new();
+    let mut wanted = Vec::new();
+    for (i, limit) in [0usize, 5].into_iter().enumerate() {
+        let body = vec![b'a'; limit + 1];
+        let said = format!("http://example.com/x{}: body longer than {limit} bytes", 3 * i);
+        // By its length: the head alone, which is the whole of what is asked.
+        let by_length = head(200, "OK", &[], &format!("content-length: {}\r\n", limit + 1));
+        wanted.push((by_length.len(), said.clone()));
+        cases.push((vec![by_length], limit));
+        // To the end of the connection: the head, the limit, and one byte.
+        let to_close = head_of_close();
+        wanted.push((to_close.len() + limit + 1, said.replace(&format!("x{}", 3 * i), &format!("x{}", 3 * i + 1))));
+        cases.push((vec![to_close, body.clone(), b"zzzzzzzzzz".to_vec()], limit));
+        // In chunks: the head and the chunk that passes the limit, whole.
+        let chunked = head_of_chunked();
+        let mut chunk = format!("{:x}\r\n", limit + 1).into_bytes();
+        chunk.extend(&body);
+        chunk.extend(b"\r\n");
+        wanted.push((chunked.len() + chunk.len(), said.replace(&format!("x{}", 3 * i), &format!("x{}", 3 * i + 2))));
+        cases.push((vec![chunked, chunk, b"0\r\n\r\n".to_vec()], limit));
+    }
+    let got: Vec<(usize, String)> = asked_of(&cases);
+    assert_eq!(got, wanted);
+}
+
+fn head_of_close() -> Vec<u8> {
+    head(200, "OK", &[], "")
+}
+
+fn head_of_chunked() -> Vec<u8> {
+    head(200, "OK", &[], "transfer-encoding: chunked\r\n")
 }
