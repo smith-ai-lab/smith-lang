@@ -57,8 +57,12 @@ pub const ONCE: &[Test] = &[
         a_copy_that_is_refused_says_which_numbers_it_was_made_for_where_the_item_is_written,
     ),
     (
-        "a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default",
-        a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default,
+        "a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default_part_1_of_2",
+        || a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default(0),
+    ),
+    (
+        "a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default_part_2_of_2",
+        || a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default(1),
     ),
     (
         "a_number_that_an_argument_or_the_wanted_type_settles_is_taken_over_the_default",
@@ -313,8 +317,8 @@ fn defaulted(k: u64) -> String {
 
 /// A function or a struct that a use leaves the number out of, where nothing
 /// settles it, is the one written with the default.
-fn a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default() {
-    generate::check(4110, 20, |g: &mut Gen| number(g), |k| {
+fn a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_with_its_default(part: u64) {
+    generate::check_part(4110, 20, part, 2, |g: &mut Gen| number(g), |k| {
         let left_out = with_header(format!(
             "{}\nfn main() <console, alloc> {{\n  print(\"{{top().at}}\")\n  b: Box = Box(at: 0)\n  print(\"{{size(b)}}\")\n  print(\"{{size(Box(at: 0))}}\")\n}}\n",
             defaulted(*k)
@@ -323,8 +327,9 @@ fn a_use_that_leaves_a_number_out_and_that_nothing_settles_is_the_use_written_wi
             "{}\nfn main() <console, alloc> {{\n  print(\"{{top[{k}]().at}}\")\n  b: Box[{k}] = Box[{k}](at: 0)\n  print(\"{{size(b)}}\")\n  print(\"{{size(Box[{k}](at: 0))}}\")\n}}\n",
             defaulted(*k)
         ));
-        assert_eq!(stdout(&left_out), format!("{}\n{k}\n{k}\n", k - 1), "for\n{left_out}");
-        assert_eq!(stdout(&left_out), stdout(&written), "for\n{left_out}");
+        let said = stdout(&left_out);
+        assert_eq!(said, format!("{}\n{k}\n{k}\n", k - 1), "for\n{left_out}");
+        assert_eq!(said, stdout(&written), "for\n{left_out}");
         let a = compile(left_out.as_bytes(), any()).unwrap_or_else(|e| panic!("{e:?}\n{left_out}"));
         let b = compile(written.as_bytes(), any()).unwrap_or_else(|e| panic!("{e:?}\n{written}"));
         assert!(a == b, "the executables differ for\n{left_out}\nand\n{written}");

@@ -6,7 +6,7 @@
 //! it to a target: the evaluator refuses it, and no pass may move a division to
 //! where the source would not have run it.
 
-use smith::scalar::{self, Binary, Bits, Builder, Compare, Function, Program, Type};
+use smith::scalar::{self, Binary, Bits, Builder, Compare, Function, Op, Program, Stream, System, Type};
 use smith::target::Target;
 
 use crate::Test;
@@ -25,16 +25,28 @@ pub const ONCE: &[Test] = &[
         the_evaluator_refuses_a_division_by_zero_and_the_least_number_by_minus_one_and_only_those,
     ),
     (
-        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives",
-        an_arm64_executable_of_a_division_gives_what_the_evaluator_gives,
+        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives_part_1_of_2",
+        || an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(0),
+    ),
+    (
+        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives_part_2_of_2",
+        || an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(1),
     ),
     (
         "no_pass_runs_a_division_where_the_source_would_not_have_run_it",
         no_pass_runs_a_division_where_the_source_would_not_have_run_it,
     ),
     (
-        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it",
-        an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it,
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_1_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(0),
+    ),
+    (
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_2_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(1),
+    ),
+    (
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_3_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(2),
     ),
 ];
 
@@ -164,6 +176,57 @@ fn written(program: &Program) -> u64 {
     vf::written(&scalar::run(program).stdout)[0] as u64
 }
 
+/// A program whose `main` calls the function of each case with its two numbers, as
+/// `observed` does for one, and writes what each gives, in the order of the cases,
+/// a slot of 16 bytes each, with the numbers through memory when `opaque`. The
+/// executable of a program of many cases is started once, where one of each case
+/// is started as many times.
+fn observed_all(cases: &[(Function, Bits, u64, u64, bool)]) -> Program {
+    let n = cases.len();
+    let mut b = Builder::new();
+    let at = |b: &mut Builder, buffer, k: usize| {
+        let by = b.int(Bits::B64, 16 * k as u64);
+        b.binary(Binary::Add, buffer, by)
+    };
+    let size = b.int(Bits::B64, 16 * (3 * n + 1) as u64);
+    let buffer = b.allocate(size);
+    let out = at(&mut b, buffer, 2 * n);
+    for (k, (_, bits, x, y, opaque)) in cases.iter().enumerate() {
+        let mut values = Vec::new();
+        for (j, number) in [x, y].into_iter().enumerate() {
+            let v = b.int(*bits, *number);
+            if *opaque {
+                let place = at(&mut b, buffer, 2 * k + j);
+                b.store(place, v);
+                values.push(b.load(Type::Int(*bits), place));
+            } else {
+                values.push(v);
+            }
+        }
+        let given = b.call(k, values, &[Type::Int(*bits)]);
+        let place = at(&mut b, out, k);
+        b.store(place, given[0]);
+    }
+    let count = b.int(Bits::B64, 16 * n as u64);
+    b.emit(
+        Op::System {
+            call: System::Write(Stream::Stdout),
+            args: vec![out, count],
+        },
+        &[],
+    );
+    b.ret(vec![]);
+    let mut functions: Vec<Function> = cases.iter().map(|(f, ..)| f.clone()).collect();
+    functions.push(b.finish(&[]));
+    let program = Program {
+        data: Vec::new(),
+        main: functions.len() - 1,
+        functions,
+    };
+    assert_eq!(scalar::check(&program), Ok(()));
+    program
+}
+
 fn the_evaluator_divides_as_arithmetic_does_for_every_size_and_sign() {
     generate::check(7381, 240, allowed, |(op, bits, a, b)| {
         let program = dividing(*op, *bits, *a, *b, true);
@@ -195,8 +258,8 @@ fn arm64(program: &Program) -> Vec<Vec<u8>> {
         .collect()
 }
 
-fn an_arm64_executable_of_a_division_gives_what_the_evaluator_gives() {
-    generate::check(7383, 120, allowed, |(op, bits, a, b)| {
+fn an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(part: u64) {
+    generate::check_part(7383, 120, part, 2, allowed, |(op, bits, a, b)| {
         for opaque in [true, false] {
             let program = dividing(*op, *bits, *a, *b, opaque);
             let said = scalar::run(&program);
@@ -211,15 +274,19 @@ fn an_arm64_executable_of_a_division_gives_what_the_evaluator_gives() {
 }
 
 fn every_executable_of_a_division_gives_what_the_evaluator_gives() {
-    generate::check(7384, 60, allowed, |(op, bits, a, b)| {
-        let program = dividing(*op, *bits, *a, *b, true);
-        let said = scalar::run(&program);
-        let passed = scalar::passes(&program);
-        for target in runnable() {
-            scalar_runs_as(&program, target, &said);
-            scalar_runs_as(&passed, target, &said);
-        }
-    });
+    let cases: Vec<_> = (0..60)
+        .map(|case| {
+            let (op, bits, a, b) = generate::sample(7384, case, allowed);
+            (function(op, bits), bits, a, b, true)
+        })
+        .collect();
+    let program = observed_all(&cases);
+    let said = scalar::run(&program);
+    let passed = scalar::passes(&program);
+    for target in runnable() {
+        scalar_runs_as(&program, target, &said);
+        scalar_runs_as(&passed, target, &said);
+    }
 }
 
 /// A function of two numbers that is `op` of them where the operation may be
@@ -317,8 +384,8 @@ fn no_pass_runs_a_division_where_the_source_would_not_have_run_it() {
     });
 }
 
-fn an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it() {
-    generate::check(7386, 120, guarded_case, |case| {
+fn an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(part: u64) {
+    generate::check_part(7386, 120, part, 3,guarded_case, |case| {
         let program = guarded_program(case);
         let said = scalar::run(&program);
         let passed = scalar::passes(&program);
@@ -334,13 +401,17 @@ fn an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it()
 }
 
 fn no_executable_runs_a_division_where_the_source_would_not_have_run_it() {
-    generate::check(7387, 80, guarded_case, |case| {
-        let program = guarded_program(case);
-        let said = scalar::run(&program);
-        let passed = scalar::passes(&program);
-        for target in runnable() {
-            scalar_runs_as(&program, target, &said);
-            scalar_runs_as(&passed, target, &said);
-        }
-    });
+    let cases: Vec<_> = (0..80)
+        .map(|case| {
+            let (op, bits, passed_on, opaque, a, b) = generate::sample(7387, case, guarded_case);
+            (guarded(op, bits, passed_on), bits, a, b, opaque)
+        })
+        .collect();
+    let program = observed_all(&cases);
+    let said = scalar::run(&program);
+    let passed = scalar::passes(&program);
+    for target in runnable() {
+        scalar_runs_as(&program, target, &said);
+        scalar_runs_as(&passed, target, &said);
+    }
 }

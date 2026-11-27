@@ -40,18 +40,25 @@ struct Range {
     end: i64,
 }
 
-fn range(g: &mut Gen) -> Range {
-    // Sizes of the holder that the range is kept at: 8, 16, 32, and 64 bits.
-    let width = [3, 200, 2_000, 70_000, 5_000_000_000i64][g.below(5)];
-    let least = match g.below(3) {
-        0 => 0,
-        1 => 1,
-        _ => -(g.below(100) as i64) - 1,
-    };
-    Range {
-        least,
-        end: least + width,
-    }
+/// The sizes of the holder that a range is kept at: 8, 16, 32, and 64 bits.
+const WIDTHS: [i64; 5] = [3, 200, 2_000, 70_000, 5_000_000_000i64];
+
+/// A range of each size, with a least value of the generator's.
+fn ranges(g: &mut Gen) -> Vec<Range> {
+    WIDTHS
+        .iter()
+        .map(|&width| {
+            let least = match g.below(3) {
+                0 => 0,
+                1 => 1,
+                _ => -(g.below(100) as i64) - 1,
+            };
+            Range {
+                least,
+                end: least + width,
+            }
+        })
+        .collect()
 }
 
 impl Range {
@@ -69,28 +76,32 @@ impl Range {
 const USES: &str = "use std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.json (FromJson, from_json)\n\n";
 
 /// Each of the four numbers is read into `struct P { a: least..end }`, and is
-/// the number when it is in the range and `err` when it is not.
+/// the number when it is in the range and `err` when it is not. The ranges of
+/// every size are in one program, which reads the library once.
 fn a_number_read_into_a_range_is_read_exactly_when_it_is_in_the_range_at_both_ends_and_one_past() {
-    generate::check(7941, 5, range, |r| {
-        let mut source = format!(
-            "{USES}struct P {{ a: {}..{} }}\n\n\
-             fn show(r: Result[P, ReadError]) -> str <alloc> {{\n  match r {{\n    \
-             .ok(p) {{ \"{{p.a}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n\
-             fn main() <console, alloc> {{\n",
-            r.least, r.end
-        );
+    generate::check(7941, 1, ranges, |rs| {
+        let mut source = USES.to_string();
+        let mut main = String::from("fn main() <console, alloc> {\n");
         let mut said = String::new();
-        for n in r.numbers() {
+        for (j, r) in rs.iter().enumerate() {
             source += &format!(
-                "  r{k}: Result[P, ReadError] = from_json(\"\\{{\\\"a\\\": {n}\\}}\")\n  print(show(r{k}))\n",
-                k = said.lines().count()
+                "struct P{j} {{ a: {}..{} }}\n\n\
+                 fn show{j}(r: Result[P{j}, ReadError]) -> str <alloc> {{\n  match r {{\n    \
+                 .ok(p) {{ \"{{p.a}}\" }}\n    .err(e) {{ \"err\" }}\n  }}\n}}\n\n",
+                r.least, r.end
             );
-            said += &if r.holds(n) {
-                format!("{n}\n")
-            } else {
-                "err\n".to_string()
-            };
+            for (k, n) in r.numbers().into_iter().enumerate() {
+                main += &format!(
+                    "  r{j}_{k}: Result[P{j}, ReadError] = from_json(\"\\{{\\\"a\\\": {n}\\}}\")\n  print(show{j}(r{j}_{k}))\n"
+                );
+                said += &if r.holds(n) {
+                    format!("{n}\n")
+                } else {
+                    "err\n".to_string()
+                };
+            }
         }
+        source += &main;
         source += "}\n";
         assert_eq!(outcome(&source).stdout, said.into_bytes(), "for\n{source}");
     });
@@ -98,33 +109,38 @@ fn a_number_read_into_a_range_is_read_exactly_when_it_is_in_the_range_at_both_en
 
 /// `fn pick(a: least..end, b: least..end = least) -> least..end`, read through
 /// `Function.call`: a number outside the range of `a` is no call, and one inside
-/// gives `a`.
+/// gives `a`. The ranges of every size are in one program, which reads the
+/// library once.
 fn a_number_read_for_an_argument_of_a_function_called_by_call_is_held_to_the_range_of_its_parameter()
  {
-    generate::check(7942, 4, range, |r| {
+    generate::check(7942, 1, ranges, |rs| {
         let mut source = format!(
-            "{USES}fn pick(a: {l}..{e}, b: {l}..{e} = {l}) -> {l}..{e} {{ a }}\n\n\
-             fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
+            "{USES}fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
              requires Function[F, A, R]\n  requires FromJson[A]\n  requires Discard[A]\n{{\n  \
              r: Result[A, ReadError] = from_json(text)\n  match r {{\n    \
-             .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
-             fn show(o: Option[{l}..{e}]) -> str <alloc> {{\n  match o {{\n    \
-             .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
-             fn main() <console, alloc> {{\n",
-            l = r.least,
-            e = r.end
+             .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n"
         );
+        let mut main = String::from("fn main() <console, alloc> {\n");
         let mut said = String::new();
-        for (k, n) in r.numbers().into_iter().enumerate() {
+        for (j, r) in rs.iter().enumerate() {
+            let (l, e) = (r.least, r.end);
             source += &format!(
-                "  t{k} = \"\\{{\\\"a\\\": {n}\\}}\"\n  print(show(run(pick, t{k})))\n"
+                "fn pick{j}(a: {l}..{e}, b: {l}..{e} = {l}) -> {l}..{e} {{ a }}\n\n\
+                 fn show{j}(o: Option[{l}..{e}]) -> str <alloc> {{\n  match o {{\n    \
+                 .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n"
             );
-            said += &if r.holds(n) {
-                format!("{n}\n")
-            } else {
-                "none\n".to_string()
-            };
+            for (k, n) in r.numbers().into_iter().enumerate() {
+                main += &format!(
+                    "  t{j}_{k} = \"\\{{\\\"a\\\": {n}\\}}\"\n  print(show{j}(run(pick{j}, t{j}_{k})))\n"
+                );
+                said += &if r.holds(n) {
+                    format!("{n}\n")
+                } else {
+                    "none\n".to_string()
+                };
+            }
         }
+        source += &main;
         source += "}\n";
         assert_eq!(outcome(&source).stdout, said.into_bytes(), "for\n{source}");
     });

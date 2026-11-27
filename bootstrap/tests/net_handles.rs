@@ -8,6 +8,7 @@ use smith::{lower, scalar};
 
 use crate::Test;
 use crate::generate::{self, Gen};
+use crate::lowered_once::{SEED, Written};
 use crate::targets;
 
 pub const ONCE: &[Test] = &[
@@ -168,15 +169,15 @@ fn main() <console, alloc> {{
 
 fn a_server_of_messages_whose_tool_asks_the_network_is_answered_over_a_handler_of_net_that_chooses_the_connection()
 {
+    // The text is the same for every handle but the handle, so it is lowered once.
+    let written = Written::new(server(SEED));
+    assert!(!written.program.asks_the_kernel());
     generate::check_cases(11, 0, 3, |g: &mut Gen| (1 + g.below(5000) as u64, 1 + g.below(12)), |&(handle, size)| {
         let word = "w".repeat(size);
         let call = format!(
             "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"ask\",\"arguments\":{{\"word\":\"{word}\"}},\"_meta\":{{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{{}}}}}}}}\n"
         );
-        let source = server(handle);
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
-        assert!(!program.asks_the_kernel());
-        let said = String::from_utf8(scalar::run_with_input(&program, call.as_bytes()).stdout).unwrap();
+        let said = String::from_utf8(scalar::run_with_input(&written.with(&[(SEED, handle)]), call.as_bytes()).stdout).unwrap();
         assert!(said.contains(&format!("\"structuredContent\":\"{handle} read 64\"")), "{said}");
     });
 }

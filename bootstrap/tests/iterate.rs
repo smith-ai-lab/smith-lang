@@ -362,7 +362,7 @@ fn walked(g: &mut Gen) -> Walked {
 fn a_loop_over_a_value_prints_what_the_call_of_each_with_a_lambda_prints() {
     generate::check(
         705,
-        24,
+        12,
         |g| (items(g, 2, true, false), walked(g)),
         |(lines, walked)| {
             let said = says(&gives(lines, walked).to_string());

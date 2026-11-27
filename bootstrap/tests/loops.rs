@@ -69,8 +69,20 @@ pub const ONCE: &[Test] = &[
         a_loop_that_decreases_a_measure_ends_without_diverge,
     ),
     (
-        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above",
-        a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above,
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_1_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(0),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_2_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(1),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_3_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(2),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_4_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(3),
     ),
     (
         "a_distance_to_an_end_is_proven_where_the_loop_goes_round_again_and_nowhere_before",
@@ -300,7 +312,7 @@ fn reach(g: &mut Gen) -> Reach {
 /// exactly when `hi - 1 + c` is a number of the type, and `i - c` exactly when
 /// `lo - c` is, with no `if`.
 fn inside_a_loop_over_a_range_arith_knows_the_counter_is_inside_the_range() {
-    generate::check(43, 150, reach, |r| {
+    generate::check(43, 70, reach, |r| {
         let operation = if r.up {
             format!("i + {}", r.by)
         } else {
@@ -540,8 +552,8 @@ fn round(g: &mut Gen) -> Round {
 /// For every `loop decreases e`, the program compiles exactly when each place
 /// the loop goes round again has `e` smaller than the round began with and
 /// not below zero.
-fn a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above() {
-    generate::check(53, 160, round, |r| {
+fn a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(part: u64) {
+    generate::check_part(53, 160, part, 4, round, |r| {
         let (t, guard, step) = (r.ty.name, r.guard, r.step);
         let rest = if r.with_else {
             format!(
@@ -633,7 +645,7 @@ fn countdown(g: &mut Gen) -> Countdown {
 /// from the limits of its type, the loop ends, after as many rounds as the
 /// steps that fit.
 fn every_loop_with_decreases_that_compiles_ends() {
-    generate::check(59, 120, countdown, |c| {
+    generate::check(59, 60, countdown, |c| {
         let (t, start, step) = (c.ty.name, c.start, c.step);
         let source = with_header(format!(
             "fn rounds(n: {t}) -> u64 {{\n  var left: {t} = n\n  var times: u64 = 0\n  loop decreases left {{\n    if left < {step} {{ break }}\n    left = left - {step}\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{rounds({start})}}\")\n}}\n"

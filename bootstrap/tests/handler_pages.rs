@@ -8,6 +8,7 @@ use smith::scalar;
 use smith::{check, lower};
 
 use crate::Test;
+use crate::lowered_once::{SEED, Written};
 
 pub const ONCE: &[Test] = &[
     (
@@ -60,6 +61,11 @@ fn errors(source: &str) -> Vec<Error> {
 fn prints(source: &str) -> String {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
     String::from_utf8(scalar::run(&program).stdout).expect("text")
+}
+
+/// What the text of `written` prints when its seed is `seed`.
+fn printed(written: &Written, seed: u64) -> String {
+    String::from_utf8(scalar::run(&written.with(&[(SEED, seed)])).stdout).expect("text")
 }
 
 /// `fixed_clock` and `reading`: `reading()` is `42` and carries no effect, so
@@ -149,12 +155,13 @@ const TASKS: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse s
 /// and the two ticks are one and two, whichever child runs first.
 fn two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_either_order() {
     let mut seen = std::collections::BTreeSet::new();
+    // The text is the same for every seed but the seed, so it is lowered once.
+    let written = Written::new(format!(
+        "{TASKS}{FAKE}fn two_readings() -> (u64, u64) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ now() }}\n  tb = spawn {{ now() }}\n  (join(ta), join(tb))\n}}\n\n\
+         fn main() <console, alloc, diverge> {{\n  print(\"{{two_readings()}}\")\n}}\n"
+    ));
     for seed in 1..=12u64 {
-        let source = format!(
-            "{TASKS}{FAKE}fn two_readings() -> (u64, u64) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({seed})\n  ta = spawn {{ now() }}\n  tb = spawn {{ now() }}\n  (join(ta), join(tb))\n}}\n\n\
-             fn main() <console, alloc, diverge> {{\n  print(\"{{two_readings()}}\")\n}}\n"
-        );
-        let said = prints(&source);
+        let said = printed(&written, seed);
         assert!(said == "(1, 2)\n" || said == "(2, 1)\n", "seed {seed}: {said}");
         seen.insert(said);
     }
@@ -164,12 +171,12 @@ fn two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_e
 /// `two_pairs` of `task-handlers.md`: the four readings are the ticks one to four,
 /// each once, whatever way the two children's readings interleave.
 fn two_pairs_of_two_children_under_the_clock_that_counts_are_the_four_ticks_each_once_for_every_seed() {
+    let written = Written::new(format!(
+        "{TASKS}{FAKE}fn two_pairs() -> ((u64, u64), (u64, u64)) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ (now(), now()) }}\n  tb = spawn {{ (now(), now()) }}\n  (join(ta), join(tb))\n}}\n\n\
+         fn main() <console, alloc, diverge> {{\n  ((a, b), (c, d)) = two_pairs()\n  print(\"{{wrapping_add(wrapping_mul(a, 1000), wrapping_add(wrapping_mul(b, 100), wrapping_add(wrapping_mul(c, 10), d)))}}\")\n}}\n"
+    ));
     for seed in 1..=12u64 {
-        let source = format!(
-            "{TASKS}{FAKE}fn two_pairs() -> ((u64, u64), (u64, u64)) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({seed})\n  ta = spawn {{ (now(), now()) }}\n  tb = spawn {{ (now(), now()) }}\n  (join(ta), join(tb))\n}}\n\n\
-             fn main() <console, alloc, diverge> {{\n  ((a, b), (c, d)) = two_pairs()\n  print(\"{{wrapping_add(wrapping_mul(a, 1000), wrapping_add(wrapping_mul(b, 100), wrapping_add(wrapping_mul(c, 10), d)))}}\")\n}}\n"
-        );
-        let said = prints(&source);
+        let said = printed(&written, seed);
         let digits: Vec<char> = said.trim().chars().collect();
         let mut sorted = digits.clone();
         sorted.sort_unstable();

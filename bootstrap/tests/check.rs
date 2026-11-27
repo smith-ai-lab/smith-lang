@@ -28,8 +28,16 @@ pub const ONCE: &[Test] = &[
         check_reports_what_build_reports_for_the_cases_and_writes_no_file,
     ),
     (
-        "check_reports_the_errors_build_reports_for_every_input",
-        check_reports_the_errors_build_reports_for_every_input,
+        "check_reports_the_errors_build_reports_for_every_input_part_1_of_3",
+        || check_reports_the_errors_build_reports_for_every_input(0),
+    ),
+    (
+        "check_reports_the_errors_build_reports_for_every_input_part_2_of_3",
+        || check_reports_the_errors_build_reports_for_every_input(1),
+    ),
+    (
+        "check_reports_the_errors_build_reports_for_every_input_part_3_of_3",
+        || check_reports_the_errors_build_reports_for_every_input(2),
     ),
     (
         "check_warns_of_dead_code_and_an_unread_binding_that_build_allows",
@@ -100,8 +108,8 @@ fn check_reports_what_build_reports_for_the_cases_and_writes_no_file() {
     }
 }
 
-fn check_reports_the_errors_build_reports_for_every_input() {
-    generate::check(41, 483, props::bytes, |Bytes(source)| {
+fn check_reports_the_errors_build_reports_for_every_input(part: u64) {
+    generate::check_part(41, 483, part, 3, props::bytes, |Bytes(source)| {
         match (lower(source), check(source)) {
             (Err(built), Err(checked)) => assert_eq!(checked, built),
             (Ok(_), Ok(_)) => {}

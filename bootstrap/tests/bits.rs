@@ -54,20 +54,32 @@ pub const ONCE: &[Test] = &[
         the_bound_of_shift_right_is_not_one_too_small_and_not_one_too_large,
     ),
     (
-        "the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large",
-        the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large,
+        "the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large_part_1_of_2",
+        || the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large(0),
+    ),
+    (
+        "the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large_part_2_of_2",
+        || the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large(1),
     ),
     (
         "arith_knows_a_least_of_a_shift_right_of_an_unsigned_number_and_no_more_than_is_true",
         arith_knows_a_least_of_a_shift_right_of_an_unsigned_number_and_no_more_than_is_true,
     ),
     (
-        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small",
-        the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small,
+        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small_part_1_of_2",
+        || the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(0),
     ),
     (
-        "a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type",
-        a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type,
+        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small_part_2_of_2",
+        || the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(1),
+    ),
+    (
+        "a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type_part_1_of_2",
+        || a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type(0),
+    ),
+    (
+        "a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type_part_2_of_2",
+        || a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type(1),
     ),
     (
         "a_mask_of_a_number_keeps_a_sum_with_it_inside_the_type",
@@ -697,10 +709,16 @@ fn tight() -> Vec<Range> {
 /// needs one less does not, so the bound is neither one too small, which a
 /// number in the bounds makes false, nor one too large.
 fn bounds_are_tight(ops: &[&str]) {
-    for tight in tight() {
-        if !ops.contains(&format!("{:?}", tight.op).as_str()) {
-            continue;
-        }
+    bounds_are_tight_in_part(ops, 0, 1);
+}
+
+/// `bounds_are_tight` for the cases that are `part` places from the first of
+/// those for the operations, of every `parts`, so that every case is in one part.
+fn bounds_are_tight_in_part(ops: &[&str], part: usize, parts: usize) {
+    let of_the_operations = tight()
+        .into_iter()
+        .filter(|tight| ops.contains(&format!("{:?}", tight.op).as_str()));
+    for tight in of_the_operations.skip(part).step_by(parts) {
         let Some(bound) = known(&tight) else { continue };
         for needs in [bound, bound - 1] {
             if needs >= tight.ty.min() {
@@ -725,8 +743,8 @@ fn the_bound_of_shift_right_is_not_one_too_small_and_not_one_too_large() {
     bounds_are_tight(&["Right"]);
 }
 
-fn the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large() {
-    bounds_are_tight(&["Left"]);
+fn the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large(part: usize) {
+    bounds_are_tight_in_part(&["Left"], part, 2);
 }
 
 /// A shift of any type by a number compiles exactly when the number is below
@@ -734,8 +752,8 @@ fn the_bound_of_shift_left_is_not_one_too_small_and_not_one_too_large() {
 /// of the last place, of 0, and of 1 are all inside it. A shift by the bits
 /// of the type or more is refused when the program is built, since nothing
 /// tests it when the program runs.
-fn a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type() {
-    for ty in INTS {
+fn a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type(part: usize) {
+    for ty in INTS.iter().skip(part).step_by(2) {
         for function in ["wrapping_shift_left", "shift_right"] {
             for by in [0, 1, ty.bits - 1, ty.bits, ty.bits + 1, 63, 64, 255] {
                 let below = if function == "shift_right" && !ty.signed {
@@ -827,8 +845,9 @@ fn arith_knows_a_least_of_a_shift_right_of_an_unsigned_number_and_no_more_than_i
 /// bounds makes false, nor one too small, which makes a function that needs
 /// the true least refused: where it is tight, a function that needs it
 /// compiles and one that needs one more does not.
-fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small() {
-    for ty in INTS.iter().filter(|t| !t.signed) {
+fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(part: usize) {
+    // The types are in two parts, every other one to each.
+    for ty in INTS.iter().filter(|t| !t.signed).skip(part).step_by(2) {
         let (m, n) = (ty.max(), i128::from(ty.bits));
         for by in [0, 1, n - 1] {
             for (low, most) in [(m, m), (m - 1, m), (5, m), (1 << (n - 1), m), (0, m), (3, 9)] {

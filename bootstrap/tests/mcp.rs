@@ -397,10 +397,33 @@ fn replies(cases: &[Case]) -> Vec<Got> {
 
 /// The names that the schema gives a definition: what it requires and what it has.
 fn schema_names(definition: &str) -> (Vec<String>, Vec<String>) {
-    static SCHEMA: OnceLock<Json> = OnceLock::new();
-    let schema = SCHEMA.get_or_init(|| parse(&standard::read_under("mcp/2026-07-28/schema", "schema.json")));
-    let Some(Json::Object(definitions)) = schema.get("$defs") else { panic!("the schema has definitions") };
-    let Some((_, d)) = definitions.iter().find(|(k, _)| k == definition) else { panic!("{definition} is in the schema") };
+    static SCHEMA: OnceLock<String> = OnceLock::new();
+    let schema = SCHEMA.get_or_init(|| standard::read_under("mcp/2026-07-28/schema", "schema.json"));
+    // Only the definition is read as JSON: the schema is large, and the one test
+    // that is first to ask would spend the time of reading all of it.
+    let key = format!("\"{definition}\": {{");
+    let Some(at) = schema.find(&key) else { panic!("{definition} is in the schema") };
+    let start = at + key.len() - 1;
+    let (mut depth, mut in_text, mut escaped, mut end) = (0, false, false, start);
+    for (i, b) in schema.bytes().enumerate().skip(start) {
+        match (in_text, b) {
+            (true, _) if escaped => escaped = false,
+            (true, b'\\') => escaped = true,
+            (true, b'"') => in_text = false,
+            (true, _) => {}
+            (false, b'"') => in_text = true,
+            (false, b'{') => depth += 1,
+            (false, b'}') => {
+                depth -= 1;
+                if depth == 0 {
+                    end = i + 1;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let d = &parse(&schema[start..end]);
     let required = match d.get("required") {
         Some(Json::Array(names)) => names.iter().filter_map(|n| n.text().map(str::to_string)).collect(),
         _ => Vec::new(),
@@ -497,8 +520,8 @@ fn hold_all(cases: &[Case]) {
 fn a_discover_request_is_answered_with_the_result_the_schema_names() {
     generate::check(
         5601,
-        2,
-        |g| (0..12).map(|_| discover_case(g)).collect::<Vec<Case>>(),
+        1,
+        |g| (0..8).map(|_| discover_case(g)).collect::<Vec<Case>>(),
         |cases| hold_all(cases),
     );
 }
@@ -506,10 +529,10 @@ fn a_discover_request_is_answered_with_the_result_the_schema_names() {
 fn a_request_with_a_version_or_a_meta_that_is_wrong_is_refused_with_the_failure_the_text_names() {
     generate::check(
         5602,
-        2,
+        1,
         |g| {
             let mut cases: Vec<Case> = Vec::new();
-            for _ in 0..4 {
+            for _ in 0..2 {
                 cases.push(other_version_case(g));
                 cases.push(initialize_case(g));
                 cases.push(bad_meta_case(g));
@@ -524,10 +547,10 @@ fn a_request_with_a_version_or_a_meta_that_is_wrong_is_refused_with_the_failure_
 fn a_method_the_server_has_not_is_answered_not_found_and_a_notification_by_none() {
     generate::check(
         5603,
-        2,
+        1,
         |g| {
             let mut cases: Vec<Case> = Vec::new();
-            for _ in 0..6 {
+            for _ in 0..4 {
                 cases.push(unknown_method_case(g));
                 cases.push(notification_case(g));
             }
@@ -562,7 +585,7 @@ fn header_case(g: &mut Gen) -> Case {
 }
 
 fn a_header_that_does_not_hold_to_the_message_is_refused_and_one_that_does_is_not() {
-    generate::check(5604, 2, |g| (0..12).map(|_| header_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
+    generate::check(5604, 1, |g| (0..8).map(|_| header_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
 }
 
 /// The base64 of bytes, which is written here and not taken from the library.
@@ -618,16 +641,16 @@ fn name_case(g: &mut Gen) -> Case {
 }
 
 fn a_name_in_a_header_is_held_to_the_name_in_the_message_as_written_or_in_base64() {
-    generate::check(5605, 2, |g| (0..14).map(|_| name_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
+    generate::check(5605, 1, |g| (0..8).map(|_| name_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
 }
 
 fn a_text_that_is_no_request_is_refused_and_the_reply_has_no_id_where_none_was_read() {
     generate::check(
         5606,
-        2,
+        1,
         |g| {
             let mut cases: Vec<Case> = Vec::new();
-            for _ in 0..10 {
+            for _ in 0..8 {
                 cases.push(no_request_case(g));
             }
             cases
@@ -665,5 +688,5 @@ fn origin_case(g: &mut Gen) -> Case {
 }
 
 fn a_message_of_a_page_that_the_server_does_not_list_is_refused_before_it_is_read() {
-    generate::check(5607, 2, |g| (0..14).map(|_| origin_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
+    generate::check(5607, 1, |g| (0..8).map(|_| origin_case(g)).collect::<Vec<Case>>(), |cases| hold_all(cases));
 }

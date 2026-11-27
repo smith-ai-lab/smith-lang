@@ -9,10 +9,56 @@ use smith::{lower, scalar};
 use crate::Test;
 use crate::dns_lookup::{Data, Question, Record, answer};
 
-pub const ONCE: &[Test] = &[(
-    "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed",
-    every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed,
-)];
+pub const ONCE: &[Test] = &[
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_1_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(0),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_2_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(1),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_3_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(2),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_4_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(3),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_5_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(4),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_6_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(5),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_7_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(6),
+    ),
+    (
+        "every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed_part_8_of_8",
+        || every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(7),
+    ),
+];
+
+/// What each part reads: the answer it is given, the values that a byte is
+/// changed to, from the first up to but not including the last, of the five,
+/// and whether it reads the answer cut at each place. Every value and every cut
+/// of every answer is in one part, and the costly answers are in several, so
+/// that no part takes long.
+const PARTS: [(usize, usize, usize, bool); 8] = [
+    (0, 0, 5, true),
+    (1, 0, 3, true),
+    (1, 3, 5, false),
+    (2, 0, 2, true),
+    (2, 2, 4, false),
+    (2, 4, 5, false),
+    (3, 0, 5, true),
+    (4, 0, 5, true),
+];
 
 /// A set of answers to a question for `a.test`, with how many addresses each
 /// holds: of one kind and the other, with a name that is a `CNAME` of a `CNAME`
@@ -57,12 +103,14 @@ fn list(bytes: &[u8]) -> String {
     format!("[{}]", numbers.join(", "))
 }
 
-fn every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed() {
-    let set = answers();
+fn every_truncated_and_every_corrupted_form_of_an_answer_is_read_to_its_end_and_a_truncated_one_is_never_believed(part: usize) {
+    let (which, from, to, cut) = PARTS[part];
+    let set = vec![answers().swap_remove(which)];
     let mut calls = String::new();
     for (message, kind, _) in &set {
         calls.push_str(&format!("  survey({}, {kind})\n", list(message)));
     }
+    let cuts = if cut { "m.size" } else { "0" };
     let source = format!(
         "use std.bits (u16)
 use std.console (console, print)
@@ -98,12 +146,12 @@ fn first(m: List[Byte], n: Nat) -> List[Byte] <alloc> {{
 
 fn survey(m: List[Byte], kind: u16) <console, alloc> {{
   var believed: Nat = 0
-  loop n in 0..m.size {{
+  loop n in 0..{cuts} {{
     if read(first(m, n), kind) != 99 {{ believed = saturating_add(believed, 1) }}
   }}
   var corrupted: Nat = 0
   loop at in 0..m.size {{
-    loop k in 0..5 {{
+    loop k in {from}..{to} {{
       var value: Byte = 0
       if k == 1 {{ value = 255 }}
       if k == 2 {{ value = 192 }}
@@ -133,6 +181,6 @@ fn main() <console, alloc> {{
         assert_eq!(numbers[0], *addresses, "{} bytes: {line}", message.len());
         assert_eq!(numbers[1], 0, "{} bytes: {line}", message.len());
         // Some of the corrupted forms are not believed and some are.
-        assert!(numbers[2] > 0 && numbers[2] < message.len() * 5, "{} bytes: {line}", message.len());
+        assert!(numbers[2] > 0 && numbers[2] < message.len() * (to - from), "{} bytes: {line}", message.len());
     }
 }

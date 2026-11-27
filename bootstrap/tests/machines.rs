@@ -2,12 +2,10 @@
 //! decides from two fingerprints, which `targets::fingerprint` makes of two
 //! compilers, so it is tested here without GitHub.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
-use smith::compile;
 use smith::diag::Error;
 use smith::target::Target;
 
@@ -143,27 +141,21 @@ fn the_machines_file_names_every_target_but_one_once() {
     assert_eq!(lines.len(), chips - 1);
 }
 
-/// What the compiler built, by program and target name.
-type Built = Mutex<HashMap<(Vec<u8>, &'static str), Vec<u8>>>;
-
-/// What the compiler builds for a program and a target, built once. The
-/// three fingerprints of the first test build the same programs, and the
-/// compiler that differs for a target builds what this does and a byte more.
+/// What stands for the compiler in these tests: for a program and a target,
+/// the program followed by the name of the target, so that it is different for
+/// every target and for every program, and the same each time. It is the
+/// script and the fingerprint that are under test here, and not what the
+/// compiler builds, which compiling each case for a target would only repeat:
+/// every case builds for every target in the tests of `cli`, and the compiler
+/// gives the same bytes each time in the tests of determinism.
 fn built(source: &[u8], target: Target) -> Result<Vec<u8>, Vec<Error>> {
-    static BUILT: OnceLock<Built> = OnceLock::new();
-    let key = (source.to_vec(), target.name());
-    let cache = BUILT.get_or_init(Mutex::default);
-    if let Some(bytes) = cache.lock().unwrap().get(&key) {
-        return Ok(bytes.clone());
-    }
-    let bytes = compile(source, target)?;
-    cache.lock().unwrap().insert(key, bytes.clone());
+    let mut bytes = source.to_vec();
+    bytes.extend_from_slice(target.name().as_bytes());
     Ok(bytes)
 }
 
 /// The hash of the compiler for the target in place `place`, which a part of
-/// each of two tests shares: it is the same for both, and it is most of what
-/// each takes.
+/// each of two tests shares: it is the same for both, and is made once.
 fn hash_of_the_compiler(place: usize) -> &'static str {
     static HASHES: OnceLock<Vec<OnceLock<String>>> = OnceLock::new();
     let hashes = HASHES.get_or_init(|| (0..PARTS).map(|_| OnceLock::new()).collect());

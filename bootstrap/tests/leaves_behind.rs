@@ -26,8 +26,12 @@ pub const ONCE: &[Test] = &[
         a_list_returned_through_calls_is_written_once,
     ),
     (
-        "what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it",
-        what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it,
+        "what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it_part_1_of_2",
+        || what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it(0),
+    ),
+    (
+        "what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it_part_2_of_2",
+        || what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it(1),
     ),
     (
         "a_function_takes_the_stacks_it_uses_and_no_others",
@@ -310,9 +314,9 @@ fn program(g: &mut Gen) -> Case {
     Case { source: with_imports(&source), stdout }
 }
 
-fn what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it()
+fn what_a_function_builds_prints_what_the_generator_says_when_every_value_is_read_after_the_calls_that_could_release_it(part: u64)
  {
-    generate::check(311, 30, program, |case| {
+    generate::check_part(311, 30, part, 2, program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(scalar::check(&program), Ok(()));
         assert_eq!(scalar::run(&program).stdout, case.stdout);

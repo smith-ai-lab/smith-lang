@@ -59,8 +59,20 @@ pub const ONCE: &[Test] = &[
         || every_target_builds_identical_bytes_twice_for_text(1),
     ),
     (
-        "every_target_builds_identical_bytes_twice_for_reprs",
-        every_target_builds_identical_bytes_twice_for_reprs,
+        "every_target_builds_identical_bytes_twice_for_reprs_part_1_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(0),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_2_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(1),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_3_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(2),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_4_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(3),
     ),
     (
         "every_target_builds_identical_bytes_twice_for_choices",
@@ -85,20 +97,40 @@ pub const ONCE: &[Test] = &[
         a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup,
     ),
     (
-        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions",
-        a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
+        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions_part_1_of_2",
+        || a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(0),
     ),
     (
-        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("linux"),
+        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions_part_2_of_2",
+        || a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(1),
     ),
     (
-        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("windows"),
+        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network_part_1_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("linux", 0),
     ),
     (
-        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("macos"),
+        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network_part_2_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("linux", 1),
+    ),
+    (
+        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network_part_1_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("windows", 0),
+    ),
+    (
+        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network_part_2_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("windows", 1),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_1_of_3",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("macos", 0),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_2_of_3",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("macos", 1),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_3_of_3",
+        a_program_built_otherwise_than_by_smith_watch_does_not_import_recvmsg_on_macos,
     ),
     (
         "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
@@ -164,24 +196,36 @@ pub const MACHINE: &[Test] = &[
         || every_executable_of_a_program_with_with_and_try_does_what_the_evaluator_says(1),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_1_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_1_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(0),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_2_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_2_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(1),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_3_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_3_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(2),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_4_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_4_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(3),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_5_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_5_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(4),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_6_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(5),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_7_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(6),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_8_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(7),
     ),
     (
         "a_jump_gives_a_block_its_parameters_as_if_all_were_copied_at_once",
@@ -540,10 +584,25 @@ fn builds_identical_bytes_twice<T: Debug>(
     generate: impl Fn(&mut Gen) -> T,
     source: impl Fn(&T) -> &[u8],
 ) {
-    let targets = buildable();
-    assert!(!targets.is_empty(), "the compiler builds for some target");
+    builds_identical_bytes_twice_for_targets(seed, from, cases, 0, 1, generate, source);
+}
+
+/// The same for the part `part` of `parts` of the targets, numbering the parts
+/// from 0, so that the parts are the targets of one check with none in two.
+fn builds_identical_bytes_twice_for_targets<T: Debug>(
+    seed: u64,
+    from: u64,
+    cases: u64,
+    part: usize,
+    parts: usize,
+    generate: impl Fn(&mut Gen) -> T,
+    source: impl Fn(&T) -> &[u8],
+) {
+    let all = buildable();
+    assert!(!all.is_empty(), "the compiler builds for some target");
+    let targets = &all[all.len() * part / parts..all.len() * (part + 1) / parts];
     generate::check_cases(seed, from, cases, generate, |case| {
-        for &target in &targets {
+        for &target in targets {
             let first = compile(source(case), target).unwrap();
             let second = compile(source(case), target).unwrap();
             assert!(first == second, "{} differs", target.name());
@@ -570,8 +629,8 @@ fn every_target_builds_identical_bytes_twice_for_text(part: usize) {
 
 // A program of these generators is built for each target twice, which takes
 // 40 to 260 ms for one, so a test takes one.
-fn every_target_builds_identical_bytes_twice_for_reprs() {
-    builds_identical_bytes_twice(65, 0, 1, reprs::program, |c| c.source.as_bytes());
+fn every_target_builds_identical_bytes_twice_for_reprs(part: usize) {
+    builds_identical_bytes_twice_for_targets(65, 0, 1, part, 4, reprs::program, |c| c.source.as_bytes());
 }
 
 fn every_target_builds_identical_bytes_twice_for_choices() {
@@ -665,8 +724,11 @@ fn every_executable_of_a_program_with_reprs_does_what_the_evaluator_says(part: u
     every_executable_agrees(64, 15 * part, 15, reprs::program, |case| case.source.as_bytes());
 }
 
+/// The hundred programs of the seed, as the parts of eight: part `part` takes the
+/// programs `100 * part / 8` up to `100 * (part + 1) / 8`.
 fn every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(part: u64) {
-    every_executable_agrees(74, 20 * part, 20, numbers::program, |case| case.source.as_bytes());
+    let (from, to) = (100 * part / 8, 100 * (part + 1) / 8);
+    every_executable_agrees(74, from, to - from, numbers::program, |case| case.source.as_bytes());
 }
 
 fn every_executable_of_a_program_with_choices_does_what_the_evaluator_says(part: u64) {
@@ -1322,26 +1384,28 @@ fn every_executable_uses_only_thin_wrappers_over_the_kernel() {
 /// for the socket it listens on, is built as any other program is for every
 /// target of the system that has a network. Only a macOS one imports `recvmsg`,
 /// with the wrappers of the kernel's calls and no other, and the same program
-/// built as any other is built does not.
-fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str) {
+/// built as any other is built does not. The part is the targets of the system
+/// that many places from its own, of two, so that every target is in one, and
+/// the last part of macOS is the program built as any other is.
+fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str, part: usize) {
     let source = include_str!("net_program.smith");
     let files = |_: &str| None::<String>;
     let project = smith::Project { files: &files, entry: None };
-    let build = |target: Target, watched: bool| {
+    let build = |target: Target| {
         smith::compile_project_files_timed(
             source.as_bytes(),
             &project,
             target,
             false,
-            watched,
+            true,
             &mut smith::timings::Timings::new(),
         )
         .unwrap_or_else(|e| panic!("{}: {e:?}", target.name()))
         .executable
     };
-    for target in buildable().into_iter().filter(|t| t.name().starts_with(system)) {
+    for target in buildable().into_iter().filter(|t| t.name().starts_with(system)).skip(part).step_by(2) {
         let name = target.name();
-        let watched = build(target, true);
+        let watched = build(target);
         if system == "macos" {
             let (_, symbols) = mach_o_imports(&watched);
             assert!(symbols.iter().any(|s| s == "_recvmsg"), "{name} does not import _recvmsg");
@@ -1356,20 +1420,30 @@ fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str) {
                     "{name} imports {symbol}, which is not a thin wrapper over the kernel"
                 );
             }
-            let (_, symbols) = mach_o_imports(&build(target, false));
-            assert!(!symbols.iter().any(|s| s == "_recvmsg"), "{name} imports _recvmsg without being built by smith --watch");
         }
     }
 }
 
+/// The same program built as any other is built does not import `recvmsg` on
+/// any macOS target. The program is lowered once, and the targets write it.
+fn a_program_built_otherwise_than_by_smith_watch_does_not_import_recvmsg_on_macos() {
+    let program = scalar::passes(&lower(include_str!("net_program.smith").as_bytes()).unwrap());
+    for target in buildable().into_iter().filter(|t| t.name().starts_with("macos")) {
+        let name = target.name();
+        let (_, symbols) = mach_o_imports(&target.emit_parts(&program).0);
+        assert!(!symbols.iter().any(|s| s == "_recvmsg"), "{name} imports _recvmsg without being built by smith --watch");
+    }
+}
+
 fn a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls() {
-    let source = include_str!("net_program.smith");
+    // The program is lowered once, and each target writes it.
+    let program = scalar::passes(&lower(include_str!("net_program.smith").as_bytes()).unwrap());
     let macos: Vec<Target> = buildable()
         .into_iter()
         .filter(|t| t.name().starts_with("macos"))
         .collect();
     for target in macos {
-        let bytes = compile(source.as_bytes(), target).unwrap();
+        let bytes = target.emit_parts(&program).0;
         let name = target.name();
         let (libraries, symbols) = mach_o_imports(&bytes);
         assert_eq!(libraries, ["/usr/lib/libSystem.B.dylib"], "{name} links only libSystem");
@@ -1412,8 +1486,10 @@ fn a_test_that_does_not_depend_on_the_machine_may_not_run_an_executable_the_fing
 /// other target is refused it for the calls it does not have.
 fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without() {
     let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() <console, alloc> {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
+    // The program is lowered once, and each target writes it.
+    let program = scalar::passes(&lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
     for target in buildable() {
-        let bytes = compile(source.as_bytes(), target).unwrap_or_else(|e| panic!("{}: {e:?}", target.name()));
+        let bytes = target.emit_parts(&program).0;
         if target.name().starts_with("macos") {
             let (_, symbols) = mach_o_imports(&bytes);
             for wrapper in ["_kqueue", "_kevent"] {
@@ -1445,15 +1521,17 @@ const SOCKET_FUNCTIONS: &[&str] = &[
 /// the functions of it that `net` asks for, among them `WSAStartup`, which it
 /// calls once before its first operation, and a program that does not carry `net`
 /// asks for no such library.
-fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions()
-{
+fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(
+    part: usize,
+) {
     let source = include_str!("net_program.smith");
     let windows: Vec<Target> = buildable()
         .into_iter()
         .filter(|t| t.name().starts_with("windows"))
         .collect();
     assert!(!windows.is_empty());
-    for target in windows {
+    // The targets are in two parts, so that no part builds the program for both.
+    for target in windows[windows.len() * part / 2..windows.len() * (part + 1) / 2].iter().copied() {
         let name = target.name();
         let bytes = compile(source.as_bytes(), target).unwrap();
         let (libraries, symbols) = pe_imports(&bytes);

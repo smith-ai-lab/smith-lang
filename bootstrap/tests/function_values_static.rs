@@ -94,8 +94,12 @@ pub const ONCE: &[Test] = &[
         a_lambda_that_writes_type_parameters_is_called_with_each_type,
     ),
     (
-        "every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints",
-        every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints,
+        "every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints_part_1_of_2",
+        || every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints(0),
+    ),
+    (
+        "every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints_part_2_of_2",
+        || every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints(1),
     ),
     (
         "a_function_that_needs_an_effect_is_not_stored_in_a_field_or_given_as_a_result",
@@ -462,8 +466,8 @@ fn generated(g: &mut Gen) -> Generated {
 /// a function that needs an effect is never held where its type states none,
 /// so no program that is accepted runs an effect that a function along its
 /// way did not declare.
-fn every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints() {
-    generate::check(4302, 150, generated, |p| {
+fn every_accepted_program_that_holds_named_functions_prints_what_calling_them_directly_prints(part: u64) {
+    generate::check_part(4302, 150, part, 2, generated, |p| {
         let built = lower(p.source.as_bytes());
         if p.refused {
             let found = built.expect_err("a function with an effect is held in a type");

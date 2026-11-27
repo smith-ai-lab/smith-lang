@@ -216,9 +216,21 @@ fn a_choice_of_a_block_more_than_1_mb_away_goes_there(target: Target) {
 /// parts are one for each target.
 fn every_target_has_a_part_of_the_choice_more_than_1_mb_away() {
     assert_eq!(Target::ALL.len(), 7, "a target has no part, or a part has no target");
-    // One target is an executable for arm64 that can be run here.
+    // One target is an executable for arm64 that can be run here, which is the
+    // one whose part runs the far choice: a program that does nothing says what
+    // a target writes as well as the far choice does, and builds at once.
+    let mut b = Builder::new();
+    let status = b.int(Bits::B8, 0);
+    b.exit(status);
+    b.ret(vec![]);
+    let nothing = scalar::Program {
+        data: Vec::new(),
+        functions: vec![b.finish(&[])],
+        main: 0,
+    };
+    assert_eq!(scalar::check(&nothing), Ok(()));
     assert!(
-        Target::ALL.iter().copied().any(far_choice_on),
+        Target::ALL.iter().any(|target| aarch64::is_executable(&target.emit(&nothing))),
         "no target is built for arm64"
     );
 }

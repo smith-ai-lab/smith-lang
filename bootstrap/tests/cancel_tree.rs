@@ -14,36 +14,244 @@ use crate::generate::{self, Gen};
 
 pub const ONCE: &[Test] = &[
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_1_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_1_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(0),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_2_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_2_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(1),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_3_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_3_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(2),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_4_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_4_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(3),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_5_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_5_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(4),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_6_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_6_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(5),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_7_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_7_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(6),
     ),
     (
-        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_8_of_8",
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_8_of_60",
         || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(7),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_9_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(8),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_10_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(9),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_11_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(10),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_12_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(11),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_13_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(12),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_14_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(13),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_15_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(14),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_16_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(15),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_17_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(16),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_18_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(17),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_19_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(18),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_20_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(19),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_21_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(20),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_22_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(21),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_23_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(22),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_24_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(23),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_25_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(24),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_26_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(25),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_27_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(26),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_28_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(27),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_29_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(28),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_30_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(29),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_31_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(30),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_32_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(31),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_33_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(32),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_34_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(33),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_35_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(34),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_36_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(35),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_37_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(36),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_38_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(37),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_39_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(38),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_40_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(39),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_41_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(40),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_42_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(41),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_43_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(42),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_44_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(43),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_45_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(44),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_46_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(45),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_47_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(46),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_48_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(47),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_49_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(48),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_50_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(49),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_51_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(50),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_52_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(51),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_53_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(52),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_54_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(53),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_55_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(54),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_56_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(55),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_57_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(56),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_58_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(57),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_59_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(58),
+    ),
+    (
+        "every_connection_a_generated_tree_of_tasks_opened_is_closed_once_whatever_point_each_task_is_cancelled_at_part_60_of_60",
+        || every_connection_a_generated_tree_of_tasks_opened_is_closed_once(59),
     ),
 ];
 
@@ -289,7 +497,7 @@ fn owners(n: &Node, k: &mut usize, parent: Option<usize>, owner: &mut HashMap<u6
 }
 
 fn every_connection_a_generated_tree_of_tasks_opened_is_closed_once(part: u64) {
-    generate::check_part(4417, 60, part, 8, case, |c| {
+    generate::check_part(4417, 60, part, 60, case, |c| {
         let source = program(c);
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         assert_eq!(scalar::check(&program), Ok(()), "for {source}");

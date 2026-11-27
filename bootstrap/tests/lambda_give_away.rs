@@ -17,8 +17,16 @@ pub const ONCE: &[Test] = &[
         a_function_that_is_called_once_takes_the_lambda_that_gives_a_value_away_and_one_that_lends_refuses_it,
     ),
     (
-        "a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place",
-        a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place,
+        "a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place_part_1_of_3",
+        || a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place(0),
+    ),
+    (
+        "a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place_part_2_of_3",
+        || a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place(1),
+    ),
+    (
+        "a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place_part_3_of_3",
+        || a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place(2),
     ),
     (
         "two_lambdas_of_one_call_that_use_a_name_one_gave_away_are_refused_at_the_second",
@@ -433,9 +441,9 @@ fn in_place(case: &Case) -> (u64, String) {
     (value, src.text)
 }
 
-fn a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place()
+fn a_lambda_that_reads_assigns_or_gives_away_is_refused_exactly_where_the_rules_say_and_prints_what_it_does_in_place(part: u64)
  {
-    generate::check(706, 70, cases, |case| {
+    generate::check_part(706, 70, part, 3, cases, |case| {
         let (source, wanted) = program(case);
         let got = places(&source);
         assert_eq!(got, wanted, "{case:?}\n{source}");

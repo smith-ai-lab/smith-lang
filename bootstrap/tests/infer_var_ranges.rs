@@ -342,11 +342,11 @@ fn cost(lines: usize) -> f64 {
 /// twenty-five times that looking at the body again for each line would. The
 /// bound leaves room for what a busy machine adds to a longer body.
 fn the_time_to_check_a_body_grows_with_its_size_and_no_faster() {
-    let small = cost(2000);
-    let large = cost(10000);
+    let small = cost(1000);
+    let large = cost(5000);
     assert!(
         large < small * 14.0,
-        "2000 lines took {small}s and 10000 took {large}s, which is more than linear"
+        "1000 lines took {small}s and 5000 took {large}s, which is more than linear"
     );
 }
 

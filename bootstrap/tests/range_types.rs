@@ -126,8 +126,16 @@ pub const ONCE: &[Test] = &[
         two_ranges_that_no_type_of_64_bits_holds_are_compared_as_the_numbers_they_hold,
     ),
     (
-        "a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one",
-        a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one,
+        "a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one_part_1_of_3",
+        || a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(0),
+    ),
+    (
+        "a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one_part_2_of_3",
+        || a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(1),
+    ),
+    (
+        "a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one_part_3_of_3",
+        || a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(2),
     ),
 ];
 
@@ -584,11 +592,8 @@ fn small_range(g: &mut Gen) -> (i128, i128) {
 /// range from the least to the greatest of the results at the ends of the
 /// ranges, which a result that states it holds with nothing proven, and no
 /// range that excludes either end holds.
-fn a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one() {
-    generate::check(
-        4006,
-        60,
-        |g: &mut Gen| (small_range(g), small_range(g), g.below(3)),
+fn a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(part: u64) {
+    generate::check_part(4006, 60, part, 3,|g: &mut Gen| (small_range(g), small_range(g), g.below(3)),
         |&((a_low, a_high), (b_low, b_high), which)| {
             let (op, f): (&str, fn(i128, i128) -> i128) = [
                 ("+", (|x, y| x + y) as fn(i128, i128) -> i128),

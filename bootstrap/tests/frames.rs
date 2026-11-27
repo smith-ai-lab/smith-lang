@@ -14,8 +14,20 @@ use crate::targets::{runnable, runs_as_in};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness",
-        a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness,
+        "a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness_part_1_of_4",
+        || a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness(0),
+    ),
+    (
+        "a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness_part_2_of_4",
+        || a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness(1),
+    ),
+    (
+        "a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness_part_3_of_4",
+        || a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness(2),
+    ),
+    (
+        "a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness_part_4_of_4",
+        || a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness(3),
     ),
     (
         "the_calls_only_the_library_makes_are_refused_in_a_program",
@@ -351,8 +363,8 @@ fn check_drives(said: &str, frames: usize) {
     }
 }
 
-fn a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness() {
-    generate::check(340, 14, |g: &mut Gen| (0..1 + g.below(3)).map(|_| lambda(g)).collect::<Vec<_>>(), |case| {
+fn a_frame_of_a_lambda_that_reads_names_gives_what_the_same_work_gives_in_every_order_of_readiness(part: u64) {
+    generate::check_part(340, 14, part, 4, |g: &mut Gen| (0..1 + g.below(3)).map(|_| lambda(g)).collect::<Vec<_>>(), |case| {
         let module = module_of(case);
         let source = main_of(&[0, 1, 2, 3]);
         let program = lowered(&source, &module).unwrap_or_else(|e| panic!("{e}\n{module}"));
