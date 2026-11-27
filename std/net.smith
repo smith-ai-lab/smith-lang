@@ -412,112 +412,8 @@ fn number_of(port: Port) -> 0..65536 {
   }
 }
 
-// The descriptor on which `smith --watch` talks to the run it started, which is
-// a socket that no other program is left with at this number.
-fn control() -> i64 {
-  3
-}
-
-// The flags of a call that looks at what the control socket holds and does
-// not wait, which Linux gives 66 and macOS 130.
-fn peek_no_wait() -> i64 {
-  if on_macos() { 130 } else { 66 }
-}
-
-// What a look at the control socket gives: minus the error number of the
-// would-block when it is open and holds nothing, 0 when `smith --watch` has
-// closed it, which is how a run is told to stop, and any other number that is
-// not an error when it holds bytes. A program that `smith --watch` did not
-// start has no such socket, and the call gives another error. Windows has none.
-fn control_peek() -> i64 <alloc> {
-  if on_windows() { return -9 }
-  var buffer: List[Byte] = __reserve(1)
-  var seen: i64 = -4
-  loop attempt in 0..8 {
-    seen = __system(8, control(), buffer, 1, peek_no_wait(), 0, 0)
-    if seen != -4 { break }
-  }
-  seen
-}
-
-// Whether the control socket is there and `smith --watch` has not closed it.
-fn watched() -> bool <alloc> {
-  seen = control_peek()
-  seen == would_block() or seen > 0
-}
-
-// The number the four bytes are, the low one first.
-fn whole(a: Byte, b: Byte, c: Byte, d: Byte) -> i64 {
-  low: i64 = a
-  second: i64 = b
-  third: i64 = c
-  high: i64 = d
-  wrapping_add(wrapping_add(low, wrapping_mul(second, 256)), wrapping_add(wrapping_mul(third, 65536), wrapping_mul(high, 16777216)))
-}
-
-// A listener that `smith --watch` keeps from one run to the next: the run asks
-// it for the address, with a line on the control socket, and it answers with
-// `o` and the descriptor of its socket, which the kernel makes a descriptor of
-// this program, or with `e` and the number of the error that listening on the
-// address gave.
-fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <alloc> {
-  address = address_text(host, port)
-  request = "listen {host} {port}\n"
-  sent = __system(7, control(), request, request.size, no_signal(), 0, 0)
-  if sent < 0 { return .err(failure(address, "listen", sent)) }
-  var said: List[Byte] = __reserve(64)
-  var rights: List[Byte] = __reserve(64)
-  said_at: u64 = wrapping_narrow(__address_of(said))
-  rights_at: u64 = wrapping_narrow(__address_of(rights))
-  iov = append(eight(said_at), eight(64))
-  iov_at: u64 = wrapping_narrow(__address_of(iov))
-  // The message the kernel fills: where the bytes go and where the descriptors
-  // go. Its fields are laid out as the kernel's header says, which macOS
-  // makes shorter.
-  var message: List[Byte] = eight(0)
-  message = append(message, zeros(8))
-  message = append(message, eight(iov_at))
-  if on_macos() {
-    message = append(append(message, number(1)), zeros(4))
-    message = append(message, eight(rights_at))
-    message = append(append(message, number(64)), zeros(4))
-  } else {
-    message = append(message, eight(1))
-    message = append(message, eight(rights_at))
-    message = append(message, eight(64))
-    message = append(message, zeros(8))
-  }
-  var got: i64 = -4
-  loop attempt in 0..8 {
-    got = __system(29, control(), message, 0, 0, 0, 0)
-    if got != -4 { break }
-  }
-  if got < 0 { return .err(failure(address, "listen", got)) }
-  if got == 0 { return .err(.failed((address, "listen: smith --watch has ended"))) }
-  reply = __sized(said, count(got))
-  if reply.size == 0 { return .err(.failed((address, "listen: smith --watch said nothing"))) }
-  if reply[0] != 111 {
-    var code: i64 = 0
-    loop k in 1..reply.size {
-      digit: i64 = reply[k]
-      if digit >= 48 and digit <= 57 { code = wrapping_add(wrapping_mul(code, 10), wrapping_sub(digit, 48)) }
-    }
-    return .err(failure(address, "bind", wrapping_sub(0, code)))
-  }
-  control_bytes = __sized(rights, 64)
-  if control_bytes.size < 24 { return .err(.failed((address, "listen: no descriptor came"))) }
-  var fd: i64 = -1
-  if on_macos() {
-    fd = whole(control_bytes[12], control_bytes[13], control_bytes[14], control_bytes[15])
-  } else {
-    fd = whole(control_bytes[16], control_bytes[17], control_bytes[18], control_bytes[19])
-  }
-  .ok(Listener(handle: fd, opened: true, host: host, port: port))
-}
-
 fn system_listen_on(host: str, wanted: Port) -> Result[Listener, NetError] <alloc> {
   port = number_of(wanted)
-  if watched() { return watched_listen_on(host, port) }
   where = try place(host, port)
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
@@ -575,9 +471,6 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
     loop attempt in 0..1000000 {
       // Windows has no scheduler that waits for a descriptor, so the call waits.
       if not on_windows() { wait_to_read(l.handle) }
-      // `smith --watch` has closed the control socket: this run is to end, and
-      // what is waiting at the listener is for the next run.
-      if control_peek() == 0 { return .err(.closed(address_text(l.host, l.port))) }
       got = __system(3, l.handle, 0, 0, 0, 0, 0)
       if got >= 0 {
         fd = got
@@ -592,7 +485,6 @@ fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
     if fd < 0 { return .err(.failed((address_text(l.host, l.port), "accept: interrupted"))) }
     return .ok(Connection(handle: fd, opened: true, host: l.host, port: l.port))
   }
-  if control_peek() == 0 { return .err(.closed(address_text(l.host, l.port))) }
   loop attempt in 0..64 {
     fd = __system(3, l.handle, 0, 0, 0, 0, 0)
     if fd >= 0 { return .ok(Connection(handle: fd, opened: true, host: l.host, port: l.port)) }

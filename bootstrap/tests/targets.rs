@@ -89,6 +89,18 @@ pub const ONCE: &[Test] = &[
         a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
     ),
     (
+        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("linux"),
+    ),
+    (
+        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("windows"),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("macos"),
+    ),
+    (
         "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
         a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls,
     ),
@@ -1123,7 +1135,6 @@ const NET_AND_TIME_WRAPPERS: &[&str] = &[
     "_setsockopt",
     "_sendto",
     "_recvfrom",
-    "_recvmsg",
     "_close",
     "_clock_gettime",
     "_nanosleep",
@@ -1303,6 +1314,50 @@ fn every_executable_uses_only_thin_wrappers_over_the_kernel() {
             }
         } else {
             panic!("{name} writes an executable in a form this test does not read");
+        }
+    }
+}
+
+/// A program built as `smith --watch` builds the programs it runs, which asks
+/// for the socket it listens on, is built as any other program is for every
+/// target of the system that has a network. Only a macOS one imports `recvmsg`,
+/// with the wrappers of the kernel's calls and no other, and the same program
+/// built as any other is built does not.
+fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str) {
+    let source = include_str!("net_program.smith");
+    let files = |_: &str| None::<String>;
+    let project = smith::Project { files: &files, entry: None };
+    let build = |target: Target, watched: bool| {
+        smith::compile_project_files_timed(
+            source.as_bytes(),
+            &project,
+            target,
+            false,
+            watched,
+            &mut smith::timings::Timings::new(),
+        )
+        .unwrap_or_else(|e| panic!("{}: {e:?}", target.name()))
+        .executable
+    };
+    for target in buildable().into_iter().filter(|t| t.name().starts_with(system)) {
+        let name = target.name();
+        let watched = build(target, true);
+        if system == "macos" {
+            let (_, symbols) = mach_o_imports(&watched);
+            assert!(symbols.iter().any(|s| s == "_recvmsg"), "{name} does not import _recvmsg");
+            for symbol in symbols {
+                assert!(
+                    THIN_WRAPPERS.contains(&symbol.as_str())
+                        || NET_AND_TIME_WRAPPERS.contains(&symbol.as_str())
+                        // The ones a program imports with `recvmsg`, which are
+                        // every wrapper there is.
+                        || ["_recvmsg", "_openat", "_pread", "_pwrite", "_lseek", "_fchmod"]
+                            .contains(&symbol.as_str()),
+                    "{name} imports {symbol}, which is not a thin wrapper over the kernel"
+                );
+            }
+            let (_, symbols) = mach_o_imports(&build(target, false));
+            assert!(!symbols.iter().any(|s| s == "_recvmsg"), "{name} imports _recvmsg without being built by smith --watch");
         }
     }
 }

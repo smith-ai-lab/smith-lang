@@ -3810,6 +3810,19 @@ impl<'a> Library<'a> {
         }
     }
 
+    /// `in_project`, with `std.net` as `smith --watch` builds it, which keeps the
+    /// socket a run listens on, as `watched_net` says.
+    pub fn in_project_watched(files: &'a dyn crate::Source, entry: Option<&'a str>) -> Library<'a> {
+        let mut library = Library::in_project(files, entry);
+        let text = watched_net();
+        for module in &mut library.modules {
+            if module.0 == "net" {
+                module.1 = text;
+            }
+        }
+        library
+    }
+
     /// The source of the module with a name written as in a `use`.
     fn source(&self, module: &str) -> Option<std::borrow::Cow<'a, str>> {
         match module.split_once('.') {
@@ -3822,6 +3835,46 @@ impl<'a> Library<'a> {
             _ => self.project.as_ref()?.files.source(module).map(Into::into),
         }
     }
+}
+
+/// `std.net` as `smith --watch` builds it into the programs it runs, and into no
+/// other. The handler of `net` there asks `smith --watch` for the socket it
+/// listens on, and gives `.closed` from `accept` when `smith --watch` closes the
+/// control socket. It is the module with three lines added to the two functions
+/// that listen and accept, and the functions of `net_watched.smith` after it, so
+/// that the module every other program is built with is not changed by it.
+fn watched_net() -> &'static str {
+    static TEXT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TEXT.get_or_init(|| {
+        let mut text = library_text("net").to_string();
+        let stop = "if told_to_stop() { return .err(.closed(address_text(l.host, l.port))) }";
+        // What each place is, and what it is made.
+        let additions = [
+            (
+                "fn system_listen_on(host: str, wanted: Port) -> Result[Listener, NetError] <alloc> {\n  port = number_of(wanted)\n".to_string(),
+                "fn system_listen_on(host: str, wanted: Port) -> Result[Listener, NetError] <alloc> {\n  port = number_of(wanted)\n  if watched() { return watched_listen_on(host, port) }\n".to_string(),
+            ),
+            (
+                "      if not on_windows() { wait_to_read(l.handle) }\n".to_string(),
+                format!("      if not on_windows() {{ wait_to_read(l.handle) }}\n      {stop}\n"),
+            ),
+            (
+                "  loop attempt in 0..64 {\n    fd = __system(3, l.handle, 0, 0, 0, 0, 0)\n".to_string(),
+                format!("  loop attempt in 0..64 {{\n    {stop}\n    fd = __system(3, l.handle, 0, 0, 0, 0, 0)\n"),
+            ),
+        ];
+        for (at, made) in additions {
+            assert_eq!(
+                text.matches(at.as_str()).count(),
+                1,
+                "std.net has changed under smith --watch: {at}"
+            );
+            text = text.replace(at.as_str(), &made);
+        }
+        text.push('\n');
+        text.push_str(include_str!("net_watched.smith"));
+        text
+    })
 }
 
 /// The source of a module of the standard library, which errors in it show a

@@ -1284,6 +1284,21 @@ impl Program {
         })
     }
 
+    /// Whether the program asks the kernel for the descriptors that come with a
+    /// message, which only a program that `smith --watch` builds does.
+    pub fn asks_for_descriptors(&self) -> bool {
+        let instructions = self.functions.iter().flat_map(|f| &f.blocks);
+        instructions.flat_map(|b| &b.instructions).any(|i| {
+            matches!(
+                i.op,
+                Op::System {
+                    call: System::Raw(Raw::RecvMsg),
+                    ..
+                }
+            )
+        })
+    }
+
     /// Whether the program asks the kernel for a call of the files, which is a
     /// program that carries `fs` and reaches one of its operations.
     pub fn asks_the_files(&self) -> bool {
