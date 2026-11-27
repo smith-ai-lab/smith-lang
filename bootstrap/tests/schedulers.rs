@@ -32,8 +32,16 @@ pub const ONCE: &[Test] = &[
         what_a_task_holds_across_a_wait_lives_until_it_ends_while_other_tasks_take_and_release_memory,
     ),
     (
-        "a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed",
-        a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed,
+        "a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed_part_1_of_3",
+        || a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed(0),
+    ),
+    (
+        "a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed_part_2_of_3",
+        || a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed(1),
+    ),
+    (
+        "a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed_part_3_of_3",
+        || a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed(2),
     ),
     (
         "a_block_that_assigns_a_var_of_its_function_gives_it_back_to_the_function",
@@ -254,8 +262,8 @@ fn what_a_task_holds_across_a_wait_lives_until_it_ends_while_other_tasks_take_an
 /// `down` goes twenty-five levels, and at each spawns a task and waits for it.
 const DEEP: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze, push)\nuse std.task (join, spawn, task, test_scheduler)\n\nfn build(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{\n  if at < xs.size {\n    first = xs[at]\n    g = spawn { wrapping_add(first, 1) }\n    v = join(g)\n    wrapping_add(v, down(xs, at + 1))\n  } else {\n    0\n  }\n}\n\nfn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)\n  a = spawn { down(freeze(build(25)), 0) }\n  join(a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run(SEED)}\")\n}\n";
 
-fn a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed() {
-    for seed in 0..6u64 {
+fn a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed(part: u64) {
+    for seed in 2 * part..2 * part + 2 {
         let said = run(&DEEP.replace("SEED", &seed.to_string()));
         assert_eq!(said, "325\n", "seed {seed}");
     }
