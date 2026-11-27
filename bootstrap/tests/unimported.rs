@@ -18,40 +18,76 @@ pub const ONCE: &[Test] = &[
         a_program_with_no_use_is_one_error_for_each_missing_name_at_its_first_use,
     ),
     (
-        "each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module",
-        each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module,
+        "each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module_part_1_of_2",
+        || each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module(0),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_1_of_8",
+        "each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module_part_2_of_2",
+        || each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module(1),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_1_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(0),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_2_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_2_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(1),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_3_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_3_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(2),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_4_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_4_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(3),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_5_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_5_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(4),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_6_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_6_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(5),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_7_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_7_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(6),
     ),
     (
-        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_8_of_8",
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_8_of_16",
         || each_name_of_the_library_that_the_file_imports_is_not_refused(7),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_9_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(8),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_10_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(9),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_11_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(10),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_12_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(11),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_13_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(12),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_14_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(13),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_15_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(14),
+    ),
+    (
+        "each_name_of_the_library_that_the_file_imports_is_not_refused_part_16_of_16",
+        || each_name_of_the_library_that_the_file_imports_is_not_refused(15),
     ),
     (
         "an_effect_that_is_listed_and_not_imported_is_one_error_the_missing_import",
@@ -211,9 +247,11 @@ fn first_use(program: &str) -> Pos {
 
 /// Every name of the standard library outside the prelude, written in any of
 /// the ways a name is written with no import, is one error at its first
-/// use, however many times it is written, and its fix names the module.
-fn each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module() {
-    for (name, module) in names() {
+/// use, however many times it is written, and its fix names the module. The
+/// part is the names that many places from its own, of two, so that every name
+/// is in one.
+fn each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_naming_its_module(part: usize) {
+    for (name, module) in names().iter().skip(part).step_by(2) {
         for shape in SHAPES {
             let program = shape.program.replace("NAME", name);
             let said: Vec<Error> = missing(&program)
@@ -227,17 +265,38 @@ fn each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_na
     }
 }
 
-/// How many parts the names are in, which the names of the tests say.
-const PARTS: usize = 8;
+/// How many parts the modules are in, which the names of the tests say.
+const PARTS: usize = 16;
 
-/// The same programs with the name imported are not refused for it. The part
-/// is the names that many places from its own, so that every name is in one.
+/// The same programs with the name imported are not refused for it. The names
+/// of a module are imported by one `use` and written in one program, which is
+/// checked once, and not once for each name, as the module is read each time.
+/// The modules are dealt out to the parts from the largest file to the least, so
+/// that the few that take long to read are in parts of their own, and every name
+/// is in one.
 fn each_name_of_the_library_that_the_file_imports_is_not_refused(part: usize) {
-    for (name, module) in names().iter().skip(part).step_by(PARTS) {
-        let program = SHAPES[0].program.replace("NAME", name);
-        let source = format!("use std.{module} ({name})\n\n{program}");
+    let mut modules: Vec<(&str, Vec<&str>)> = Vec::new();
+    for (name, module) in names() {
+        match modules.iter_mut().find(|(m, _)| m == module) {
+            Some((_, held)) => held.push(name),
+            None => modules.push((module, vec![name])),
+        }
+    }
+    let size = |module: &str| {
+        std::fs::metadata(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../std/{module}.smith")))
+            .map_or(0, |m| m.len())
+    };
+    modules.sort_by_key(|(module, _)| (std::cmp::Reverse(size(module)), *module));
+    for (module, held) in modules.iter().skip(part).step_by(PARTS) {
+        let uses = format!("use std.{module} ({})\n\n", held.join(", "));
+        let mut program = String::from("fn main() {\n");
+        for (i, name) in held.iter().enumerate() {
+            program += &format!("  x{i} = {name}(1)\n  y{i} = {name}(2)\n");
+        }
+        program += "}\n";
+        let source = format!("{uses}{program}");
         let said: Vec<Error> = missing(&source);
-        assert!(said.is_empty(), "{name}: {said:?}\n{source}");
+        assert!(said.is_empty(), "{module}: {said:?}\n{source}");
     }
 }
 
