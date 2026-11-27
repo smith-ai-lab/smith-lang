@@ -16,8 +16,8 @@ pub const ONCE: &[Test] = &[
         a_flag_of_smith_after_the_command_is_refused_with_where_it_goes,
     ),
     (
-        "a_flag_of_a_command_before_it_is_refused_and_watch_is_not_built_yet",
-        a_flag_of_a_command_before_it_is_refused_and_watch_is_not_built_yet,
+        "a_flag_of_a_command_before_it_is_refused",
+        a_flag_of_a_command_before_it_is_refused,
     ),
     (
         "a_flag_of_smith_given_twice_or_a_word_that_is_no_flag_before_the_command_is_refused",
@@ -98,7 +98,7 @@ fn a_flag_of_smith_after_the_command_is_refused_with_where_it_goes() {
     );
 }
 
-fn a_flag_of_a_command_before_it_is_refused_and_watch_is_not_built_yet() {
+fn a_flag_of_a_command_before_it_is_refused() {
     let dir = probe_project("flags-before", &[]);
     std::fs::write(dir.join("hello.smith"), HELLO).unwrap();
     let target = crate::targets::any().name();
@@ -108,15 +108,6 @@ fn a_flag_of_a_command_before_it_is_refused_and_watch_is_not_built_yet() {
         assert_eq!(said.status.code(), Some(1), "{command}: {err}");
         assert!(err.contains("`--target` is a flag of `build` and `run`, written after the command"), "{command}: {err}");
         assert!(!dir.join("hello").exists(), "{command}");
-    }
-    for command in [&["build", "hello.smith"][..], &["run", "hello.smith"], &["check", "hello.smith"], &["probe"]] {
-        let mut words = vec!["--watch"];
-        words.extend_from_slice(command);
-        let said = smith(&dir, &words);
-        let err = stderr(&said);
-        assert_eq!(said.status.code(), Some(1), "{words:?}: {err}");
-        assert!(err.contains("--watch") && err.contains("not built yet"), "{words:?}: {err}");
-        assert!(!dir.join("hello").exists() && !dir.join("probe").exists(), "{words:?}");
     }
 }
 
@@ -216,6 +207,11 @@ fn a_flag_of_smith_given_twice_or_a_word_that_is_no_flag_before_the_command_is_r
     let err = stderr(&said);
     assert_eq!(said.status.code(), Some(1), "{err}");
     assert!(err.contains("`--timings` is given twice"), "{err}");
+    assert!(!dir.join("hello").exists());
+    let said = smith(&dir, &["--watch", "--watch", "build", "hello.smith"]);
+    let err = stderr(&said);
+    assert_eq!(said.status.code(), Some(1), "{err}");
+    assert!(err.contains("`--watch` is given twice"), "{err}");
     assert!(!dir.join("hello").exists());
 
     generate::check(
