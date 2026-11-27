@@ -196,24 +196,36 @@ pub const MACHINE: &[Test] = &[
         || every_executable_of_a_program_with_with_and_try_does_what_the_evaluator_says(1),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_1_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_1_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(0),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_2_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_2_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(1),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_3_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_3_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(2),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_4_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_4_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(3),
     ),
     (
-        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_5_of_5",
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_5_of_8",
         || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(4),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_6_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(5),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_7_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(6),
+    ),
+    (
+        "every_executable_of_a_program_with_numbers_does_what_the_evaluator_says_part_8_of_8",
+        || every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(7),
     ),
     (
         "a_jump_gives_a_block_its_parameters_as_if_all_were_copied_at_once",
@@ -712,8 +724,11 @@ fn every_executable_of_a_program_with_reprs_does_what_the_evaluator_says(part: u
     every_executable_agrees(64, 15 * part, 15, reprs::program, |case| case.source.as_bytes());
 }
 
+/// The hundred programs of the seed, as the parts of eight: part `part` takes the
+/// programs `100 * part / 8` up to `100 * (part + 1) / 8`.
 fn every_executable_of_a_program_with_numbers_does_what_the_evaluator_says(part: u64) {
-    every_executable_agrees(74, 20 * part, 20, numbers::program, |case| case.source.as_bytes());
+    let (from, to) = (100 * part / 8, 100 * (part + 1) / 8);
+    every_executable_agrees(74, from, to - from, numbers::program, |case| case.source.as_bytes());
 }
 
 fn every_executable_of_a_program_with_choices_does_what_the_evaluator_says(part: u64) {
