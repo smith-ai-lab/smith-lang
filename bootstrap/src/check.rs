@@ -8695,6 +8695,7 @@ impl<'a> Checker<'a> {
             call_proofs: HashMap::new(),
         };
         body.facts.solving = self.solve.is_some();
+        body.facts.reads_bytes = self.needs_boundaries(f);
         if let Template::Free(_) = template {
             self.hold_changed(&mut body, f);
             for requirement in &f.requires {
