@@ -24,6 +24,7 @@ The modules of the standard library, one file each, named for the module. A modu
 - [json.md](json.md): `std.json`, which writes a value that has `Serialize` as JSON text and reads JSON text into a value that has `Deserialize`, the settings for how a case and a field's name look, and `RawJson`.
 - [jsonrpc.md](jsonrpc.md): `std.jsonrpc`, which reads and writes the messages of JSON-RPC 2.0 as values, with parameters and results left as `RawJson`.
 - [http.md](http.md): `std.http`, with which a program answers HTTP requests with plain functions, and `at`, which puts a server of messages at a path.
+- [message.md](message.md): `std.message`, which holds what a request and a response share: the method, a header's name and value, and a payload whose content type and length come only from how it was made.
 - [cloudflare.md](cloudflare.md): `std.cloudflare`, with which a program runs as a Cloudflare Worker: `durable`, which answers `store`, and `worker`, which writes what Cloudflare needs beside a built module.
 - [html.md](html.md): `std.html`, with which a page is written as calls of plain functions that write it as they run, with every text escaped.
 - [project.md](project.md): `std.project`, whose `Package` names the package a `project.smith` describes.
