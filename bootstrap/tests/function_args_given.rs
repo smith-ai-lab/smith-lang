@@ -18,8 +18,16 @@ pub const ONCE: &[Test] = &[
         the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_is,
     ),
     (
-        "a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has",
-        a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has,
+        "a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has_part_1_of_3",
+        || a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has(0),
+    ),
+    (
+        "a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has_part_2_of_3",
+        || a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has(1),
+    ),
+    (
+        "a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has_part_3_of_3",
+        || a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has(2),
     ),
     (
         "call_holds_the_function_once_and_no_copy_of_it",
@@ -106,7 +114,7 @@ fn the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_i
 /// A pattern for a parameter has no name for a field, so the function has no
 /// `Function` and is one error where its name is given for one. A `take`
 /// parameter is a field, and `call` spends it.
-fn a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has() {
+fn a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take_parameter_has(part: u64) {
     let program = |name: &str| {
         format!(
             "{USES}fn pat((a, b): (str, str)) -> str <alloc> {{ \"{{a}}{{b}}\" }}\n\n\
@@ -114,11 +122,16 @@ fn a_function_with_a_pattern_for_a_parameter_has_no_function_and_one_with_a_take
              fn main() <console, alloc> {{\n  print(run({name}, \"\\{{\\\"x\\\": \\\"v\\\"\\}}\"))\n}}\n"
         )
     };
-    assert!(errors(&program("spend")).is_empty());
-    assert_eq!(outcome(&program("spend")).stdout, b"spend.Args(x: \"v\") {\"x\":\"v\"} true\n");
-    let found = errors(&program("pat"));
-    assert_eq!(found.len(), 1, "{found:?}");
-    assert!(found[0].message.contains("`pat`") && found[0].message.contains("`Function`"));
+    // Each of the three is a part, so that no part compiles the same text twice.
+    match part {
+        0 => assert!(errors(&program("spend")).is_empty()),
+        1 => assert_eq!(outcome(&program("spend")).stdout, b"spend.Args(x: \"v\") {\"x\":\"v\"} true\n"),
+        _ => {
+            let found = errors(&program("pat"));
+            assert_eq!(found.len(), 1, "{found:?}");
+            assert!(found[0].message.contains("`pat`") && found[0].message.contains("`Function`"));
+        }
+    }
 }
 
 /// The number the function multiplies by, to find it again.
