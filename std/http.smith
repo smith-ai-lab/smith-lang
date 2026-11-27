@@ -915,7 +915,7 @@ enum Fault {
 // The bytes read so far with what the connection has sent since.
 fn fill(c: Connection, held: Slice[Byte]) -> Result[Slice[Byte], Fault] <net, alloc> {
   match read(c, most_read()) {
-    .ok(.bytes(bytes)) { Result.ok(freeze(append(copy(held), bytes))) }
+    .ok(.bytes(chunk)) { Result.ok(freeze(append(copy(held), chunk.bytes))) }
     .ok(.ended) { Result.err(Fault.ended) }
     .err(e) { Result.err(Fault.ended) }
   }

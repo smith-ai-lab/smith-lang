@@ -45,6 +45,14 @@ pub const ONCE: &[Test] = &[
         "each_case_of_a_net_error_is_written_as_its_address_and_what_went_wrong",
         each_case_of_a_net_error_is_written_as_its_address_and_what_went_wrong,
     ),
+    (
+        "a_read_that_gives_bytes_gives_a_chunk_of_at_least_one_and_a_handler_that_gives_none_is_refused",
+        a_read_that_gives_bytes_gives_a_chunk_of_at_least_one_and_a_handler_that_gives_none_is_refused,
+    ),
+    (
+        "a_caller_that_matches_bytes_indexes_the_first_with_no_check",
+        a_caller_that_matches_bytes_indexes_the_first_with_no_check,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[
@@ -594,7 +602,7 @@ fn main() <console, alloc> {
 const HANDLED: &str = "use std.console (console, print)
 use std.instant (instant, since_1970)
 use std.list (freeze)
-use std.net (Connection, Got, NetError, close, connect, net, read, release, write)
+use std.net (Chunk, Connection, Got, NetError, close, connect, net, read, release, write)
 use std.time (now, time)
 
 fn ask(question: str) -> Result[Got, NetError] <net, alloc> {
@@ -609,7 +617,7 @@ fn main() <console, alloc> {
     accept: fn(l) { .err(.refused(l.host)) },
     stop: fn(l) { n = release(l) },
     connect_to: fn(host, port) { .err(.refused(\"{host}:{port}\")) },
-    read: fn(c, most) { .ok(.bytes([104, 101, 108, 108, 111])) },
+    read: fn(c, most) { .ok(.bytes(Chunk(bytes: [104, 101, 108, 108, 111]))) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) { n = release(c) },
     bind_to: fn(host, port) { .err(.refused(host)) },
@@ -659,4 +667,92 @@ fn a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them
         };
         assert!(message.contains(target.name()), "{message}");
     }
+}
+
+/// A program that asks a handler of `net` for one read, whose `read` is the
+/// body given, and whose caller is the lines given.
+fn reading(read: &str, caller: &str) -> String {
+    format!(
+        "use std.bits (u8)
+use std.console (console, print)
+use std.list (copy)
+use std.net (Chunk, NetError, connect, connection, net, read, release)
+
+fn ask() -> Result[u8, NetError] <net, alloc> {{
+  with c = connect(\"example.test\", 7)
+{caller}
+}}
+
+fn main() <console, alloc> {{
+  net(
+    listen_on: fn(host, port) {{ .err(.refused(host)) }},
+    accept: fn(l) {{ .err(.refused(l.host)) }},
+    stop: fn(l) {{ n = release(l) }},
+    connect_to: fn(host, port) {{ .ok(connection(2)) }},
+    read: fn(c, most) {{ {read} }},
+    write: fn(c, bytes) {{ .ok(()) }},
+    close: fn(c) {{ n = release(c) }},
+    bind_to: fn(host, port) {{ .err(.refused(host)) }},
+    send: fn(s, to, bytes) {{ .ok(()) }},
+    receive: fn(s, most) {{ .err(.refused(s.host)) }},
+    unbind: fn(s) {{ n = release(s) }}
+  ) {{
+    match ask() {{
+      .ok(b) {{ print(\"{{b}}\") }}
+      .err(e) {{ print(\"another\") }}
+    }}
+  }}
+}}
+"
+    )
+}
+
+/// A caller that gives what it was given, as every test below needs one.
+const GIVES: &str = "  match try read(c, 16) {
+    .bytes(chunk) { .ok(0) }
+    .ended { .ok(0) }
+  }";
+
+/// A handler whose `read` gives `.bytes` of a chunk is built when the bytes are
+/// shown to be at least one, and refused, with what could not be proven stated,
+/// when they are none.
+fn a_read_that_gives_bytes_gives_a_chunk_of_at_least_one_and_a_handler_that_gives_none_is_refused() {
+    // The number of bytes a literal list gives.
+    generate::check_cases(53, 0, 2, |g: &mut Gen| g.below(40), |&n| {
+        let list = format!("[{}]", vec!["7"; n].join(", "));
+        let source = reading(&format!(".ok(.bytes(Chunk(bytes: {list})))"), GIVES);
+        let found = errors(&source);
+        if n >= 1 {
+            assert!(found.is_empty(), "{found:?} for\n{source}");
+        } else {
+            assert_eq!(found.len(), 1, "{found:?} for\n{source}");
+            assert!(found[0].message.contains("[].size >= 1"), "{found:?}");
+        }
+    });
+    // A list that is known only when the program runs is built after the test.
+    let tested = "
+      got = copy(\"{most}\".bytes)
+      if got.size >= 1 { .ok(.bytes(Chunk(bytes: got))) } else { .ok(.ended) }
+    ";
+    let found = errors(&reading(tested, GIVES));
+    assert!(found.is_empty(), "{found:?}");
+    let untested = "
+      got = copy(\"{most}\".bytes)
+      .ok(.bytes(Chunk(bytes: got)))
+    ";
+    let found = errors(&reading(untested, GIVES));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].message.contains("size >= 1"), "{found:?}");
+}
+
+/// A caller that matches `.bytes(c)` has `c.bytes.size >= 1` as a fact, so
+/// `c.bytes[0]` is built with no check, and gives the first byte read.
+fn a_caller_that_matches_bytes_indexes_the_first_with_no_check() {
+    let unchecked = "  match try read(c, 16) {
+    .bytes(chunk) { .ok(chunk.bytes[0]) }
+    .ended { .ok(0) }
+  }";
+    let program = lower(reading(".ok(.bytes(Chunk(bytes: [9, 8])))", unchecked).as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let outcome = scalar::run(&program);
+    assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "9\n");
 }

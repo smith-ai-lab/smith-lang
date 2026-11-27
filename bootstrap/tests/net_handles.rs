@@ -114,7 +114,7 @@ fn server(handle: u64) -> String {
         "use std.console (console)
 use std.list (copy, freeze)
 use std.mcp (messages, mcp, stdio, tool)
-use std.net (NetError, connect, connection, handle, net, read, release, write)
+use std.net (Chunk, NetError, connect, connection, handle, net, read, release, write)
 use std.utf8 (utf8)
 
 // Asks the peer a word, and gives what it answers.
@@ -122,8 +122,8 @@ fn ask(word: str) -> Result[str, NetError] <net, alloc> {{
   with c = connect(\"peer.test\", 7)
   try write(c, word.bytes)
   match try read(c, 64) {{
-    .bytes(bytes) {{
-      match utf8(freeze(bytes)) {{
+    .bytes(chunk) {{
+      match utf8(freeze(chunk.bytes)) {{
         .ok(text) {{ .ok(text) }}
         .err(e) {{ .err(.failed((\"peer.test:7\", \"not text\"))) }}
       }}
@@ -143,7 +143,10 @@ fn peer[T](body: fn() -> T <net>) -> T <alloc> {{
     accept: fn(l) {{ .err(.refused(l.host)) }},
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .ok(connection({handle})) }},
-    read: fn(c, most) {{ .ok(.bytes(copy(\"{{handle(c)}} read {{most}}\".bytes))) }},
+    read: fn(c, most) {{
+      said = copy(\"{{handle(c)}} read {{most}}\".bytes)
+      if said.size >= 1 {{ .ok(.bytes(Chunk(bytes: said))) }} else {{ .ok(.ended) }}
+    }},
     write: fn(c, bytes) {{ .ok(()) }},
     close: fn(c) {{ n = release(c) }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},

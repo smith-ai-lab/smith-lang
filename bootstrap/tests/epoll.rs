@@ -42,9 +42,9 @@ use std.task (join, spawn, tasks)
 fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
-    .ok(.bytes(bytes)) {
-      size = bytes.size
-      _ = write(c, freeze(bytes))
+    .ok(.bytes(chunk)) {
+      size = chunk.bytes.size
+      _ = write(c, freeze(chunk.bytes))
     }
     .ok(.ended) { }
     .err(e) { }
@@ -94,9 +94,9 @@ use std.task (join, spawn, task, tasks)
 fn turn(c: take Connection) -> u64 <net, alloc> {
   var size: u64 = 0
   match read(c, 64) {
-    .ok(.bytes(bytes)) {
-      size = bytes.size
-      _ = write(c, freeze(bytes))
+    .ok(.bytes(chunk)) {
+      size = chunk.bytes.size
+      _ = write(c, freeze(chunk.bytes))
     }
     .ok(.ended) { }
     .err(e) { }
