@@ -34,8 +34,16 @@ pub const ONCE: &[Test] = &[
         || a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(3),
     ),
     (
-        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values",
-        a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values,
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_1_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(0),
+    ),
+    (
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_2_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(1),
+    ),
+    (
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_3_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(2),
     ),
     (
         "a_value_of_the_struct_has_the_statement_of_its_fields_wherever_it_is_held",
@@ -173,9 +181,8 @@ fn a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values
 
 /// A proof written for the field is accepted exactly when it is of the
 /// statement for the values given, and not for what else is known.
-fn a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values()
-{
-    generate::check(5602, 80, owing, |o: &Owing| {
+fn a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(part: u64) {
+    generate::check_part(5602, 80, part, 3,owing, |o: &Owing| {
         let (t, owed, tested) = (o.ty, &o.owed, &o.tested);
         let (held, _) = pair(t, owed);
         let given = with_header(format!(
