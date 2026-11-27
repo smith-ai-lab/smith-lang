@@ -292,12 +292,29 @@ fn each_name_of_the_library_that_the_file_imports_is_not_refused(part: usize) {
     modules.sort_by_key(|(module, _)| (std::cmp::Reverse(size(module)), *module));
     // The names of a module are checked a few at a time, as a call that is not
     // right for its function costs the check more the more of them a program
-    // holds, so that the module of `std.fetch` is in more than one part.
-    let pieces: Vec<(&str, &[&str])> = modules
+    // holds, so that the module of `std.fetch` is in more than one part. A
+    // function costs the check about six times what a type does, and the pieces
+    // are dealt, the dearest first, each to the part that holds the least yet,
+    // so that no part is the one that holds the dear ones.
+    let cost = |names: &[&str]| -> usize {
+        names.iter().map(|n| if n.starts_with(|c: char| c.is_ascii_lowercase()) { 6 } else { 1 }).sum::<usize>() + 2
+    };
+    let mut pieces: Vec<(usize, &str, &[&str])> = modules
         .iter()
         .flat_map(|(module, held)| held.chunks(NAMES_AT_ONCE).map(move |names| (*module, names)))
+        .map(|(module, names)| (cost(names), module, names))
         .collect();
-    for (module, held) in pieces.iter().skip(part).step_by(PARTS) {
+    pieces.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(b.1)).then(a.2.cmp(b.2)));
+    let mut load = [0usize; PARTS];
+    let mut mine: Vec<(&str, &[&str])> = Vec::new();
+    for (cost, module, names) in pieces {
+        let lightest = (0..PARTS).min_by_key(|p| load[*p]).unwrap();
+        load[lightest] += cost;
+        if lightest == part {
+            mine.push((module, names));
+        }
+    }
+    for (module, held) in mine {
         let uses = format!("use std.{module} ({})\n\n", held.join(", "));
         let mut program = String::from("fn main() {\n");
         for (i, name) in held.iter().enumerate() {
