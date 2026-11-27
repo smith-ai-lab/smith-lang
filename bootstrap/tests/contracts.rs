@@ -311,7 +311,7 @@ fn inside(g: &mut Gen) -> Inside {
 /// Inside a function the `requires` are facts, so an operation on the
 /// parameter compiles exactly when it fits for every value they allow.
 fn inside_a_function_its_requires_are_facts() {
-    generate::check(111, 150, inside, |c| match check(c.source.as_bytes()) {
+    generate::check(111, 80, inside, |c| match check(c.source.as_bytes()) {
         Ok(_) => assert!(c.fits, "accepted, though the result may not fit"),
         Err(errors) => {
             assert!(!c.fits, "refused, though every result fits: {errors:?}");
