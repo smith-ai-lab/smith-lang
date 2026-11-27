@@ -16,12 +16,20 @@ use crate::numbers::{INTS, Int, compare, with_header};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_call_compiles_exactly_when_its_arguments_satisfy_every_requires",
-        a_call_compiles_exactly_when_its_arguments_satisfy_every_requires,
+        "a_call_compiles_exactly_when_its_arguments_satisfy_every_requires_part_1_of_2",
+        || a_call_compiles_exactly_when_its_arguments_satisfy_every_requires(0),
     ),
     (
-        "a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is",
-        a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is,
+        "a_call_compiles_exactly_when_its_arguments_satisfy_every_requires_part_2_of_2",
+        || a_call_compiles_exactly_when_its_arguments_satisfy_every_requires(1),
+    ),
+    (
+        "a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is_part_1_of_2",
+        || a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is(0),
+    ),
+    (
+        "a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is_part_2_of_2",
+        || a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is(1),
     ),
     (
         "inside_a_function_its_requires_are_facts",
@@ -165,8 +173,8 @@ fn call(g: &mut Gen) -> Call {
 /// For every function with several `requires`, each a comparison of whole
 /// numbers joined with `and`, `or`, and `not`, a call compiles exactly when
 /// `arith` proves them of the call's arguments, and prints what it was given.
-fn a_call_compiles_exactly_when_its_arguments_satisfy_every_requires() {
-    generate::check(110, 150, call, |c| match check(c.source.as_bytes()) {
+fn a_call_compiles_exactly_when_its_arguments_satisfy_every_requires(part: u64) {
+    generate::check_part(110, 150, part, 2, call, |c| match check(c.source.as_bytes()) {
         Ok(_) => {
             assert!(c.holds, "accepted, though a `requires` does not hold");
             assert_eq!(
@@ -234,8 +242,8 @@ fn predicates(g: &mut Gen) -> Call {
 /// effect that return a comparison, or a call of another, a call compiles
 /// exactly when the comparisons hold of its arguments, as with the
 /// expressions written in place, and the program prints the same.
-fn a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is() {
-    generate::check(111, 150, predicates, |c| match check(c.source.as_bytes()) {
+fn a_requires_that_calls_a_predicate_is_owed_exactly_as_the_expression_it_returns_is(part: u64) {
+    generate::check_part(111, 150, part, 2, predicates, |c| match check(c.source.as_bytes()) {
         Ok(_) => {
             assert!(c.holds, "accepted, though a predicate does not hold");
             assert_eq!(
