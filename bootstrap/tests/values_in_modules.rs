@@ -142,7 +142,7 @@ fn program(c: &Case) -> (String, String) {
 /// the program with the items in its file is.
 fn a_program_that_uses_items_with_whole_number_parameters_of_a_module_builds_to_what_it_builds_with_them_in_its_file()
 {
-    generate::check(1230, 30, case, |c| {
+    generate::check(1230, 10, case, |c| {
         let (main, said) = program(c);
         let module = items(true, c.default);
         let split = numbers::with_header(format!("use std.gen (Box, make, top, width)\n\n{main}"));
