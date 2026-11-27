@@ -76,7 +76,7 @@ bind_pat   = IDENT | "_" | "var" IDENT | tuple_pat ;
 effects    = "<" IDENT { "," IDENT } [ "," ] ">" ;
 contract   = ( "requires" | "ensures" ) expr | "decreases" expr { "," expr } ;
 
-struct_def = "struct" IDENT [ generics ] "{" { [ "pub" ] IDENT ":" type [ "=" expr ] } "}" ;
+struct_def = "struct" IDENT [ generics ] "{" { [ "pub" ] IDENT ":" type [ "=" expr ] } "}" ;   (* a field whose type is a statement holds a proof of it *)
 alias_def  = "type" IDENT [ generics ] "=" type ;
 enum_def   = "enum" IDENT [ generics ] "{" { IDENT [ ":" type ] } "}" ;
 trait_def  = "trait" IDENT generics "{" { fn_sig } "}" ;

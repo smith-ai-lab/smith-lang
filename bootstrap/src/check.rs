@@ -956,6 +956,10 @@ struct Defs<'a> {
     struct_scopes: Vec<Scope>,
     /// The type of each field of each struct, among its type parameters.
     fields: Vec<Vec<Ty>>,
+    /// For each struct that holds a proof, the function its construction is
+    /// checked as: the fields are its parameters, and each proof field is a
+    /// proof parameter with the default `arith`.
+    constructions: Vec<Option<(Function, Signature)>>,
     /// For each field that holds a function, the function type it is written
     /// with, which is what a call of it is checked against while the function
     /// it holds is not known.
@@ -1485,6 +1489,21 @@ impl<'a> Defs<'a> {
             Error::new(t.pos, format!("there is no type named `{name}`"))
         });
         Ty::Unknown
+    }
+
+    /// The fields of a struct that hold data, by their places: those that are
+    /// not a proof, which is erased and is in no value.
+    fn data_fields(&self, s: usize) -> Vec<usize> {
+        (0..self.file.structs[s].fields.len())
+            .filter(|&i| self.file.structs[s].fields[i].ty.statement.is_none())
+            .collect()
+    }
+
+    /// The types of the data fields of a struct, among the types it is given.
+    fn data_types(&self, s: usize, args: &[Ty]) -> Vec<Ty> {
+        (self.data_fields(s).into_iter())
+            .map(|i| self.fields[s][i].subst(args))
+            .collect()
     }
 
     /// The prelude's `bool`.
@@ -2968,6 +2987,7 @@ fn check_file(
         cyclic: vec![false; file.structs.len()],
         cyclic_enums: vec![false; file.enums.len()],
         implicit: vec![0; file.structs.len()],
+        constructions: Vec::new(),
         field_items: Vec::new(),
         env_lambdas: Vec::new(),
         env_at: Map::default(),
@@ -3059,6 +3079,15 @@ fn check_file(
             (s.fields.iter())
                 .map(|f| defs.quietly(&f.ty, &defs.struct_scopes[i]))
                 .collect()
+        })
+        .collect();
+    defs.constructions = (0..file.structs.len())
+        .map(|s| {
+            (file.structs[s]
+                .fields
+                .iter()
+                .any(|f| f.ty.statement.is_some()))
+            .then(|| construction_as_call(&defs, s))
         })
         .collect();
     defs.field_items = (file.structs.iter().enumerate())
@@ -3669,7 +3698,12 @@ fn reach(
                     type_name(name, pos, &mut found)
                 });
                 let defaults = s.fields.iter().filter_map(|f| f.default.as_ref());
-                called(defaults.collect(), &[], &mut found);
+                // What a proof field says is a contract, which is reached
+                // only where contracts are looked in.
+                let statements = (s.fields.iter())
+                    .filter_map(|f| f.ty.statement.as_deref())
+                    .filter(|_| contracts);
+                called(defaults.chain(statements).collect(), &[], &mut found);
                 found.extend(
                     for_type
                         .get(&(false, si))
@@ -8093,6 +8127,10 @@ impl<'a> Checker<'a> {
                 self.default(value, ty, scope, Vec::new(), Vec::new());
             }
         }
+        // What a proof field says is a statement about the other fields.
+        if let Some((function, signature)) = &defs.constructions[s] {
+            self.contracts(function, signature);
+        }
     }
 
     /// Checks an enum: its type parameters, each named by a case's type,
@@ -9114,7 +9152,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         let mut ty = body.names[at].1.clone();
-        for (field, pos) in fields {
+        for (k, (field, pos)) in fields.iter().enumerate() {
             ty = match ty {
                 Ty::Struct(s, args) => {
                     let def = &defs.file.structs[s];
@@ -9122,6 +9160,9 @@ impl<'a> Checker<'a> {
                         Some(at) => {
                             if hidden(def, &def.fields[at], *pos) {
                                 self.errors.push(private_field(def, field, *pos));
+                            }
+                            if k + 1 == fields.len() {
+                                self.refuse_named_field(def, field, *pos);
                             }
                             defs.fields[s][at].subst(&args)
                         }
@@ -9148,6 +9189,44 @@ impl<'a> Checker<'a> {
             };
         }
         Some(ty)
+    }
+
+    /// Refuses the assignment of a field that a proof field's statement, or
+    /// the type of another field, names: it would leave the proof proving what
+    /// is no longer so.
+    fn refuse_named_field(&mut self, def: &Struct, field: &str, pos: Pos) {
+        for other in &def.fields {
+            let names = |t: &Type| names_the_field(t, field);
+            if other.name == field || !names(&other.ty) {
+                continue;
+            }
+            let message = if other.ty.statement.is_some() {
+                format!(
+                    "`{field}` cannot be assigned, as `{}` is a proof about it",
+                    other.name
+                )
+            } else {
+                format!(
+                    "`{field}` cannot be assigned, as the type of `{}` names it",
+                    other.name
+                )
+            };
+            let fix = if other.ty.statement.is_some() {
+                format!(
+                    "build the value again, as `{}({field}: e)`",
+                    crate::values::copy_of(&def.name)
+                        .map_or(written_name(&def.name), |(template, _)| template)
+                )
+            } else {
+                format!(
+                    "build the value again, as `{}(...)`",
+                    crate::values::copy_of(&def.name)
+                        .map_or(written_name(&def.name), |(template, _)| template)
+                )
+            };
+            self.errors.push(Error::new(pos, message).with_fix(fix));
+            return;
+        }
     }
 
     /// Checks an expression against what is wanted of it, and gives its
@@ -10598,7 +10677,7 @@ impl<'a> Checker<'a> {
         }
         let missing: Vec<&str> = (def.fields.iter())
             .zip(&given)
-            .filter(|(f, given)| !**given && f.default.is_none())
+            .filter(|(f, given)| !**given && f.default.is_none() && f.ty.statement.is_none())
             .map(|(f, _)| f.name.as_str())
             .collect();
         // A field given by position may be one of those missing.
@@ -10610,6 +10689,9 @@ impl<'a> Checker<'a> {
         }
         if defs.cyclic[s] {
             return Ty::Unknown;
+        }
+        if self.errors.len() == before && def.fields.iter().any(|f| f.ty.statement.is_some()) {
+            self.owe_proof_fields(body, call, s);
         }
         if self.errors.len() == before && self.function_for_parameter(&sol, call.pos) {
             return Ty::Unknown;
@@ -10630,6 +10712,121 @@ impl<'a> Checker<'a> {
         let args = sol.into_iter().map(|t| t.unwrap_or(Ty::Unknown)).collect();
         Ty::structure(s, args)
     }
+}
+
+/// The function a construction of the struct `s` is checked as: its fields
+/// are its parameters, and the statement of each proof field is a proof
+/// parameter with the default `arith`, so that what a construction owes is
+/// what a call owes.
+fn construction_as_call(defs: &Defs, s: usize) -> (Function, Signature) {
+    let def = &defs.file.structs[s];
+    let mut params = Vec::new();
+    let mut requires = Vec::new();
+    for field in &def.fields {
+        let proof = field.ty.statement.is_some();
+        if let Some(statement) = field.ty.statement.as_deref() {
+            requires.push(statement.clone());
+        }
+        params.push(crate::parser::Param {
+            name: field.name.clone(),
+            pos: field.pos,
+            ty: field.ty.clone(),
+            default: proof.then(|| Expr::Name {
+                name: "arith".to_string(),
+                pos: field.pos,
+            }),
+            take: false,
+            takes: Vec::new(),
+            effects: Vec::new(),
+            by_name: false,
+        });
+    }
+    let function = Function {
+        name: written_name(&def.name).to_string(),
+        pos: def.pos,
+        generics: Vec::new(),
+        params,
+        result: None,
+        result_name: None,
+        effects: Vec::new(),
+        requires,
+        needs: Vec::new(),
+        notes: Vec::new(),
+        ensures: Vec::new(),
+        decreases: Vec::new(),
+        body: Vec::new(),
+        end: def.pos,
+    };
+    let signature = Signature {
+        scope: defs.struct_scopes[s].clone(),
+        params: (def.fields.iter().zip(&defs.fields[s]))
+            .map(|(f, t)| (f.name.clone(), t.clone()))
+            .collect(),
+        written: Vec::new(),
+        defaults: def
+            .fields
+            .iter()
+            .map(|f| f.ty.statement.is_some())
+            .collect(),
+        param_defaults: Vec::new(),
+        named_from: None,
+        gives: Ty::Nothing,
+        gives_param: None,
+        gives_held: Vec::new(),
+        effects: Vec::new(),
+        fn_effects: Vec::new(),
+    };
+    (function, signature)
+}
+
+impl<'a> Checker<'a> {
+    /// A construction owes the proof of each proof field of the struct: one
+    /// written for it is of the statement with the values given put in, and
+    /// one left out is built by `arith` from what is known.
+    fn owe_proof_fields(&mut self, body: &mut Body<'a>, call: &Call, s: usize) {
+        let defs = self.defs;
+        let def = &defs.file.structs[s];
+        let Some((function, signature)) = &defs.constructions[s] else {
+            return;
+        };
+        let mut next = 0;
+        let mut args = Vec::new();
+        for arg in &call.args {
+            let place = match &arg.name {
+                Some((name, _)) => def.fields.iter().position(|f| &f.name == name),
+                None => {
+                    next += 1;
+                    Some(next - 1)
+                }
+            };
+            if let Some(place) = place {
+                args.push((&arg.value, place));
+            }
+        }
+        self.contract_at(
+            body,
+            (call.pos, addr(call), Some(call)),
+            args,
+            function,
+            signature,
+        );
+    }
+}
+
+/// Whether a type written in a struct names the field `field`: a statement
+/// that reads it, a bound of a range, or the type of an element.
+fn names_the_field(t: &Type, field: &str) -> bool {
+    if let Some(statement) = t.statement.as_deref() {
+        let mut all = Vec::new();
+        walk(statement, &mut all);
+        return all
+            .iter()
+            .any(|e| matches!(e, Expr::Name { name, .. } if name == field));
+    }
+    let bound = |b: &Bound| matches!(b.named(), Some(n) if n == field);
+    t.range.as_ref().is_some_and(|(a, b)| bound(a) || bound(b))
+        || t.name == field
+        || t.args.iter().any(|a| names_the_field(a, field))
 }
 
 /// Whether a function is a proof: its result is a statement.

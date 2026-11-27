@@ -317,6 +317,7 @@ fn known_bounds(facts: &Facts, lin: &Lin) -> Option<(i128, i128)> {
 
 /// Turns expressions into sums of variables.
 struct Builder<'b, 'a> {
+    checker: &'b Checker<'a>,
     body: &'b Body<'a>,
     types: &'b HashMap<usize, Ty>,
     facts: &'b mut Facts,
@@ -539,6 +540,7 @@ impl Builder<'_, '_> {
                 if name == "size" {
                     hi = hi.min(self.size_most(of));
                 }
+                self.hold_proof_fields(of);
                 match self.path(e) {
                     Some(path) => Some(self.variable(Key::Field(path, lo, hi))),
                     None => self.goal.then(|| {
@@ -612,6 +614,49 @@ impl Builder<'_, '_> {
             }
             _ => self.goal.then(|| self.fresh(e)),
         }
+    }
+
+    /// A struct that holds a proof is a value whose fields the proof is of, so
+    /// what each proof field says of the fields of `of` is known wherever
+    /// `of` is read from.
+    fn hold_proof_fields(&mut self, of: &Expr) {
+        if self.facts.subst.is_some() {
+            return;
+        }
+        let Some(Ty::Struct(s, _)) = self.types.get(&addr(of)) else {
+            return;
+        };
+        let defs = self.checker.defs;
+        let def = &defs.file.structs[*s];
+        if def.fields.iter().all(|f| f.ty.statement.is_none()) {
+            return;
+        }
+        let Some(path) = self.path(of) else {
+            return;
+        };
+        let mut sums = HashMap::new();
+        for (field, ty) in def.fields.iter().zip(&defs.fields[*s]) {
+            if let Ty::Int(t) = ty {
+                let key = Key::Field(format!("{path}.{}", field.name), t.min(), t.max());
+                let sum = self.variable(key);
+                sums.insert(field.name.clone(), sum);
+            }
+        }
+        let overflow = self.overflow;
+        for field in &def.fields {
+            let Some(statement) = field.ty.statement.as_deref() else {
+                continue;
+            };
+            self.facts.subst = Some(sums.clone());
+            let said = self.checker.said(self.body, self.facts, statement, true);
+            self.facts.subst = None;
+            if let Some(said) = said
+                && !self.facts.known.contains(&said)
+            {
+                self.facts.known.push(said);
+            }
+        }
+        self.overflow = overflow;
     }
 
     /// Whether `goal` follows from what is known.
@@ -819,6 +864,21 @@ impl Builder<'_, '_> {
             // one is known of the size of the other.
             Expr::Field { of, name, .. } if name == "bytes" && self.is_text(of) => self.path(of),
             Expr::Field { of, name, .. } => Some(format!("{}.{name}", self.path(of)?)),
+            // An element of a list that is never assigned, at a number or at
+            // a name that is not a `var`.
+            Expr::Index { of, index, .. } => {
+                let base = self.path(of)?;
+                let at = match &**index {
+                    Expr::Number {
+                        magnitude,
+                        negative: false,
+                        ..
+                    } => magnitude.to_string(),
+                    Expr::Name { .. } => self.path(index)?,
+                    _ => return None,
+                };
+                (!base.contains('@') && !at.contains('@')).then(|| format!("{base}[{at}]"))
+            }
             _ => None,
         }
     }
@@ -847,6 +907,7 @@ impl<'a> Checker<'a> {
         goal: bool,
     ) -> Builder<'b, 'a> {
         Builder {
+            checker: self,
             body,
             types: &self.types,
             facts,
@@ -2396,10 +2457,13 @@ impl<'a> Checker<'a> {
         facts.args = Some(given);
         self.statements_name_no_var(body, &args, callee);
         // A proof written at the call is one of what the parameter owes.
+        let mut judged = Vec::new();
         for &(arg, place) in &args {
             if let Some(owed) = owed_by(callee, place) {
                 let name = (callee.params[place].name.as_str(), callee.name.as_str());
-                self.proof_argument(body, &mut facts, arg, owed, name, &texts);
+                if self.proof_argument(body, &mut facts, arg, owed, name, &texts) {
+                    judged.extend(callee.requires.iter().position(|r| std::ptr::eq(r, owed)));
+                }
             }
         }
         // A proof parameter with no default is always passed, and the call that
@@ -2412,7 +2476,8 @@ impl<'a> Checker<'a> {
             })
             .collect();
         for (at, requirement) in callee.requires.iter().enumerate() {
-            if left_out.contains(&at) {
+            // A proof that is passed is judged for what it proves alone.
+            if left_out.contains(&at) || judged.contains(&at) {
                 continue;
             }
             let said = self.said(body, &mut facts, requirement, true);
@@ -2491,7 +2556,7 @@ impl<'a> Checker<'a> {
         owed: &Expr,
         (param, callee): (&str, &str),
         texts: &HashMap<String, String>,
-    ) {
+    ) -> bool {
         let (name, pos, held) = match arg {
             Expr::Name { name, pos } => {
                 let held = body.proofs.iter().rfind(|(n, _)| n == name);
@@ -2499,14 +2564,14 @@ impl<'a> Checker<'a> {
                     // What is not a proof is the wrong type, which is reported
                     // where the arguments are checked, and a name that is not
                     // defined where it is read.
-                    return;
+                    return false;
                 };
                 (name.as_str(), *pos, held.clone())
             }
             Expr::Call(c) if body.call_proofs.contains_key(&addr(c)) => {
                 (c.callee.as_str(), c.pos, body.call_proofs[&addr(c)].clone())
             }
-            _ => return,
+            _ => return false,
         };
         self.proof_names.insert(addr(arg));
         let written = written_contract(&|n| texts.get(n).cloned(), owed);
@@ -2530,6 +2595,7 @@ impl<'a> Checker<'a> {
                 .with_fix("pass a proof of the statement the parameter is of"),
             );
         }
+        true
     }
 
     /// The function a call is of, when it is one the kernel works out for a

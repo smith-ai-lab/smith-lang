@@ -80,7 +80,7 @@ A reader gives names and is given none, so a type holds no table of its fields: 
 
 ## Given automatically
 
-A struct, an enum, a tuple, a list, and an `Option` have `Deserialize` when each of their parts has it, as they have `Serialize`. The numbers, `bool`, `str`, and `()` have it. [`without`](../language/without.md) takes it away, and a type's own `impl` replaces it.
+A struct, an enum, a tuple, a list, and an `Option` have `Deserialize` when each of their parts has it, as they have `Serialize`. The numbers, `bool`, `str`, and `()` have it. [`without`](../language/without.md) takes it away, and a type's own `impl` replaces it. A struct that holds a [proof field](../language/proof-fields.md) has none, as nothing that is read holds a proof: it is read by a function that reads the data and tests the statement with [`check`](../language/check.md).
 
 A number that the type cannot hold is an error: a `u8` is read with `unsigned`, and 300 is refused. Nothing is turned into another shape to make it fit.
 

@@ -7,6 +7,7 @@ built:
   - "`Ord` given to a `str`, a struct, an enum, a tuple, `bool`, and `()`, from their parts as the page says, and `without Ord for T`, which takes it away, and a type's own `impl Ord`, which replaces it"
   - "An `impl Eq[T]` that a program writes is refused, as `==` is only the `Eq` a type is given"
   - "`Eq` of a `List` and of a `Slice`, which are equal when they have the same size and equal elements in order, and a list whose element has no `Eq` has none; not `Ord` of a list or a slice"
+  - "`Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` of a struct, which leave its proof fields out"
   - "`without Eq for T`, which takes away the `Eq` a struct was given, and a struct with a part that has no `Eq` has none"
 ---
 
@@ -61,7 +62,7 @@ struct Cursor[size: Nat] {
 }
 ```
 
-`Cursor(at: 4) == Cursor(at: 4)` is `true`, and `Cursor(at: 1) < Cursor(at: 4)` is `true`. `"{Cursor(at: 4)}"` is `Cursor(at: 4)`, and so is `repr(Cursor(at: 4))`, which is how the value is written in source: a program that holds that text builds the `Cursor` again, and the construction proves `inside` again.
+`Cursor(at: 4) == Cursor(at: 4)` is `true`, and `Cursor(at: 1) < Cursor(at: 4)` is `true`. `"{Cursor(at: 4)}"` is `Cursor(at: 4)`, and so is `repr(Cursor(at: 4))`, which is how the value is written in source: a program that holds that text builds the `Cursor` again, and the construction proves `inside` again. `Hash`, `Serialize`, and `Describe` leave it out as well. `Deserialize` is not given to a struct that holds a proof, as nothing that is read holds one, so such a struct is read by a function that reads its data and tests the statement with [`check`](check.md).
 
 ## Taking one away
 

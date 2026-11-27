@@ -135,7 +135,9 @@ fn head(path: str) -> Result[List[Byte], FsError] <fs, alloc> {{
   read(f, 0..64)
 }}
 
-fn window(path: str, from: Nat, to: Nat) -> Result[List[Byte], FsError] <fs, alloc> {{
+fn window(path: str, from: Nat, to: Nat) -> Result[List[Byte], FsError] <fs, alloc>
+  requires from <= to
+{{
   with f = open(path)
   read(f, from..to)
 }}

@@ -1,0 +1,19 @@
+use std.console (console, print)
+
+struct Cursor {
+  at: Nat
+  inside: at <= 10
+}
+
+fn first() -> Cursor { Cursor(at: 4) }
+
+fn step(c: Cursor) -> Cursor {
+  if c.at < 10 { Cursor(at: c.at + 1) } else { c }
+}
+
+fn main() <console, alloc> {
+  c = step(first())
+  print("{c.at}")
+  print("{c == step(first())}")
+  print("{c}")
+}

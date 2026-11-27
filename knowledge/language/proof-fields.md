@@ -2,7 +2,12 @@
 type: specification
 title: A struct that holds a proof
 description: A statement about values is a type, a struct holds a proof as a field where a fact joins two values, a fact about one number is its range, an index that travels is a range, and a fact that must hold in every round of a loop is kept in a type.
-status: planned
+status: partial
+built:
+  - "a struct whose field has a statement as its type, a proof field, such as `inside: at <= size`: a construction leaves it out and `arith` builds it from the values given, refused with the goal stated for them where it cannot, or gives a proof of the statement for those values and no other; a value of the struct that is read from a parameter, a field, an item of a list at a number or a name, a `var`, or a name bound by a `loop` has the statement of its fields as a fact; the field is in no value, no layout, and no executable"
+  - "an assignment to a field that a proof field's statement or the type of another field names is refused, with the fix that builds the value again; a field nothing names is assigned as before"
+  - "`Eq`, `Ord`, `Fmt`, `Repr`, `Hash`, `Serialize`, and `Describe` of a struct that leave its proof fields out, and no automatic `Deserialize` for a struct that holds one"
+  - "not a fact for a value taken apart by a pattern of its fields; not a proof field in a case of an enum"
 ---
 
 # A struct that holds a proof

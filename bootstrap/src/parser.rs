@@ -345,7 +345,7 @@ impl Bound {
     }
 
     /// The name that the bound is about, if it is about one.
-    fn named(&self) -> Option<&str> {
+    pub fn named(&self) -> Option<&str> {
         match self {
             Bound::Number(_) => None,
             Bound::Name(n) | Bound::Size(n) => Some(n),
@@ -1608,8 +1608,13 @@ impl Parser<'_> {
             }
             let (name, pos) = self.defined("a field or `}`")?;
             self.expect_punct(":", "`:` and the field's type")?;
+            // A field whose type is a statement holds a proof of it.
+            let proof = self.statement_type();
             self.no_names = Some(NoNames::Field);
-            let ty = self.ty();
+            let ty = match proof {
+                Some(statement) => Ok(statement),
+                None => self.ty(),
+            };
             self.no_names = None;
             let mut ty = ty?;
             // A field of a function type is a field whose type is a type

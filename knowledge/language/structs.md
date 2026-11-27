@@ -6,6 +6,7 @@ status: partial
 built:
   - "structs with fields and defaults, reading a field, and assigning to a field of a `var` with `=`"
   - "a struct that takes a whole number as a parameter, written `[n: Nat]` or `[n: Pos]`, which a type names with the number written out, as `Box[10]`, and whose name is a bound in the type of a field, as `0..n`, and a construction that leaves the number out, which takes it from the type it must give"
+  - "a field whose type is a statement, which holds a proof, as [A struct that holds a proof](proof-fields.md) says"
   - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes a type after the name; one that states its type is not built yet"
 ---
 

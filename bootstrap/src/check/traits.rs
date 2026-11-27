@@ -1013,9 +1013,16 @@ impl<'a> Defs<'a> {
             return match &types[0] {
                 Ty::Text | Ty::Nothing | Ty::Int(_) => Some(Vec::new()),
                 Ty::List(of) => Some(vec![of[0].clone()]),
-                Ty::Struct(s, args) if !taken(Def::Struct(*s)) => {
-                    Some(self.fields[*s].iter().map(|t| t.subst(args)).collect())
+                // What is read cannot give a proof, as no fact is known of it
+                // when the program is built, so a struct that holds one is not
+                // read by what is given automatically.
+                Ty::Struct(s, _)
+                    if self.deserialize == Some(k)
+                        && self.data_fields(*s).len() < self.fields[*s].len() =>
+                {
+                    None
                 }
+                Ty::Struct(s, args) if !taken(Def::Struct(*s)) => Some(self.data_types(*s, args)),
                 Ty::Enum(e, args) if !taken(Def::Enum(*e)) => (self.cases[*e].iter().flatten())
                     .map(|t| Some(t.subst(args)))
                     .collect(),
@@ -1035,9 +1042,7 @@ impl<'a> Defs<'a> {
             Ty::List(of) | Ty::Slice(of) if k == self.fmt || k == self.repr || k == self.eq => {
                 Some(vec![of[0].clone()])
             }
-            Ty::Struct(s, args) if !taken(Def::Struct(*s)) => {
-                Some(self.fields[*s].iter().map(|t| t.subst(args)).collect())
-            }
+            Ty::Struct(s, args) if !taken(Def::Struct(*s)) => Some(self.data_types(*s, args)),
             Ty::Enum(e, args) if !taken(Def::Enum(*e)) => (self.cases[*e].iter().flatten())
                 .map(|t| Some(t.subst(args)))
                 .collect(),
@@ -1361,6 +1366,16 @@ impl<'a> Defs<'a> {
                 ", as `{}` contains itself, and a type that does is given no `{}` until a function may call itself, which is not supported yet",
                 self.text(&own, scope),
                 self.file.traits[k].name
+            );
+        }
+        if self.deserialize == Some(k)
+            && let Ty::Struct(s, _) = t
+            && let Some(at) =
+                (self.file.structs[*s].fields.iter()).position(|f| f.ty.statement.is_some())
+        {
+            return format!(
+                ", as `{}` is a proof, which nothing that is read holds",
+                self.file.structs[*s].fields[at].name
             );
         }
         match self.lacking(k, t, scope) {

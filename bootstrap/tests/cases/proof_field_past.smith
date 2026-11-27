@@ -1,0 +1,15 @@
+use std.console (console, print)
+
+struct Cursor {
+  at: Nat
+  inside: at <= 10
+}
+
+fn past(c: Cursor) -> Cursor {
+  Cursor(at: c.at + 1)
+}
+
+fn main() <console, alloc> {
+  c = past(Cursor(at: 4))
+  print("{c.at}")
+}
