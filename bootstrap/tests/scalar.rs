@@ -77,20 +77,36 @@ pub const ONCE: &[Test] = &[
         a_read_or_a_write_that_is_not_through_an_address_or_not_of_its_type_is_refused,
     ),
     (
-        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_1_of_4",
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_1_of_8",
         || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(0),
     ),
     (
-        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_2_of_4",
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_2_of_8",
         || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(1),
     ),
     (
-        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_3_of_4",
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_3_of_8",
         || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(2),
     ),
     (
-        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_4_of_4",
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_4_of_8",
         || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(3),
+    ),
+    (
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_5_of_8",
+        || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(4),
+    ),
+    (
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_6_of_8",
+        || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(5),
+    ),
+    (
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_7_of_8",
+        || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(6),
+    ),
+    (
+        "a_program_ends_with_a_failing_status_when_the_system_refuses_memory_part_8_of_8",
+        || a_program_ends_with_a_failing_status_when_the_system_refuses_memory(7),
     ),
     (
         "joining_texts_gives_the_texts_one_after_another",
@@ -332,11 +348,15 @@ struct Lowered {
 /// How many programs each generator contributes.
 const CASES: u64 = 8;
 
-/// Every program of every generator, lowered.
-fn lowered() -> &'static [Lowered] {
-    static LOWERED: OnceLock<Vec<Lowered>> = OnceLock::new();
-    LOWERED.get_or_init(|| {
-        let mut sources: Vec<(Vec<u8>, Option<Vec<u8>>)> = Vec::new();
+/// The text of a program of a generator, and what the generator says it prints,
+/// when it says.
+type Source = (Vec<u8>, Option<Vec<u8>>);
+
+/// The text of every program of every generator.
+fn sources() -> &'static [Source] {
+    static SOURCES: OnceLock<Vec<Source>> = OnceLock::new();
+    SOURCES.get_or_init(|| {
+        let mut sources: Vec<Source> = Vec::new();
         for case in 0..CASES {
             let c = sample(3, case, programs::program);
             sources.push((c.source, Some(c.stdout)));
@@ -367,9 +387,18 @@ fn lowered() -> &'static [Lowered] {
             sources.push((c.source.into_bytes(), Some(c.stdout)));
         }
         sources
-            .into_iter()
-            .map(|(source, stdout)| lowered_from(&source, stdout))
-            .collect()
+    })
+}
+
+/// A program of one of the generators, lowered, by its place in `sources`. Each
+/// is lowered once, by the first test that reads it, so that a test that reads a
+/// part of them does not pay for the others.
+fn lowered(at: usize) -> &'static Lowered {
+    static LOWERED: OnceLock<Vec<OnceLock<Lowered>>> = OnceLock::new();
+    let all = LOWERED.get_or_init(|| sources().iter().map(|_| OnceLock::new()).collect());
+    all[at].get_or_init(|| {
+        let (source, stdout) = &sources()[at];
+        lowered_from(source, stdout.clone())
     })
 }
 
@@ -380,12 +409,16 @@ fn lowered_from(source: &[u8], stdout: Option<Vec<u8>>) -> Lowered {
 
 /// Every generated program, in the scalar form.
 fn taken() -> Vec<(&'static Lowered, &'static scalar::Program)> {
-    lowered().iter().map(|l| (l, &l.scalar)).collect()
+    taken_part(0, 1)
 }
 
 /// Every generated program of one slice: the programs at `part` of every `parts`.
 fn taken_part(part: usize, parts: usize) -> Vec<(&'static Lowered, &'static scalar::Program)> {
-    taken().into_iter().skip(part).step_by(parts).collect()
+    (0..sources().len())
+        .skip(part)
+        .step_by(parts)
+        .map(|at| (lowered(at), &lowered(at).scalar))
+        .collect()
 }
 
 /// Every function of every generated program, in the scalar form.
@@ -1334,7 +1367,7 @@ fn a_program_ends_with_a_failing_status_when_the_system_refuses_memory(part: usi
     let limits: Vec<usize> = (0..48)
         .chain([64, 100, 128, 256, 1000, 4096, 1 << 16])
         .collect();
-    for (l, s) in taken_part(part, 4) {
+    for (l, s) in taken_part(part, 8) {
         let all = scalar::run(s);
         if let Some(stdout) = &l.stdout {
             assert_eq!(all.stdout, *stdout, "{:?}", l.scalar);
