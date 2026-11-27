@@ -40,6 +40,10 @@ pub const MACHINE: &[Test] = &[
         a_file_the_build_did_not_read_does_not_start_a_build,
     ),
     (
+        "a_program_that_smith_watch_did_not_build_serves_and_never_writes_to_descriptor_3",
+        a_program_that_smith_watch_did_not_build_serves_and_never_writes_to_descriptor_3,
+    ),
+    (
         "interrupting_smith_watch_ends_the_run_and_leaves_no_process",
         interrupting_smith_watch_ends_the_run_and_leaves_no_process,
     ),
@@ -423,4 +427,58 @@ fn interrupting_smith_watch_ends_the_run_and_leaves_no_process() {
     // Nothing holds the port: the run is gone, and so is the socket `smith
     // --watch` kept.
     assert!(TcpStream::connect(("127.0.0.1", port)).is_err(), "something still listens at the port");
+}
+
+/// A program that is started with descriptor 3 open, as a supervisor or a shell
+/// can leave it, is a server that serves, and writes nothing to it, whether the
+/// socket holds bytes or its other end is closed.
+fn a_program_that_smith_watch_did_not_build_serves_and_never_writes_to_descriptor_3() {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    use std::os::unix::process::CommandExt;
+    unsafe extern "C" {
+        fn dup2(from: i32, to: i32) -> i32;
+    }
+    if !runs_here() {
+        return;
+    }
+    for (name, holds_bytes) in [("watch_fd_bytes", true), ("watch_fd_closed", false)] {
+        let (dir, port) = served(name, "one");
+        let built = smith(&dir, &["build", "serve"]);
+        assert!(built.status.success(), "{}", stderr(&built));
+        let (mine, theirs) = UnixStream::pair().unwrap();
+        // The other end is kept with bytes in it, or is closed before the program
+        // starts.
+        let kept = if holds_bytes {
+            (&mine).write_all(b"bytes that nobody reads").unwrap();
+            Some(mine)
+        } else {
+            drop(mine);
+            None
+        };
+        let from = theirs.as_raw_fd();
+        let mut command = Command::new(dir.join("site"));
+        command.args(["--port", &port.to_string()]).stdout(Stdio::null()).stderr(Stdio::null());
+        // SAFETY: only `dup2` is called between the fork and the exec.
+        unsafe {
+            command.pre_exec(move || if dup2(from, 3) < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) });
+        }
+        let mut child = command.spawn().unwrap();
+        drop(theirs);
+        until_it_says(port, "one");
+        for _ in 0..10 {
+            assert_eq!(ask(port).unwrap().body, "one", "{name}");
+        }
+        if let Some(mine) = kept {
+            mine.set_nonblocking(true).unwrap();
+            let mut said = [0u8; 16];
+            let read = (&mine).read(&mut said);
+            assert!(
+                matches!(&read, Err(e) if e.kind() == std::io::ErrorKind::WouldBlock),
+                "{name}: the program wrote to descriptor 3: {read:?}"
+            );
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }

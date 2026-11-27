@@ -47,12 +47,12 @@ const IMPORTS: [&str; 26] = [
     "_nanosleep",
     "_kqueue",
     "_kevent",
-    "_recvmsg",
     "_openat",
     "_pread",
     "_pwrite",
     "_lseek",
     "_fchmod",
+    "_recvmsg",
 ];
 /// `write`, which writes bytes to a file.
 pub const WRITE: usize = 0;
@@ -84,12 +84,12 @@ pub fn slot(call: Raw) -> usize {
         Raw::NanoSleep => 17,
         Raw::Kqueue => 18,
         Raw::Kevent => 19,
-        Raw::RecvMsg => 20,
-        Raw::OpenAt => 21,
-        Raw::PRead => 22,
-        Raw::PWrite => 23,
-        Raw::LSeek => 24,
-        Raw::FChmod => 25,
+        Raw::OpenAt => 20,
+        Raw::PRead => 21,
+        Raw::PWrite => 22,
+        Raw::LSeek => 23,
+        Raw::FChmod => 24,
+        Raw::RecvMsg => 25,
         Raw::Read => READ,
         Raw::Write => WRITE,
         Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::GetRandom => {
@@ -128,11 +128,14 @@ pub fn imports(
     reads: bool,
     kernel: bool,
     files: bool,
+    descriptors: bool,
 ) -> &'static [&'static str] {
-    if files {
+    if descriptors {
         &IMPORTS
+    } else if files {
+        &IMPORTS[..25]
     } else if kernel {
-        &IMPORTS[..21]
+        &IMPORTS[..20]
     } else if reads {
         &IMPORTS[..6]
     } else if entropy {

@@ -166,6 +166,11 @@ impl Project<'_> {
     fn library(&self) -> check::Library<'_> {
         check::Library::in_project(self.files, self.entry)
     }
+
+    /// The library of a program that `smith --watch` runs.
+    fn library_watched(&self) -> check::Library<'_> {
+        check::Library::in_project_watched(self.files, self.entry)
+    }
 }
 
 /// `check_timed` for a file that imports the modules of a project.
@@ -193,7 +198,7 @@ pub fn compile_project_timed(
     target: Target,
     timings: &mut Timings,
 ) -> Result<Vec<u8>, Vec<diag::Error>> {
-    compile_project_files_timed(source, project, target, false, timings)
+    compile_project_files_timed(source, project, target, false, false, timings)
         .map(|built| built.executable)
 }
 
@@ -217,15 +222,23 @@ impl Built {
 }
 
 /// `compile_project_timed`, with the files that go beside the executable, and
-/// with the map of the executable among them when `map` says so.
+/// with the map of the executable among them when `map` says so. `watched` is
+/// whether `smith --watch` builds it, which only changes what the library's
+/// handler of `net` does: it keeps a socket for the run, as `compiler.md` says.
 pub fn compile_project_files_timed(
     source: &[u8],
     project: &Project,
     target: Target,
     map: bool,
+    watched: bool,
     timings: &mut Timings,
 ) -> Result<Built, Vec<diag::Error>> {
-    let program = checked_in(source, &project.library(), timings)?.program;
+    let library = if watched {
+        project.library_watched()
+    } else {
+        project.library()
+    };
+    let program = checked_in(source, &library, timings)?.program;
     emit(program, target, map, timings)
 }
 

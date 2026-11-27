@@ -33,6 +33,7 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.reads(),
         program.asks_the_kernel() || program.waits_in_kqueue(),
         files,
+        program.asks_for_descriptors(),
     );
     let mut at = 0;
     let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {

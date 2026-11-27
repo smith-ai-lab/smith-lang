@@ -51,6 +51,9 @@ struct Request {
     timings: bool,
     /// Whether `smith build` writes the map of the executable beside it.
     map: bool,
+    /// Whether `smith --watch` builds the executable to run it, which is the
+    /// only executable that is built to keep a socket for its run.
+    watched: bool,
     /// What follows the file's name in `smith run`, which are the words the
     /// program is started with.
     words: Vec<OsString>,
@@ -191,6 +194,7 @@ fn request(args: &[OsString], with_words: bool, timings: bool) -> Result<Request
         task,
         timings,
         map,
+        watched: false,
         words,
     })
 }
@@ -433,6 +437,7 @@ fn build_timed(
         &files.project(),
         request.target,
         request.map,
+        request.watched,
         timings,
     );
     read.extend(files.paths());
@@ -603,6 +608,7 @@ fn build_task(
         &files.project(),
         request.target,
         request.map,
+        request.watched,
         timings,
     );
     reading.extend(files.paths());
@@ -647,6 +653,7 @@ fn run_task(task: &str, flags: &[OsString], timings: bool) -> Result<ExitCode, S
         task: Some(task.to_string()),
         timings,
         map: false,
+        watched: false,
         words: flags.to_vec(),
     };
     let executable = build(&request)?;
@@ -668,7 +675,8 @@ fn watch_command(name: &str, rest: &[OsString], timings: bool) -> Result<ExitCod
     match name {
         "build" | "run" => {
             let running = name == "run";
-            let request = request(rest, running, timings)?;
+            let mut request = request(rest, running, timings)?;
+            request.watched = running;
             if running && Target::host() != Some(request.target) {
                 return Err(format!(
                     "smith run runs only programs for this machine, and {} is not its target",
@@ -741,6 +749,7 @@ fn watch_command(name: &str, rest: &[OsString], timings: bool) -> Result<ExitCod
                 task: Some(task.to_string()),
                 timings,
                 map: false,
+                watched: true,
                 words: rest.to_vec(),
             };
             let kind = watch::Kind::Run {
