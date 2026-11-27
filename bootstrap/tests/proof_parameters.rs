@@ -15,16 +15,68 @@ use crate::numbers::{INTS, Int, with_header};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in",
-        a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in,
+        "a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in_part_1_of_4",
+        || a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in(0),
     ),
     (
-        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known",
-        a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known,
+        "a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in_part_2_of_4",
+        || a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in(1),
     ),
     (
-        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs",
-        a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs,
+        "a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in_part_3_of_4",
+        || a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in(2),
+    ),
+    (
+        "a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in_part_4_of_4",
+        || a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in(3),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_1_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(0),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_2_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(1),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_3_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(2),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_4_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(3),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_5_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(4),
+    ),
+    (
+        "a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known_part_6_of_6",
+        || a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(5),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_1_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(0),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_2_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(1),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_3_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(2),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_4_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(3),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_5_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(4),
+    ),
+    (
+        "a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs_part_6_of_6",
+        || a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(5),
     ),
     (
         "a_proof_that_is_not_passed_or_not_a_proof_or_picked_by_is_refused_with_its_name",
@@ -122,6 +174,20 @@ fn lowered(source: &str) -> smith::scalar::Program {
     lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"))
 }
 
+/// What lowering a program gives, which is the errors `check` gives exactly when
+/// it is refused: a program is accepted when this is a program, so that one
+/// that is both accepted and lowered is checked once.
+type Lowered = Result<smith::scalar::Program, Vec<smith::diag::Error>>;
+
+fn lower_of(source: &str) -> Lowered {
+    lower(source.as_bytes())
+}
+
+/// The program of a lowering that is known to have succeeded.
+fn program_of(lowering: Lowered, source: &str) -> smith::scalar::Program {
+    lowering.unwrap_or_else(|e| panic!("{e:?} for\n{source}"))
+}
+
 /// The programs a call is written in: with the statement as a proof parameter
 /// that the call passes the proof of a `check` for, as a `requires`, and with
 /// the proof taken out by hand.
@@ -147,11 +213,12 @@ fn calls(o: &Owing) -> [String; 3] {
 /// one that states the statement in a `requires` does, which is when the test
 /// says what is owed with the arguments put in, and the executable is the one
 /// that has no proof in it.
-fn a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in() {
-    generate::check(131, 80, owing, |o| {
+fn a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_arguments_put_in(part: u64) {
+    generate::check_part(131, 80, part, 4, owing, |o| {
         let [proof, requires, bare] = calls(o);
         let ok = accepted(&requires);
-        assert_eq!(accepted(&proof), ok, "for\n{proof}\nand\n{requires}");
+        let given = lower_of(&proof);
+        assert_eq!(given.is_ok(), ok, "for\n{proof}\nand\n{requires}");
         if o.proves {
             assert!(ok, "for\n{requires}");
         }
@@ -165,15 +232,15 @@ fn a_call_compiles_exactly_when_the_proof_passed_is_of_the_statement_with_the_ar
         ));
         assert_eq!(accepted(&nested), ok, "for\n{nested}\nand\n{requires}");
         if ok {
-            assert_eq!(lowered(&proof), lowered(&bare), "for\n{proof}\nand\n{bare}");
+            assert_eq!(program_of(given, &proof), lowered(&bare), "for\n{proof}\nand\n{bare}");
         }
     });
 }
 
 /// The same with the proof left out where the parameter says `= arith`, which
 /// is built from what is known where the call is written.
-fn a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known() {
-    generate::check(132, 80, owing, |o| {
+fn a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known(part: u64) {
+    generate::check_part(132, 80, part, 6, owing, |o| {
         let t = o.ty;
         let (owed, tested) = (&o.owed, &o.tested);
         let main = "fn main() <console, alloc> {\n  print(\"{f(1, 2)}\")\n}\n";
@@ -196,11 +263,13 @@ fn a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known() {
         );
         let bare = program(&format!("fn g(x: {t}, y: {t}) -> {t} {{ x }}"), "g(y, x)");
         let ok = accepted(&requires);
-        assert_eq!(accepted(&defaulted), ok, "for\n{defaulted}\nand\n{requires}");
-        assert_eq!(accepted(&named), ok, "for\n{named}\nand\n{requires}");
+        let (defaulted_made, named_made) = (lower_of(&defaulted), lower_of(&named));
+        assert_eq!(defaulted_made.is_ok(), ok, "for\n{defaulted}\nand\n{requires}");
+        assert_eq!(named_made.is_ok(), ok, "for\n{named}\nand\n{requires}");
         if ok {
-            assert_eq!(lowered(&defaulted), lowered(&bare), "for\n{defaulted}");
-            assert_eq!(lowered(&named), lowered(&bare), "for\n{named}");
+            let without = lowered(&bare);
+            assert_eq!(program_of(defaulted_made, &defaulted), without, "for\n{defaulted}");
+            assert_eq!(program_of(named_made, &named), without, "for\n{named}");
         }
         // A call that writes the proof of what it tested passes it for the
         // default, and is accepted when the call that leaves it out is.
@@ -212,8 +281,8 @@ fn a_proof_left_out_where_arith_is_the_default_is_built_from_what_is_known() {
 
 /// A function that gives its proof back, and the caller that holds the proof it
 /// gave, as `c = keep(y, x, q)`, and passes it on, or passes the call itself.
-fn a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs() {
-    generate::check(133, 80, owing, |o| {
+fn a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs(part: u64) {
+    generate::check_part(133, 80, part, 6, owing, |o| {
         let t = o.ty;
         let (owed, tested) = (&o.owed, &o.tested);
         let main = "fn main() <console, alloc> {\n  print(\"{f(1, 2)}\")\n}\n";
@@ -232,11 +301,13 @@ fn a_proof_a_call_gives_is_passed_on_and_the_program_is_the_one_without_proofs()
             "fn need(x: {t}, y: {t}) -> {t} {{ x }}\n\nfn f(x: {t}, y: {t}) -> {t} {{\n  if {tested} {{ need(y, x) }} else {{ 0 }}\n}}\n\n{main}"
         ));
         let ok = accepted(&requires);
-        assert_eq!(accepted(&held), ok, "for\n{held}\nand\n{requires}");
-        assert_eq!(accepted(&direct), ok, "for\n{direct}\nand\n{requires}");
+        let (held_made, direct_made) = (lower_of(&held), lower_of(&direct));
+        assert_eq!(held_made.is_ok(), ok, "for\n{held}\nand\n{requires}");
+        assert_eq!(direct_made.is_ok(), ok, "for\n{direct}\nand\n{requires}");
         if ok {
-            assert_eq!(lowered(&held), lowered(&bare), "for\n{held}\nand\n{bare}");
-            assert_eq!(lowered(&direct), lowered(&bare), "for\n{direct}\nand\n{bare}");
+            let without = lowered(&bare);
+            assert_eq!(program_of(held_made, &held), without, "for\n{held}\nand\n{bare}");
+            assert_eq!(program_of(direct_made, &direct), without, "for\n{direct}\nand\n{bare}");
         }
     });
 }
