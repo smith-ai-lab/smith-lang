@@ -23,12 +23,28 @@ use crate::targets::{runnable, scalar_runs_as};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives",
-        a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives,
+        "a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives_part_1_of_3",
+        || a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives("add"),
     ),
     (
-        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call",
-        a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call,
+        "a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives_part_2_of_3",
+        || a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives("sub"),
+    ),
+    (
+        "a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives_part_3_of_3",
+        || a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives("mul"),
+    ),
+    (
+        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_1_of_3",
+        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("add"),
+    ),
+    (
+        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_2_of_3",
+        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("sub"),
+    ),
+    (
+        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_3_of_3",
+        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("mul"),
     ),
     (
         "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64",
@@ -100,33 +116,31 @@ fn counted(source: &str) -> Vec<(Target, (usize, usize, usize))> {
 
 /// For each type and each operation, on every chip, with the function used
 /// twice so that it is not the one call that is replaced for being the only
-/// one: the function has no call and no jump that the program with the
+/// one, for the operation that the part is given: the function has no call and no jump that the program with the
 /// `wrapping_` function has not, and costs no more than `extra` instructions
 /// beyond it for each use.
-fn a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives() {
+fn a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives(op: &str) {
     let mut read = 0;
     for ty in TYPES {
-        for op in ["add", "sub", "mul"] {
-            let program = |f: String, ty: &str| {
-                with_values(ty, &format!("  print(\"{{{f}(x, y)}}\")\n  print(\"{{{f}(y, x)}}\")\n"))
-            };
-            let saturating = program(format!("saturating_{op}"), ty);
-            let wrapping = program(format!("wrapping_{op}"), wrapping_type(ty));
-            let (saturating, wrapping) = (counted(&saturating), counted(&wrapping));
-            for ((target, s), (_, w)) in saturating.iter().zip(&wrapping) {
-                read += 1;
-                assert_eq!(
-                    (s.1, s.2),
-                    (w.1, w.2),
-                    "`saturating_{op}` of `{ty}` makes a call or a jump on {target:?}"
-                );
-                assert!(
-                    s.0 <= w.0 + 2 * extra(ty, op),
-                    "`saturating_{op}` of `{ty}` is {} instructions, and `wrapping_{op}` is {}, on {target:?}",
-                    s.0,
-                    w.0
-                );
-            }
+        let program = |f: String, ty: &str| {
+            with_values(ty, &format!("  print(\"{{{f}(x, y)}}\")\n  print(\"{{{f}(y, x)}}\")\n"))
+        };
+        let saturating = program(format!("saturating_{op}"), ty);
+        let wrapping = program(format!("wrapping_{op}"), wrapping_type(ty));
+        let (saturating, wrapping) = (counted(&saturating), counted(&wrapping));
+        for ((target, s), (_, w)) in saturating.iter().zip(&wrapping) {
+            read += 1;
+            assert_eq!(
+                (s.1, s.2),
+                (w.1, w.2),
+                "`saturating_{op}` of `{ty}` makes a call or a jump on {target:?}"
+            );
+            assert!(
+                s.0 <= w.0 + 2 * extra(ty, op),
+                "`saturating_{op}` of `{ty}` is {} instructions, and `wrapping_{op}` is {}, on {target:?}",
+                s.0,
+                w.0
+            );
         }
     }
     assert!(read > 0, "no target is an ELF file");
@@ -149,36 +163,34 @@ fn checked_extra(ty: &str, op: &str) -> usize {
 /// A `checked_` function that is matched at once is an operation and a jump,
 /// and no call: the calls and the jumps of an `if` on the same operands, and
 /// at most `checked_extra` instructions more, on every chip.
-fn a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call() {
+fn a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call(op: &str) {
     let mut read = 0;
     for ty in TYPES {
-        for op in ["add", "sub", "mul"] {
-            let matched = with_values(
-                ty,
-                &format!(
-                    "  match checked_{op}(x, y) {{\n    .some(v) {{ print(\"{{v}}\") }}\n    .none {{ print(\"none\") }}\n  }}\n"
-                ),
+        let matched = with_values(
+            ty,
+            &format!(
+                "  match checked_{op}(x, y) {{\n    .some(v) {{ print(\"{{v}}\") }}\n    .none {{ print(\"none\") }}\n  }}\n"
+            ),
+        );
+        let written = with_values(
+            wrapping_type(ty),
+            &format!(
+                "  r = wrapping_{op}(x, y)\n  if x < y {{ print(\"none\") }} else {{ print(\"{{r}}\") }}\n"
+            ),
+        );
+        for ((target, m), (_, h)) in counted(&matched).iter().zip(&counted(&written)) {
+            read += 1;
+            assert_eq!(
+                (m.1, m.2),
+                (h.1, h.2),
+                "`checked_{op}` of `{ty}` matched at once has other calls or jumps than an `if` on {target:?}"
             );
-            let written = with_values(
-                wrapping_type(ty),
-                &format!(
-                    "  r = wrapping_{op}(x, y)\n  if x < y {{ print(\"none\") }} else {{ print(\"{{r}}\") }}\n"
-                ),
+            assert!(
+                m.0 <= h.0 + checked_extra(ty, op),
+                "`checked_{op}` of `{ty}` matched at once is {} instructions, and an `if` is {}, on {target:?}",
+                m.0,
+                h.0
             );
-            for ((target, m), (_, h)) in counted(&matched).iter().zip(&counted(&written)) {
-                read += 1;
-                assert_eq!(
-                    (m.1, m.2),
-                    (h.1, h.2),
-                    "`checked_{op}` of `{ty}` matched at once has other calls or jumps than an `if` on {target:?}"
-                );
-                assert!(
-                    m.0 <= h.0 + checked_extra(ty, op),
-                    "`checked_{op}` of `{ty}` matched at once is {} instructions, and an `if` is {}, on {target:?}",
-                    m.0,
-                    h.0
-                );
-            }
         }
     }
     assert!(read > 0, "no target is an ELF file");
