@@ -18,12 +18,24 @@ use crate::targets;
 
 pub const ONCE: &[Test] = &[
     (
-        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly",
-        the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly,
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_1_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(0),
     ),
     (
-        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list",
-        a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list,
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_2_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(1),
+    ),
+    (
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_3_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(2),
+    ),
+    (
+        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list_part_1_of_2",
+        || a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(0),
+    ),
+    (
+        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list_part_2_of_2",
+        || a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(1),
     ),
     (
         "a_proof_is_refused_for_a_range_whose_greatest_number_is_above_what_an_i128_holds",
@@ -247,10 +259,10 @@ fn program_of_pairs(pairs: &[(Sum, Sum)]) -> (String, String) {
 /// printed exactly and compared exactly with the other, whether it needs 64 bits
 /// or not, so a product of two numbers of 64 bits is the whole product. Each
 /// program holds ten pairs, one function each, so that the 60 pairs are six
-/// whole checks and not sixty.
-fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly() {
+/// whole checks and not sixty, in three parts of two.
+fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(part: u64) {
     let pairs = |g: &mut Gen| (0..10).map(|_| (sum(g), sum(g))).collect::<Vec<_>>();
-    generate::check(4301, 6, pairs, |batch| {
+    generate::check_part(4301, 6, part, 3, pairs, |batch| {
         let (source, expected) = program_of_pairs(batch);
         assert_eq!(stdout(&source), expected, "for\n{source}");
     });
@@ -258,11 +270,13 @@ fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compa
 
 /// A wide number is a parameter, a result, a field of a struct, an element of a
 /// tuple, and an element of a list, and is the same number in each.
-fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list() {
+fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(part: u64) {
     const R: &str = "-73786976294838206464..73786976294838206464";
-    generate::check(
+    generate::check_part(
         4302,
         12,
+        part,
+        2,
         |g: &mut Gen| {
             let mut p = sum(g);
             // A sum or a difference is below 2 to the 66.
