@@ -373,6 +373,7 @@ fn peek(r: Rd) -> Shape {
     .case(n) { \"case {n}\" }
     .unknown(n) { \"unknown {n}\" }
     .twice(n) { \"twice {n}\" }
+    .proof(p) { \"proof\" }
   }
 }",
     );

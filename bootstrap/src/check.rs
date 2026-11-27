@@ -9162,7 +9162,10 @@ impl<'a> Checker<'a> {
                                 self.errors.push(private_field(def, field, *pos));
                             }
                             if k + 1 == fields.len() {
-                                self.refuse_named_field(def, field, *pos);
+                                let held: Vec<&str> =
+                                    fields[..k].iter().map(|(f, _)| f.as_str()).collect();
+                                let held = [name].into_iter().chain(held).collect::<Vec<_>>();
+                                self.refuse_named_field(def, field, *pos, &held.join("."));
                             }
                             defs.fields[s][at].subst(&args)
                         }
@@ -9194,10 +9197,9 @@ impl<'a> Checker<'a> {
     /// Refuses the assignment of a field that a proof field's statement, or
     /// the type of another field, names: it would leave the proof proving what
     /// is no longer so.
-    fn refuse_named_field(&mut self, def: &Struct, field: &str, pos: Pos) {
+    fn refuse_named_field(&mut self, def: &Struct, field: &str, pos: Pos, held: &str) {
         for other in &def.fields {
-            let names = |t: &Type| names_the_field(t, field);
-            if other.name == field || !names(&other.ty) {
+            if other.name == field || !names_the_field(&other.ty, field) {
                 continue;
             }
             let message = if other.ty.statement.is_some() {
@@ -9211,19 +9213,17 @@ impl<'a> Checker<'a> {
                     other.name
                 )
             };
-            let fix = if other.ty.statement.is_some() {
-                format!(
-                    "build the value again, as `{}({field}: e)`",
-                    crate::values::copy_of(&def.name)
-                        .map_or(written_name(&def.name), |(template, _)| template)
-                )
-            } else {
-                format!(
-                    "build the value again, as `{}(...)`",
-                    crate::values::copy_of(&def.name)
-                        .map_or(written_name(&def.name), |(template, _)| template)
-                )
-            };
+            // The value is built again with the other fields as they are read.
+            let data = def.fields.iter().filter(|f| f.ty.statement.is_none());
+            let given: Vec<String> = data
+                .map(|f| match f.name == field {
+                    true => format!("{}: e", f.name),
+                    false => format!("{0}: {held}.{0}", f.name),
+                })
+                .collect();
+            let of = crate::values::copy_of(&def.name)
+                .map_or(written_name(&def.name), |(template, _)| template);
+            let fix = format!("build the value again, as `{of}({})`", given.join(", "));
             self.errors.push(Error::new(pos, message).with_fix(fix));
             return;
         }

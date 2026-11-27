@@ -1916,7 +1916,53 @@ impl<'a> Lowering<'a> {
             }
             values.extend(out.join(&self.scalars(&types[i]), ends));
         }
+        self.test_proofs(out, c, s, &(&types, &values), &reader);
         (reader, values)
+    }
+
+    /// Tests, once, the statement of each proof field of the struct `s` of the
+    /// values that were read, which `types` and `values` hold for its data
+    /// fields. A statement that is false ends the read with the error that
+    /// names the struct, the field, and the statement.
+    fn test_proofs(
+        &mut self,
+        out: &mut Out<'a>,
+        c: &Read,
+        s: usize,
+        (types, values): &(&[Ty], &[form::Value]),
+        reader: &[form::Value],
+    ) {
+        let defs = self.typed.defs;
+        let def = &defs.file.structs[s];
+        let Some((function, _)) = &defs.constructions[s] else {
+            return;
+        };
+        let name = crate::values::copy_of(&def.name).map_or(def.name.as_str(), |(t, _)| t);
+        let mark = out.names().len();
+        let mut at = 0;
+        for (&i, t) in defs.data_fields(s).iter().zip(types.iter()) {
+            let size = self.size(t);
+            out.define(
+                &def.fields[i].name,
+                t.clone(),
+                values[at..at + size].to_vec(),
+            );
+            at += size;
+        }
+        let proofs = def.fields.iter().filter(|f| f.ty.statement.is_some());
+        for (field, statement) in proofs.zip(&function.requires) {
+            let (_, holds) = self.expr(out, statement, &[]);
+            let arms = out.switch(holds[0], 2);
+            out.current = arms[0];
+            let written = crate::check::proof::written_contract(&|_| None, statement);
+            let which = format!("`{}` of `{name}`", field.name);
+            let held = [which.as_str(), written.as_str()]
+                .map(|text| self.text(out, text.as_bytes()))
+                .concat();
+            self.failure(out, c, reader.to_vec(), "proof", held);
+            out.current = arms[1];
+        }
+        out.names_mut().truncate(mark);
     }
 }
 

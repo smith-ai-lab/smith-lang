@@ -60,7 +60,7 @@ fn main() <console, alloc> {{
             if a > b {
                 let errors = check(source.as_bytes()).expect_err("a range written backward");
                 assert!(
-                    errors.iter().any(|e| e.message.contains(&format!("{a} <= {b}"))),
+                    errors.iter().any(|e| e.message.contains(&format!("`ordered` of `Range`: `{a} <= {b}`"))),
                     "{errors:?} for {source}"
                 );
                 return;

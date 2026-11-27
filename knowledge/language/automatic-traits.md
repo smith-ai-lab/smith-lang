@@ -62,7 +62,7 @@ struct Cursor[size: Nat] {
 }
 ```
 
-`Cursor(at: 4) == Cursor(at: 4)` is `true`, and `Cursor(at: 1) < Cursor(at: 4)` is `true`. `"{Cursor(at: 4)}"` is `Cursor(at: 4)`, and so is `repr(Cursor(at: 4))`, which is how the value is written in source: a program that holds that text builds the `Cursor` again, and the construction proves `inside` again. `Hash`, `Serialize`, and `Describe` leave it out as well. `Deserialize` is not given to a struct that holds a proof, as nothing that is read holds one, so such a struct is read by a function that reads its data and tests the statement with [`check`](check.md).
+`Cursor(at: 4) == Cursor(at: 4)` is `true`, and `Cursor(at: 1) < Cursor(at: 4)` is `true`. `"{Cursor(at: 4)}"` is `Cursor(at: 4)`, and so is `repr(Cursor(at: 4))`, which is how the value is written in source: a program that holds that text builds the `Cursor` again, and the construction proves `inside` again. `Hash`, `Serialize`, and `Describe` leave it out as well. `Deserialize` reads the data fields, then tests the statement of each proof field of what was read, as [`check`](check.md) does, and gives the [error](../library/deserialize.md#what-was-wrong) that names the struct, the field, and the statement when one is false.
 
 ## Taking one away
 

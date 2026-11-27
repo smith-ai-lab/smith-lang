@@ -1,4 +1,4 @@
-proof_field_past.smith:9:3: cannot prove that `(c.at + 1) <= 10`, which `Cursor` requires of its arguments
+proof_field_past.smith:9:3: cannot prove `inside` of `Cursor`: `(c.at + 1) <= 10`
   9 |   Cursor(at: c.at + 1)
     |   ^
   fix: check the arguments first with an `if`, or state it in a `requires`

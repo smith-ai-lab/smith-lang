@@ -540,7 +540,7 @@ impl Builder<'_, '_> {
                 if name == "size" {
                     hi = hi.min(self.size_most(of));
                 }
-                self.hold_proof_fields(of);
+                self.hold_along(e);
                 match self.path(e) {
                     Some(path) => Some(self.variable(Key::Field(path, lo, hi))),
                     None => self.goal.then(|| {
@@ -616,6 +616,16 @@ impl Builder<'_, '_> {
         }
     }
 
+    /// What each struct that a field is read from holds, along the field
+    /// reads and the items of lists `e` is made of.
+    fn hold_along(&mut self, e: &Expr) {
+        let mut at = e;
+        while let Expr::Field { of, .. } | Expr::Index { of, .. } = at {
+            self.hold_proof_fields(of);
+            at = of;
+        }
+    }
+
     /// A struct that holds a proof is a value whose fields the proof is of, so
     /// what each proof field says of the fields of `of` is known wherever
     /// `of` is read from.
@@ -636,10 +646,18 @@ impl Builder<'_, '_> {
         };
         let mut sums = HashMap::new();
         for (field, ty) in def.fields.iter().zip(&defs.fields[*s]) {
-            if let Ty::Int(t) = ty {
-                let key = Key::Field(format!("{path}.{}", field.name), t.min(), t.max());
-                let sum = self.variable(key);
-                sums.insert(field.name.clone(), sum);
+            match ty {
+                Ty::Int(t) => {
+                    let key = Key::Field(format!("{path}.{}", field.name), t.min(), t.max());
+                    let sum = self.variable(key);
+                    sums.insert(field.name.clone(), sum);
+                }
+                Ty::List(_) | Ty::Slice(_) | Ty::Text => {
+                    let key = Key::Field(format!("{path}.{}.size", field.name), 0, MAX_SIZE);
+                    let sum = self.variable(key);
+                    sums.insert(format!("{}.size", field.name), sum);
+                }
+                _ => {}
             }
         }
         let overflow = self.overflow;
@@ -800,6 +818,7 @@ impl Builder<'_, '_> {
         if self.facts.subst.is_some() {
             return None;
         }
+        self.hold_along(of);
         match self.path(of) {
             Some(path) => Some(self.variable(Key::Field(format!("{path}.size"), range.0, range.1))),
             None => self.goal.then(|| {
@@ -2495,9 +2514,30 @@ impl<'a> Checker<'a> {
                     self.kernel_calls.push(pending);
                     continue;
                 }
-                let error = match note {
-                    Some(note) => Error::new(pos, note).with_goal(format!("`{goal}`")),
-                    None => Error::new(
+                // What a construction cannot prove is said of the field.
+                let field = self
+                    .defs
+                    .constructions
+                    .iter()
+                    .flatten()
+                    .any(|(f, _)| std::ptr::eq(f, callee));
+                let proof_field = (0..callee.params.len())
+                    .find(|&k| owed_by(callee, k).is_some_and(|o| std::ptr::eq(o, requirement)))
+                    .filter(|_| field);
+                let error = match (note, proof_field) {
+                    (_, Some(k)) => {
+                        let of = crate::values::copy_of(&callee.name)
+                            .map_or(callee.name.as_str(), |(template, _)| template);
+                        Error::new(
+                            pos,
+                            format!(
+                                "cannot prove `{}` of `{of}`: `{goal}`",
+                                callee.params[k].name
+                            ),
+                        )
+                    }
+                    (Some(note), None) => Error::new(pos, note).with_goal(format!("`{goal}`")),
+                    (None, None) => Error::new(
                         pos,
                         format!(
                             "cannot prove that `{goal}`, which `{}` requires of its arguments",

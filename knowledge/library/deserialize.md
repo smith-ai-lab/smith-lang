@@ -80,7 +80,7 @@ A reader gives names and is given none, so a type holds no table of its fields: 
 
 ## Given automatically
 
-A struct, an enum, a tuple, a list, and an `Option` have `Deserialize` when each of their parts has it, as they have `Serialize`. The numbers, `bool`, `str`, and `()` have it. [`without`](../language/without.md) takes it away, and a type's own `impl` replaces it. A struct that holds a [proof field](../language/proof-fields.md) has none, as nothing that is read holds a proof: it is read by a function that reads the data and tests the statement with [`check`](../language/check.md).
+A struct, an enum, a tuple, a list, and an `Option` have `Deserialize` when each of their parts has it, as they have `Serialize`. The numbers, `bool`, `str`, and `()` have it. [`without`](../language/without.md) takes it away, and a type's own `impl` replaces it. A struct that holds a [proof field](../language/proof-fields.md) has it too: its data fields are read as for any struct, and then the statement of each proof field is tested of the values read, once, as [`check`](../language/check.md) tests one. A statement that is false is the error `proof`, and the value read has the statement as a fact, as any value of the struct has.
 
 A number that the type cannot hold is an error: a `u8` is read with `unsigned`, and 300 is refused. Nothing is turned into another shape to make it fit.
 
@@ -122,10 +122,11 @@ enum Problem {
   case: str
   unknown: str
   twice: str
+  proof: (str, str)
 }
 ```
 
-`path` is the way to the value from the top, as `tools[2].timeout`. `shape` holds what was needed and what was found, `range` the type a number did not fit, `case` a name that is no case of the enum, `unknown` a field the format refuses, and `twice` a field given two times. `line` and `column` are the place in a text, and are 0 for a format that has none. Reading stops at the first thing that is wrong, and the path and the place are worked out only then, so a read that succeeds does nothing for them.
+`path` is the way to the value from the top, as `tools[2].timeout`. `shape` holds what was needed and what was found, `range` the type a number did not fit, `case` a name that is no case of the enum, `unknown` a field the format refuses, `twice` a field given two times, and `proof` a proof field whose statement does not hold of what was read, with the field and the struct, as `` `named` of `NewUser` ``, and the statement as it is written, as `name.size > 0`. `line` and `column` are the place in a text, and are 0 for a format that has none. Reading stops at the first thing that is wrong, and the path and the place are worked out only then, so a read that succeeds does nothing for them.
 
 ## The forms
 

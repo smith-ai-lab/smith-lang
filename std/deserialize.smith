@@ -15,6 +15,7 @@ pub enum Problem {
   case: str
   unknown: str
   twice: str
+  proof: (str, str)
 }
 
 pub trait Reader[R] {

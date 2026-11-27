@@ -10,6 +10,7 @@
 use smith::{check, compile, lower, scalar};
 
 use crate::Test;
+use crate::arith::condition;
 use crate::generate::{self, Gen};
 use crate::numbers::{INTS, Int, with_header};
 use crate::proof_parameters::{Owing, owing};
@@ -37,8 +38,16 @@ pub const ONCE: &[Test] = &[
         a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not,
     ),
     (
-        "a_struct_is_refused_deserialize_for_a_proof_field_and_serializes_its_data",
-        a_struct_is_refused_deserialize_for_a_proof_field_and_serializes_its_data,
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read",
+        a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read,
+    ),
+    (
+        "a_value_that_was_read_has_the_fact_and_a_value_that_breaks_it_is_refused_with_its_path",
+        a_value_that_was_read_has_the_fact_and_a_value_that_breaks_it_is_refused_with_its_path,
+    ),
+    (
+        "a_struct_with_a_proof_field_is_written_as_the_data_it_holds",
+        a_struct_with_a_proof_field_is_written_as_the_data_it_holds,
     ),
     (
         "eq_ord_fmt_and_repr_leave_a_proof_field_out",
@@ -262,7 +271,9 @@ fn a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not(
         };
         refused(&source(named), &format!("`{named}` cannot be assigned, as `ok` is a proof about it"));
         let errors = check(source(named).as_bytes()).expect_err("an assignment of a named field");
-        assert!(errors.iter().any(|e| e.fix.as_deref().is_some_and(|f| f.contains("build the value again"))), "{errors:?}");
+        let whole = format!("build the value again, as `P({named}: e, {other}: d.{other}, z: d.z)`", other = ["x", "y"][1 - which]);
+        let whole = if which == 0 { whole } else { "build the value again, as `P(x: d.x, y: e, z: d.z)`".to_string() };
+        assert!(errors.iter().any(|e| e.fix.as_deref() == Some(whole.as_str())), "{errors:?}");
         // The type of another field that names a field is as good as a statement.
         let sized = with_header(format!(
             "struct Row {{\n  n: {t}\n  cells: [n]f32\n}}\n\nfn main() {{\n  var r = Row(n: 3, cells: [1.0, 2.0, 3.0])\n  r.n = 9\n}}\n",
@@ -274,40 +285,66 @@ fn a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not(
     });
 }
 
-/// For every pair of ranges, a struct of two numbers in them that holds the
-/// proof that the first is not above the second is refused the automatic
-/// `Deserialize`, since nothing known when the program is built proves it of
-/// what is read, and the struct without the proof is read as the data it holds.
-/// The struct with the proof is written as the data it holds.
-fn a_struct_is_refused_deserialize_for_a_proof_field_and_serializes_its_data() {
+const READ_HEAD: &str = "use std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.json (FromJson, from_json, describe, to_json)\n\n";
+
+/// For every statement over two numbers and every two numbers, the struct that
+/// holds the statement is read from JSON exactly when the statement holds of
+/// them, and what is read is the data; where it does not hold, the error names
+/// the struct, the proof field, and the statement.
+fn a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read() {
     generate::check(
         5606,
-        2,
-        |g: &mut Gen| (1 + g.below(20) as u32, 1 + g.below(20) as u32),
-        |&(a, c)| {
-            // `lo` may be above `hi`, so no range proves `lo <= hi`.
-            let head = "use std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.json (FromJson, from_json, to_json)\n\n";
-            let reading = |proof: &str| {
-                format!(
-                    "{head}struct Span {{\n  lo: 0..{}\n  hi: 0..{}\n{proof}}}\n\nfn parse(text: str) -> Result[Span, ReadError] <alloc> {{\n  from_json(text)\n}}\n\nfn main() <console, alloc> {{\n  match parse(\"\\{{\\\"lo\\\": 0, \\\"hi\\\": 0\\}}\") {{\n    .ok(s) {{ print(\"{{s.lo}} {{s.hi}}\") }}\n    .err(e) {{ print(\"error\") }}\n  }}\n}}\n",
-                    a + 1,
-                    c + 1
-                )
-            };
-            let source = reading("  ok: lo <= hi\n");
-            refused(&source, "no implementation of `FromJson` for `Span`");
-            let bare = reading("");
-            assert_eq!(output(&bare), "0 0\n", "for\n{bare}");
-            let written = format!(
-                "{head}struct Span {{\n  lo: 0..{}\n  hi: 0..{}\n  ok: lo <= hi\n}}\n\nfn make(lo: 0..{}, hi: 0..{}) -> Option[Span] {{\n  match check(lo <= hi) {{\n    .some(q) {{ .some(Span(lo: lo, hi: hi, ok: q)) }}\n    .none {{ .none }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  match make(0, 0) {{\n    .some(s) {{ print(to_json(s)) }}\n    .none {{ print(\"none\") }}\n  }}\n}}\n",
-                a + 1,
-                c + 1,
-                a + 1,
-                c + 1
+        6,
+        |g: &mut Gen| {
+            let (text, holds) = condition(g, 1, false);
+            let (x, y) = (g.below(21) as i128 - 10, g.below(21) as i128 - 10);
+            let says = holds(x, y);
+            (text, x, y, says)
+        },
+        |(text, x, y, says)| {
+            let source = format!(
+                "{READ_HEAD}struct P {{\n  x: i32\n  y: i32\n  ok: {text}\n}}\n\nfn parse(text: str) -> Result[P, ReadError] <alloc> {{\n  from_json(text)\n}}\n\nfn main() <console, alloc> {{\n  match parse(\"\\{{\\\"x\\\": {x}, \\\"y\\\": {y}\\}}\") {{\n    .ok(p) {{ print(\"read {{p.x}} {{p.y}}\") }}\n    .err(e) {{ print(describe(e)) }}\n  }}\n}}\n"
             );
-            assert_eq!(output(&written), "{\"lo\":0,\"hi\":0}\n", "for\n{written}");
+            let source = with_header(source);
+            let said = output(&source);
+            if *says {
+                assert_eq!(said, format!("read {x} {y}\n"), "for\n{source}");
+            } else {
+                assert!(
+                    said.contains("`ok` of `P` does not hold: `") && !said.starts_with("read"),
+                    "{said} for\n{source}"
+                );
+            }
         },
     );
+}
+
+/// What is read has the statement as a fact, so the struct is built again from
+/// it with nothing to prove, and a value that breaks the statement is refused
+/// with the path of the value and the statement as it is written.
+fn a_value_that_was_read_has_the_fact_and_a_value_that_breaks_it_is_refused_with_its_path() {
+    let source = with_header(format!(
+        "{READ_HEAD}struct Cursor {{\n  at: Nat\n  inside: at <= 10\n}}\n\nstruct Doc {{\n  cursors: List[Cursor]\n}}\n\nfn parse(text: str) -> Result[Doc, ReadError] <alloc> {{\n  from_json(text)\n}}\n\nfn again(c: Cursor) -> Nat {{ Cursor(at: c.at).at }}\n\nfn main() <console, alloc> {{\n  match parse(\"\\{{\\\"cursors\\\": [\\{{\\\"at\\\": 3\\}}, \\{{\\\"at\\\": 11\\}}]\\}}\") {{\n    .ok(d) {{ print(\"{{d.cursors.size}}\") }}\n    .err(e) {{ print(describe(e)) }}\n  }}\n  match parse(\"\\{{\\\"cursors\\\": [\\{{\\\"at\\\": 3\\}}]\\}}\") {{\n    .ok(d) {{ print(\"{{d.cursors.size}}\") }}\n    .err(e) {{ print(describe(e)) }}\n  }}\n}}\n"
+    ));
+    let said = output(&source);
+    let lines: Vec<&str> = said.lines().collect();
+    assert!(
+        lines[0].contains("cursors[1]") && lines[0].contains("`inside` of `Cursor` does not hold: `at <= 10`"),
+        "{said} for\n{source}"
+    );
+    assert_eq!(lines[1], "1", "{said} for\n{source}");
+    let usable = with_header(format!(
+        "{READ_HEAD}struct Cursor {{\n  at: Nat\n  inside: at <= 10\n}}\n\nfn parse(text: str) -> Result[Cursor, ReadError] <alloc> {{\n  from_json(text)\n}}\n\nfn main() <console, alloc> {{\n  match parse(\"\\{{\\\"at\\\": 4\\}}\") {{\n    .ok(c) {{ print(\"{{Cursor(at: c.at).at}}\") }}\n    .err(e) {{ print(describe(e)) }}\n  }}\n}}\n"
+    ));
+    assert_eq!(output(&usable), "4\n", "for\n{usable}");
+}
+
+/// A struct with a proof field is written as the data it holds.
+fn a_struct_with_a_proof_field_is_written_as_the_data_it_holds() {
+    let written = with_header(format!(
+        "{READ_HEAD}struct Span {{\n  lo: Nat\n  hi: Nat\n  ok: lo <= hi\n}}\n\nfn make(lo: Nat, hi: Nat) -> Option[Span] {{\n  match check(lo <= hi) {{\n    .some(q) {{ .some(Span(lo: lo, hi: hi, ok: q)) }}\n    .none {{ .none }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  match make(1, 2) {{\n    .some(s) {{ print(to_json(s)) }}\n    .none {{ print(\"none\") }}\n  }}\n}}\n"
+    ));
+    assert_eq!(output(&written), "{\"lo\":1,\"hi\":2}\n", "for\n{written}");
 }
 
 /// `Cursor(at: 4) == Cursor(at: 4)`, the order of two, how one is shown, and
@@ -371,9 +408,9 @@ fn the_cursor_and_step_of_the_page_compile_and_a_step_outside_the_if_is_refused_
     let outside = with_header(format!(
         "{CURSOR}fn past[size: Nat](c: Cursor[size]) -> Cursor[size] {{\n  Cursor(at: c.at + 1)\n}}\n\nfn main() <console, alloc> {{\n  c = past(first())\n  print(\"{{c.at}}\")\n}}\n"
     ));
-    refused(&outside, "cannot prove that `(c.at + 1) <= 10`");
+    refused(&outside, "cannot prove `inside` of `Cursor`: `(c.at + 1) <= 10`");
     let beyond = with_header(format!(
         "{CURSOR}fn main() <console, alloc> {{\n  c: Cursor[10] = Cursor(at: 11)\n  print(\"{{c.at}}\")\n}}\n"
     ));
-    refused(&beyond, "cannot prove that `11 <= 10`");
+    refused(&beyond, "cannot prove `inside` of `Cursor`: `11 <= 10`");
 }

@@ -1973,6 +1973,7 @@ pub fn describe(e: ReadError) -> str <alloc> {
     .case(n) { "`{n}` is not a case" }
     .unknown(n) { "unknown `{n}`" }
     .twice(n) { "`{n}` is given twice" }
+    .proof((which, statement)) { "{which} does not hold: `{statement}`" }
   }
   if e.path.size == 0 { "{e.line}:{e.column}: {what}" } else { "{e.line}:{e.column}: {e.path}: {what}" }
 }
