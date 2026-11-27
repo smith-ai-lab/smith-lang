@@ -22,6 +22,10 @@ pub const ONCE: &[Test] = &[
         a_tree_holding_itself_through_a_list_is_hashed_as_the_same_shape_of_types_that_do_not_hold_themselves,
     ),
     (
+        "a_type_that_holds_itself_through_a_list_has_a_trait_exactly_when_every_other_part_has_it",
+        a_type_that_holds_itself_through_a_list_has_a_trait_exactly_when_every_other_part_has_it,
+    ),
+    (
         "a_tree_a_hundred_levels_deep_is_compared_written_and_hashed",
         a_tree_a_hundred_levels_deep_is_compared_written_and_hashed,
     ),
@@ -270,4 +274,65 @@ fn a_tree_a_hundred_levels_deep_is_compared_written_and_hashed() {
     let out = run(&c.source);
     assert_eq!(out.status, 0, "{}", String::from_utf8_lossy(&out.stdout));
     assert_eq!(String::from_utf8_lossy(&out.stdout), c.stdout);
+}
+
+/// The declarations of a shape with a part of a type `Opaque`, which has
+/// no `lacking` trait when one is named, and the source of one value of it.
+fn with_opaque(shape: Shape, lacking: Option<&str>) -> (String, String) {
+    let (declarations, value) = match shape {
+        Shape::Direct => (
+            "struct Node {\n  part: Opaque\n  kids: List[Node]\n}\n",
+            "Node(part: Opaque(n: 1), kids: [])",
+        ),
+        Shape::Through => (
+            "struct Node {\n  held: Holder\n}\n\nstruct Holder {\n  part: Opaque\n  kids: List[Node]\n}\n",
+            "Node(held: Holder(part: Opaque(n: 1), kids: []))",
+        ),
+        Shape::Cases => (
+            "enum Node {\n  leaf: u8\n  branch: Forest\n}\n\nstruct Forest {\n  part: Opaque\n  trees: List[Node]\n}\n",
+            ".branch(Forest(part: Opaque(n: 1), trees: []))",
+        ),
+    };
+    let without = lacking.map_or(String::new(), |t| format!("\nwithout {t} for Opaque\n"));
+    (
+        format!("struct Opaque {{\n  n: u8\n}}\n{without}\n{declarations}"),
+        value.to_string(),
+    )
+}
+
+fn a_type_that_holds_itself_through_a_list_has_a_trait_exactly_when_every_other_part_has_it() {
+    // What is asked of `a`, for the trait it needs.
+    const ASKED: [(&str, &str); 4] = [
+        ("Eq", "a == a"),
+        ("Fmt", "a"),
+        ("Repr", "repr(a)"),
+        ("Hash", "hash(a)"),
+    ];
+    for shape in SHAPES {
+        for (name, ask) in ASKED {
+            for lacking in [None, Some(name)] {
+                let (declarations, value) = with_opaque(shape, lacking);
+                let source = format!(
+                    "use std.bits (u8)\nuse std.console (console, print)\n\n{declarations}\n\
+                     fn main() <console, alloc> {{\n  a: Node = {value}\n  print(\"{{{ask}}}\")\n}}\n"
+                );
+                let found = lower(source.as_bytes());
+                match lacking {
+                    None => {
+                        assert!(found.is_ok(), "{found:?} for\n{source}");
+                    }
+                    Some(_) => {
+                        let errors = found.expect_err(&source);
+                        let named = format!("as `Opaque` has no `{name}`");
+                        assert!(
+                            errors.len() == 1
+                                && errors[0].message.contains(&format!("`{name}` for `Node`"))
+                                && errors[0].message.contains(&named),
+                            "{errors:?} for\n{source}"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
