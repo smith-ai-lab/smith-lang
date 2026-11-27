@@ -59,8 +59,20 @@ pub const ONCE: &[Test] = &[
         || every_target_builds_identical_bytes_twice_for_text(1),
     ),
     (
-        "every_target_builds_identical_bytes_twice_for_reprs",
-        every_target_builds_identical_bytes_twice_for_reprs,
+        "every_target_builds_identical_bytes_twice_for_reprs_part_1_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(0),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_2_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(1),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_3_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(2),
+    ),
+    (
+        "every_target_builds_identical_bytes_twice_for_reprs_part_4_of_4",
+        || every_target_builds_identical_bytes_twice_for_reprs(3),
     ),
     (
         "every_target_builds_identical_bytes_twice_for_choices",
@@ -85,8 +97,12 @@ pub const ONCE: &[Test] = &[
         a_linux_executable_that_carries_net_asks_for_random_bytes_only_when_it_can_reach_a_lookup,
     ),
     (
-        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions",
-        a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
+        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions_part_1_of_2",
+        || a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(0),
+    ),
+    (
+        "a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions_part_2_of_2",
+        || a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(1),
     ),
     (
         "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network_part_1_of_2",
@@ -556,10 +572,25 @@ fn builds_identical_bytes_twice<T: Debug>(
     generate: impl Fn(&mut Gen) -> T,
     source: impl Fn(&T) -> &[u8],
 ) {
-    let targets = buildable();
-    assert!(!targets.is_empty(), "the compiler builds for some target");
+    builds_identical_bytes_twice_for_targets(seed, from, cases, 0, 1, generate, source);
+}
+
+/// The same for the part `part` of `parts` of the targets, numbering the parts
+/// from 0, so that the parts are the targets of one check with none in two.
+fn builds_identical_bytes_twice_for_targets<T: Debug>(
+    seed: u64,
+    from: u64,
+    cases: u64,
+    part: usize,
+    parts: usize,
+    generate: impl Fn(&mut Gen) -> T,
+    source: impl Fn(&T) -> &[u8],
+) {
+    let all = buildable();
+    assert!(!all.is_empty(), "the compiler builds for some target");
+    let targets = &all[all.len() * part / parts..all.len() * (part + 1) / parts];
     generate::check_cases(seed, from, cases, generate, |case| {
-        for &target in &targets {
+        for &target in targets {
             let first = compile(source(case), target).unwrap();
             let second = compile(source(case), target).unwrap();
             assert!(first == second, "{} differs", target.name());
@@ -586,8 +617,8 @@ fn every_target_builds_identical_bytes_twice_for_text(part: usize) {
 
 // A program of these generators is built for each target twice, which takes
 // 40 to 260 ms for one, so a test takes one.
-fn every_target_builds_identical_bytes_twice_for_reprs() {
-    builds_identical_bytes_twice(65, 0, 1, reprs::program, |c| c.source.as_bytes());
+fn every_target_builds_identical_bytes_twice_for_reprs(part: usize) {
+    builds_identical_bytes_twice_for_targets(65, 0, 1, part, 4, reprs::program, |c| c.source.as_bytes());
 }
 
 fn every_target_builds_identical_bytes_twice_for_choices() {
@@ -1475,15 +1506,17 @@ const SOCKET_FUNCTIONS: &[&str] = &[
 /// the functions of it that `net` asks for, among them `WSAStartup`, which it
 /// calls once before its first operation, and a program that does not carry `net`
 /// asks for no such library.
-fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions()
-{
+fn a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions(
+    part: usize,
+) {
     let source = include_str!("net_program.smith");
     let windows: Vec<Target> = buildable()
         .into_iter()
         .filter(|t| t.name().starts_with("windows"))
         .collect();
     assert!(!windows.is_empty());
-    for target in windows {
+    // The targets are in two parts, so that no part builds the program for both.
+    for target in windows[windows.len() * part / 2..windows.len() * (part + 1) / 2].iter().copied() {
         let name = target.name();
         let bytes = compile(source.as_bytes(), target).unwrap();
         let (libraries, symbols) = pe_imports(&bytes);
