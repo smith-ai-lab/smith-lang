@@ -1,0 +1,66 @@
+use std.console (console, print)
+use std.fetch (client, get)
+use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.instant (ms)
+use std.net (net)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+
+fn address(port: 1..65536, path: str) -> str <alloc> {
+  "http://127.0.0.1:{port}{path}"
+}
+
+// A send that is cancelled when its group ends, while the program goes on.
+fn cancelled(port: 1..65536) <console, net, time, alloc> {
+  with tasks()
+  with client()
+  _ = spawn {
+    match get[64](address(port, "/slow")) {
+      .ok(r) { print("slow {r.status}") }
+      .err(e) { print("slow {e}") }
+    }
+  }
+  sleep(ms(400))
+}
+
+// Two sends at once, in tasks of one group: the first server answers late, and
+// the second's answer is what the program prints first.
+fn pair(first: 1..65536, second: 1..65536) <console, net, time, alloc> {
+  with tasks()
+  with client()
+  a = spawn {
+    match get[64](address(first, "/late")) {
+      .ok(r) { print("late {r.status}") }
+      .err(e) { print("late {e}") }
+    }
+  }
+  b = spawn {
+    match get[64](address(second, "/early")) {
+      .ok(r) { print("early {r.status}") }
+      .err(e) { print("early {e}") }
+    }
+  }
+  join(a)
+  join(b)
+}
+
+fn main(args: List[str]) <console, net, time, alloc> {
+  if args.size < 2 { return }
+  port: Result[1..65536, ReadError] = from_text("port", args[1])
+  match port {
+    .ok(p) {
+      if args[0] == "pair" and args.size > 2 {
+        second: Result[1..65536, ReadError] = from_text("second", args[2])
+        match second {
+          .ok(q) { pair(p, q) }
+          .err(e) { }
+        }
+      } else if args[0] == "cancelled" {
+        cancelled(p)
+        sleep(ms(2500))
+      }
+    }
+    .err(e) { }
+  }
+}
