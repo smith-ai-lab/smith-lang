@@ -98,8 +98,12 @@ pub const ONCE: &[Test] = &[
         an_extension_that_is_written_twice_is_an_error_whichever_it_is,
     ),
     (
-        "what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error",
-        what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error,
+        "what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error_part_1_of_2",
+        || what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error(0),
+    ),
+    (
+        "what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error_part_2_of_2",
+        || what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error(1),
     ),
     (
         "an_extension_that_is_read_and_is_not_written_right_is_an_error_and_one_that_is_not_read_is_passed_over",
@@ -793,9 +797,11 @@ fn an_extension_that_is_read_and_is_not_written_right_is_an_error_and_one_that_i
 
 /// What a certificate that holds only these basic constraints may sign, as the
 /// generator that built them knows: `None` where they are not written right.
-fn what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error() {
-    generate::check(
+fn what_a_certificate_may_sign_is_one_of_three_and_a_path_length_without_an_authority_is_an_error(part: u64) {
+    generate::check_part(
         7,
+        2,
+        part,
         2,
         |g| {
             // Whether the authority boolean is written, and the path length if one is.
