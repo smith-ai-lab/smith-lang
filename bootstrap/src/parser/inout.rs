@@ -33,7 +33,7 @@ pub(super) fn lower(
     for f in functions.iter_mut() {
         if f.params.iter().any(|p| p.inout) {
             held_by_lambdas(f, errors);
-            gives_back(f, errors, unbuilt);
+            give_back(f, errors, unbuilt);
         }
         statements(&mut f.body);
     }
@@ -114,9 +114,15 @@ fn names_in_block(
     }
 }
 
+/// Whether a function was lowered to give back the parameters it marks
+/// `inout`, so that its result is not one its source writes.
+pub(crate) fn gives_back(f: &Function) -> bool {
+    f.params.iter().any(|p| p.inout && p.take)
+}
+
 /// Makes a function with parameters marked `inout` take them and give them
 /// back.
-fn gives_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>) {
+fn give_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>) {
     let first = f.params.iter().find(|p| p.inout).expect("one is inout");
     if is_operation(f) {
         unbuilt.push(Error::unsupported(first.pos, "`inout` in an operation"));
@@ -150,7 +156,10 @@ fn gives_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error
         },
     });
     returns(&mut f.body, &names, (&f.name, errors));
-    f.body.push(Stmt::Expr(given(&names, f.end)));
+    // A body that ends with `return` gives the parameters back there.
+    if !matches!(f.body.last(), Some(Stmt::Expr(Expr::Return { .. }))) {
+        f.body.push(Stmt::Expr(given(&names, f.end)));
+    }
 }
 
 fn first_pos(changed: &[(String, Type)]) -> Pos {

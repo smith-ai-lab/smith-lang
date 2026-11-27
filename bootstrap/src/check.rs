@@ -2222,7 +2222,8 @@ fn written(f: &Function, effects: &[&str]) -> String {
         .collect();
     let params: Vec<String> = (f.params.iter())
         .map(|p| {
-            let mut text = format!("{}: {}", p.name, written_type(&p.ty));
+            let inout = if p.inout { "inout " } else { "" };
+            let mut text = format!("{}: {inout}{}", p.name, written_type(&p.ty));
             if !p.effects.is_empty() {
                 let effects: Vec<&str> = p.effects.iter().map(|(e, _)| e.as_str()).collect();
                 text.push_str(&format!(" <{}>", effects.join(", ")));
@@ -2250,7 +2251,9 @@ fn written(f: &Function, effects: &[&str]) -> String {
         list.push_str(&by_name.join(", "));
     }
     text.push_str(&format!("({list})"));
-    if let Some(t) = &f.result {
+    // The result a function that changes its parameters is given when it is
+    // lowered is not written.
+    if let Some(t) = f.result.as_ref().filter(|_| !crate::parser::gives_back(f)) {
         text.push_str(&format!(" -> {}", written_type(t)));
     }
     if !effects.is_empty() {
