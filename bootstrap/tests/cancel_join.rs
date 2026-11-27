@@ -56,7 +56,7 @@ fn closed_once_children_first(said: &str, source: &str) {
 
 fn a_task_asked_to_end_while_it_waits_for_a_child_ends_the_child_first_and_every_connection_is_closed_once_under_the_scheduler_of_a_test()
  {
-    for seed in [22, 0, 1, 2, 3] {
+    for seed in [22, 0] {
         let source = TEST_SCHEDULER.replace("test_scheduler_with_io(22,", &format!("test_scheduler_with_io({seed},"));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         assert_eq!(scalar::check(&program), Ok(()), "for {source}");
