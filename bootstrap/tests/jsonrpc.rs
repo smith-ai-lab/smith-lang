@@ -20,16 +20,40 @@ pub const ONCE: &[Test] = &[
         the_example_of_the_issue_is_read_and_written_as_it_says,
     ),
     (
-        "a_message_written_is_read_back_as_the_message_and_so_is_a_batch",
-        a_message_written_is_read_back_as_the_message_and_so_is_a_batch,
+        "a_message_written_is_read_back_as_the_message_and_so_is_a_batch_part_1_of_3",
+        || a_message_written_is_read_back_as_the_message_and_so_is_a_batch(0),
     ),
     (
-        "a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names",
-        a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names,
+        "a_message_written_is_read_back_as_the_message_and_so_is_a_batch_part_2_of_3",
+        || a_message_written_is_read_back_as_the_message_and_so_is_a_batch(1),
     ),
     (
-        "a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read",
-        a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read,
+        "a_message_written_is_read_back_as_the_message_and_so_is_a_batch_part_3_of_3",
+        || a_message_written_is_read_back_as_the_message_and_so_is_a_batch(2),
+    ),
+    (
+        "a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names_part_1_of_3",
+        || a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names(0),
+    ),
+    (
+        "a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names_part_2_of_3",
+        || a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names(1),
+    ),
+    (
+        "a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names_part_3_of_3",
+        || a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names(2),
+    ),
+    (
+        "a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read_part_1_of_3",
+        || a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read(0),
+    ),
+    (
+        "a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read_part_2_of_3",
+        || a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read(1),
+    ),
+    (
+        "a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read_part_3_of_3",
+        || a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read(2),
     ),
     (
         "every_example_of_section_7_of_the_specification_is_read_as_it_says",
@@ -363,9 +387,13 @@ fn with_raw(raw: &Option<String>, v: &str, body: &str) -> String {
     }
 }
 
-fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch() {
-    generate::check(
+/// The three cases of the property are a test each, as a case is what a test may
+/// spend its time on.
+fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch(part: u64) {
+    generate::check_part(
         6701,
+        3,
+        part,
         3,
         |g| {
             let singles: Vec<Msg> = (0..10).map(|_| msg(g)).collect();
@@ -546,9 +574,13 @@ fn broken(g: &mut Gen) -> (String, i64) {
     }
 }
 
-fn a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names() {
-    generate::check(
+/// The three cases of the property are a test each, as a case is what a test may
+/// spend its time on.
+fn a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names(part: u64) {
+    generate::check_part(
         6702,
+        3,
+        part,
         3,
         |g| (0..40).map(|_| broken(g)).collect::<Vec<_>>(),
         |batch| {
@@ -559,9 +591,13 @@ fn a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names() {
     );
 }
 
-fn a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read() {
-    generate::check(
+/// The three cases of the property are a test each, as a case is what a test may
+/// spend its time on.
+fn a_batch_with_one_member_broken_has_that_member_refused_and_the_others_read(part: u64) {
+    generate::check_part(
         6703,
+        3,
+        part,
         3,
         |g| {
             (0..8)
