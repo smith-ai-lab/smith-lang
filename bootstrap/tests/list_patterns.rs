@@ -9,6 +9,8 @@
 //! An arm gives its place, and the sum of what its names hold, so the output
 //! shows which arm took each list and what each name held.
 
+use std::sync::OnceLock;
+
 use smith::diag::Pos;
 use smith::scalar::{self, Outcome};
 use smith::{check, lower};
@@ -199,8 +201,15 @@ fn values(ty: Ty) -> Vec<Val> {
     }
 }
 
-/// Every list the arms can tell from another, of the element type.
-fn lists(ty: Ty) -> Vec<Vec<Val>> {
+/// Every list the arms can tell from another, of the element type, made once
+/// for the type, as every case of every property asks for it.
+fn lists(ty: Ty) -> &'static [Vec<Val>] {
+    static ALL: [OnceLock<Vec<Vec<Val>>>; 4] =
+        [OnceLock::new(), OnceLock::new(), OnceLock::new(), OnceLock::new()];
+    ALL[ty as usize].get_or_init(|| lists_of(ty))
+}
+
+fn lists_of(ty: Ty) -> Vec<Vec<Val>> {
     let parts = values(ty);
     let mut all: Vec<Vec<Val>> = vec![Vec::new()];
     let mut level: Vec<Vec<Val>> = vec![Vec::new()];
@@ -359,73 +368,103 @@ fn arm_lines(c: &Case) -> Vec<String> {
     lines
 }
 
-/// The program with the lines for the arms, and the line the `match` is on.
-fn program(c: &Case, lines: &[String]) -> (String, usize) {
-    let ty = c.ty.name();
-    let head = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn pick(xs: List[{ty}]) -> i32 {{\n  match xs {{\n"
+/// One program with a function for each case, which matches lists of the
+/// case's type with the lines it is given for the arms, and a `main` that
+/// prints what each function gives for each of the lists of its case, and the
+/// line each `match` is on. The cases are one program so that the library is
+/// lowered once.
+fn program(cases: &[(&Case, Vec<String>)]) -> (String, Vec<usize>) {
+    let mut out = String::from(
+        "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\n",
     );
-    let at = head.matches('\n').count();
-    let mut out = head;
-    for line in lines {
-        out.push_str(line);
-        out.push('\n');
+    let mut at = Vec::new();
+    for (k, (c, lines)) in cases.iter().enumerate() {
+        let ty = c.ty.name();
+        let head = format!("fn pick{k}(xs: List[{ty}]) -> i32 {{\n  match xs {{\n");
+        at.push(out.matches('\n').count() + head.matches('\n').count());
+        out.push_str(&head);
+        for line in lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push_str("  }\n}\n\n");
     }
-    out.push_str("  }\n}\n\nfn main() <console, alloc> {\n");
-    for (k, list) in c.given.iter().enumerate() {
-        let parts: Vec<String> = list.iter().map(written_value).collect();
-        out.push_str(&format!(
-            "  l{k}: List[{ty}] = [{}]\n  print(\"{{pick(l{k})}}\")\n",
-            parts.join(", ")
-        ));
+    out.push_str("fn main() <console, alloc> {\n");
+    for (k, (c, _)) in cases.iter().enumerate() {
+        let ty = c.ty.name();
+        for (j, list) in c.given.iter().enumerate() {
+            let parts: Vec<String> = list.iter().map(written_value).collect();
+            out.push_str(&format!(
+                "  l{k}_{j}: List[{ty}] = [{}]\n  print(\"{{pick{k}(l{k}_{j})}}\")\n",
+                parts.join(", ")
+            ));
+        }
     }
     out.push_str("}\n");
     (out, at)
 }
 
+/// How many cases of a property are one program.
+const CASES: usize = 30;
+
+fn cases(g: &mut Gen) -> Vec<Case> {
+    (0..CASES).map(|_| case(g)).collect()
+}
+
 fn a_list_takes_the_first_arm_whose_pattern_matches_and_its_names_hold_the_elements() {
-    generate::check(
-        0x11_57,
-        30,
-        case,
-        |c| {
-            let (source, _) = program(c, &arm_lines(c));
-            let mut stdout = Vec::new();
+    generate::check(0x11_57, 1, cases, |cs| {
+        let arms: Vec<(&Case, Vec<String>)> = cs.iter().map(|c| (c, arm_lines(c))).collect();
+        let (source, _) = program(&arms);
+        let mut stdout = Vec::new();
+        for c in cs {
             for list in &c.given {
                 stdout.extend(format!("{}\n", takes(&c.arms, list)).bytes());
             }
-            assert_eq!(run(&source), Outcome { stdout, status: 0 }, "{source}");
-        },
-    );
+        }
+        assert_eq!(run(&source), Outcome { stdout, status: 0 }, "{source}");
+    });
+}
+
+/// The lines the errors of a program are at, in order.
+fn error_lines(source: &str, wanted: usize) -> Vec<usize> {
+    let errors = refused(source);
+    assert_eq!(errors.len(), wanted, "{errors:?} for\n{source}");
+    let mut lines: Vec<usize> = errors.iter().map(|e| e.pos.line).collect();
+    lines.sort();
+    lines
 }
 
 fn a_match_on_a_list_with_no_bare_name_at_the_end_is_one_error_at_the_match() {
-    generate::check(0x11_58, 30, case, |c| {
-        let mut lines = arm_lines(c);
-        lines.pop();
-        let (source, at) = program(c, &lines);
-        let errors = refused(&source);
-        assert_eq!(errors.len(), 1, "{errors:?} for\n{source}");
-        assert_eq!(errors[0].pos.line, at, "{errors:?} for\n{source}");
+    generate::check(0x11_58, 1, cases, |cs| {
+        let arms: Vec<(&Case, Vec<String>)> = cs
+            .iter()
+            .map(|c| {
+                let mut lines = arm_lines(c);
+                lines.pop();
+                (c, lines)
+            })
+            .collect();
+        let (source, at) = program(&arms);
+        assert_eq!(error_lines(&source, cs.len()), at, "for\n{source}");
     });
 }
 
 fn a_pattern_that_the_ones_before_it_cover_is_one_error_at_that_arm() {
-    generate::check(0x11_59, 30, case, |c| {
-        let lines = arm_lines(c);
+    generate::check(0x11_59, 1, cases, |cs| {
         // The first arm again, after every arm.
-        let again = lines[0].clone();
-        let mut lines = lines;
-        let last = lines.len() - 1;
-        lines.insert(last, again);
-        let (source, at) = program(c, &lines);
-        let errors = refused(&source);
-        assert_eq!(errors.len(), 1, "{errors:?} for\n{source}");
-        assert_eq!(
-            errors[0].pos.line,
-            at + 1 + last,
-            "{errors:?} for\n{source}"
-        );
+        let arms: Vec<(&Case, Vec<String>)> = cs
+            .iter()
+            .map(|c| {
+                let mut lines = arm_lines(c);
+                let again = lines[0].clone();
+                let last = lines.len() - 1;
+                lines.insert(last, again);
+                (c, lines)
+            })
+            .collect();
+        let (source, at) = program(&arms);
+        let wanted: Vec<usize> = at.iter().zip(&arms).map(|(at, (_, lines))| at + lines.len() - 1).collect();
+        assert_eq!(error_lines(&source, cs.len()), wanted, "for\n{source}");
     });
 }
 
