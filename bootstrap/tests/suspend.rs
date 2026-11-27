@@ -14,8 +14,44 @@ use crate::generate::{self, Gen};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness",
-        a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness,
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_1_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(0),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_2_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(1),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_3_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(2),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_4_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(3),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_5_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(4),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_6_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(5),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_7_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(6),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_8_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(7),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_9_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(8),
+    ),
+    (
+        "a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness_part_10_of_10",
+        || a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(9),
     ),
     (
         "a_state_machine_gives_a_wait_each_time_the_function_waits_and_no_other_time",
@@ -338,8 +374,8 @@ fn waits_of(program: &Program) -> bool {
         })
 }
 
-fn a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness() {
-    generate::check(160, 150, cases, |case| {
+fn a_function_with_waits_as_a_state_machine_does_what_it_does_for_every_order_of_readiness(part: u64) {
+    generate::check_part(160, 150, part, 10,cases, |case| {
         let program = program_of(case);
         assert_eq!(scalar::check(&program), Ok(()));
         if !waits_of(&program) {
