@@ -58,7 +58,7 @@ impl Fmt[HeaderValue] {
 }
 
 // The byte, in a small letter if it is a capital letter.
-pub fn lowered(b: Byte) -> Byte {
+fn lowered(b: Byte) -> Byte {
   if b >= 'A' and b <= 'Z' { b + 32 } else { b }
 }
 
@@ -69,7 +69,7 @@ fn token_byte(b: Byte) -> bool {
 }
 
 // Whether a text is a token: one byte or more, each of which a name may hold.
-pub fn a_token(t: str) -> bool {
+fn a_token(t: str) -> bool {
   var yes = t.size > 0
   loop b in t {
     if not token_byte(b) {
@@ -100,13 +100,13 @@ fn is_named(t: str, name: str) -> bool {
 
 // Whether a header of this name may be given, which is so for any but the four
 // that the library writes.
-pub fn not_written_by_the_library(t: str) -> bool {
+fn not_written_by_the_library(t: str) -> bool {
   not is_named(t, "content-type") and not is_named(t, "content-length") and not is_named(t, "connection") and not is_named(t, "transfer-encoding")
 }
 
 // Whether a text holds no line break, so that a header made of it cannot add
 // a line of its own.
-pub fn one_line(s: str) -> bool {
+fn one_line(s: str) -> bool {
   var yes = true
   loop b in s {
     if b == 13 or b == 10 {
