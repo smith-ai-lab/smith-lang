@@ -213,17 +213,24 @@ fn the_release_workflow_runs_after_a_merge_and_only_its_publish_job_writes() {
         writes[0] > publish,
         "the job that writes is the one that publishes"
     );
-    for forbidden in [
-        "--clobber",
-        "gh release delete",
-        "gh release edit",
-        "--force",
-    ] {
+    for forbidden in ["--clobber", "gh release edit", "--force", "--cleanup-tag"] {
         assert!(
             !text.contains(forbidden),
             "a release is never changed: {forbidden}"
         );
     }
+    // A published release is never deleted: the only delete is of a draft,
+    // and comes after the step has read whether the release is one.
+    let deletes: Vec<usize> = text
+        .match_indices("gh release delete")
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(deletes.len(), 1, "one place may delete, and only a draft");
+    let checked = text[..deletes[0]].rfind("--json isDraft").expect("a read of isDraft");
+    assert!(
+        text[checked..deletes[0]].contains("= false"),
+        "a release that is published is left before the delete"
+    );
 }
 
 /// A list of tag names, each beginning with `v`.
