@@ -84,7 +84,7 @@ A `Result` error prints its message and exits non-zero. When `deploy` above give
 
 ## A name that is no task
 
-`smith <name>`, for a name that is not a built-in command, either runs the task or gives exactly one error. `unknown command` is said only for a name that starts with `-`.
+`smith <name>`, for a name that is not a built-in command, either runs the task or gives exactly one error. `unknown command` is never said: a word that starts with `-` is no name, and `smith --nope` says "unknown flag `--nope`; the flags of smith are --timings and --watch".
 
 - With no `project.smith` in the folder or any folder above it, the error names the folder, says that none was found, and says that `<name>` would be a task of it.
 - With a `project.smith` that has no `pub fn <name>`, the error says that the file, with its path, has no task `<name>`, and lists the tasks it has.
