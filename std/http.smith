@@ -22,10 +22,32 @@ pub struct Request {
   pub body: str
 }
 
-pub struct Response {
+// A response that has no body, whatever its status.
+pub struct HeadersOnly {
   pub status: 100..600
   pub headers: List[(HeaderName, HeaderValue)]
-  pub body: Option[Payload]
+}
+
+// A response that has a body, which a status of 1xx, 204, or 304 never has, as
+// HTTP says.
+pub struct WithBody {
+  pub status: 100..600
+  pub headers: List[(HeaderName, HeaderValue)]
+  pub body: Payload
+  pub has_body: status >= 200 and status != 204 and status != 304
+}
+
+pub enum Response {
+  headers_only: HeadersOnly
+  with_body: WithBody
+}
+
+// The status of a response.
+pub fn status_of(r: Response) -> 100..600 {
+  match r {
+    .headers_only(h) { h.status }
+    .with_body(w) { w.status }
+  }
 }
 
 pub struct Part {
@@ -567,13 +589,19 @@ pub trait Respond[T] {
   fn respond(value: T) -> Response <alloc>
 }
 
+// A response with a body, for a status that may have one: a status that may not
+// is answered with no body, as HTTP says.
 fn answer(status: 100..600, body: take Payload) -> Response {
-  Response(status: status, headers: [], body: .some(body))
+  if status >= 200 and status != 204 and status != 304 {
+    Response.with_body(WithBody(status: status, headers: [], body: body))
+  } else {
+    Response.headers_only(HeadersOnly(status: status, headers: []))
+  }
 }
 
 // A response with no body, which says no type and a length of 0.
 fn bare(status: 100..600) -> Response {
-  Response(status: status, headers: [], body: .none)
+  Response.headers_only(HeadersOnly(status: status, headers: []))
 }
 
 impl[T] Respond[T]
@@ -599,7 +627,7 @@ impl Respond[Text] {
 impl Respond[Redirect] {
   fn respond(value: Redirect) -> Response <alloc> {
     match check_value(value.to) {
-      .ok(place) { Response(status: 302, headers: [(header_name("location"), place)], body: .none) }
+      .ok(place) { Response.headers_only(HeadersOnly(status: 302, headers: [(header_name("location"), place)])) }
       .err(e) { bare(500) }
     }
   }
@@ -987,21 +1015,24 @@ fn answer_with[T](request: Request, body: fn() -> T <http>) -> Response <alloc>
   copy_response(response)
 }
 
-// The response again, with its own list of headers.
+// The response again, with its own list of headers and its own bytes.
 fn copy_response(r: Response) -> Response <alloc> {
-  var headers: List[(HeaderName, HeaderValue)] = []
-  loop i in 0..r.headers.size {
-    headers = push(headers, r.headers[i])
+  match r {
+    .headers_only(h) {
+      Response.headers_only(HeadersOnly(status: h.status, headers: copied(h.headers)))
+    }
+    .with_body(w) {
+      Response.with_body(WithBody(status: w.status, headers: copied(w.headers), body: bytes(content(w.body), content_type(w.body))))
+    }
   }
-  Response(status: r.status, headers: headers, body: copy_body(r.body))
 }
 
-// The body again, with its own bytes.
-fn copy_body(b: Option[Payload]) -> Option[Payload] <alloc> {
-  match b {
-    .some(p) { .some(bytes(content(p), content_type(p))) }
-    .none { .none }
+fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
+  var made: List[(HeaderName, HeaderValue)] = []
+  loop i in 0..headers.size {
+    made = push(made, headers[i])
   }
+  made
 }
 
 fn reason(status: 100..600) -> str {
@@ -1037,28 +1068,37 @@ fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
   push(push(line, 13), 10)
 }
 
+// The status line and the headers of a response, each ended by a line break.
+fn head_bytes(status: 100..600, headers: List[(HeaderName, HeaderValue)]) -> List[Byte] <alloc> {
+  var made: List[Byte] = []
+  made = ended(append(made, "HTTP/1.1 {status} {reason(status)}".bytes))
+  loop i in 0..headers.size {
+    (n, v) = headers[i]
+    made = ended(append(made, "{n}: {v}".bytes))
+  }
+  made
+}
+
+// The end of a head: whether the connection is kept, and the empty line.
+fn head_ended(made: take List[Byte], keep: bool) -> List[Byte] <alloc> {
+  if keep { ended(made) } else { ended(ended(append(made, "connection: close".bytes))) }
+}
+
 // The bytes of a response: its status line, its headers, then the type and the
 // length of its body, which are the only ones on the wire as no header can be
 // one, and the body.
 fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
-  made = ended(append(made, "HTTP/1.1 {r.status} {reason(r.status)}".bytes))
-  loop i in 0..r.headers.size {
-    (n, v) = r.headers[i]
-    made = ended(append(made, "{n}: {v}".bytes))
-  }
-  match r.body {
-    .some(p) {
-      made = ended(append(made, "content-type: {content_type(p)}".bytes))
-      made = ended(append(made, "content-length: {size(p)}".bytes))
+  match r {
+    .headers_only(h) {
+      made = ended(append(head_bytes(h.status, h.headers), "content-length: 0".bytes))
+      head_ended(made, keep)
     }
-    .none { made = ended(append(made, "content-length: 0".bytes)) }
-  }
-  if not keep { made = ended(append(made, "connection: close".bytes)) }
-  made = ended(made)
-  match r.body {
-    .some(p) { append(made, content(p)) }
-    .none { made }
+    .with_body(w) {
+      var made = head_bytes(w.status, w.headers)
+      made = ended(append(made, "content-type: {content_type(w.body)}".bytes))
+      made = ended(append(made, "content-length: {size(w.body)}".bytes))
+      append(head_ended(made, keep), content(w.body))
+    }
   }
 }
 

@@ -41,10 +41,10 @@ fn printed(source: &str) -> String {
 }
 
 /// Prints each response as its status, its headers, and its body.
-const SHOW: &str = "fn show(r: Response) <console, alloc> {\n  print(\"{r.status}\")\n  loop i in 0..r.headers.size {\n    (name, value) = r.headers[i]\n    print(\"{name}: {value}\")\n  }\n  match r.body {\n    .some(p) {\n      print(\"content-type: {content_type(p)}\")\n      match utf8(freeze(content(p))) {\n        .ok(t) { print(t) }\n        .err(e) { print(\"not text\") }\n      }\n    }\n    .none { print(\"\") }\n  }\n}\n\n";
+const SHOW: &str = "fn lines(headers: List[(HeaderName, HeaderValue)]) <console, alloc> {\n  loop i in 0..headers.size {\n    (name, value) = headers[i]\n    print(\"{name}: {value}\")\n  }\n}\n\nfn show(r: Response) <console, alloc> {\n  print(\"{status_of(r)}\")\n  match r {\n    .headers_only(h) {\n      lines(h.headers)\n      print(\"\")\n    }\n    .with_body(w) {\n      lines(w.headers)\n      print(\"content-type: {content_type(w.body)}\")\n      match utf8(freeze(content(w.body))) {\n        .ok(t) { print(t) }\n        .err(e) { print(\"not text\") }\n      }\n    }\n  }\n}\n\n";
 
 /// What a program that shows a response imports to do it.
-const SHOWN: &str = "use std.list (freeze)\nuse std.message (content, content_type)\nuse std.utf8 (utf8)\n";
+const SHOWN: &str = "use std.list (freeze)\nuse std.message (HeaderName, HeaderValue, content, content_type)\nuse std.utf8 (utf8)\n";
 
 const NAMES: &[&str] = &["Ana", "a\\\"b", "x y", "", "caf\u{e9}", "back\\\\slash"];
 
@@ -76,7 +76,7 @@ fn a_value_with_serialize_is_answered_as_json_with_status_200() {
     };
     generate::check(8501, 3, users, |all| {
         let mut source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (Respond, Response)\n{SHOWN}\nstruct User {{\n  id: u64\n  name: str\n}}\n\n{SHOW}fn main() <console, alloc> {{\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (Respond, Response, status_of)\n{SHOWN}\nstruct User {{\n  id: u64\n  name: str\n}}\n\n{SHOW}fn main() <console, alloc> {{\n"
         );
         let mut expected = String::new();
         for (id, name) in all {
@@ -95,7 +95,7 @@ fn a_value_with_serialize_is_answered_as_json_with_status_200() {
 
 fn a_result_is_answered_as_its_value_or_as_its_error_with_the_status_of_the_error() {
     let source = format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (BadRequest, NotFound, Respond, Response, Unauthorized)\n{SHOWN}\nstruct User {{\n  id: u64\n}}\n\n{SHOW}\
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.http (BadRequest, NotFound, Respond, Response, Unauthorized, status_of)\n{SHOWN}\nstruct User {{\n  id: u64\n}}\n\n{SHOW}\
 fn main() <console, alloc> {{\n  \
 ok: Result[User, NotFound] = Result.ok(User(id: 7))\n  show(Respond[Result[User, NotFound]].respond(ok))\n  \
 a: Result[User, NotFound] = Result.err(NotFound(message: \"no\"))\n  show(Respond[Result[User, NotFound]].respond(a))\n  \
@@ -113,8 +113,8 @@ c: Result[User, Unauthorized] = Result.err(Unauthorized(message: \"who\"))\n  sh
 
 fn a_type_that_writes_its_own_respond_is_answered_as_it_says_and_not_as_json() {
     let source = format!(
-        "use std.console (console, print)\nuse std.http (Respond, Response, Status)\nuse std.list (append, freeze)\nuse std.message (bytes, content, content_type, header_value)\nuse std.utf8 (utf8)\n\nstruct Taken {{\n  name: str\n}}\n\nimpl Status[Taken] {{\n  fn status(e: Taken) -> 100..600 {{ 409 }}\n}}\n\n\
-struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response <alloc> {{\n    Response(status: 200, headers: [], body: .some(bytes(append([], value.name.bytes), header_value(\"image/png\"))))\n  }}\n}}\n\n{SHOW}\
+        "use std.console (console, print)\nuse std.http (Respond, Response, Status, WithBody, status_of)\nuse std.list (append, freeze)\nuse std.message (HeaderName, HeaderValue, bytes, content, content_type, header_value)\nuse std.utf8 (utf8)\n\nstruct Taken {{\n  name: str\n}}\n\nimpl Status[Taken] {{\n  fn status(e: Taken) -> 100..600 {{ 409 }}\n}}\n\n\
+struct Picture {{\n  name: str\n}}\n\nimpl Respond[Picture] {{\n  fn respond(value: Picture) -> Response <alloc> {{\n    Response.with_body(WithBody(status: 200, headers: [], body: bytes(append([], value.name.bytes), header_value(\"image/png\"))))\n  }}\n}}\n\n{SHOW}\
 fn send[T](x: T) -> Response <alloc>\n  requires Respond[T]\n{{\n  Respond[T].respond(x)\n}}\n\n\
 fn main() <console, alloc> {{\n  show(send(Picture(name: \"cat\")))\n  \
 t: Result[Picture, Taken] = Result.err(Taken(name: \"ana\"))\n  show(send(t))\n}}\n"
@@ -126,7 +126,7 @@ t: Result[Picture, Taken] = Result.err(Taken(name: \"ana\"))\n  show(send(t))\n}
     );
 }
 
-const EACH: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.html (render, text)\nuse std.http (NotFound, Redirect, Respond, Response, Text)\nuse std.list (freeze)\nuse std.message (content, content_type)\nuse std.utf8 (utf8)\n\nstruct User {\n  id: u64\n}\n\n";
+const EACH: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.html (render, text)\nuse std.http (NotFound, Redirect, Respond, Response, Text, status_of)\nuse std.list (freeze)\nuse std.message (HeaderName, HeaderValue, content, content_type)\nuse std.utf8 (utf8)\n\nstruct User {\n  id: u64\n}\n\n";
 
 fn every_executable_answers_each_kind_of_value_as_the_evaluator_does() {
     let source = format!(

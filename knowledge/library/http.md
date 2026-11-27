@@ -11,7 +11,7 @@ built:
   - "`FromRequest`, which `get` and the other methods require of the struct of the function's parameters, is found for it only when each parameter has `FromText` (or is an `Option` of a type that has it) except at most one that has `Deserialize`, read from the body; a function with a parameter that is neither, or with two for the body, is refused where its name is given, with an error that names the parameters, and a type of a program's own `FromText` is refused as not used by a route yet"
   - "`listen(port: p)` of `std.http` on Linux, macOS, and Windows, on x86-64 and arm64, which answers `http` from a socket as [Where the requests come from](#where-the-requests-come-from) says, with each connection in a task of its own, on Linux and on macOS, so that a connection that says nothing holds up no other and 1,000 connections held open at once are each answered, and one connection at a time on Windows, where every call waits where it is, with `with arena()` around each request so that a connection serving requests asks the system for the same memory after 50 requests as after 2,000, and with the frame and the stack of a connection given back when it ends, so that a second wave of 1,000 connections asks the system for no more than the first, and a head of at most 16384 bytes and a body of at most a megabyte, read by `std.http1` whether it has a length or comes in chunks"
   - "`listen` returns when `accept` gives `.closed`, after the connections it took have been served, which a test handler of `net` that keeps what `write` was given does, and what `write` was given is read after `listen` has returned, for every order that a scheduler of a test of any seed runs the connections in"
-  - "`Response.status` is a `100..600`, as `Status.status` gives; `Response.body` is an `Option` of a `Payload` of [`std.message`](message.md), which `json`, `form`, `text`, `html`, and `bytes` make, and `listen` writes the `content-type` and the `content-length` of the response from it, and `content-length: 0` and no `content-type` for a response with no body; a header of a response is a `HeaderName` and a `HeaderValue` of `std.message`, which only `header_name` and `header_value` make from texts written out, where the program is built, and `check_name` and `check_value` make from texts known when it runs, as a `Result` with a `HeaderError`; a `header_name` of a text that is no token, or is `content-type`, `content-length`, `connection`, or `transfer-encoding` in any case of its letters, and a `header_value` of a text with a line break, are refused where they are written, with the call and its text in the message; `Request.method` is the `Method` of `std.message`, and a request whose method is not one of its cases is answered 501 and the connection is closed"
+  - "`Response` is an enum of `headers_only`, a `HeadersOnly` of a status and headers, and `with_body`, a `WithBody` that also has a `body` that is a `Payload` of [`std.message`](message.md), which `json`, `form`, `text`, `html`, and `bytes` make, and a proof field `has_body` that the status is 200 or more and is not 204 or 304, so a `WithBody` of any other status is refused where it is written, with the goal stated, and `status_of` gives the status of either; a status is a `100..600`, as `Status.status` gives; `listen` writes the `content-type` and the `content-length` of the payload of a `with_body`, and `content-length: 0` and no `content-type` for a `headers_only`; a header of a response is a `HeaderName` and a `HeaderValue` of `std.message`, which only `header_name` and `header_value` make from texts written out, where the program is built, and `check_name` and `check_value` make from texts known when it runs, as a `Result` with a `HeaderError`; a `header_name` of a text that is no token, or is `content-type`, `content-length`, `connection`, or `transfer-encoding` in any case of its letters, and a `header_value` of a text with a line break, are refused where they are written, with the call and its text in the message; `Request.method` is the `Method` of `std.message`, and a request whose method is not one of its cases is answered 501 and the connection is closed"
   - "not the check of a path that names a part the function has no parameter for, `at`, a guard, or the reading of a percent sign in a part"
 ---
 
@@ -98,14 +98,14 @@ impl Status[Taken] {
 }
 ```
 
-`.ok(v)` is the response of `v`, by `Respond`. `.err(e)` is a response of status `status(e)` whose body is `e` as JSON. An error that is an enum says the status of each case with a `match`. A route whose function gives an error with no `Status` is refused when the program is built, so no failure is answered with a status nobody chose. The library has `NotFound`, `BadRequest`, and `Unauthorized`, with 404, 400, and 401.
+`.ok(v)` is the response of `v`, by `Respond`. `.err(e)` is a response of status `status(e)` whose body is `e` as JSON, or no body when that status has none. An error that is an enum says the status of each case with a `match`. A route whose function gives an error with no `Status` is refused when the program is built, so no failure is answered with a status nobody chose. The library has `NotFound`, `BadRequest`, and `Unauthorized`, with 404, 400, and 401.
 
 `Text` and `Redirect` are structs of `std.http`, so a file that imports `Text` from `std.http` and `Text` from [`std.text`](text.md) writes one of them with its module.
 
-A response that a function writes itself, as `impl Respond[Picture]` does, has a body made by the functions of [`std.message`](message.md), which say its type and its length, so it never names them.
+A response that a function writes itself, as `impl Respond[Picture]` does, is a `with_body` whose body is made by the functions of [`std.message`](message.md), which say its type and its length, so it never names them.
 
 ```
-use std.http (Respond, Response)
+use std.http (Respond, Response, WithBody)
 use std.message (bytes, header_value)
 
 struct Picture {
@@ -114,7 +114,7 @@ struct Picture {
 
 impl Respond[Picture] {
   fn respond(value: Picture) -> Response <alloc> {
-    Response(status: 200, headers: [], body: .some(bytes(value.png, header_value("image/png"))))
+    Response.with_body(WithBody(status: 200, headers: [], body: bytes(value.png, header_value("image/png"))))
   }
 }
 ```
@@ -195,7 +195,7 @@ fn listen[T](body: fn() -> T <http>; port: 1..65536) -> T <net, alloc, diverge>
 - **One connection at a time.** `listen` listens on the port at every address of the machine, takes a connection, serves the requests it sends one after another, and takes the next connection when it ends. For each request it runs the block once, with `request` giving that request and `send` taking its response, so `routes` answers it.
 - **A closed listener ends the serving.** When `accept` gives `.closed`, `listen` takes no more connections, runs each connection it took, in a task of its own on Linux, to its end, and returns what the block gives when nothing asks it. Another error of `accept` is passed over, as before. A test gives `listen` a handler of `net` that makes the connections, reads each a request, and keeps what `write` was given, and reads it after `listen` has returned, with no socket opened.
 - **A request is read by [`std.http1`](http1.md),** its head of at most 16384 bytes and its body of at most a megabyte, whether the body has a length or comes in chunks, and a body that is not UTF-8 is refused. The path and the query of the target are the parts of `Request`.
-- **A response is written whole.** Its status line has the reason of the status, and its headers are those the block gave, none of which is `content-type`, `content-length`, `connection`, or `transfer-encoding`, as [A header](message.md#a-header) says. Then comes the `content-type` of its payload, when it has one, and the `content-length`, which is the size of the payload, or 0 with no payload, so every response, with no body or with one, says where it ends, with the one length.
+- **A response is written whole.** Its status line has the reason of the status, and its headers are those the block gave, none of which is `content-type`, `content-length`, `connection`, or `transfer-encoding`, as [A header](message.md#a-header) says. Then comes the `content-type` of its payload, when it has one, and the `content-length`, which is the size of the payload, or 0 for a `headers_only`, so every response, with no body or with one, says where it ends, with the one length.
 - **A request that is refused is answered 400 and the connection is closed.** That is every request `std.http1` refuses, a body that is too long or not UTF-8, and one the connection ends in the middle of, which is closed with nothing said. The next connection is served.
 - **A connection is kept** for the next request of `HTTP/1.1` unless the request says `connection: close`, and of `HTTP/1.0` only if it says `connection: keep-alive`, as [`std.http1`](http1.md#answering-a-request-of-http10) says. A client that sent the next request before it had the response to this one has it answered with `connection: close`, and the connection is closed, which is a response a client of HTTP/1.1 is ready for and sends the rest again.
 - **A port that cannot be listened on ends the program.** The error is written to the standard error and the status is 1, as a write the system refuses ends a program, since nothing can be served. A connection that cannot be taken is passed over.
@@ -213,14 +213,27 @@ struct Request {
   body: str
 }
 
-struct Response {
+enum Response {
+  headers_only: HeadersOnly
+  with_body: WithBody
+}
+
+struct HeadersOnly {
   status: 100..600
   headers: List[(HeaderName, HeaderValue)]
-  body: Option[Payload]
+}
+
+struct WithBody {
+  status: 100..600
+  headers: List[(HeaderName, HeaderValue)]
+  body: Payload
+  has_body: status >= 200 and status != 204 and status != 304
 }
 ```
 
-`Method`, `HeaderName`, `HeaderValue`, and `Payload` are of [`std.message`](message.md), which `std.fetch` imports too. A request whose method is not one of the cases of `Method` is answered 501. `body` is `.none` for a response that has none, and `.some` of a `Payload` otherwise, which says its own type and length.
+`Method`, `HeaderName`, `HeaderValue`, and `Payload` are of [`std.message`](message.md), which `std.fetch` imports too. A request whose method is not one of the cases of `Method` is answered 501.
+
+A response with a body is a `with_body`, whose `Payload` says its own type and length. HTTP says a response of status 1xx, 204, or 304 has no body, so a `WithBody` of one is refused where it is written, and a response of such a status is a `headers_only`. A proof field `has_body` says it, as [A struct that holds a proof](../language/proof-fields.md) describes. `Response.with_body(WithBody(status: 204, headers: [], body: text("x")))` is refused: "cannot prove `has_body` of `WithBody`", while the same with status 200 is built. `status_of(r)` is the status of either case.
 
 ## A header
 
@@ -236,7 +249,7 @@ fn page_headers() -> List[(HeaderName, HeaderValue)] <alloc> {
 
 `content-type` and `content-length` are not a header of a response: the body gives them, so `header_name("Content-Type")` is refused where it is written, as are `connection` and `transfer-encoding`, which `listen` writes. A response whose body is a `text`, a `json`, an `html`, a `form`, or `bytes` has the type that maker says.
 
-`Response.status` is a `100..600`, so `Response(status: 0, headers: [], body: .none)` is refused where it is written, as every number outside its range is.
+A status is a `100..600`, so `HeadersOnly(status: 0, headers: [])` is refused where it is written, as every number outside its range is.
 
 `route_match(pattern, path)` gives `.some` of each part of the path that a `:name` part of the pattern stands at, as a `Part` of the name and the text, when the pattern and the path have the same number of parts and each part that does not begin with `:` is the same, and `.none` when they do not. `route_match("/users/:id", "/users/7")` is one `Part`, `id` with `7`, and `/users` does not fit it. `query_parts("a=1&b=&c")` gives `a` with `1`, `b` with the empty text, and `c` with the empty text: the members are the pieces between `&`, each cut at its first `=`, and a piece with nothing in it is no member. A part is read as the type of its parameter by [`from_text`](fromtext.md).
 
