@@ -13,52 +13,100 @@ pub const ONCE: &[Test] = &[
         the_examples_of_bits_md_give_what_the_page_says,
     ),
     (
-        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_1_of_4",
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_1_of_8",
         || the_range_of_bit_and_is_the_least_to_the_greatest_result(0),
     ),
     (
-        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_2_of_4",
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_2_of_8",
         || the_range_of_bit_and_is_the_least_to_the_greatest_result(1),
     ),
     (
-        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_3_of_4",
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_3_of_8",
         || the_range_of_bit_and_is_the_least_to_the_greatest_result(2),
     ),
     (
-        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_4_of_4",
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_4_of_8",
         || the_range_of_bit_and_is_the_least_to_the_greatest_result(3),
     ),
     (
-        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_1_of_4",
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_5_of_8",
+        || the_range_of_bit_and_is_the_least_to_the_greatest_result(4),
+    ),
+    (
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_6_of_8",
+        || the_range_of_bit_and_is_the_least_to_the_greatest_result(5),
+    ),
+    (
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_7_of_8",
+        || the_range_of_bit_and_is_the_least_to_the_greatest_result(6),
+    ),
+    (
+        "the_range_of_bit_and_is_the_least_to_the_greatest_result_part_8_of_8",
+        || the_range_of_bit_and_is_the_least_to_the_greatest_result(7),
+    ),
+    (
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_1_of_8",
         || the_range_of_bit_or_is_the_least_to_the_greatest_result(0),
     ),
     (
-        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_2_of_4",
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_2_of_8",
         || the_range_of_bit_or_is_the_least_to_the_greatest_result(1),
     ),
     (
-        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_3_of_4",
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_3_of_8",
         || the_range_of_bit_or_is_the_least_to_the_greatest_result(2),
     ),
     (
-        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_4_of_4",
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_4_of_8",
         || the_range_of_bit_or_is_the_least_to_the_greatest_result(3),
     ),
     (
-        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_1_of_4",
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_5_of_8",
+        || the_range_of_bit_or_is_the_least_to_the_greatest_result(4),
+    ),
+    (
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_6_of_8",
+        || the_range_of_bit_or_is_the_least_to_the_greatest_result(5),
+    ),
+    (
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_7_of_8",
+        || the_range_of_bit_or_is_the_least_to_the_greatest_result(6),
+    ),
+    (
+        "the_range_of_bit_or_is_the_least_to_the_greatest_result_part_8_of_8",
+        || the_range_of_bit_or_is_the_least_to_the_greatest_result(7),
+    ),
+    (
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_1_of_8",
         || the_range_of_bit_xor_is_the_least_to_the_greatest_result(0),
     ),
     (
-        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_2_of_4",
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_2_of_8",
         || the_range_of_bit_xor_is_the_least_to_the_greatest_result(1),
     ),
     (
-        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_3_of_4",
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_3_of_8",
         || the_range_of_bit_xor_is_the_least_to_the_greatest_result(2),
     ),
     (
-        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_4_of_4",
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_4_of_8",
         || the_range_of_bit_xor_is_the_least_to_the_greatest_result(3),
+    ),
+    (
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_5_of_8",
+        || the_range_of_bit_xor_is_the_least_to_the_greatest_result(4),
+    ),
+    (
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_6_of_8",
+        || the_range_of_bit_xor_is_the_least_to_the_greatest_result(5),
+    ),
+    (
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_7_of_8",
+        || the_range_of_bit_xor_is_the_least_to_the_greatest_result(6),
+    ),
+    (
+        "the_range_of_bit_xor_is_the_least_to_the_greatest_result_part_8_of_8",
+        || the_range_of_bit_xor_is_the_least_to_the_greatest_result(7),
     ),
     (
         "the_range_of_shift_left_is_the_least_to_the_greatest_result",
@@ -124,7 +172,7 @@ fn program(call: &str, first: (i128, i128), second: (i128, i128), gives: (i128, 
 
 /// How many parts the first ranges of a bit function are in, which the names
 /// of its tests say.
-const PARTS: usize = 4;
+const PARTS: usize = 8;
 
 /// The function gives its exact range, and not a range that is one less at
 /// either end, for the first ranges that are `part` places from the start, a
