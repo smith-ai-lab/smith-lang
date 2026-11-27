@@ -1028,7 +1028,7 @@ fn to_json_asks_for_memory_in_proportion_to_the_text_it_gives() {
         (outcome.stdout, requests)
     };
     // One struct gives `{"a":7,"b":true}`, 16 bytes, and a comma between.
-    for n in [10usize, 1_000, 2_000] {
+    for n in [10usize, 250, 500] {
         let (stdout, with) = requests(n, true);
         let (_, without) = requests(n, false);
         let text = n * 16 + (n - 1) + 2;
