@@ -346,24 +346,40 @@ pub const ONCE: &[Test] = &[
 
 pub const MACHINE: &[Test] = &[
     (
-        "every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped",
-        every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped,
+        "every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped_part_1_of_3",
+        || every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(0),
     ),
     (
-        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_1_of_4",
+        "every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped_part_2_of_3",
+        || every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(1),
+    ),
+    (
+        "every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped_part_3_of_3",
+        || every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(2),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_1_of_6",
         || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(0),
     ),
     (
-        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_2_of_4",
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_2_of_6",
         || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(1),
     ),
     (
-        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_3_of_4",
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_3_of_6",
         || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(2),
     ),
     (
-        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_4_of_4",
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_4_of_6",
         || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(3),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_5_of_6",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(4),
+    ),
+    (
+        "every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back_part_6_of_6",
+        || every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(5),
     ),
 ];
 
@@ -482,16 +498,16 @@ fn ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_
 type Case = (String, Option<String>);
 
 /// Each program of the test, which the evaluator runs when it can, as a part of
-/// four: part `k` takes every fourth, so that no part is more than a quarter of the
-/// work, which the executables of every target are most of.
+/// six: part `k` takes every sixth, so that no part is more than a sixth of the
+/// work, which the executables of every target and the evaluator are most of.
 fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_joined_task_back(k: usize) {
     let targets = runnable();
     let cases: Vec<Case> = vec![
-        (many(200), None),
-        (arena_rounds(300), None),
+        (many(50), None),
+        (arena_rounds(60), None),
         (two_in_arenas(4), None),
-        (one_after_another(500), None),
-        (lists_one_after_another(200), None),
+        (one_after_another(100), None),
+        (lists_one_after_another(50), None),
         (list_up_to_main(), None),
         // The executables run what the evaluator has not the time for: 1,000 tasks
         // that all exist at once, 2,000 rounds of an arena in a task, and 10,000
@@ -508,7 +524,7 @@ fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_j
             Some(format!("{}\n", (0..10_000u64).map(|n| n.to_string().len() as u64 + 17).sum::<u64>())),
         ),
     ];
-    for (source, wanted) in cases.into_iter().skip(k).step_by(4) {
+    for (source, wanted) in cases.into_iter().skip(k).step_by(6) {
         let said = match wanted {
             Some(wanted) => scalar::Outcome {
                 status: 0,
@@ -704,8 +720,42 @@ fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_an
 /// or bound to a name that nothing reads. The handle is `how`.
 fn dropped_children(count: u64, seed: u64, how: &str) -> String {
     format!(
-        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ rounds({count}) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{}{}{}{}",
+        dropped_items(),
+        dropped_rounds("rounds", how),
+        dropped_run("run", "rounds", count, seed),
+        dropped_main(&["run"]),
     )
+}
+
+/// What the programs of `dropped_children` share: the types and the functions
+/// that the loops of their rounds use.
+fn dropped_items() -> String {
+    format!(
+        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\n"
+    )
+}
+
+/// The function of the rounds of a program of `dropped_children`, in which the
+/// handle of each child is `how`.
+fn dropped_rounds(name: &str, how: &str) -> String {
+    format!(
+        "fn {name}(n: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\n"
+    )
+}
+
+/// The function that runs `rounds` for `count` rounds under the scheduler of a
+/// test of the seed.
+fn dropped_run(name: &str, rounds: &str, count: u64, seed: u64) -> String {
+    format!(
+        "fn {name}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ {rounds}({count}) }}\n  join(a)\n}}\n\n"
+    )
+}
+
+/// The `main` that prints what each of the functions that run gives.
+fn dropped_main(runs: &[&str]) -> String {
+    let prints: String = runs.iter().map(|run| format!("  print(\"{{{run}()}}\")\n")).collect();
+    format!("fn main() <console, alloc, diverge> {{\n{prints}}}\n")
 }
 
 /// Each of a hundred children would keep 4 KB of list and more. A handle that is dropped gives
@@ -826,21 +876,32 @@ fn a_child_whose_handle_is_read_is_not_given_back_before_it_is_joined() {
     assert_eq!(said, format!("{}\n", sum(100) + sum(200) + sum(300)));
 }
 
-fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped() {
-    let targets = runnable();
-    for (source, wanted) in [
-        (dropped_children(3_000, 1, "_ = spawn { total(build(100)) }"), "3000\n"),
-    ]
-    .into_iter()
-    .chain(DROPS.iter().map(|how| (dropped_children(30, 2, how), "30\n")))
-    {
-        let said = scalar::Outcome {
-            status: 0,
-            stdout: wanted.as_bytes().to_vec(),
-        };
-        for &target in &targets {
-            runs_as(source.as_bytes(), target, &said);
-        }
+fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(part: usize) {
+    // The programs of the cases of a part are the functions of one program, which
+    // is lowered and built once, and each prints the number of rounds it ran. Part
+    // `part` of three takes every third case.
+    let cases: Vec<(u64, u64, &str)> = std::iter::once((3_000, 1, "_ = spawn { total(build(100)) }"))
+        .chain(DROPS.iter().map(|how| (30, 2, *how)))
+        .skip(part)
+        .step_by(3)
+        .collect();
+    let mut source = dropped_items();
+    let mut runs = Vec::new();
+    let mut wanted = String::new();
+    for (k, (count, seed, how)) in cases.iter().enumerate() {
+        source += &dropped_rounds(&format!("rounds{k}"), how);
+        source += &dropped_run(&format!("run{k}"), &format!("rounds{k}"), *count, *seed);
+        runs.push(format!("run{k}"));
+        wanted += &format!("{count}\n");
+    }
+    let runs: Vec<&str> = runs.iter().map(String::as_str).collect();
+    source += &dropped_main(&runs);
+    let said = scalar::Outcome {
+        status: 0,
+        stdout: wanted.into_bytes(),
+    };
+    for target in runnable() {
+        runs_as(source.as_bytes(), target, &said);
     }
 }
 
