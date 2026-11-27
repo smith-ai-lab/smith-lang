@@ -99,8 +99,12 @@ pub const ONCE: &[Test] = &[
     ),
     ("a_file_must_be_named_smith", a_file_must_be_named_smith),
     (
-        "timings_list_every_stage_in_order_and_change_nothing_else",
-        timings_list_every_stage_in_order_and_change_nothing_else,
+        "timings_list_every_stage_in_order_and_change_nothing_else_part_1_of_2",
+        || timings_list_every_stage_in_order_and_change_nothing_else(0),
+    ),
+    (
+        "timings_list_every_stage_in_order_and_change_nothing_else_part_2_of_2",
+        || timings_list_every_stage_in_order_and_change_nothing_else(1),
     ),
     (
         "a_failed_build_lists_the_stages_that_ran_after_its_errors",
@@ -361,8 +365,9 @@ pub fn cases(extension: &str) -> Vec<PathBuf> {
     found
 }
 
-fn timings_list_every_stage_in_order_and_change_nothing_else() {
-    for source in cases("out") {
+fn timings_list_every_stage_in_order_and_change_nothing_else(part: usize) {
+    // The cases are shared by the two parts, each taking every other one.
+    for source in cases("out").into_iter().skip(part).step_by(2) {
         let name = source.file_stem().unwrap().to_str().unwrap();
         let file = format!("{name}.smith");
         let plain = folder("plain");
