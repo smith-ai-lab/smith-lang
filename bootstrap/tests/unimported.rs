@@ -268,6 +268,9 @@ fn each_name_of_the_library_used_with_no_import_is_one_error_at_its_first_use_na
 /// How many parts the modules are in, which the names of the tests say.
 const PARTS: usize = 16;
 
+/// The most names of one module that a program imports and calls.
+const NAMES_AT_ONCE: usize = 2;
+
 /// The same programs with the name imported are not refused for it. The names
 /// of a module are imported by one `use` and written in one program, which is
 /// checked once, and not once for each name, as the module is read each time.
@@ -287,7 +290,14 @@ fn each_name_of_the_library_that_the_file_imports_is_not_refused(part: usize) {
             .map_or(0, |m| m.len())
     };
     modules.sort_by_key(|(module, _)| (std::cmp::Reverse(size(module)), *module));
-    for (module, held) in modules.iter().skip(part).step_by(PARTS) {
+    // The names of a module are checked a few at a time, as a call that is not
+    // right for its function costs the check more the more of them a program
+    // holds, so that the module of `std.fetch` is in more than one part.
+    let pieces: Vec<(&str, &[&str])> = modules
+        .iter()
+        .flat_map(|(module, held)| held.chunks(NAMES_AT_ONCE).map(move |names| (*module, names)))
+        .collect();
+    for (module, held) in pieces.iter().skip(part).step_by(PARTS) {
         let uses = format!("use std.{module} ({})\n\n", held.join(", "));
         let mut program = String::from("fn main() {\n");
         for (i, name) in held.iter().enumerate() {
