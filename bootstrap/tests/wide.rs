@@ -7,6 +7,9 @@
 //! least and greatest as often as from anywhere else, and the oracle is a sign
 //! and a magnitude of 128 bits, which shares nothing with the compiler.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use smith::scalar::{self, Outcome};
 use smith::target::Target;
 use smith::{check, compile, lower};
@@ -665,22 +668,47 @@ fn runtime(g: &mut Gen) -> Runtime {
     }
 }
 
-impl Runtime {
-    fn source(self) -> String {
-        let read = |name: &str, ty: &str| {
-            format!(
-                "fn read_{name}(text: str) -> {ty} <alloc> {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
-            )
-        };
-        with_header(format!(
-            "use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n{}{}fn main(args: List[str]) <console, alloc> {{\n  if args.size == 2 {{\n    a = read_a(args[0])\n    b = read_b(args[1])\n    print(\"{{a * b}}\")\n  }}\n}}\n",
-            read("a", self.types.0.name),
-            read("b", self.types.1.name)
-        ))
-    }
+/// The numbers of one sign that the program of `runtime_program` reads, in the
+/// order it numbers them.
+fn of_sign(signed: bool) -> Vec<Int> {
+    INTS.iter().copied().filter(|t| t.signed == signed).collect()
+}
 
+/// A program that reads three words it is started with: the number of a pair of
+/// types of the same sign, and two numbers, which it reads as the types of the
+/// pair, so that the compiler does not know them, and prints their product. The
+/// pair is numbered by the place of the type of the first among the types of the
+/// sign, times their count, and the place of the type of the second, so that every
+/// pair of the sign is a product in one program, which is built once and started
+/// for each case.
+fn runtime_program(signed: bool) -> String {
+    let same = of_sign(signed);
+    let mut source = String::from("use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n");
+    for (i, ty) in same.iter().enumerate() {
+        let ty = ty.name;
+        source += &format!(
+            "fn read_{i}(text: str) -> {ty} <alloc> {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
+        );
+    }
+    source += "fn main(args: List[str]) <console, alloc> {\n  if args.size == 3 {\n    which = read_0(args[0])\n";
+    for a in 0..same.len() {
+        for b in 0..same.len() {
+            source += &format!(
+                "    if which == {} {{\n      print(\"{{read_{a}(args[1]) * read_{b}(args[2])}}\")\n    }}\n",
+                a * same.len() + b
+            );
+        }
+    }
+    source += "  }\n}\n";
+    with_header(source)
+}
+
+impl Runtime {
     fn words(self) -> Vec<String> {
-        vec![self.values.0.to_string(), self.values.1.to_string()]
+        let same = of_sign(self.types.0.signed);
+        let place = |ty: Int| same.iter().position(|t| t.name == ty.name).expect("a type of the sign");
+        let which = place(self.types.0) * same.len() + place(self.types.1);
+        vec![which.to_string(), self.values.0.to_string(), self.values.1.to_string()]
     }
 
     fn expected(self) -> String {
@@ -693,16 +721,23 @@ impl Runtime {
 /// compiler cannot know, is the exact product in every executable that this
 /// machine runs, whether a number is negative, at the least or the greatest of
 /// its type, or anywhere between. On arm64 it is `mul` with `smulh` or `umulh`,
-/// and on x86-64 one `mul` or `imul`.
+/// and on x86-64 one `mul` or `imul`. The programs are one for each sign, which
+/// has every pair of types of the sign in it, and which is built once for each
+/// target, and started with the pair and the two numbers of each case.
 fn every_executable_gives_the_exact_product_of_two_numbers_known_only_when_it_runs() {
+    let built: RefCell<HashMap<(bool, String), Vec<u8>>> = RefCell::new(HashMap::new());
     generate::check(4308, 40, runtime, |r| {
-        let (source, words, said) = (r.source(), r.words(), r.expected());
+        let (words, said) = (r.words(), r.expected());
+        let signed = r.types.0.signed;
         for target in targets::runnable() {
-            let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
-            targets::record(target, &[&bytes, words.concat().as_bytes(), said.as_bytes()]);
+            let mut built = built.borrow_mut();
+            let bytes = built.entry((signed, target.name().to_string())).or_insert_with(|| {
+                targets::build(runtime_program(signed).as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+            });
+            targets::record(target, &[bytes, words.concat().as_bytes(), said.as_bytes()]);
             if !targets::fingerprinting() {
-                let ran = targets::run_with_words(&bytes, &words);
-                assert_eq!(ran.stdout, said.as_bytes(), "{target:?}, with {words:?}, for\n{source}");
+                let ran = targets::run_with_words(bytes, &words);
+                assert_eq!(ran.stdout, said.as_bytes(), "{target:?}, with {words:?}, for\n{}", runtime_program(signed));
             }
         }
     });
