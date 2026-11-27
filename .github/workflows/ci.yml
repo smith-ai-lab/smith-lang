@@ -102,6 +102,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.compiler == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       machines: ${{ steps.decide.outputs.machines }}
     steps:
@@ -208,9 +211,12 @@ jobs:
       - name: Say which cases this change builds to other bytes
         if: github.event_name == 'pull_request'
         env:
-          DESCRIPTION: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: |
-          printf '%s\n' "$DESCRIPTION" > "$RUNNER_TEMP/description"
+          # The description as it is now, not as the event this run started
+          # with had it, so that editing it and running the job again counts.
+          gh api "repos/${{ github.repository }}/pulls/$PULL_REQUEST" --jq '.body // ""' > "$RUNNER_TEMP/description"
           if sh .github/check-generated.sh "$RUNNER_TEMP/base-case-hashes" case-hashes \
             "$RUNNER_TEMP/description" > "$RUNNER_TEMP/generated"; then status=0; else status=$?; fi
           cat "$RUNNER_TEMP/generated"
