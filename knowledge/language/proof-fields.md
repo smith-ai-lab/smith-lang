@@ -41,7 +41,7 @@ A struct that holds a proof is read as any struct is: the fields that hold data 
 
 ## Changing a field
 
-A field cannot be assigned when a proof field's statement, or the type of another field, names it. Assigning it would leave the proof proving something that is no longer so.
+A field cannot be assigned when a proof field's statement, or the type of another field, names it, through a `var` or an [`inout`](inout.md) parameter. Assigning it would leave the proof proving something that is no longer so.
 
 ```
 fn past[size: Nat](c: Cursor[size]) -> Cursor[size] {

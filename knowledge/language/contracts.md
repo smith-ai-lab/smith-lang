@@ -139,6 +139,23 @@ This is refused: "cannot prove that `lo <= r and r <= hi`, which `clamp` ensures
 
 A signature that has an `ensures` names its result.
 
+An [`inout`](inout.md) parameter is named by its value when the function returns, and `old(x)` names the value it was given, so an `ensures` says what the function did to it.
+
+```
+struct Cursor {
+  at: Nat
+}
+
+fn step(c: inout Cursor)
+  requires c.at < 1000000
+  ensures c.at == old(c).at + 1
+{
+  c.at = c.at + 1
+}
+```
+
+The caller knows `c.at` is one more than it was, and nothing else about `c`. `old` is written only in an `ensures`, and only of an `inout` parameter: `old(x)` of any other name is refused, as it is the same before and after.
+
 ```
 fn bigger(a: Byte) -> Byte
   ensures a + 1 <= 255
