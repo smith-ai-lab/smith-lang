@@ -31,6 +31,7 @@ struct Utf8Error {
 struct Range {
   pub start: Nat
   pub end: Nat
+  pub ordered: start <= end
 }
 
 trait Eq[A, B = A] {

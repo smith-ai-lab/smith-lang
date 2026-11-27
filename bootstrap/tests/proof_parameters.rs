@@ -84,18 +84,18 @@ fn swapped(text: &str) -> String {
 /// What is owed, a callee's statement over its parameters `x` and `y`, and what
 /// the caller has proven over its own, with how the second was made.
 #[derive(Debug)]
-struct Owing {
-    ty: &'static str,
+pub struct Owing {
+    pub ty: &'static str,
     /// The statement of the callee, over `x` and `y`.
-    owed: String,
+    pub owed: String,
     /// The statement the caller tests, over its `x` and `y`, where it calls with
     /// the two swapped, so that what is owed there is `owed` with them swapped.
-    tested: String,
+    pub tested: String,
     /// Whether the test says what is owed or more, which proves it.
-    proves: bool,
+    pub proves: bool,
 }
 
-fn owing(g: &mut Gen) -> Owing {
+pub fn owing(g: &mut Gen) -> Owing {
     let ty = room(g);
     let (owed, _): Condition = condition(g, 1, true);
     let (other, _): Condition = condition(g, 1, true);

@@ -7,7 +7,7 @@ built:
   - "`match check(e) { .some(p) { ... } .none { ... } }`, which runs `e` once, takes the first arm exactly when it is true, and gives `arith` in that arm what `if e` gives; it is the same program as `if e { ... } else { ... }` once the passes have run, as the proof is in no executable"
   - "a `check` of a statement that names a `var` or calls a function that carries an effect is refused"
   - "`check` needs no `use`"
-  - "not a proof that is returned, passed on, or held in a field, which `p` cannot be yet, and not a bound that is a name in a type inside another type, so `index_of` is not built"
+  - "not a bound that is a name in a type inside another type, so `index_of` is not built"
 ---
 
 # check

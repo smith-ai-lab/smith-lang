@@ -56,6 +56,15 @@ fn main() <console, alloc> {{
 }}
 "
             );
+            // A range is written only where its ends are proven in order.
+            if a > b {
+                let errors = check(source.as_bytes()).expect_err("a range written backward");
+                assert!(
+                    errors.iter().any(|e| e.message.contains(&format!("{a} <= {b}"))),
+                    "{errors:?} for {source}"
+                );
+                return;
+            }
             let line = format!("{a} {b}\n");
             assert_eq!(output_of(&source), format!("{line}{line}").into_bytes(), "for {source}");
         },

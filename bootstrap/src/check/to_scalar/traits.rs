@@ -448,10 +448,11 @@ impl<'a> Lowering<'a> {
                 let def = &defs.file.structs[*s];
                 let name = self.text(out, crate::check::written_name(&def.name).as_bytes());
                 let about = self.text(out, defs.note_of(&def.name).as_bytes());
-                let size = self.count(out, def.fields.len());
+                let data = defs.data_fields(*s);
+                let size = self.count(out, data.len());
                 let mut to = call(self, out, "structure", to, vec![name, about, size]);
-                for (field, t) in def.fields.iter().zip(&defs.fields[*s]) {
-                    let t = t.subst(args);
+                for &i in &data {
+                    let (field, t) = (&def.fields[i], defs.fields[*s][i].subst(args));
                     let name = self.text(out, field.name.as_bytes());
                     let key = format!("{}.{}", def.name, field.name);
                     let about = self.text(out, defs.note_of(&key).as_bytes());
@@ -593,11 +594,12 @@ impl<'a> Lowering<'a> {
             Ty::Struct(s, args) => {
                 let def = &defs.file.structs[*s];
                 let name = self.text(out, crate::check::written_name(&def.name).as_bytes());
-                let size = self.count(out, def.fields.len());
+                let data = defs.data_fields(*s);
+                let size = self.count(out, data.len());
                 let mut to = self.writer_call(out, w, "structure", to, vec![name, size]);
                 let mut at = 0;
-                for (field, t) in def.fields.iter().zip(&defs.fields[*s]) {
-                    let t = t.subst(args);
+                for &i in &data {
+                    let (field, t) = (&def.fields[i], defs.fields[*s][i].subst(args));
                     let size = self.size(&t);
                     let name = self.text(out, field.name.as_bytes());
                     to = self.writer_call(out, w, "field", to, vec![name]);
@@ -793,7 +795,7 @@ impl<'a> Lowering<'a> {
                 ends.push((out.current, order));
                 return out.join(&[BYTE], ends)[0];
             }
-            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Struct(s, args) => defs.data_types(*s, args),
             Ty::Tuple(of) => of.clone(),
             Ty::Nothing => Vec::new(),
             _ => unreachable!("a type given `Ord`"),
@@ -974,7 +976,7 @@ impl<'a> Lowering<'a> {
                 }
                 return out.join(&bool_types, ends)[0];
             }
-            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Struct(s, args) => defs.data_types(*s, args),
             Ty::Tuple(of) => of.clone(),
             Ty::Nothing => Vec::new(),
             _ => unreachable!("a type given `Eq`"),
@@ -1107,8 +1109,8 @@ impl<'a> Lowering<'a> {
                 let def = &defs.file.structs[*s];
                 let mut at = 0;
                 let mut items = Vec::new();
-                for (field, t) in def.fields.iter().zip(&defs.fields[*s]) {
-                    let t = t.subst(args);
+                for &i in &defs.data_fields(*s) {
+                    let (field, t) = (&def.fields[i], defs.fields[*s][i].subst(args));
                     let size = self.size(&t);
                     items.push((
                         format!("{}: ", field.name),
@@ -1117,7 +1119,10 @@ impl<'a> Lowering<'a> {
                     ));
                     at += size;
                 }
-                self.listed(out, &format!("{}(", def.name), ")", items)
+                // A struct that takes numbers is written as it is made, with
+                // the numbers left to the type that is wanted.
+                let name = crate::values::copy_of(&def.name).map_or(def.name.as_str(), |(t, _)| t);
+                self.listed(out, &format!("{name}("), ")", items)
             }
             Ty::Tuple(of) => {
                 let items = (of.iter().zip(self.elements(of, values)))
@@ -1320,7 +1325,7 @@ impl<'a> Lowering<'a> {
                 }
                 return out.join(&[WORD], ends)[0];
             }
-            Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
+            Ty::Struct(s, args) => defs.data_types(*s, args),
             Ty::Tuple(of) => of.clone(),
             Ty::Nothing => Vec::new(),
             _ => unreachable!("a type given `Hash`"),
@@ -1801,7 +1806,12 @@ impl<'a> Lowering<'a> {
     ) -> (Vec<form::Value>, Vec<form::Value>) {
         let defs = self.typed.defs;
         let def = &defs.file.structs[s];
-        let types: Vec<Ty> = defs.fields[s].iter().map(|t| t.subst(args)).collect();
+        // A proof field is in no input: it is built where the struct is.
+        let data = defs.data_fields(s);
+        let types: Vec<Ty> = data
+            .iter()
+            .map(|&i| defs.fields[s][i].subst(args))
+            .collect();
         let name = self.text(out, crate::check::written_name(&def.name).as_bytes());
         let (reader, _) = self.reader_step(out, c, "structure", reader, vec![name], &Ty::Nothing);
         // The loop carries the reader, and for each field whether it was
@@ -1840,7 +1850,7 @@ impl<'a> Lowering<'a> {
         // A field the input holds.
         out.current = arms[some];
         let given = self.held(&option, "some", &next);
-        for (i, field) in def.fields.iter().enumerate() {
+        for (i, field) in data.iter().map(|&k| &def.fields[k]).enumerate() {
             let literal = self.text(out, field.name.as_bytes());
             let same = self.call_runtime(
                 out,
@@ -1886,7 +1896,7 @@ impl<'a> Lowering<'a> {
         // The input has no more fields.
         out.current = arms[none];
         let mut values = Vec::new();
-        for (i, field) in def.fields.iter().enumerate() {
+        for (i, field) in data.iter().map(|&k| &def.fields[k]).enumerate() {
             let seen = out.switch(state[i].0, 2);
             let mut ends = vec![(seen[1], state[i].1.clone())];
             out.current = seen[0];

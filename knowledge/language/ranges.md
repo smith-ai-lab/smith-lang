@@ -8,7 +8,7 @@ built:
   - "`x[a..b]`, `x[..k]`, and `x[k..]` on a [`Slice`](../library/slice.md), a `Slice` that shares the memory of `x`, compiled when `arith` proves `a <= b` and `b <= x.size`, and a piece of a piece"
   - "`a..b` written as a value, which is a `Range` of the prelude with `start` and `end`, both `Nat`, and whose ends `arith` knows as the ends that were written"
   - "`loop i in a..b` written only where `arith` proves `a <= b`, refused with \"cannot prove that `a <= b`, which the range `a..b` needs\" where it does not"
-  - "not the proof `start <= end` that a `Range` holds, or the refusal of a range that `arith` cannot prove ordered when it is written as a value"
+  - "a `Range` that holds the proof `ordered: start <= end`, which `arith` builds where the range is written as a value, so that `3..1` is refused and so is `from..to` where `arith` cannot prove `from <= to`"
   - "not a range as a type, or a piece of an array, a text, or a list"
 ---
 
