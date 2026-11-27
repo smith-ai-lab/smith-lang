@@ -179,9 +179,9 @@ impl Chain {
         }
         s.push_str("}\n");
         for l in 0..self.changed.len() {
-            s.push_str(&format!("\nfn g{l}(s: S) -> S {{\n{}  var t = s\n", pad("s.f0")));
+            s.push_str(&format!("\nfn g{l}(s: S) -> S {{\n{}  mut t = s\n", pad("s.f0")));
             s.push_str(&format!(
-                "  var e = wrapping_add(wrapping_mul(s.f0, {}), 1)\n",
+                "  mut e = wrapping_add(wrapping_mul(s.f0, {}), 1)\n",
                 mark(l)
             ));
             for q in &self.read[l] {
@@ -205,7 +205,7 @@ impl Chain {
                 .map(|(i, v)| format!("f{i}: {v}"))
                 .collect();
             s.push_str(&format!(
-                "  var a{n} = S({})\n  a{n} = g{function}(a{n})\n",
+                "  mut a{n} = S({})\n  a{n} = g{function}(a{n})\n",
                 fields.join(", ")
             ));
             for i in 0..self.types.len() {
@@ -221,7 +221,7 @@ impl Chain {
 /// two places and still be inlined, and make nothing that is used. A function
 /// that starts with them is not inlined, and reads no more than it did.
 fn pad(value: &str) -> String {
-    let mut lines = format!("  var padding = {value}\n");
+    let mut lines = format!("  mut padding = {value}\n");
     for _ in 0..scalar::LEAF_BOUND {
         lines += &format!("  padding = wrapping_add(padding, {value})\n");
     }
@@ -312,7 +312,7 @@ const READ_ON_ONE_PATH: Written = Written {
 use std.int (wrapping_add, wrapping_mul)
 
 fn pick(a: Int, b: Int, c: Int) -> Int {
-{pad}  var r = wrapping_mul(wrapping_add(c, 1), 424242)
+{pad}  mut r = wrapping_mul(wrapping_add(c, 1), 424242)
   if a > 0 { r = wrapping_add(r, b) }
   r
 }
@@ -370,14 +370,14 @@ struct S {
 }
 
 fn step(s: S) -> S {
-{pad}  var t = s
+{pad}  mut t = s
   t.a = wrapping_add(s.a, s.b)
   t.b = wrapping_mul(wrapping_add(s.b, 1), 616161)
   t
 }
 
 fn main() <console, alloc> {
-  var s = S(a: 2, b: 3, c: 5)
+  mut s = S(a: 2, b: 3, c: 5)
   loop i in 0..4 { s = step(s) }
   print(\"{s.a} {s.b} {s.c}\")
   u = step(S(a: 7, b: 1, c: 9))
@@ -405,14 +405,14 @@ struct S {
 }
 
 fn bump(s: S) -> S {
-{pad}  var t = s
+{pad}  mut t = s
   t.a = wrapping_mul(wrapping_add(wrapping_add(s.a, s.b), s.c), 717171)
   t
 }
 
 fn main() <console, alloc> {
-  var x = S(a: 1, b: 2, c: 3)
-  var y = S(a: 10, b: 20, c: 30)
+  mut x = S(a: 1, b: 2, c: 3)
+  mut y = S(a: 10, b: 20, c: 30)
   x = bump(x)
   y = bump(y)
   print(\"{x.a} {x.b} {x.c}\")
@@ -435,7 +435,7 @@ use std.int (wrapping_add)
 use std.list (push)
 
 fn make(n: u64) -> List[u64] <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   if n > 3 {
     xs = push(xs, wrapping_add(n, 8888))
     xs = push(xs, wrapping_add(n, 9999))
@@ -444,12 +444,12 @@ fn make(n: u64) -> List[u64] <alloc> {
 }
 
 fn main() <console, alloc> {
-  var first: List[u64] = []
+  mut first: List[u64] = []
   first = push(first, 11)
   a = make(5)
   b = make(1)
   c = make(9)
-  var last: List[u64] = []
+  mut last: List[u64] = []
   last = push(last, 22)
   loop v in first { print(\"{v}\") }
   loop v in a { print(\"{v}\") }

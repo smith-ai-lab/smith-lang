@@ -5,8 +5,8 @@ description: A mut parameter, which a function changes for its caller, means tak
 status: partial
 built:
   - "`mut` before a parameter's type, in a function that gives nothing, lowered to taking the value and giving it back, so a call that changes a value is built to the code of the call that takes it and assigns what it gives back"
-  - "`f(mut x)` on a line of its own, of a `var`, a field of one, or an item of a list held by one, and of several places that do not overlap"
-  - "a call that leaves out `mut` where the parameter is `mut` refused with the call to write, `mut` where the parameter is not refused, and what is not a `var`, a field, or an item refused"
+  - "`f(mut x)` on a line of its own, of a `mut`, a field of one, or an item of a list held by one, and of several places that do not overlap"
+  - "a call that leaves out `mut` where the parameter is `mut` refused with the call to write, `mut` where the parameter is not refused, and what is not a `mut`, a field, or an item refused"
   - "one place passed twice, or a place and a part of it, refused"
   - "a parameter marked `mut`, or a part of it without `Copy`, refused where it is stored, bound to another name, given to a `take` parameter, or returned, and any lambda that reads or assigns it refused"
   - "what `arith` knew of a value before a call that changes it not known after"
@@ -27,7 +27,7 @@ fn step(c: mut Cursor) {
 }
 
 fn main() {
-  var c = Cursor(at: 0, line: 1)
+  mut c = Cursor(at: 0, line: 1)
   step(mut c)
   step(mut c)
 }
@@ -45,7 +45,7 @@ fn step(c: mut Cursor) {
 }
 
 fn step(c: take Cursor) -> Cursor {
-  var next = c
+  mut next = c
   next.at = next.at + 1
   next
 }
@@ -56,7 +56,7 @@ The first is called `step(mut c)`, and the second `c = step(c)`. Every value has
 ## Where the change is seen
 
 - **The call is marked.** `step(c)` is refused when the parameter is `mut`, with the fix "write `step(mut c)`", and `mut c` is refused where the parameter is not `mut`. A line that changes a name says so.
-- **What is passed can be assigned.** It is a `var`, or a field or an item of one, as `step(mut cs[0])` or `step(mut doc.cursor)`. `step(mut Cursor(at: 0, line: 1))` is refused, as nothing would see the change.
+- **What is passed can be assigned.** It is a `mut`, or a field or an item of one, as `step(mut cs[0])` or `step(mut doc.cursor)`. `step(mut Cursor(at: 0, line: 1))` is refused, as nothing would see the change.
 - **One place is passed once.** `swap(mut a, mut a)` is refused, and so is `swap(mut doc, mut doc.cursor)`, as both name the cursor. Two places that are not one are passed together.
 - **The parameter is not kept.** A function cannot store a `mut` parameter, return it, or give it to a lambda that outlives the call. It changes the value and gives it back when it returns, and nothing else holds it.
 

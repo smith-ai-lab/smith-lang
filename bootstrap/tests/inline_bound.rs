@@ -30,11 +30,11 @@ const MARK: u64 = 7_654_321;
 /// which are statements that read what it is given.
 fn source(lines: usize) -> String {
     let mut s = String::from("use std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\n\nfn grow(a: Int) -> Int {\n");
-    s.push_str(&format!("  var r = wrapping_mul(a, {MARK})\n"));
+    s.push_str(&format!("  mut r = wrapping_mul(a, {MARK})\n"));
     for _ in 0..lines {
         s.push_str("  r = wrapping_add(r, a)\n");
     }
-    s.push_str("  r\n}\n\nfn main() <console, alloc> {\n  var t: Int = 0\n");
+    s.push_str("  r\n}\n\nfn main() <console, alloc> {\n  mut t: Int = 0\n");
     s.push_str("  loop i in 0..3 {\n    t = wrapping_add(t, grow(i))\n    t = wrapping_add(t, grow(t))\n  }\n");
     s.push_str("  print(\"{t}\")\n  print(\"{grow(5)}\")\n}\n");
     s

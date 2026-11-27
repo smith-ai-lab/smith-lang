@@ -130,7 +130,7 @@ const LOG: &str = "effect log {
 }
 
 fn recording[T](body: fn() -> T <log>) -> T <alloc> {
-  var seen: List[u64] = []
+  mut seen: List[u64] = []
   log(
     note: fn(v) {
       seen = push(seen, v)
@@ -151,13 +151,13 @@ const COUNTED: &str = "effect log {
 }
 
 fn recording[T](body: fn() -> T <log>) -> T <alloc> {
-  var seen: List[u64] = []
+  mut seen: List[u64] = []
   log(
     note: fn(v) {
       seen = push(seen, v)
     },
     count: {
-      var s: u64 = 0
+      mut s: u64 = 0
       loop i in 0..seen.size { s = wrapping_add(s, seen[i]) }
       s
     },
@@ -169,13 +169,13 @@ fn recording[T](body: fn() -> T <log>) -> T <alloc> {
 
 /// The functions that build memory around it.
 const BUILD: &str = "fn build(n: u64, k: u64) -> List[u64] <alloc> {
-  var acc: List[u64] = []
+  mut acc: List[u64] = []
   loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, i), k)) }
   acc
 }
 
 fn total(xs: List[u64]) -> u64 {
-  var s: u64 = 0
+  mut s: u64 = 0
   loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }
   s
 }
@@ -236,7 +236,7 @@ fn a_list_a_handler_gives_out_of_its_block_is_read_whole_after_more_is_built() {
 fn two_handlers_that_hold_lists_are_in_force_at_once() {
     generate::check(1045, 3, |g| g.below(8) as u64, |&seed| {
         let source = program(&format!(
-            "{LOG}{BUILD}{PUSHER}effect tally {{\n  fn bump(v: u64)\n  fn tallied() -> List[u64] <alloc>\n}}\n\nfn counting[T](body: fn() -> T <tally>) -> T <alloc> {{\n  var marks: List[u64] = []\n  tally(\n    bump: fn(v) {{\n      marks = push(marks, wrapping_mul(v, 10))\n    }},\n    tallied: {{\n      marks\n    }},\n    body: body,\n  )\n}}\n\nfn both(v: u64) -> u64 <log, tally, alloc> {{\n  bump(v)\n  pusher(v)\n}}\n\nfn run() -> List[u64] <alloc, diverge> {{\n  with counting()\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ both(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ both(2) }}\n  _ = join(a)\n  _ = join(n)\n  _ = join(b)\n  c = spawn {{ noise(9) }}\n  _ = join(c)\n  first = all()\n  second = tallied()\n  var joined: List[u64] = []\n  loop i in 0..first.size {{ joined = push(joined, first[i]) }}\n  loop i in 0..second.size {{ joined = push(joined, second[i]) }}\n  joined\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
+            "{LOG}{BUILD}{PUSHER}effect tally {{\n  fn bump(v: u64)\n  fn tallied() -> List[u64] <alloc>\n}}\n\nfn counting[T](body: fn() -> T <tally>) -> T <alloc> {{\n  mut marks: List[u64] = []\n  tally(\n    bump: fn(v) {{\n      marks = push(marks, wrapping_mul(v, 10))\n    }},\n    tallied: {{\n      marks\n    }},\n    body: body,\n  )\n}}\n\nfn both(v: u64) -> u64 <log, tally, alloc> {{\n  bump(v)\n  pusher(v)\n}}\n\nfn run() -> List[u64] <alloc, diverge> {{\n  with counting()\n  with recording()\n  with test_scheduler({seed})\n  a = spawn {{ both(1) }}\n  n = spawn {{ noise(5) }}\n  b = spawn {{ both(2) }}\n  _ = join(a)\n  _ = join(n)\n  _ = join(b)\n  c = spawn {{ noise(9) }}\n  _ = join(c)\n  first = all()\n  second = tallied()\n  mut joined: List[u64] = []\n  loop i in 0..first.size {{ joined = push(joined, first[i]) }}\n  loop i in 0..second.size {{ joined = push(joined, second[i]) }}\n  joined\n}}\n\nfn main() <console, alloc, diverge> {{\n  xs = run()\n  print(\"{{xs.size}} {{total(xs)}}\")\n}}\n"
         ));
         assert_eq!(run(&source), "6 236\n", "for {source}");
     });
@@ -277,9 +277,9 @@ effect keep {
 }
 
 fn keeping[T](body: fn() -> T <keep>) -> T <alloc> {
-  var text: str = \"\"
-  var box: Box = Box(items: [], name: \"b\")
-  var kept: Held = .nothing
+  mut text: str = \"\"
+  mut box: Box = Box(items: [], name: \"b\")
+  mut kept: Held = .nothing
   keep(
     add: fn(v) {
       text = \"{text}{v},\"
@@ -325,7 +325,7 @@ fn a_text_built_at_run_time_a_struct_and_an_enum_that_hold_memory_are_kept_in_th
 fn a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region() {
     generate::check(1047, 3, |g| (g.below(8) as u64, 1 + g.below(40) as u64), |&(seed, k)| {
         let source = program(&format!(
-            "{BUILD}effect shelf {{\n  fn put(xs: take List[u64])\n  fn shelved() -> List[List[u64]] <alloc>\n}}\n\nfn shelving[T](body: fn() -> T <shelf>) -> T <alloc> {{\n  var shelves: List[List[u64]] = []\n  shelf(\n    put: fn(xs) {{\n      shelves = push(shelves, xs)\n    }},\n    shelved: {{\n      shelves\n    }},\n    body: body,\n  )\n}}\n\nfn stocker(n: u64, k: u64) -> u64 <shelf, alloc> {{\n  xs = build(n, k)\n  put(xs)\n  1\n}}\n\nfn run() -> List[List[u64]] <alloc, diverge> {{\n  with shelving()\n  with test_scheduler({seed})\n  a = spawn {{ stocker(40, {k}) }}\n  b = spawn {{ stocker(50, {k}) }}\n  _ = join(a)\n  _ = join(b)\n  n = spawn {{ noise(1) }}\n  _ = join(n)\n  m = spawn {{ noise(2) }}\n  _ = join(m)\n  shelved()\n}}\n\nfn main() <console, alloc, diverge> {{\n  all = run()\n  zs = build(400, 3)\n  var sum: u64 = 0\n  loop i in 0..all.size {{\n    inner = all[i]\n    sum = wrapping_add(sum, total(inner))\n  }}\n  print(\"{{all.size}} {{sum}} {{total(zs)}}\")\n}}\n"
+            "{BUILD}effect shelf {{\n  fn put(xs: take List[u64])\n  fn shelved() -> List[List[u64]] <alloc>\n}}\n\nfn shelving[T](body: fn() -> T <shelf>) -> T <alloc> {{\n  mut shelves: List[List[u64]] = []\n  shelf(\n    put: fn(xs) {{\n      shelves = push(shelves, xs)\n    }},\n    shelved: {{\n      shelves\n    }},\n    body: body,\n  )\n}}\n\nfn stocker(n: u64, k: u64) -> u64 <shelf, alloc> {{\n  xs = build(n, k)\n  put(xs)\n  1\n}}\n\nfn run() -> List[List[u64]] <alloc, diverge> {{\n  with shelving()\n  with test_scheduler({seed})\n  a = spawn {{ stocker(40, {k}) }}\n  b = spawn {{ stocker(50, {k}) }}\n  _ = join(a)\n  _ = join(b)\n  n = spawn {{ noise(1) }}\n  _ = join(n)\n  m = spawn {{ noise(2) }}\n  _ = join(m)\n  shelved()\n}}\n\nfn main() <console, alloc, diverge> {{\n  all = run()\n  zs = build(400, 3)\n  mut sum: u64 = 0\n  loop i in 0..all.size {{\n    inner = all[i]\n    sum = wrapping_add(sum, total(inner))\n  }}\n  print(\"{{all.size}} {{sum}} {{total(zs)}}\")\n}}\n"
         ));
         let expected = format!("2 {} {}\n", built(40, k) + built(50, k), built(400, 3));
         assert_eq!(run(&source), expected, "for {source}");
@@ -367,15 +367,15 @@ effect store {
 }
 
 fn storing[T](body: fn() -> T <store>) -> T <alloc> {
-  var shelves: List[List[u64]] = []
-  var held: List[Pair] = []
-  var notes: List[u64] = []
+  mut shelves: List[List[u64]] = []
+  mut held: List[Pair] = []
+  mut notes: List[u64] = []
   store(
     put: fn(xs) {
       shelves = push(shelves, xs)
     },
     grow: fn(n, k) {
-      var acc: List[u64] = []
+      mut acc: List[u64] = []
       loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, i), k)) }
       shelves = push(shelves, acc)
     },
@@ -459,9 +459,9 @@ fn generated(cases: &[(u64, Vec<Vec<Act>>)]) -> String {
         s += "  n1 = spawn { noise(11) }\n  _ = join(n1)\n  n2 = spawn { noise(12) }\n  _ = join(n2)\n";
         s += "  (shelved(), pairs(), noted())\n}\n\n";
         s += &format!("fn report{case}() <console, alloc, diverge> {{\n  (shelves, held, notes) = run{case}()\n  zs = build(400, 3)\n");
-        s += "  var shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
-        s += "  var pair: u64 = 0\n  loop i in 0..held.size {\n    p = held[i]\n    pair = wrapping_add(pair, wrapping_add(wrapping_mul(p.tag, 7919), wrapping_add(wrapping_mul(p.items.size, 1000003), total(p.items))))\n  }\n";
-        s += "  var note: u64 = 0\n  loop i in 0..notes.size { note = wrapping_add(note, wrapping_mul(notes[i], 31)) }\n";
+        s += "  mut shelf: u64 = 0\n  loop i in 0..shelves.size {\n    inner = shelves[i]\n    shelf = wrapping_add(shelf, wrapping_add(wrapping_mul(inner.size, 1000003), total(inner)))\n  }\n";
+        s += "  mut pair: u64 = 0\n  loop i in 0..held.size {\n    p = held[i]\n    pair = wrapping_add(pair, wrapping_add(wrapping_mul(p.tag, 7919), wrapping_add(wrapping_mul(p.items.size, 1000003), total(p.items))))\n  }\n";
+        s += "  mut note: u64 = 0\n  loop i in 0..notes.size { note = wrapping_add(note, wrapping_mul(notes[i], 31)) }\n";
         s += "  print(\"{shelves.size} {shelf} {held.size} {pair} {notes.size} {note} {total(zs)}\")\n}\n\n";
     }
     s += "fn main() <console, alloc, diverge> {\n";
@@ -530,7 +530,7 @@ fn a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends() {
     // The text is the same for both numbers of rounds but the number, so it is
     // lowered once.
     let written = Written::new(program(&format!(
-        "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..{ROUNDS} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    _ = join(a)\n    _ = join(b)\n    c = spawn {{ total(build(20, r)) }}\n    _ = join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..{ROUNDS} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    _ = join(a)\n    _ = join(b)\n    c = spawn {{ total(build(20, r)) }}\n    _ = join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
     )));
     let asked = |rounds: u64| {
         let (outcome, requests) = scalar::run_counting(&written.with(&[(ROUNDS, rounds)]), usize::MAX);
@@ -548,7 +548,7 @@ fn a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends() {
 /// task of its own that writes, and the handler's list has both writes, which the
 /// test reads after the handler's block, for each seed of the scheduler.
 const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {
-  var kept: List[List[Byte]] = []
+  mut kept: List[List[Byte]] = []
   result = net(
     listen_on: fn(host, port) { .ok(listener(1)) },
     accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
@@ -556,7 +556,7 @@ const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]
     connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .ok(.ended) },
     write: fn(c, bytes) {
-      var copied: List[Byte] = []
+      mut copied: List[Byte] = []
       loop i in 0..bytes.size { copied = push(copied, bytes[i]) }
       kept = push(kept, copied)
       .ok(())
@@ -603,7 +603,7 @@ fn serve(l: Listener) -> Result[u64, NetError] <net, alloc, task> {
 
 fn net_program(seed: u64) -> String {
     program(&format!(
-        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", .at(80), serve)\n}}\n\nfn main() <console, alloc, diverge> {{\n  (served, writes) = run()\n  var bytes: u64 = 0\n  var sum: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n    loop j in 0..inner.size {{\n      b: u64 = inner[j]\n      sum = wrapping_add(sum, b)\n    }}\n  }}\n  zs = build(300, 5)\n  print(\"{{writes.size}} {{bytes}} {{sum}} {{total(zs)}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
+        "{BUILD}{NET}fn run() -> (Result[u64, NetError], List[List[Byte]]) <alloc, diverge> {{\n  with recording()\n  with test_scheduler({seed})\n  listen(\"localhost\", .at(80), serve)\n}}\n\nfn main() <console, alloc, diverge> {{\n  (served, writes) = run()\n  mut bytes: u64 = 0\n  mut sum: u64 = 0\n  loop i in 0..writes.size {{\n    inner = writes[i]\n    bytes = wrapping_add(bytes, inner.size)\n    loop j in 0..inner.size {{\n      b: u64 = inner[j]\n      sum = wrapping_add(sum, b)\n    }}\n  }}\n  zs = build(300, 5)\n  print(\"{{writes.size}} {{bytes}} {{sum}} {{total(zs)}}\")\n  match served {{\n    .ok(n) {{ print(\"served {{n}}\") }}\n    .err(e) {{ print(\"failed\") }}\n  }}\n}}\n"
     ))
 }
 

@@ -146,7 +146,7 @@ fn a_cancelled_task_closes_both_files_of_a_struct_it_holds() {
 }
 
 const LIST: &str = "fn hold_list(n: u64) -> List[File] <fs, task, alloc> {
-  var fs: List[File] = []
+  mut fs: List[File] = []
   fs = push(fs, file(n))
   fs = push(fs, file(wrapping_add(n, 1)))
   test_ready(n)
@@ -191,7 +191,7 @@ fn a_file_that_is_closed_by_its_function_is_not_closed_again_when_no_task_is_ask
 /// closes the file once, two calls deep as well, and its parent is told.
 fn a_file_a_task_holds_when_it_fails_is_closed_by_the_handler_once() {
     let functions = "fn eat() -> u64 <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     xs = push(xs, i)
   }

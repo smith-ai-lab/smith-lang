@@ -113,7 +113,7 @@ fn piece(s: str, a: Nat, b: Nat) -> str {
 
 // Whether the text begins with the prefix.
 fn begins(s: str, prefix: str) -> bool {
-  var yes = s.size >= prefix.size
+  mut yes = s.size >= prefix.size
   loop i in 0..prefix.size {
     if i < s.size and s[i] != prefix[i] { yes = false }
   }
@@ -122,7 +122,7 @@ fn begins(s: str, prefix: str) -> bool {
 
 // Where the first of `a`, `b`, or `c` is in the text, or its size.
 fn first_of(s: str, a: Byte, b: Byte, c: Byte) -> Nat {
-  var at = s.size
+  mut at = s.size
   loop i in 0..s.size {
     if at == s.size and (s[i] == a or s[i] == b or s[i] == c) { at = i }
   }
@@ -153,10 +153,10 @@ fn place_of(url: str) -> Result[Place, FetchError] <alloc> {
   kept = piece(tail, 0, cut)
   target = if kept.size == 0 { "/" } else if kept[0] == '?' { "/{kept}" } else { kept }
   if named.size == 0 { return Result.err(FetchError.address(url)) }
-  var host = named
-  var port: Option[1..65536] = Option.some(80)
+  mut host = named
+  mut port: Option[1..65536] = Option.some(80)
   if named[0] == '[' {
-    var close = named.size
+    mut close = named.size
     loop i in 0..named.size {
       if close == named.size and named[i] == ']' { close = i }
     }
@@ -168,7 +168,7 @@ fn place_of(url: str) -> Result[Place, FetchError] <alloc> {
       port = port_of(piece(after, 1, after.size))
     }
   } else {
-    var colon = named.size
+    mut colon = named.size
     loop i in 0..named.size {
       if named[i] == ':' { colon = i }
     }
@@ -177,7 +177,7 @@ fn place_of(url: str) -> Result[Place, FetchError] <alloc> {
       port = port_of(piece(named, saturating_add(colon, 1), named.size))
     }
   }
-  var bad = host.size == 0
+  mut bad = host.size == 0
   loop i in 0..host.size {
     if host[i] == '@' or host[i] == ' ' { bad = true }
   }
@@ -207,7 +207,7 @@ fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
 
 // Whether a header of this name is among those the program gave.
 fn names(headers: List[(HeaderName, HeaderValue)], name: str) -> bool <alloc> {
-  var found = false
+  mut found = false
   loop i in 0..headers.size {
     (n, v) = headers[i]
     if "{n}" == name { found = true }
@@ -220,7 +220,7 @@ fn names(headers: List[(HeaderName, HeaderValue)], name: str) -> bool <alloc> {
 // with a body the type and the length of it, which are its payload's and no header
 // can be. `type_of` is empty for a request with no body.
 fn request_bytes(method: Method, place: Place, headers: List[(HeaderName, HeaderValue)], type_of: str, body: List[Byte]) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   made = ended(append(made, "{method_name(method)} {place.target} HTTP/1.1".bytes))
   if not names(headers, "host") { made = ended(append(made, "host: {place.named}".bytes)) }
   made = ended(append(made, "connection: close".bytes))
@@ -268,7 +268,7 @@ fn after(bytes: Slice[Byte], used: Nat) -> Slice[Byte] {
 // The head of the response, and the bytes that follow it. A head is at most
 // 16384 bytes, and each round has one more byte of it.
 fn read_head(c: Connection) -> Result[(ResponseHead, Slice[Byte]), Trouble] <net, alloc> {
-  var bytes: Slice[Byte] = []
+  mut bytes: Slice[Byte] = []
   loop round in 0..16400 {
     if bytes.size > 0 {
       match response_head(bytes) {
@@ -289,7 +289,7 @@ fn read_head(c: Connection) -> Result[(ResponseHead, Slice[Byte]), Trouble] <net
 // that came with the head.
 fn read_sized(c: Connection, held: Slice[Byte], size: Nat, limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
   if size > limit { return Result.err(Trouble.big) }
-  var bytes = held
+  mut bytes = held
   loop round in 0..limit + 2 {
     if bytes.size >= size { return Result.ok(copy(bytes[0..size])) }
     match more(c, bytes, size - bytes.size) {
@@ -302,7 +302,7 @@ fn read_sized(c: Connection, held: Slice[Byte], size: Nat, limit: Nat) -> Result
 
 // A body that runs to the end of the connection, of at most `limit` bytes.
 fn read_to_end(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
-  var bytes = held
+  mut bytes = held
   loop round in 0..limit + 2 {
     if bytes.size > limit { return Result.err(Trouble.big) }
     match more(c, bytes, saturating_add(saturating_sub(limit, bytes.size), 1)) {
@@ -324,8 +324,8 @@ fn read_to_end(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte
 
 // A body in chunks, whole, of at most `limit` bytes.
 fn read_chunks(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
-  var bytes = held
-  var body: List[Byte] = []
+  mut bytes = held
+  mut body: List[Byte] = []
   loop round in 0..limit + 65536 {
     if bytes.size > 0 {
       match chunk(bytes) {
@@ -481,7 +481,7 @@ pub fn client[T](body: fn() -> T <fetch>) -> T <net, alloc> {
 // it is written, each of the first three on a line of its own, and gives back what
 // the server wrote, as many bytes as it wrote, to the end or to the most it holds.
 fn through_host(place: Place, wire: List[Byte], most: Nat) -> Result[List[Byte], Trouble] <alloc> {
-  var request: List[Byte] = []
+  mut request: List[Byte] = []
   request = append(request, "{place.host}\n{place.port}\n{most}\n".bytes)
   request = append(request, wire)
   given = __system(30, request, request.size, 0, 0, 0, 0)
@@ -531,8 +531,8 @@ fn buffered_body(head: ResponseHead, held: Slice[Byte], method: Method, limit: N
 
 // A body in chunks that is all in memory, whole.
 fn buffered_chunks(held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <alloc> {
-  var bytes = held
-  var body: List[Byte] = []
+  mut bytes = held
+  mut body: List[Byte] = []
   loop round in 0..saturating_add(held.size, 1) {
     match chunk(bytes) {
       .complete((piece, used)) {
@@ -587,7 +587,7 @@ pub fn host[T](body: fn() -> T <fetch>) -> T <alloc> {
 
 // The headers again, as a list of the request's own.
 fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
-  var made: List[(HeaderName, HeaderValue)] = []
+  mut made: List[(HeaderName, HeaderValue)] = []
   loop i in 0..headers.size {
     made = push(made, headers[i])
   }

@@ -180,8 +180,8 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A statement names no `var`: a proof of one says nothing once the `var`
-    /// holds another value. So an argument that names a `var` is refused where
+    /// A statement names no `mut`: a proof of one says nothing once the `mut`
+    /// holds another value. So an argument that names a `mut` is refused where
     /// the statement of a proof a call gives, or is passed, is about it.
     pub(super) fn statements_name_no_var(
         &mut self,
@@ -217,10 +217,10 @@ impl<'a> Checker<'a> {
                         Error::new(
                             *pos,
                             format!(
-                                "a proof is of a statement that names no `var`, and `{name}` is one"
+                                "a proof is of a statement that names no `mut`, and `{name}` is one"
                             ),
                         )
-                        .with_fix("bind its value to a name that is not a `var` first"),
+                        .with_fix("bind its value to a name that is not a `mut` first"),
                     );
                 }
             }

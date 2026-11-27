@@ -6352,19 +6352,19 @@ fn type_names_in(t: &Type, out: &mut impl FnMut(&str, Pos)) {
 }
 
 /// The error for assigning to `name`, or to a field of it, where `name`,
-/// the name at `at` among those of the body, is not a `var`.
+/// the name at `at` among those of the body, is not a `mut`.
 fn not_a_var(body: &Body, name: &str, pos: Pos, at: usize) -> Error {
     let error = Error::new(
         pos,
-        format!("`{name}` is not a `var`, so it cannot be assigned to"),
+        format!("`{name}` is not a `mut`, so it cannot be assigned to"),
     );
     if at < body.params {
         error.with_fix(format!(
-            "declare a `var` that starts as the parameter, as in `var new_{name} = {name}`"
+            "declare a `mut` that starts as the parameter, as in `mut new_{name} = {name}`"
         ))
     } else {
         error.with_fix(format!(
-            "declare it with `var`: write `var {name}` where it is defined"
+            "declare it with `mut`: write `mut {name}` where it is defined"
         ))
     }
 }
@@ -6976,7 +6976,7 @@ struct Typed<'a> {
     /// The types a call of a trait's function writes in brackets after the
     /// trait, by the address of the call.
     type_args: Map<usize, Vec<Ty>>,
-    /// The `var`s in scope while a core term is made, with their types.
+    /// The `mut`s in scope while a core term is made, with their types.
     core_vars: RefCell<Vec<(String, core::Type)>>,
     /// For each function with a handler of an operation that has type
     /// parameters of its own, by the address of the function, how many type
@@ -7518,23 +7518,23 @@ struct Checker<'a> {
     /// The `==` calls that a `!=` negates, by their addresses, which the
     /// `!=` reports and not the call.
     negated: Set<usize>,
-    /// Whether the body being checked has a `var` with no type written,
+    /// Whether the body being checked has a `mut` with no type written,
     /// whose range its values give it.
     infer_on: bool,
-    /// What is learned while the ranges of those `var`s are solved.
+    /// What is learned while the ranges of those `mut`s are solved.
     solve: Option<infer::Solve>,
     /// What the solving found, which the look that is kept reads.
     solved: infer::Solved,
     /// How many rounds each `loop` around what is being checked has at most,
     /// from the outermost, where that is known when the program is built.
     rounds: Vec<Option<u128>>,
-    /// The `var`s of the body whose range is solved, by their place among the
+    /// The `mut`s of the body whose range is solved, by their place among the
     /// names, with the place of the statement that defines each.
     inferred: HashMap<usize, Pos>,
     /// The names that a pattern gives a value in the body, which are not
     /// solved.
     patterned: HashSet<String>,
-    /// The `var` that is being given a value, and whether the value reads it.
+    /// The `mut` that is being given a value, and whether the value reads it.
     assigning: Option<(Pos, bool)>,
     /// Whether the arguments being fitted are those of a comparison, whose
     /// two sides are taken as the smallest range that holds both.
@@ -7905,7 +7905,7 @@ struct Body<'a> {
     names: Vec<(String, Ty)>,
     /// How many of the names are parameters, which come first.
     params: usize,
-    /// The names defined with `var`.
+    /// The names defined with `mut`.
     vars: Vec<String>,
     /// What looking at the uses of the whole numbers bound to names has
     /// found, or is finding.
@@ -7962,7 +7962,7 @@ impl<'a> Body<'a> {
     }
 
     /// Defines the names a pattern binds, each with its type and whether it
-    /// is a `var`.
+    /// is a `mut`.
     fn define(&mut self, binds: Vec<(String, Ty, bool)>) {
         for (name, ty, var) in binds {
             if var {
@@ -8556,9 +8556,9 @@ impl<'a> Checker<'a> {
         self.run_body(template, Numbers::Decided(decided));
     }
 
-    /// Finds the range of each `var` with no type written: the body is looked
+    /// Finds the range of each `mut` with no type written: the body is looked
     /// at again, with what it says of each so far, until no range grows. A
-    /// `var` that still grows after as many looks as there are `var`s is
+    /// `mut` that still grows after as many looks as there are `mut`s is
     /// changed by itself, and is refused.
     fn solve_ranges(&mut self, template: Template) {
         let (errors, refusals, no_impl) = (self.errors.len(), self.refusals, self.no_impl);
@@ -8598,7 +8598,7 @@ impl<'a> Checker<'a> {
             }
             let merged = solve.merged_elems();
             let settled = merged == before_elems;
-            // Where no value that a `var` is given widened it, what was read
+            // Where no value that a `mut` is given widened it, what was read
             // as its range in this look is what it has, and no look is needed
             // to find it.
             let unchanged = looks == 1
@@ -8617,7 +8617,7 @@ impl<'a> Checker<'a> {
                 stuck.extend(grown);
                 stuck.sort();
                 stuck.dedup();
-                // A `var` first given a value that has a type, and that is given
+                // A `mut` first given a value that has a type, and that is given
                 // itself, has the range of that value, as it had before it was
                 // solved from every value. One first given a number written out
                 // has nothing to go on, and is refused.
@@ -8690,7 +8690,7 @@ impl<'a> Checker<'a> {
             names: view.params.clone(),
             params: view.params.len(),
             // A parameter marked `mut` is changed for the caller, so it is
-            // assigned to as a `var` is.
+            // assigned to as a `mut` is.
             vars: (f.params.iter().filter(|p| p.mutable))
                 .map(|p| p.name.clone())
                 .collect(),
@@ -8998,7 +8998,7 @@ impl<'a> Checker<'a> {
                             } else if body.vars.contains(name) {
                                 let gives = self.expr(body, value, &Want::Ty(needed.clone()));
                                 // A number that its uses have not decided is decided by
-                                // them, and not by the range of a `var` that is solved.
+                                // them, and not by the range of a `mut` that is solved.
                                 if !(matches!(gives, Ty::Flex(_))
                                     && self.inferred.contains_key(&at))
                                 {
@@ -9190,7 +9190,7 @@ impl<'a> Checker<'a> {
         ty
     }
 
-    /// Checks a field of a `var`, or a field of one of its fields, as a
+    /// Checks a field of a `mut`, or a field of one of its fields, as a
     /// place to assign to, and gives the type of what it holds. Gives
     /// `None` when the place holds a mistake, which is reported.
     fn place(&mut self, body: &Body, name: &str, pos: Pos, fields: &[(String, Pos)]) -> Option<Ty> {
@@ -9896,7 +9896,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Refuses what `check` is given when the statement names a `var`, which
+    /// Refuses what `check` is given when the statement names a `mut`, which
     /// holds another value later, or calls a function that carries an effect,
     /// as a proof is erased and says nothing of a value that changes.
     fn checkable(&mut self, body: &Body<'a>, test: &Expr) {
@@ -9908,9 +9908,9 @@ impl<'a> Checker<'a> {
                     self.errors.push(
                         Error::new(
                             *pos,
-                            format!("`check` tests a statement, which names no `var`, and `{name}` is one"),
+                            format!("`check` tests a statement, which names no `mut`, and `{name}` is one"),
                         )
-                        .with_fix("bind its value to a name that is not a `var` first"),
+                        .with_fix("bind its value to a name that is not a `mut` first"),
                     );
                 }
                 Expr::Call(c) => {
@@ -10045,7 +10045,7 @@ impl<'a> Checker<'a> {
     /// Checks the value a `loop` runs over, which is of a type that
     /// implements `Iterate`, and gives the type of its elements. A text is
     /// read as its bytes. The value is worked out once, when the loop starts,
-    /// so assigning a `var` it was read from changes nothing about which
+    /// so assigning a `mut` it was read from changes nothing about which
     /// elements the loop gives.
     fn element_type(&mut self, body: &mut Body<'a>, o: &Over) -> (Ty, infer::Passes) {
         let given = self.expr(body, &o.value, &Want::Any);
@@ -10319,10 +10319,10 @@ impl<'a> Checker<'a> {
     /// Checks a pattern against the type of what it matches, and gives it
     /// as checked, or `None` if it holds a mistake. Each bare name it
     /// defines goes in `binds`, with the type of what it names and whether
-    /// it is a `var`.
+    /// it is a `mut`.
     ///
     /// In a `match`, `assigned` is `None` and a bare name always defines a
-    /// name. In a binding, a bare name that is already a `var` is assigned
+    /// name. In a binding, a bare name that is already a `mut` is assigned
     /// and goes in `assigned`, and a case is not built yet.
     fn pattern(
         &mut self,
@@ -10367,7 +10367,7 @@ impl<'a> Checker<'a> {
                             self.errors.push(Error::new(
                                 *pos,
                                 format!(
-                                    "`{name}` is a `var` that holds {}, and this pattern gives \
+                                    "`{name}` is a `mut` that holds {}, and this pattern gives \
                                      it {}",
                                     defs.describe(holds, body.scope),
                                     defs.describe(ty, body.scope)

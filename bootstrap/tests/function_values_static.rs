@@ -274,7 +274,7 @@ fn builds_to_the_bytes(holds: &[Hold], lambda: bool, bare: bool) {
 }
 
 /// Where a value could be one of two functions: the arms of an `if`, two
-/// elements of a list, a `var` given one and then another, and a function that
+/// elements of a list, a `mut` given one and then another, and a function that
 /// returns one by a branch.
 fn a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second() {
     let head = "use std.console (console, print)\n\n\
@@ -285,7 +285,7 @@ fn a_value_that_could_be_one_of_two_functions_is_one_error_at_the_second() {
     let cases = [
         ("  p = if true { Held(run: half) } else { ", "Held(run: dbl)", " }\n  r = p.run(1.0)\n"),
         ("  ps = [Held(run: half), ", "Held(run: dbl)", "]\n  r = ps.size\n"),
-        ("  var f = half\n  f = ", "dbl", "\n  r = f(1.0)\n"),
+        ("  mut f = half\n  f = ", "dbl", "\n  r = f(1.0)\n"),
     ];
     for (before, second, after) in cases {
         let source = format!(

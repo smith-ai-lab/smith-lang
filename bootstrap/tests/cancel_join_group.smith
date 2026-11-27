@@ -10,7 +10,7 @@ use std.task (join, outcome, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn eat() -> u64 <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     xs = push(xs, i)
   }
@@ -34,7 +34,7 @@ fn n2(c: take Connection) -> u64 <net, task, console, alloc, time> {
   a = opened(6)
   g = opened(7)
   t = spawn { n3(g) }
-  var total: u64 = 0
+  mut total: u64 = 0
   match outcome(t) {
     .ok(v) { total = wrapping_add(total, v) }
     .err(failure) { }

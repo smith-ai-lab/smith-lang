@@ -97,9 +97,9 @@ fn app() <http, alloc> {{
 }}
 
 fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
-  var accepted: u64 = 0
-  var asked: List[u64] = []
-  var kept: List[List[Byte]] = []
+  mut accepted: u64 = 0
+  mut asked: List[u64] = []
+  mut kept: List[List[Byte]] = []
   result = net(
     listen_on: fn(host, port) {{ .ok(listener(1)) }},
     accept: fn(l) {{
@@ -113,7 +113,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{
-      var seen = false
+      mut seen = false
       loop i in 0..asked.size {{ if asked[i] == handle(c) {{ seen = true }} }}
       if seen {{
         .ok(.ended)
@@ -129,7 +129,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
       }}
     }},
     write: fn(c, bytes) {{
-      var copied: List[Byte] = []
+      mut copied: List[Byte] = []
       loop i in 0..bytes.size {{ copied = push(copied, bytes[i]) }}
       kept = push(kept, copied)
       .ok(())
@@ -162,7 +162,7 @@ fn show(writes: List[List[Byte]]) <console, alloc> {{
   print(\"{{writes.size}}\")
   loop i in 0..writes.size {{
     inner = writes[i]
-    var line = \"\"
+    mut line = \"\"
     loop j in 0..inner.size {{ line = \"{{line}}{{inner[j]}} \" }}
     print(line)
   }}

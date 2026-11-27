@@ -88,8 +88,8 @@ impl Deserialize[Members] {
       .err(e) { return (opened, Result.err(e)) }
       .ok(u) { }
     }
-    var r = opened
-    var named: List[(str, RawJson)] = []
+    mut r = opened
+    mut named: List[(str, RawJson)] = []
     loop round in 0..4294967296 {
       (after, got) = Reader.field(r)
       r = after
@@ -303,7 +303,7 @@ pub fn read(text: str) -> Result[Received, Failure] <alloc> {
       .err(e) { .err(parse_error()) }
       .ok(ms) {
         if ms.size == 0 { return .err(invalid_request()) }
-        var read_all: List[Result[Message, Failure]] = []
+        mut read_all: List[Result[Message, Failure]] = []
         loop one in ms {
           if kind(one) == 123 {
             read_all = push(read_all, read_object(raw_text(one)))
@@ -370,8 +370,8 @@ pub fn write(to: take Text, message: Message) -> Text <alloc> {
 }
 
 pub fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc> {
-  var written = append(to, "[")
-  var first = true
+  mut written = append(to, "[")
+  mut first = true
   loop m in messages {
     if not first { written = append(written, ",") }
     first = false

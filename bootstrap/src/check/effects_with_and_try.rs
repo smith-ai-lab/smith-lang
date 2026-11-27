@@ -614,8 +614,8 @@ impl<'a> Checker<'a> {
         signature.gives.solved(&sol)
     }
 
-    /// Refuses a child that assigns a `var` of the function it is written in:
-    /// a child reads a `var` as it was at the spawn, and what it finds out
+    /// Refuses a child that assigns a `mut` of the function it is written in:
+    /// a child reads a `mut` as it was at the spawn, and what it finds out
     /// comes back through `join`.
     pub(super) fn child_assigns(&mut self, body: &Body<'a>, call: &Call) {
         for arg in &call.args {
@@ -638,7 +638,7 @@ impl<'a> Checker<'a> {
                         Error::new(
                             *pos,
                             format!(
-                                "this child assigns `{name}`, which belongs to the function it is spawned in, and a child reads a `var` as it was at the spawn"
+                                "this child assigns `{name}`, which belongs to the function it is spawned in, and a child reads a `mut` as it was at the spawn"
                             ),
                         )
                         .with_fix("give the new value back as the value of the child, and read it with `join`"),

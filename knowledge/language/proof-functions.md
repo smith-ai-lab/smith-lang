@@ -6,7 +6,7 @@ status: partial
 built:
   - "a statement as the result of a function, a comparison of values or comparisons joined with `and`, `or`, and `not` written where a type is, which is checked as a `bool` over the parameters; a function with one is a proof function, which is checked whether or not any code reaches it, never built, and carries no effect; its body is steps that the kernel checks against the statement owed: `same`, which proves `a == a` and any statement with nothing unknown by working it out, and an `if` whose blocks are steps, each proving the statement; `arith` of the proofs named before it and a name given by `unfold` are read too; a call of a proof function is read too, and one that calls itself is held to its `decreases`; `replace` is not read yet. A proof function names the functions its statement is about, which carry `alloc` as any function may, as it is never run"
   - "a predicate in a contract: a function that returns `bool`, carries no effect, and is one expression of comparisons of whole numbers joined with `and`, `or`, and `not`, or a call of another such function, which `arith` reads as that expression with the arguments put in"
-  - "a proof as a result and a name: a proof function whose body is the name of a proof it was given, which proves exactly the statement that proof has, and a call of a proof function, written as a statement, bound to a name, or passed to a proof parameter, which gives the caller its statement with the arguments put in as a fact and as a proof to pass on; a call of one with an argument that is a `var` where the statement is about it, a `match` or an `if` on a proof, and a function that returns a proof and carries an effect are refused"
+  - "a proof as a result and a name: a proof function whose body is the name of a proof it was given, which proves exactly the statement that proof has, and a call of a proof function, written as a statement, bound to a name, or passed to a proof parameter, which gives the caller its statement with the arguments put in as a fact and as a proof to pass on; a call of one with an argument that is a `mut` where the statement is about it, a `match` or an `if` on a proof, and a function that returns a proof and carries an effect are refused"
 ---
 
 # Proofs as functions
@@ -30,7 +30,7 @@ A function whose result is a statement is a proof function. It is checked with t
 
 ## What a proof may not do
 
-A proof is erased before the program runs, so three rules hold of it, which [What is trusted](trust.md) gives the reasons for. A function that returns a proof carries no effect, `diverge` among them. The statement it proves names no `var`. And a proof is passed, held, and given where one is owed, and no `match` picks a value by which proof it was given.
+A proof is erased before the program runs, so three rules hold of it, which [What is trusted](trust.md) gives the reasons for. A function that returns a proof carries no effect, `diverge` among them. The statement it proves names no `mut`. And a proof is passed, held, and given where one is owed, and no `match` picks a value by which proof it was given.
 
 ## A fact proved once
 

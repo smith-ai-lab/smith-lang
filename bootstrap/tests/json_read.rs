@@ -1810,7 +1810,7 @@ fn asked_of(program: &scalar::Program) -> (Vec<u8>, usize, usize) {
 /// A function that makes the text of a `Wrap`, whose body is `n` zeros in an
 /// array, from the bytes of a text that is built with `push`.
 const MAKE: &str = "fn make(n: Nat) -> str <alloc> {
-  var l: List[Byte] = []
+  mut l: List[Byte] = []
   loop b in \"\\{\\\"head\\\":1,\\\"body\\\":[\" { l = push(l, b) }
   loop i in 0..n {
     if i > 0 { l = push(l, ',') }
@@ -1878,7 +1878,7 @@ fn written_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (Lower
         };
         with_import(
             &["from_json"],
-            format!("{TEXT}{decls}fn main() <console, alloc> {{\n  var l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
+            format!("{TEXT}{decls}fn main() <console, alloc> {{\n  mut l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
         )
     };
     (Lowered::new(program(true)), Lowered::new(program(false)))

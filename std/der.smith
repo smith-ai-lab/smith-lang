@@ -37,7 +37,7 @@ fn length(bytes: Slice[Byte], at: Nat) -> Result[(Nat, Nat), str] {
   if count > 8 { return .err("a length of more bytes than there are") }
   if count >= bytes.size - at { return .err("the bytes end inside the length") }
   if bytes[at + 1] == 0 { return .err("a length that could be shorter") }
-  var n: Nat = 0
+  mut n: Nat = 0
   loop i in 0..count {
     b: Nat = bytes[at + 1 + i]
     if n >= 72057594037927936 {
@@ -131,8 +131,8 @@ fn holds_parts(tag: Tag) -> bool {
 
 pub fn children(of: Value) -> Result[List[Value], str] <alloc> {
   if not holds_parts(of.tag) { return .err("a value that holds no parts") }
-  var parts: List[Value] = []
-  var rest = of.bytes
+  mut parts: List[Value] = []
+  mut rest = of.bytes
   loop i in 0..of.bytes.size {
     if rest.size == 0 { break }
     (v, end) = try read(rest)
@@ -183,9 +183,9 @@ pub fn object(of: Value) -> Result[List[Nat], str] <alloc> {
   match of.tag {
     .object {
       c = of.bytes
-      var arcs: List[Nat] = []
-      var n: Nat = 0
-      var fresh = true
+      mut arcs: List[Nat] = []
+      mut n: Nat = 0
+      mut fresh = true
       loop i in 0..c.size {
         b: Nat = c[i]
         if fresh and b == 128 { return .err("a number with a byte at the front that it does not need") }

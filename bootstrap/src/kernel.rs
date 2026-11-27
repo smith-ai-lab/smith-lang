@@ -77,7 +77,7 @@ impl<'a> Machine<'a> {
     }
 
     /// The last comparison worked out, which is what a `bool` that no
-    /// comparison gave directly, as a `var` a loop handed on, is last owed to.
+    /// comparison gave directly, as a `mut` a loop handed on, is last owed to.
     pub fn last_comparison(&self) -> Option<&Why> {
         self.last.as_ref()
     }

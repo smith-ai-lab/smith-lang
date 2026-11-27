@@ -135,7 +135,7 @@ fn digit(d: Byte) -> Byte {
 }
 
 fn hex(b: Slice[Byte]) -> str <alloc> {
-  var built: List[Byte] = []
+  mut built: List[Byte] = []
   loop i in 0..b.size {
     built = push(built, digit(shift_right(b[i], 4)))
     built = push(built, digit(bit_and(b[i], 15)))
@@ -147,7 +147,7 @@ fn hex(b: Slice[Byte]) -> str <alloc> {
 }
 
 fn dotted(arcs: List[Nat]) -> str <alloc> {
-  var s = \"\"
+  mut s = \"\"
   loop i in 0..arcs.size {
     if i == 0 { s = \"{arcs[i]}\" } else { s = \"{s}.{arcs[i]}\" }
   }
@@ -155,7 +155,7 @@ fn dotted(arcs: List[Nat]) -> str <alloc> {
 }
 
 fn joined(names: List[str]) -> str <alloc> {
-  var s = \"\"
+  mut s = \"\"
   loop i in 0..names.size {
     if i == 0 { s = names[i] } else { s = \"{s},{names[i]}\" }
   }
@@ -943,7 +943,7 @@ fn digit(d: Byte) -> Byte {
 }
 
 fn hex(b: List[Byte]) -> str <alloc> {
-  var built: List[Byte] = []
+  mut built: List[Byte] = []
   loop i in 0..b.size {
     built = push(built, digit(shift_right(b[i], 4)))
     built = push(built, digit(bit_and(b[i], 15)))
@@ -961,7 +961,7 @@ fn show(bytes: Slice[Byte]) <console, alloc> {
       match pem(t) {
         .err(e) { print(\"err\") }
         .ok(cs) {
-          var line = \"ok {cs.size}\"
+          mut line = \"ok {cs.size}\"
           loop i in 0..cs.size { line = \"{line} {hex(cs[i])}\" }
           print(line)
         }

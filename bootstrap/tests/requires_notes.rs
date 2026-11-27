@@ -238,7 +238,7 @@ fn a_comment_above_a_requires_that_the_kernel_works_out_is_told_with_what_it_fou
     generate::check(7913, 20, words, |lines| {
         let comment: String = lines.iter().map(|l| format!("  // {l}\n")).collect();
         let source = with_header(format!(
-            "fn has(xs: List[i32], k: i32) -> bool {{\n  var found = false\n  loop v in xs {{\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
+            "fn has(xs: List[i32], k: i32) -> bool {{\n  mut found = false\n  loop v in xs {{\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
              fn pick(xs: List[i32], k: i32) -> i32\n{comment}  requires has(xs, k)\n{{\n  k\n}}\n\n\
              fn main() <console, alloc> {{ print(\"{{pick([1, 2, 3], 5)}}\") }}\n"
         ));

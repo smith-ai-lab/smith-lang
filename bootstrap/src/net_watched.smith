@@ -24,8 +24,8 @@ fn peek_no_wait() -> i64 {
 // start has no such socket, and the call gives another error. Windows has none.
 fn control_peek() -> i64 <alloc> {
   if on_windows() { return -9 }
-  var buffer: List[Byte] = __reserve(1)
-  var seen: i64 = -4
+  mut buffer: List[Byte] = __reserve(1)
+  mut seen: i64 = -4
   loop attempt in 0..8 {
     seen = __system(8, control(), buffer, 1, peek_no_wait(), 0, 0)
     if seen != -4 { break }
@@ -64,8 +64,8 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   request = "listen {host} {port}\n"
   sent = __system(7, control(), request, request.size, no_signal(), 0, 0)
   if sent < 0 { return .err(failure(address, "listen", sent)) }
-  var said: List[Byte] = __reserve(64)
-  var rights: List[Byte] = __reserve(64)
+  mut said: List[Byte] = __reserve(64)
+  mut rights: List[Byte] = __reserve(64)
   said_at: u64 = wrapping_narrow(__address_of(said))
   rights_at: u64 = wrapping_narrow(__address_of(rights))
   iov = append(eight(said_at), eight(64))
@@ -73,7 +73,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   // The message the kernel fills: where the bytes go and where the descriptors
   // go. Its fields are laid out as the kernel's header says, which macOS
   // makes shorter.
-  var message: List[Byte] = eight(0)
+  mut message: List[Byte] = eight(0)
   message = append(message, zeros(8))
   message = append(message, eight(iov_at))
   if on_macos() {
@@ -86,7 +86,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
     message = append(message, eight(64))
     message = append(message, zeros(8))
   }
-  var got: i64 = -4
+  mut got: i64 = -4
   loop attempt in 0..8 {
     got = __system(29, control(), message, 0, 0, 0, 0)
     if got != -4 { break }
@@ -96,7 +96,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   reply = __sized(said, count(got))
   if reply.size == 0 { return .err(.failed((address, "listen: smith --watch said nothing"))) }
   if reply[0] != 111 {
-    var code: i64 = 0
+    mut code: i64 = 0
     loop k in 1..reply.size {
       digit: i64 = reply[k]
       if digit >= 48 and digit <= 57 { code = wrapping_add(wrapping_mul(code, 10), wrapping_sub(digit, 48)) }
@@ -105,7 +105,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   }
   control_bytes = __sized(rights, 64)
   if control_bytes.size < 24 { return .err(.failed((address, "listen: no descriptor came"))) }
-  var fd: i64 = -1
+  mut fd: i64 = -1
   if on_macos() {
     fd = whole(control_bytes[12], control_bytes[13], control_bytes[14], control_bytes[15])
   } else {

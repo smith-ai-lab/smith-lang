@@ -1017,7 +1017,7 @@ fn main() <diverge> {
 fn the_element_a_loop_over_a_list_gives_is_lent_and_is_refused_where_it_is_returned() {
     let read = with_imports(&format!(
         "{KEY}fn total(ks: List[Key]) -> u64 {{
-  var n: u64 = 0
+  mut n: u64 = 0
   loop k in ks {{ n = wrapping_add(n, k.secret) }}
   n + 0
 }}

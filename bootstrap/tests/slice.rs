@@ -80,7 +80,7 @@ fn expected(lines: &[String]) -> Vec<u8> {
 /// piece of a list, which is the next issue; `out` of the page's `evens` is a
 /// word of the language, so the list is called `built`.
 fn the_slice_examples_of_the_page_give_what_the_page_says() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\n\nfn evens(n: u64) -> Slice[u64] <alloc> {\n  var built: List[u64] = []\n  loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }\n  freeze(built)\n}\n\nstruct Halves {\n  left: Slice[u64]\n  right: Slice[u64]\n}\n\nfn halves(s: Slice[u64], mid: Nat) -> Halves\n  requires mid <= s.size\n{\n  Halves(left: s[..mid], right: s[mid..])\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var t: u64 = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn demo(building: List[u64], done: Slice[u64]) -> u64 {\n  wrapping_add(total(building), total(done))\n}\n\nfn main() <console, alloc> {\n  e = evens(3)\n  if 3 <= e.size { print(\"{total(e)} {e.size} {e[2]}\") }\n  f = evens(5)\n  if 3 <= f.size {\n    h = halves(f, 3)\n    print(\"{h.left.size} {total(h.left)} {h.right.size} {total(h.right)}\")\n  }\n  building: List[u64] = [10, 20]\n  print(\"{demo(building, f)}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\n\nfn evens(n: u64) -> Slice[u64] <alloc> {\n  mut built: List[u64] = []\n  loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }\n  freeze(built)\n}\n\nstruct Halves {\n  left: Slice[u64]\n  right: Slice[u64]\n}\n\nfn halves(s: Slice[u64], mid: Nat) -> Halves\n  requires mid <= s.size\n{\n  Halves(left: s[..mid], right: s[mid..])\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut t: u64 = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn demo(building: List[u64], done: Slice[u64]) -> u64 {\n  wrapping_add(total(building), total(done))\n}\n\nfn main() <console, alloc> {\n  e = evens(3)\n  if 3 <= e.size { print(\"{total(e)} {e.size} {e[2]}\") }\n  f = evens(5)\n  if 3 <= f.size {\n    h = halves(f, 3)\n    print(\"{h.left.size} {total(h.left)} {h.right.size} {total(h.right)}\")\n  }\n  building: List[u64] = [10, 20]\n  print(\"{demo(building, f)}\")\n}\n";
     let out = scalar::run(&lowered(source));
     assert_eq!(out.stdout, b"6 3 4\n3 6 2 14\n50\n".to_vec());
 }
@@ -156,7 +156,7 @@ fn frozen_source(f: &Frozen) -> String {
         }
     }
     reads += &format!("  dump(s[..{}])\n  dump(s[{}..])\n", n / 2, n / 2);
-    let mut main = format!("  var a: List[{t}] = []\n");
+    let mut main = format!("  mut a: List[{t}] = []\n");
     for v in &f.items {
         main += &format!("  a = push(a, {v})\n");
     }
@@ -189,7 +189,7 @@ fn frozen_source(f: &Frozen) -> String {
 }}
 
 fn build(n: u64, base: {t}) -> List[{t}] <alloc> {{
-  var xs: List[{t}] = []
+  mut xs: List[{t}] = []
   loop i in 0..n {{ xs = push(xs, base) }}
   xs
 }}
@@ -322,13 +322,13 @@ fn freeze_asks_for_no_memory_moves_no_byte_and_runs_no_instruction_more() {
             let program = |read: &str| {
                 format!(
                     "{uses}fn total(xs: List[{t}]) -> {t} {{
-  var sum: {t} = 0
+  mut sum: {t} = 0
   loop v in xs {{ sum = wrapping_add(sum, v) }}
   sum
 }}
 
 fn main() <console, alloc> {{
-  var xs: List[{t}] = []
+  mut xs: List[{t}] = []
   loop i in 0..{n} {{ xs = push(xs, 3) }}
 {read}}}
 "
@@ -398,7 +398,7 @@ fn hold(s: Slice[{t}]) -> Held {{ Held(all: s, tag: 1) }}
 fn pair(s: Slice[{t}]) -> (Slice[{t}], Slice[{t}]) {{ (s, s) }}
 
 fn main() <console, alloc> {{
-  var a: List[{t}] = []
+  mut a: List[{t}] = []
 {pushes}  s = freeze(a)
   t = s
   h = hold(s)
@@ -452,7 +452,7 @@ fn a_slice_a_list_and_a_text_are_passed_where_a_list_is_lent_and_a_slice_is_refu
     let program = |given: &str, total: u8| {
         format!(
             "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn total(xs: List[Byte]) -> Byte {{
-  var sum: Byte = 0
+  mut sum: Byte = 0
   loop v in xs {{ sum = wrapping_add(sum, v) }}
   sum
 }}
@@ -513,7 +513,7 @@ fn copy_of_a_slice_gives_a_new_list_and_asks_for_alloc() {
 
 fn main() <console, alloc> {{
   s: Slice[{t}] = [{}]
-  var xs = copy(s)
+  mut xs = copy(s)
   xs = push(xs, {extra})
   dump(s)
   dump(xs)

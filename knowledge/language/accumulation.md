@@ -1,17 +1,17 @@
 ---
 type: specification
 title: Accumulation
-description: A for whose block only accumulates into a var gives nothing and runs as a reduction, and an accumulation may be indexed, which is how a scatter is written.
+description: A for whose block only accumulates into a mut gives nothing and runs as a reduction, and an accumulation may be indexed, which is how a scatter is written.
 status: planned
 ---
 
 # Accumulation
 
-A [`for`](for.md) whose block only accumulates into a [`var`](var.md) gives nothing. It runs for its effect on the `var`.
+A [`for`](for.md) whose block only accumulates into a [`mut`](mut.md) gives nothing. It runs for its effect on the `mut`.
 
 ```
 fn total_of(x: [4]f32) -> f32 {
-  var total = 0.0
+  mut total = 0.0
   for i { total += x[i] }
   total
 }
@@ -21,11 +21,11 @@ fn total_of(x: [4]f32) -> f32 {
 
 ## Giving a new value is refused
 
-Giving an outer `var` a new value with `=` inside a `for` is refused, because the result would depend on order, and the iterations are independent.
+Giving an outer `mut` a new value with `=` inside a `for` is refused, because the result would depend on order, and the iterations are independent.
 
 ```
 fn last(x: [4]f32) -> f32 {
-  var latest = 0.0
+  mut latest = 0.0
   for i { latest = x[i] }
   latest
 }
@@ -35,7 +35,7 @@ The compiler does not build this refusal, so the page quotes no words. A [`loop`
 
 ```
 fn last(x: [4]f32) -> f32 {
-  var latest = 0.0
+  mut latest = 0.0
   loop i in 0..4 { latest = x[i] }
   latest
 }
@@ -47,7 +47,7 @@ An accumulation may be indexed, as in `hist[bucket[i]] += 1.0`. This is how a sc
 
 ```
 fn histogram(bucket: [8]0..4) -> [4]f32 {
-  var hist: [4]f32 = zeros(4)
+  mut hist: [4]f32 = zeros(4)
   for i { hist[bucket[i]] += 1.0 }
   hist
 }

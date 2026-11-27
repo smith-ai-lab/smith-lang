@@ -5,7 +5,7 @@ description: x[i] reads one element, an index is proven to be in range when the 
 status: partial
 built:
   - "indexing a `List` of whole numbers or `bool`s as `xs[i]`, which compiles when `arith` proves `i < xs.size` from the size of a list written out or given to a name, the range of a `loop`, an `if`, or a `requires` over a list's `size`, where `i` is a whole number of an unsigned type"
-  - "an array whose size is in its type, `a[i]` read and `a[i] = e` assigned of a `var`, which compile when `arith` proves `i` below the size, from the type of the index, an `if`, or a `requires`, and are refused with `cannot prove that `3 < 3`` otherwise"
+  - "an array whose size is in its type, `a[i]` read and `a[i] = e` assigned of a `mut`, which compile when `arith` proves `i` below the size, from the type of the index, an `if`, or a `requires`, and are refused with `cannot prove that `3 < 3`` otherwise"
   - "not `Index` as a trait a program implements, or an element of a list assigned"
 ---
 
@@ -66,7 +66,7 @@ Inside `loop i in 0..xs.size`, `i` is below `xs.size`.
 use std.bits (u32)
 
 fn largest(xs: List[u32]) -> u32 {
-  var best: u32 = 0
+  mut best: u32 = 0
   loop i in 0..xs.size {
     if xs[i] > best { best = xs[i] }
   }
@@ -142,11 +142,11 @@ A [`List`](../library/list.md) implements `Index` with the index below `size`. A
 
 ## Assigning an element
 
-An element of a `var` array is assigned as a field is, and only that `var` sees the change.
+An element of a `mut` array is assigned as a field is, and only that `mut` sees the change.
 
 ```
 fn bump(a: [3]f32) -> [3]f32 {
-  var b = a
+  mut b = a
   b[0] = 1.0
   b
 }
@@ -160,7 +160,7 @@ fn bump(a: [3]f32) -> [3]f32 {
 | --- | --- |
 | `x[i]` | `at(x, i)`, the element at place `i`, compiled when `valid(x, i)` is proven |
 | `a[r, c]` | The element of a matrix at row `r` and column `c` |
-| `a[0] = e` | Assigns an element of a `var` array |
+| `a[0] = e` | Assigns an element of a `mut` array |
 | `valid(x, i)` | Whether `x` has the index `i`, used to prove and never run |
 | `i: 0..n` on an index of size `n` | An index whose type proves it |
 | `loop i in 0..xs.size`, `if i < xs.size`, `requires i < xs.size` | The three ways to prove an index |

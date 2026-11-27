@@ -1229,7 +1229,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// Makes each bare name in a pattern of a binding stand for the values
-    /// it matches: a name defined before it, which is a `var`, from then on,
+    /// it matches: a name defined before it, which is a `mut`, from then on,
     /// and any other as a new name.
     fn bind(&self, out: &mut Out<'a>, pattern: &Pattern, ty: &Ty, values: Vec<form::Value>) {
         match pattern {
@@ -1865,7 +1865,7 @@ impl<'a> Lowering<'a> {
                     };
                     self.defining_frame = false;
                     self.keep_in_region(out, name, &value);
-                    // A `var` that is bound again drops the value it held.
+                    // A `mut` that is bound again drops the value it held.
                     self.drop_at(out, Site::Replace(addr(stmt)));
                     let made = self.made_frame.take();
                     // A name bound to a function with a name holds that function,
@@ -2427,7 +2427,7 @@ impl<'a> Lowering<'a> {
     /// leave meet in one, which gives the names their values after the
     /// `loop`.
     fn round(&mut self, out: &mut Out<'a>, l: &'a Loop, env: &[Ty]) {
-        // A name is a `var` of the frame it is written in, so a name that
+        // A name is a `mut` of the frame it is written in, so a name that
         // the body assigns is of this frame, and one that a lambda assigns
         // is of the frame the lambda is written in. A lambda written outside
         // the `loop` may be called inside it, so what the lambdas in any
@@ -2789,7 +2789,7 @@ impl<'a> Lowering<'a> {
     /// it gives.
     ///
     /// While a function is lowered in place, a block may run a lambda that
-    /// assigns a `var` of any frame, so every name is compared after it.
+    /// assigns a `mut` of any frame, so every name is compared after it.
     fn match_expr(
         &mut self,
         out: &mut Out<'a>,

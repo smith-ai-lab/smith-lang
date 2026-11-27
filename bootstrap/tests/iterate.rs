@@ -77,7 +77,7 @@ enum Val {
 }
 
 /// A line of the block of a loop whose element is `v`, in a function that
-/// has `var acc`.
+/// has `mut acc`.
 #[derive(Clone, Debug)]
 enum Item {
     /// `acc = wrapping_add(acc, wrapping_add(v, k))`.
@@ -314,11 +314,11 @@ fn program(lines: &[Item], walked: &Walked, form: Form) -> String {
     write(lines, form, false, &mut block);
     let function = match form {
         Form::Loop => format!(
-            "fn f(c: {}) -> Int {{\nvar acc: Int = 0\nloop v in c {{\n{block}}}\nwrapping_add(acc, 1000)\n}}\n",
+            "fn f(c: {}) -> Int {{\nmut acc: Int = 0\nloop v in c {{\n{block}}}\nwrapping_add(acc, 1000)\n}}\n",
             walked.type_name()
         ),
         Form::Each => format!(
-            "fn f(c: {}) -> Int {{\nvar acc: Int = 0\nvar kept: Int = 0\nvar left = false\n_ = each(c) fn(v) {{\n{block}.go\n}}\nif left {{ return kept }}\nwrapping_add(acc, 1000)\n}}\n",
+            "fn f(c: {}) -> Int {{\nmut acc: Int = 0\nmut kept: Int = 0\nmut left = false\n_ = each(c) fn(v) {{\n{block}.go\n}}\nif left {{ return kept }}\nwrapping_add(acc, 1000)\n}}\n",
             walked.type_name()
         ),
     };
@@ -386,7 +386,7 @@ fn over_places(lines: &[Item], places: bool) -> String {
     };
     let int = if block.contains("wrapping_add") { "use std.int (wrapping_add)\n" } else { "" };
     format!(
-        "use std.console (console, print)\n{int}\nfn f(xs: List[Int]) -> Int {{\nvar acc: Int = 0\n{head}{block}}}\nacc\n}}\n\nfn main() <console, alloc> {{\n  xs: List[Int] = [1, 2, 3]\n  print(\"{{f(xs)}}\")\n}}\n"
+        "use std.console (console, print)\n{int}\nfn f(xs: List[Int]) -> Int {{\nmut acc: Int = 0\n{head}{block}}}\nacc\n}}\n\nfn main() <console, alloc> {{\n  xs: List[Int] = [1, 2, 3]\n  print(\"{{f(xs)}}\")\n}}\n"
     )
 }
 
@@ -528,7 +528,7 @@ impl Iterate[Countdown, i32] {
     );
     assert_eq!(evaluate(&each), Outcome { stdout: b"3\n2\ndone\n".to_vec(), status: 0 });
     let largest = format!(
-        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn largest(c: Countdown) -> i32 {{\n  var top = 0\n  loop v in c {{ if v > top {{ top = v }} }}\n  top\n}}\n\nfn first_small(c: Countdown) -> i32 {{\n  var found = 0\n  loop v in c {{\n    if v < 3 {{\n      found = v\n      break\n    }}\n  }}\n  found\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{largest(Countdown(from: 3))}}\")\n  print(\"{{first_small(Countdown(from: 5))}}\")\n}}\n"
+        "use std.bits (i32)\nuse std.console (console, print)\n\n{countdown}fn largest(c: Countdown) -> i32 {{\n  mut top = 0\n  loop v in c {{ if v > top {{ top = v }} }}\n  top\n}}\n\nfn first_small(c: Countdown) -> i32 {{\n  mut found = 0\n  loop v in c {{\n    if v < 3 {{\n      found = v\n      break\n    }}\n  }}\n  found\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{largest(Countdown(from: 3))}}\")\n  print(\"{{first_small(Countdown(from: 5))}}\")\n}}\n"
     );
     assert_eq!(evaluate(&largest), Outcome { stdout: b"3\n2\n".to_vec(), status: 0 });
     // The block of a loop is checked where it is written, against the effects

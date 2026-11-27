@@ -1,7 +1,7 @@
 use std.console (console, print)
 
 fn next(i: Byte) -> Byte {
-  var v = i
+  mut v = i
   if v < 255 { v + 1 } else { v }
 }
 

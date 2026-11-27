@@ -1,10 +1,10 @@
-//! A `var` that starts as a number written out, and that a `loop` gives itself
+//! A `mut` that starts as a number written out, and that a `loop` gives itself
 //! plus a value or itself less a value, has the range that linear templates
 //! over the count of passes bound: it is accepted where that range is finite
 //! within 64 bits, and refused where it is not.
 //!
 //! Every generator knows the greatest and the least value its loop can give
-//! the `var`, from the count of its passes and what a pass adds, so what a
+//! the `mut`, from the count of its passes and what a pass adds, so what a
 //! test expects shares nothing with the compiler.
 
 use std::collections::BTreeSet;
@@ -84,7 +84,7 @@ fn a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_
  {
     let body = |after: &str| {
         with_header(format!(
-            "fn main() <console, alloc> {{\n  xs = [1, 2, 3]\n  var acc = 0\n  loop x in xs {{\n    acc = acc + x\n  }}\n{after}}}\n"
+            "fn main() <console, alloc> {{\n  xs = [1, 2, 3]\n  mut acc = 0\n  loop x in xs {{\n    acc = acc + x\n  }}\n{after}}}\n"
         ))
     };
     assert_eq!(
@@ -95,7 +95,7 @@ fn a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_
         }
     );
     let source = with_header(
-        "fn takes(v: 0..9) -> 0..9 { v }\n\nfn main() <alloc> {\n  xs = [1, 2, 3]\n  var acc = 0\n  loop x in xs {\n    acc = acc + x\n  }\n  y = takes(acc)\n}\n"
+        "fn takes(v: 0..9) -> 0..9 { v }\n\nfn main() <alloc> {\n  xs = [1, 2, 3]\n  mut acc = 0\n  loop x in xs {\n    acc = acc + x\n  }\n  y = takes(acc)\n}\n"
             .to_string(),
     );
     let said = refused(&source);
@@ -112,7 +112,7 @@ fn a_sum_over_an_array_of_the_program_prints_what_it_is_and_the_range_is_what_a_
 fn a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to_the_56() {
     let count = |holds: &str| {
         with_header(format!(
-            "fn evens(xs: List[Nat]) -> {holds} {{\n  var n = 0\n  loop x in xs {{\n    if x % 2 == 0 {{ n = n + 1 }}\n  }}\n  n\n}}\n\n\
+            "fn evens(xs: List[Nat]) -> {holds} {{\n  mut n = 0\n  loop x in xs {{\n    if x % 2 == 0 {{ n = n + 1 }}\n  }}\n  n\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{evens([1, 2, 4, 5])}}\")\n}}\n"
         ))
     };
@@ -130,7 +130,7 @@ fn a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to
     );
     let sum = |holds: &str| {
         with_header(format!(
-            "fn total(xs: List[Byte]) -> {holds} {{\n  var acc = 0\n  loop b in xs {{ acc = acc + b }}\n  acc\n}}\n\n\
+            "fn total(xs: List[Byte]) -> {holds} {{\n  mut acc = 0\n  loop b in xs {{ acc = acc + b }}\n  acc\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{total([200, 100, 255])}}\")\n}}\n"
         ))
     };
@@ -148,7 +148,7 @@ fn a_count_over_a_list_is_below_two_to_the_48_and_a_sum_of_bytes_is_below_two_to
 /// gives the choices, and the compiler adds no check.
 fn a_sum_of_nats_is_refused_with_the_range_why_and_the_choices() {
     let source = with_header(
-        "fn total(xs: List[Nat]) -> Nat {\n  var acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\nfn main() <alloc> {\n  y = total([1, 2])\n}\n"
+        "fn total(xs: List[Nat]) -> Nat {\n  mut acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\nfn main() <alloc> {\n  y = total([1, 2])\n}\n"
             .to_string(),
     );
     let errors = lower(source.as_bytes()).expect_err("a sum that is not finite");
@@ -167,7 +167,7 @@ fn a_sum_of_nats_is_refused_with_the_range_why_and_the_choices() {
 /// A `requires` that bounds the size is what the passes are bounded by.
 fn a_requires_that_bounds_the_size_of_a_list_makes_a_sum_of_nats_finite() {
     let source = with_header(
-        "fn total(xs: List[0..1000]) -> 0..100001\n  requires xs.size <= 100\n{\n  var acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\n\
+        "fn total(xs: List[0..1000]) -> 0..100001\n  requires xs.size <= 100\n{\n  mut acc = 0\n  loop x in xs { acc = acc + x }\n  acc\n}\n\n\
          fn main() <console, alloc> {\n  xs: List[0..1000] = [5, 6]\n  if xs.size <= 100 {\n    print(\"{total(xs)}\")\n  }\n}\n"
             .to_string(),
     );
@@ -185,7 +185,7 @@ fn a_requires_that_bounds_the_size_of_a_list_makes_a_sum_of_nats_finite() {
 fn a_loop_that_counts_down_is_proven_where_it_cannot_pass_below_the_range() {
     let down = |start: u32, holds: &str| {
         with_header(format!(
-            "fn down(d: 1..4) -> {holds} {{\n  var n = {start}\n  loop i in 0..10 {{ n = n - d }}\n  n\n}}\n\n\
+            "fn down(d: 1..4) -> {holds} {{\n  mut n = {start}\n  loop i in 0..10 {{ n = n - d }}\n  n\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{down(3)}}\")\n}}\n"
         ))
     };
@@ -206,7 +206,7 @@ fn a_loop_that_counts_down_is_proven_where_it_cannot_pass_below_the_range() {
 fn a_change_that_no_template_covers_is_refused_with_the_range_to_state() {
     for step in ["acc = acc * 2", "acc = acc + acc"] {
         let source = with_header(format!(
-            "fn f(n: 0..11) -> 0..2049 {{\n  var acc = 1\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\nfn main() <alloc> {{\n  x = f(3)\n}}\n"
+            "fn f(n: 0..11) -> 0..2049 {{\n  mut acc = 1\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\nfn main() <alloc> {{\n  x = f(3)\n}}\n"
         ));
         let said = refused(&source);
         assert!(
@@ -218,12 +218,12 @@ fn a_change_that_no_template_covers_is_refused_with_the_range_to_state() {
 }
 
 /// A loop of one of the shapes the templates cover, with the least and the
-/// greatest the `var` can be after it, worked out from its passes and what a
+/// greatest the `mut` can be after it, worked out from its passes and what a
 /// pass adds.
 #[derive(Clone, Debug)]
 struct Loop {
     /// How the loop is written, and the signature and the call that print the
-    /// `var` for the input that makes it greatest and for the one that makes
+    /// `mut` for the input that makes it greatest and for the one that makes
     /// it least.
     signature: String,
     body: String,
@@ -237,7 +237,7 @@ fn shapes(g: &mut Gen) -> Loop {
     let start = g.below(40) as i128;
     let takes = g.one_in(2);
     let sign = if takes { "-" } else { "+" };
-    // A `var` that takes away starts high enough that it stays above zero.
+    // A `mut` that takes away starts high enough that it stays above zero.
     let start = if takes { start + 8000 } else { start };
     match g.below(4) {
         0 => {
@@ -311,13 +311,13 @@ fn shapes(g: &mut Gen) -> Loop {
 }
 
 impl Loop {
-    /// The loop with the start of its `var` written before it.
+    /// The loop with the start of its `mut` written before it.
     fn with_start(mut self, start: i128) -> Loop {
-        self.body = format!("var acc = {start}\n  {}", self.body);
+        self.body = format!("mut acc = {start}\n  {}", self.body);
         self
     }
 
-    /// The program that passes the `var` to a function that needs `lo..hi`.
+    /// The program that passes the `mut` to a function that needs `lo..hi`.
     fn needing(&self, lo: i128, hi: i128) -> String {
         with_header(format!(
             "fn needs(v: {lo}..{hi}) -> {lo}..{hi} {{ v }}\n\n\
@@ -365,7 +365,7 @@ fn a_net_change_of_a_pass_that_adds_and_takes_in_nested_loops_is_the_range_the_d
  {
     let program = |holds: &str| {
         with_header(format!(
-            "fn f(c: bool) -> {holds} {{\n  var s = 0\n  loop i in 0..10 {{\n    loop j in 0..10 {{ s = s + 3 }}\n    if c {{ s = s - 1 }}\n  }}\n  s\n}}\n\n\
+            "fn f(c: bool) -> {holds} {{\n  mut s = 0\n  loop i in 0..10 {{\n    loop j in 0..10 {{ s = s + 3 }}\n    if c {{ s = s - 1 }}\n  }}\n  s\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f(true)}} {{f(false)}}\")\n}}\n"
         ))
     };
@@ -451,12 +451,12 @@ fn reachable(
 }
 
 /// For nested loops that add and take, with a branch in them, no use that
-/// needs a range that leaves out a value the `var` can end with is accepted:
-/// the range inferred holds every value the `var` has at any point.
+/// needs a range that leaves out a value the `mut` can end with is accepted:
+/// the range inferred holds every value the `mut` has at any point.
 fn no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_value_the_var_has()
  {
     // The whole of it is in a loop, so that what is known after it is the range
-    // of the `var` and not what its last assignment gave.
+    // of the `mut` and not what its last assignment gave.
     let program_of = |g: &mut Gen| vec![Node::Rounds(1 + g.below(3), nodes(g, 2))];
     generate::check(9602, 30, program_of, |body| {
         let mut all = BTreeSet::new();
@@ -467,7 +467,7 @@ fn no_range_inferred_for_generated_nested_loops_that_add_and_take_leaves_out_a_v
         let program = |lo: i128, hi: i128| {
             with_header(format!(
                 "fn needs(v: {lo}..{hi}) -> {lo}..{hi} {{ v }}\n\n\
-                 fn f(c: bool) -> Int {{\n  var s = 1000\n{text}  needs(s)\n}}\n\n\
+                 fn f(c: bool) -> Int {{\n  mut s = 1000\n{text}  needs(s)\n}}\n\n\
                  fn main() <console, alloc> {{\n  print(\"{{f(true)}} {{f(false)}}\")\n}}\n"
             ))
         };
@@ -615,12 +615,12 @@ fn a_field_named_size_that_is_not_the_size_of_a_list_is_not_below_two_to_the_48(
     assert!(check(source.as_bytes()).is_err(), "accepted\n{source}");
 }
 
-/// `loops` loops, each over an array and each adding to a `var` of its own,
+/// `loops` loops, each over an array and each adding to a `mut` of its own,
 /// in one body.
 fn many_loops(loops: usize) -> String {
     let mut out = String::from("fn f(xs: [4]Byte) -> Int {\n");
     for k in 0..loops {
-        out.push_str(&format!("  var a{k} = {k}\n  loop x in xs {{ a{k} = a{k} + x }}\n"));
+        out.push_str(&format!("  mut a{k} = {k}\n  loop x in xs {{ a{k} = a{k} + x }}\n"));
     }
     out.push_str("  a0\n}\n\nfn main() <alloc> {\n  y = f([1, 2, 3, 4])\n}\n");
     with_header(out)

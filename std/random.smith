@@ -30,7 +30,7 @@ fn inject(x: Words, first: u64, second: u64, step: u64) -> Words {
 
 pub fn threefry(counter: Words, key: Words) -> Words {
   third = bit_xor(bit_xor(key.first, key.second), 0x1BD11BDAA9FC1A22)
-  var x = Words(first: wrapping_add(counter.first, key.first), second: wrapping_add(counter.second, key.second))
+  mut x = Words(first: wrapping_add(counter.first, key.first), second: wrapping_add(counter.second, key.second))
   x = mix(x, 16)
   x = mix(x, 42)
   x = mix(x, 12)
@@ -76,11 +76,11 @@ pub fn split(key: take Key) -> (Key, Key) {
 fn widen(b: Byte) -> u64 { b }
 
 pub fn fresh() -> Key <entropy, alloc> {
-  var zeros: List[Byte] = []
+  mut zeros: List[Byte] = []
   loop i in 0..16 { zeros = push(zeros, 0) }
-  var first: u64 = 0
-  var second: u64 = 0
-  var position: u64 = 0
+  mut first: u64 = 0
+  mut second: u64 = 0
+  mut position: u64 = 0
   loop b in fill(zeros) {
     shifted = wrapping_shift_left(widen(b), bit_and(position, 7) * 8)
     if position < 8 {

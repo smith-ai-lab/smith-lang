@@ -4,10 +4,10 @@ title: Inference
 description: What is written at the top level is the contract and what is inside a body is solved from everything the body says, how a range is the smallest that holds every value a name is given, and the errors that say what was inferred.
 status: partial
 built:
-  - "a `var` with no stated type given the smallest range that holds the value it starts as and every value it is given, solved in the order the body is read, so that `n = n + 1` twice is a `0..3`, and what `arith` knows of the value last given still proves what it proved"
+  - "a `mut` with no stated type given the smallest range that holds the value it starts as and every value it is given, solved in the order the body is read, so that `n = n + 1` twice is a `0..3`, and what `arith` knows of the value last given still proves what it proved"
   - "an error that names the range inferred, each value it was inferred from with its line, the assignment that set its top, and the use that needs less"
-  - "a `var` that starts as a number written out and is given itself plus a value, or itself less a value, in a loop or after a branch, given the range its linear templates over the count of passes bound, where the passes are those of an array, a range, or a `List`, a `str`, or a `Slice` of a size below 2 to the 48, and refused, with the range, why, and the choices, where that range is not finite within 64 bits"
-  - "a `var` that starts as a number written out and is given a value that depends on it in any other way, in a loop or after a branch, refused with the range of the first use as the range to state, and a `var` that starts as a value that has a type, and is given itself, keeping the range of that value"
+  - "a `mut` that starts as a number written out and is given itself plus a value, or itself less a value, in a loop or after a branch, given the range its linear templates over the count of passes bound, where the passes are those of an array, a range, or a `List`, a `str`, or a `Slice` of a size below 2 to the 48, and refused, with the range, why, and the choices, where that range is not finite within 64 bits"
+  - "a `mut` that starts as a number written out and is given a value that depends on it in any other way, in a loop or after a branch, refused with the range of the first use as the range to state, and a `mut` that starts as a value that has a type, and is given itself, keeping the range of that value"
   - "a function that takes a whole number as a type parameter, written `[n: Nat]` or `[n: Pos]`, which a call writes in brackets after the name, as `top[4]()`, which is a `Nat` in the body, which is checked as if the number were written where the name is, and a call that leaves the number out, which takes it from the type of an argument or from the type the call must give and is refused where neither says it"
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
@@ -21,11 +21,11 @@ built:
 
 # Inference
 
-What is written at the top level is the contract, and what is inside a body is solved. The parameters, the result, and the effects of a function, a field, an operation of an effect, and a top-level value state their types. Inside a body, a binding, a `var`, a lambda and its parameters, a literal, and a type argument are not written, and each takes the type that everything the body says about it needs.
+What is written at the top level is the contract, and what is inside a body is solved. The parameters, the result, and the effects of a function, a field, an operation of an effect, and a top-level value state their types. Inside a body, a binding, a `mut`, a lambda and its parameters, a literal, and a type argument are not written, and each takes the type that everything the body says about it needs.
 
 ```
 fn grow(start: 0..5) -> 0..11 {
-  var x = start
+  mut x = start
   x = 9
   x
 }
@@ -39,15 +39,15 @@ Each value given to a name is a lower bound on its range: the range holds it. Ea
 
 ```
 fn pick(c: bool) -> 0..10 {
-  var x = 0
+  mut x = 0
   if c { x = 5 } else { x = 9 }
   x
 }
 ```
 
-`x` is given `0`, `5`, and `9`, so it is a `0..10`, which the result holds. `var x = 0` does not make `x` a `0..1`.
+`x` is given `0`, `5`, and `9`, so it is a `0..10`, which the result holds. `mut x = 0` does not make `x` a `0..1`.
 
-A binding that is not a `var` is given one value, so it has the range of that value, as [Bindings](bindings.md) says.
+A binding that is not a `mut` is given one value, so it has the range of that value, as [Bindings](bindings.md) says.
 
 ## An error says what was inferred
 
@@ -57,7 +57,7 @@ Every error that involves an inferred range says that it was inferred, from what
 fn takes(level: 0..6) -> 0..6 { level }
 
 fn pick(c: bool) -> 0..6 {
-  var x = 0
+  mut x = 0
   if c { x = 5 } else { x = 9 }
   takes(x)
 }
@@ -65,41 +65,41 @@ fn pick(c: bool) -> 0..6 {
 
 This is refused: "`x` is a `0..10`, inferred from `0` at line 4, `x = 5` at line 5, and `x = 9` at line 5, and its top is set by `x = 9` at line 5; the use at line 6 needs a `0..6`". The error names the range inferred, the assignment that set its top, and the use that needs less. The fix is to give `x` nothing above 5, or to check it first, as [Integer arithmetic](arithmetic.md#checking-first) shows.
 
-## A var given a value one after another
+## A mut given a value one after another
 
-Code with no loop is solved in order, as it is read. Each assignment is a new step, whose range is known from the steps before it, and the range of the `var` is the smallest that holds every step.
+Code with no loop is solved in order, as it is read. Each assignment is a new step, whose range is known from the steps before it, and the range of the `mut` is the smallest that holds every step.
 
 ```
 fn count() -> 0..3 {
-  var n = 0
+  mut n = 0
   n = n + 1
   n = n + 1
   n
 }
 ```
 
-`count()` is `2`. The steps are `0`, `0 + 1`, and `1 + 1`, so `n` is a `0..3`. What is known of the value a `var` was last given still proves what it proved, as [`arith`](arith.md) says, so a `var` that is last given a value that fits a narrower range enters it.
+`count()` is `2`. The steps are `0`, `0 + 1`, and `1 + 1`, so `n` is a `0..3`. What is known of the value a `mut` was last given still proves what it proved, as [`arith`](arith.md) says, so a `mut` that is last given a value that fits a narrower range enters it.
 
 ```
 fn takes(level: 0..6) -> 0..6 { level }
 
 fn last_given() -> 0..6 {
-  var x = 0
+  mut x = 0
   x = 9
   x = 5
   takes(x)
 }
 ```
 
-`last_given()` is `5`. `x` is a `0..10`, and it was last given `5`, which a `0..6` holds. After an `if`, a `match`, or a loop, which of the values it was last given is not known, so the range of the `var` is what enters.
+`last_given()` is `5`. `x` is a `0..10`, and it was last given `5`, which a `0..6` holds. After an `if`, a `match`, or a loop, which of the values it was last given is not known, so the range of the `mut` is what enters.
 
 ## A name a loop changes by itself
 
-A `var` that starts as a number written out, and that a [`loop`](loop.md) gives itself plus a value, or itself less a value, has a range found with linear templates over the count of passes.
+A `mut` that starts as a number written out, and that a [`loop`](loop.md) gives itself plus a value, or itself less a value, has a range found with linear templates over the count of passes.
 
 ```
 fn sum_of(xs: [3]Byte) -> 0..766 {
-  var acc = 0
+  mut acc = 0
   loop x in xs { acc = acc + x }
   acc
 }
@@ -107,14 +107,14 @@ fn sum_of(xs: [3]Byte) -> 0..766 {
 
 `sum_of([200, 100, 255])` is `555`. One pass adds a `0..256`, so at most `255`, and there are three passes, so `acc` is a `0..766`.
 
-For each such `var` the solver tries one fixed set of templates and searches for nothing else. Where the `var` starts as a `start_lo..start_hi`, and one pass of a loop changes it by a `lo..hi`, then after `n` passes it is within
+For each such `mut` the solver tries one fixed set of templates and searches for nothing else. Where the `mut` starts as a `start_lo..start_hi`, and one pass of a loop changes it by a `lo..hi`, then after `n` passes it is within
 
 ```
 start_lo + n * lo <= x
 x <= start_hi + n * hi
 ```
 
-and each holds before the first pass and after each pass. The change of one pass is worked out from the body, in the order it is read: an assignment changes the `var` by what it adds or takes, which may be nothing where it is in an `if`; a loop in the pass changes it by its range times its passes; and one thing and then another change it by the sum of both. So a pass that adds `30` in an inner loop and then, in an `if`, takes `1`, changes the `var` by `29..30`, and the `var` is at its least when the `1` is taken after each `30`. The range of the `var` is what holds every value it has after any part of any pass, so what a pass takes away is charged against what the same pass added before it, and not against the start. A value given to the `var` that does not read it, as `acc = 0` is, is another start, and then each assignment counts at its own `lo..hi` for as many times as it runs. A `break` ends the loop after a part of a pass, which the range holds.
+and each holds before the first pass and after each pass. The change of one pass is worked out from the body, in the order it is read: an assignment changes the `mut` by what it adds or takes, which may be nothing where it is in an `if`; a loop in the pass changes it by its range times its passes; and one thing and then another change it by the sum of both. So a pass that adds `30` in an inner loop and then, in an `if`, takes `1`, changes the `mut` by `29..30`, and the `mut` is at its least when the `1` is taken after each `30`. The range of the `mut` is what holds every value it has after any part of any pass, so what a pass takes away is charged against what the same pass added before it, and not against the start. A value given to the `mut` that does not read it, as `acc = 0` is, is another start, and then each assignment counts at its own `lo..hi` for as many times as it runs. A `break` ends the loop after a part of a pass, which the range holds.
 
 The number of passes is known when the program is built, and is one of these:
 
@@ -124,17 +124,17 @@ The number of passes is known when the program is built, and is one of these:
 
 ```
 fn evens(xs: List[Nat]) -> 0..281474976710656 {
-  var n = 0
+  mut n = 0
   loop x in xs { if x % 2 == 0 { n = n + 1 } }
   n
 }
 ```
 
-This is accepted: `n` is a `0..281474976710656`, which is `0..2^48`, as `xs` has fewer than 2 to the 48 elements and one pass adds at most `1`. A `var` that counts down is solved the same way, from its start by what a pass takes away.
+This is accepted: `n` is a `0..281474976710656`, which is `0..2^48`, as `xs` has fewer than 2 to the 48 elements and one pass adds at most `1`. A `mut` that counts down is solved the same way, from its start by what a pass takes away.
 
 ```
 fn down(d: 1..4) -> 70..101 {
-  var n = 100
+  mut n = 100
   loop i in 0..10 { n = n - d }
   n
 }
@@ -144,7 +144,7 @@ fn down(d: 1..4) -> 70..101 {
 
 ```
 fn netted(c: bool) -> 0..301 {
-  var s = 0
+  mut s = 0
   loop i in 0..10 {
     loop j in 0..10 { s = s + 3 }
     if c { s = s - 1 }
@@ -155,33 +155,33 @@ fn netted(c: bool) -> 0..301 {
 
 `netted(true)` is `290`. Each pass of the outer loop changes `s` by `29..30`, so `s` is a `0..301`.
 
-A `var` whose range is not finite within 64 bits is refused, with the range, why, and the choices.
+A `mut` whose range is not finite within 64 bits is refused, with the range, why, and the choices.
 
 ```
 fn total(xs: List[Nat]) -> Nat {
-  var acc = 0
+  mut acc = 0
   loop x in xs { acc = acc + x }
   acc
 }
 ```
 
-This is refused: "`acc` is changed by itself in this loop, and its range is not finite within 64 bits: `acc = acc + x` adds a `Nat`, at most 281474976710655 times", with the fix "write `checked_add`, which gives an `Option` and costs one comparison, where it is seen; or `wrapping_add`; or a `requires` that bounds the size". The compiler adds no check that the program did not write. A loop over a type of a program's own that implements [`Iterate`](iterate.md), or an open-ended loop, has no count of passes, and a `var` it adds to is refused the same way.
+This is refused: "`acc` is changed by itself in this loop, and its range is not finite within 64 bits: `acc = acc + x` adds a `Nat`, at most 281474976710655 times", with the fix "write `checked_add`, which gives an `Option` and costs one comparison, where it is seen; or `wrapping_add`; or a `requires` that bounds the size". The compiler adds no check that the program did not write. A loop over a type of a program's own that implements [`Iterate`](iterate.md), or an open-ended loop, has no count of passes, and a `mut` it adds to is refused the same way.
 
-A change the templates do not cover, as a product or a value that depends on the `var` in any other way, is refused: "`n` is changed by itself in this loop, so its range is not inferred", with the range of the first use as the range to state.
+A change the templates do not cover, as a product or a value that depends on the `mut` in any other way, is refused: "`n` is changed by itself in this loop, so its range is not inferred", with the range of the first use as the range to state.
 
 ```
 fn doubled(n: 0..11) -> 0..2049 {
-  var acc = 1
+  mut acc = 1
   loop i in 0..n { acc = acc * 2 }
   acc
 }
 ```
 
-A `var` that starts as a value that has a type keeps that range when it is given itself, and each assignment is proven to fit it.
+A `mut` that starts as a value that has a type keeps that range when it is given itself, and each assignment is proven to fit it.
 
 ```
 fn steps(from: 0..100) -> 0..100 {
-  var i = from
+  mut i = from
   loop j in 0..3 { if i < 99 { i = i + 1 } }
   i
 }
@@ -262,8 +262,8 @@ A name doubled on each pass has no template, so its range is stated, and a secon
 
 ```
 fn gap(n: Nat) -> Nat {
-  var a: 0..65 = 1
-  var b: 0..65 = 1
+  mut a: 0..65 = 1
+  mut b: 0..65 = 1
   loop i in 0..n invariant a == b {
     if a < 33 {
       a = a + a
@@ -278,7 +278,7 @@ fn gap(n: Nat) -> Nat {
 
 ## A lambda's parameters
 
-A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. The parameter is the smallest range that holds every argument, joined before the lambda is checked, and the lambda is checked once with that range and is lowered as one function, as a `var` is solved from every value it is given.
+A [lambda](lambdas.md) written in a function has the type parameters of the function. A lambda that is passed where a function type decides its parameters takes them from it. A lambda that is bound to a name and called in the same body has its parameters solved from those calls and from its uses: each argument is a lower bound of the range of the parameter, and each use of the parameter inside the lambda is an upper bound. The parameter is the smallest range that holds every argument, joined before the lambda is checked, and the lambda is checked once with that range and is lowered as one function, as a `mut` is solved from every value it is given.
 
 ```
 fn doubled(a: 0..5) -> 0..9 {
@@ -308,7 +308,7 @@ A value that says nothing of its element type takes it from what the body does w
 use std.list (push)
 
 fn one() -> List[1..2] <alloc> {
-  var xs = []
+  mut xs = []
   xs = push(xs, 1)
   xs
 }
@@ -326,7 +326,7 @@ fn none() {
 
 This is refused: "an array of nothing has no element to say its type, so it is written where a type is expected", with the fix "write its type, as in `xs: List[Nat] = []`".
 
-A use settles it too: `xs = []` that is passed to a function whose parameter is a `List[0..256]` is that list. An option settles the same way, so `var o = .none` with `o = .some(7)` in one branch and `o` as the result of a function that gives an `Option[Nat]` is an `Option[Nat]`. A use gives the type where it holds everything that is put in, and where it does not, the elements are what is put in and the use is refused.
+A use settles it too: `xs = []` that is passed to a function whose parameter is a `List[0..256]` is that list. An option settles the same way, so `mut o = .none` with `o = .some(7)` in one branch and `o` as the result of a function that gives an `Option[Nat]` is an `Option[Nat]`. A use gives the type where it holds everything that is put in, and where it does not, the elements are what is put in and the use is refused.
 
 ```
 use std.list (push)
@@ -334,7 +334,7 @@ use std.list (push)
 fn small(xs: List[0..3]) -> Nat { xs.size }
 
 fn main() <alloc> {
-  var xs = []
+  mut xs = []
   xs = push(xs, 7)
   n = small(xs)
 }
@@ -368,10 +368,10 @@ This is refused at the `try`: "this block gives `u64`, which `try` cannot return
 
 | Written | Is |
 | --- | --- |
-| `var x = 0`, then `x = 5` and `x = 9` | A `0..10`, the smallest range that holds each value given |
+| `mut x = 0`, then `x = 5` and `x = 9` | A `0..10`, the smallest range that holds each value given |
 | `n = n + 1`, twice, with no loop | Solved in order: `0`, `1`, and `2` give a `0..3` |
 | `acc = acc + x` in a loop, `acc` starting as a number written out | The start, and what the passes add or take away, by a template |
-| A `var` a loop changes in a way no template covers | Refused, with the range to state |
+| A `mut` a loop changes in a way no template covers | Refused, with the range to state |
 | `fn f[n: Nat]() { ... }` and `f[4]()` | The body of `f` checked as if `4` were written where `n` is |
 | `f()` where `n` is left out | `n` taken from the type of an argument or the type the call gives, or its default, or refused where it has none |
 | `fn f[n: Nat = 10]()` and `f()` | `f[10]()`, where nothing settles `n` |

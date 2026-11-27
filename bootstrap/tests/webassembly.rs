@@ -861,7 +861,7 @@ use std.int (wrapping_add)
 fn string(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..3 {
     if fuel > 0 {
       total = wrapping_add(total, expression(n, fuel - 1))
@@ -898,7 +898,7 @@ fn token(n: u64, fuel: u64) -> u64 <alloc>
 fn string(n: u64, fuel: u64) -> u64 <alloc>
   decreases fuel
 {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..3 {
     if fuel > 0 {
       (a, closed) = expression(n, fuel - 1)
@@ -912,8 +912,8 @@ fn string(n: u64, fuel: u64) -> u64 <alloc>
 fn expression(n: u64, fuel: u64) -> (u64, bool) <alloc>
   decreases fuel
 {
-  var total: u64 = 0
-  var closed = false
+  mut total: u64 = 0
+  mut closed = false
   loop i in 0..3 {
     if fuel > 0 {
       total = wrapping_add(total, token(wrapping_add(n, 1), fuel - 1))
@@ -927,7 +927,7 @@ fn expression(n: u64, fuel: u64) -> (u64, bool) <alloc>
 }
 
 fn main() <console, alloc> {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..5 {
     total = wrapping_add(total, token(i, 6))
   }
@@ -949,7 +949,7 @@ fn walk(n: u64) -> u64 <alloc>
     0
   } else {
     inner = walk(n - 1)
-    var total: u64 = inner
+    mut total: u64 = inner
     loop i in 0..4 {
       total = wrapping_add(total, i)
       if total > 1000 { break }

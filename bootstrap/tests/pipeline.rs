@@ -198,7 +198,7 @@ fn a_line_that_starts_with_a_pipe_goes_on_from_the_line_before_at_any_depth(part
             }
             // The value is bound inside `if`s `depth` deep.
             let nested = |value: &str| {
-                let mut body = String::from("  var r: Byte = 0\n");
+                let mut body = String::from("  mut r: Byte = 0\n");
                 for d in 0..*depth {
                     body.push_str(&format!("{}if r == 0 {{\n", indent(1 + d)));
                 }

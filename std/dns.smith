@@ -25,17 +25,17 @@ fn put16(bytes: take List[Byte], n: u16) -> List[Byte] <alloc> {
 // and no empty label, and with one dot at its end that is left off; any other is
 // not asked.
 pub fn query(id: u16, name: List[Byte], kind: u16) -> Option[List[Byte]] <alloc> {
-  var size = name.size
+  mut size = name.size
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
   if size == 0 or size > 253 { return .none }
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   made = put16(made, id)
   made = put16(made, 256)
   made = put16(made, 1)
   made = put16(made, 0)
   made = put16(made, 0)
   made = put16(made, 0)
-  var label: List[Byte] = []
+  mut label: List[Byte] = []
   loop i in 0..size + 1 {
     if i == size or name[i] == '.' {
       if label.size == 0 or label.size > 63 { return .none }
@@ -69,10 +69,10 @@ fn word(msg: List[Byte], at: 0..70000) -> Option[u16]
 fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] <alloc>
   requires msg.size <= 60000
 {
-  var pos: 0..65536 = at
-  var end: 0..65536 = 0
-  var jumped = false
-  var made: List[Byte] = []
+  mut pos: 0..65536 = at
+  mut end: 0..65536 = 0
+  mut jumped = false
+  mut made: List[Byte] = []
   loop step in 0..msg.size + 1 {
     if pos >= msg.size { return .none }
     n = msg[pos]
@@ -102,7 +102,7 @@ fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] <all
 
 // Whether the list of names holds the name.
 fn has(names: List[List[Byte]], name: List[Byte]) -> bool {
-  var found = false
+  mut found = false
   loop i in 0..names.size { if names[i] == name { found = true } }
   found
 }
@@ -127,9 +127,9 @@ struct Record {
 
 // The name as it is compared, in lower case and with no dot at its end.
 fn compared(name: List[Byte]) -> List[Byte] <alloc> {
-  var size = name.size
+  mut size = name.size
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..size { made = push(made, lower(name[i])) }
   made
 }
@@ -156,12 +156,12 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
   if qname != asked { return .none }
   if try word(msg, after) != kind { return .none }
   if try word(msg, after + 2) != 1 { return .none }
-  var addresses: List[List[Byte]] = []
+  mut addresses: List[List[Byte]] = []
   if truncated or code != 0 { return .some(Reply(code: code, truncated: truncated, addresses: addresses)) }
   count = msg[6] * 256 + msg[7]
   if after + 4 > msg.size { return .none }
-  var at: 0..65536 = after + 4
-  var records: List[Record] = []
+  mut at: 0..65536 = after + 4
+  mut records: List[Record] = []
   loop r in 0..count {
     (owner, next) = try name_at(msg, at)
     rtype = try word(msg, next)
@@ -169,13 +169,13 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
     length = try word(msg, next + 8)
     start = next + 10
     if start + length > msg.size { return .none }
-    var target: List[Byte] = []
+    mut target: List[Byte] = []
     if rtype == 5 {
       (text, past) = try name_at(msg, start)
       target = text
     }
     if rclass == 1 {
-      var data: List[Byte] = []
+      mut data: List[Byte] = []
       if length <= 16 {
         loop k in 0..length { data = push(data, msg[start + k]) }
       }
@@ -183,7 +183,7 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
     }
     at = start + length
   }
-  var known: List[List[Byte]] = []
+  mut known: List[List[Byte]] = []
   known = push(known, asked)
   loop round in 0..records.size {
     loop i in 0..records.size {
@@ -192,7 +192,7 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
       }
     }
   }
-  var wanted: Nat = 4
+  mut wanted: Nat = 4
   if kind == 28 { wanted = 16 }
   loop i in 0..records.size {
     if records[i].kind == kind and has(known, records[i].owner) and records[i].data.size == wanted {
@@ -218,9 +218,9 @@ fn hex_digit(b: Byte) -> Option[Byte] {
 
 // The four bytes of an address written as numbers with dots.
 pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
-  var parts: List[Byte] = []
-  var current: Nat = 0
-  var digits: Nat = 0
+  mut parts: List[Byte] = []
+  mut current: Nat = 0
+  mut digits: Nat = 0
   loop i in 0..host.size {
     c = host[i]
     if c >= 48 and c <= 57 {
@@ -247,11 +247,11 @@ pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
 
 // The sixteen bytes of an address written with colons, as `::1` is.
 pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
-  var before: List[Byte] = []
-  var after: List[Byte] = []
-  var gap = false
-  var current: Nat = 0
-  var digits: Nat = 0
+  mut before: List[Byte] = []
+  mut after: List[Byte] = []
+  mut gap = false
+  mut current: Nat = 0
+  mut digits: Nat = 0
   loop i in 0..host.size {
     c = host[i]
     if c == 58 {
@@ -293,7 +293,7 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
     if host.size < 2 { return .none }
     if host[host.size - 2] != 58 { return .none }
   }
-  var made = before
+  mut made = before
   if gap {
     if made.size + after.size > 14 { return .none }
     missing: Nat = 16 - made.size - after.size
@@ -309,13 +309,13 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
 // are the runs of bytes between spaces, tabs, and the end of a line; a line with
 // no word is left out.
 fn lines(text: List[Byte]) -> List[List[List[Byte]]] <alloc> {
-  var made: List[List[List[Byte]]] = []
-  var words: List[List[Byte]] = []
-  var word: List[Byte] = []
-  var comment = false
+  mut made: List[List[List[Byte]]] = []
+  mut words: List[List[Byte]] = []
+  mut word: List[Byte] = []
+  mut comment = false
   if text.size > 1000000 { return made }
   loop i in 0..text.size + 1 {
-    var c: Byte = 10
+    mut c: Byte = 10
     if i < text.size { c = text[i] }
     if c == 10 {
       if word.size > 0 { words = push(words, word) }
@@ -349,7 +349,7 @@ fn address(word: List[Byte]) -> Option[List[Byte]] <alloc> {
 // asked when it is the same with no regard for case.
 pub fn hosts(text: List[Byte], name: List[Byte]) -> List[List[Byte]] <alloc> {
   asked = compared(name)
-  var found: List[List[Byte]] = []
+  mut found: List[List[Byte]] = []
   rows = lines(text)
   loop r in 0..rows.size {
     row = rows[r]
@@ -383,7 +383,7 @@ pub struct Config {
 // or none when it has none.
 fn number_after(word: List[Byte], from: Nat) -> Option[Nat] {
   if word.size <= from { return .none }
-  var n: Nat = 0
+  mut n: Nat = 0
   loop i in from..word.size {
     c = word[i]
     if c < '0' or c > '9' { return .none }
@@ -396,7 +396,7 @@ fn number_after(word: List[Byte], from: Nat) -> Option[Nat] {
 // Whether the word starts with the letters, which are in lower case.
 fn begins(word: List[Byte], letters: List[Byte]) -> bool {
   if word.size < letters.size { return false }
-  var same = true
+  mut same = true
   loop i in 0..letters.size { if word[i] != letters[i] { same = false } }
   same
 }
@@ -413,11 +413,11 @@ fn says(word: List[Byte], letters: List[Byte]) -> bool {
 // attempts that is none is one. What is not said is the default: a nameserver
 // at 127.0.0.1, no domain, one dot, five seconds, and two tries.
 pub fn config(text: List[Byte]) -> Config <alloc> {
-  var servers: List[List[Byte]] = []
-  var domains: List[List[Byte]] = []
-  var dots: 0..16 = 1
-  var seconds: 1..31 = 5
-  var tries: 1..6 = 2
+  mut servers: List[List[Byte]] = []
+  mut domains: List[List[Byte]] = []
+  mut dots: 0..16 = 1
+  mut seconds: 1..31 = 5
+  mut tries: 1..6 = 2
   rows = lines(text)
   loop r in 0..rows.size {
     row = rows[r]
@@ -431,7 +431,7 @@ pub fn config(text: List[Byte]) -> Config <alloc> {
       } else if says(key, "domain") {
         domains = [copy(row[1])]
       } else if says(key, "search") {
-        var listed: List[List[Byte]] = []
+        mut listed: List[List[Byte]] = []
         loop w in 1..row.size {
           if listed.size < 6 { listed = push(listed, copy(row[w])) }
         }
@@ -469,15 +469,15 @@ pub fn config(text: List[Byte]) -> Config <alloc> {
 // with each domain added; any other is asked with each domain added and then as it
 // is. Each is as `query` takes it.
 pub fn candidates(name: List[Byte], conf: Config) -> List[List[Byte]] <alloc> {
-  var dots: Nat = 0
+  mut dots: Nat = 0
   loop i in 0..name.size { if name[i] == '.' { dots = saturating_add(dots, 1) } }
-  var made: List[List[Byte]] = []
+  mut made: List[List[Byte]] = []
   if name.size > 0 and name[name.size - 1] == '.' {
     return [copy(name)]
   }
-  var added: List[List[Byte]] = []
+  mut added: List[List[Byte]] = []
   loop d in 0..conf.domains.size {
-    var joined = copy(name)
+    mut joined = copy(name)
     joined = push(joined, '.')
     joined = append(joined, conf.domains[d])
     added = push(added, joined)

@@ -11,7 +11,7 @@ built:
   - "a function marked `take` is spent by its first call or by being passed to a parameter that takes its function, so a second call, on any path or in a later round of a loop, is refused"
   - "a lambda that gives away a value without `Discard` is refused where the function it is passed to takes its function, as that function may not call it"
   - "a lambda a handler gives for an operation takes what the operation marks `take`, as a function does, so it must use the value or give it away exactly once"
-  - "a lambda that gives away a `var` of the function it is written in and assigns it again before it ends, on every path, a `return` and a `try` that leaves among them, gives nothing away: it is accepted where the function it is passed to lends its function, and the `var` is whole after the call, which is how a handler keeps a `Text` or a list; a path that leaves with the name given away is refused with the error at the lambda"
+  - "a lambda that gives away a `mut` of the function it is written in and assigns it again before it ends, on every path, a `return` and a `try` that leaves among them, gives nothing away: it is accepted where the function it is passed to lends its function, and the `mut` is whole after the call, which is how a handler keeps a `Text` or a list; a path that leaves with the name given away is refused with the error at the lambda"
   - "a function that is lent is called any number of times, and is passed to a parameter that lends its function and not to one that takes it"
   - "a type parameter has `Copy` and `Discard` only where a bound or a `requires` line asks, so a value of one is used at most once and must be taken, and a call, or an implementation it chooses, is given only a type that has what the bounds ask"
 ---
@@ -85,7 +85,7 @@ fn collect(acc: take List[Byte], xs: take List[Byte]) -> u64 {
 
 This is refused at the lambda: "this lambda gives away `acc`, and the function it is passed to may call it more than once". `twice` may call its function any number of times, and the lambda can give `acc` away once.
 
-A lambda that gives away a `var` and assigns it again before it ends has given nothing away. The name holds a value when the lambda returns, as it did when the lambda began, so the function may be called any number of times.
+A lambda that gives away a `mut` and assigns it again before it ends has given nothing away. The name holds a value when the lambda returns, as it did when the lambda began, so the function may be called any number of times.
 
 ```
 use std.text (text, append, finish)
@@ -96,13 +96,13 @@ fn both(f: fn(str)) {
 }
 
 fn gather() -> str <alloc> {
-  var page = text()
+  mut page = text()
   both() fn(part) { page = append(page, part) }
   finish(page)
 }
 ```
 
-`append` takes `page`, and the same statement assigns what it gives back. This is accepted when every path through the lambda assigns the name after it is given away, a `return` and a `try` that leaves among them. A path that leaves with the name given away is refused with the error above. A [handler](handlers.md) keeps a value that is owned this way: its function takes the value its `var` holds and puts the next one there.
+`append` takes `page`, and the same statement assigns what it gives back. This is accepted when every path through the lambda assigns the name after it is given away, a `return` and a `try` that leaves among them. A path that leaves with the name given away is refused with the error above. A [handler](handlers.md) keeps a value that is owned this way: its function takes the value its `mut` holds and puts the next one there.
 
 A value the lambda gives away is spent in `collect` from the call the lambda is passed to: a use of `acc` after the call is refused, as a use after any give-away is, and a use before it is not. A second lambda of the same call that gives `acc` away is refused at the second use.
 

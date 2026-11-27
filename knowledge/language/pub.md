@@ -72,7 +72,7 @@ Every field of `Rect` is `pub`, so any module can build one and assign its field
 
 ```
 fn wider(r: Rect) -> Rect {
-  var wide = Rect(w: 1.0, h: r.h)
+  mut wide = Rect(w: 1.0, h: r.h)
   wide.w = r.w * 2.0
   wide
 }
@@ -99,7 +99,7 @@ Assigning its field is refused for the same reason.
 
 ```
 fn renumbered(db: Db) -> Transaction <net> {
-  var t = begin(db)
+  mut t = begin(db)
   t.id = 8
   t
 }

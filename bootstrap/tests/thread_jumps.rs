@@ -453,9 +453,9 @@ enum Phase {
 }
 
 fn run(n: u64) -> u64 <diverge> {
-  var phase: Phase = .up
-  var total: u64 = 0
-  var rounds: u64 = 0
+  mut phase: Phase = .up
+  mut total: u64 = 0
+  mut rounds: u64 = 0
   loop {
     match phase {
       .up {
@@ -537,7 +537,7 @@ fn once(n: u64) -> u64 <console, alloc> {
 }
 
 fn pushed(n: u64) -> u64 <alloc> {
-  var l: List[u64] = [0]
+  mut l: List[u64] = [0]
   e: Option[u64] = if n < 3 { .some(n) } else { .none }
   l = push(l, wrapping_add(n, 5))
   r: u64 = match e {

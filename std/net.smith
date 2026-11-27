@@ -252,7 +252,7 @@ struct Place {
 fn sockaddr(address: List[Byte], port: 0..65536) -> Place <alloc> {
   high = bit_and(shift_right(port, 8), 255)
   low = bit_and(port, 255)
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   if address.size == 4 {
     if on_macos() {
       made = push(push(made, 16), 2)
@@ -264,7 +264,7 @@ fn sockaddr(address: List[Byte], port: 0..65536) -> Place <alloc> {
     loop k in 0..8 { made = push(made, 0) }
     return Place(family: 2, bytes: made)
   }
-  var family: Byte = 10
+  mut family: Byte = 10
   if on_macos() {
     family = 30
     made = push(push(made, 28), 30)
@@ -297,14 +297,14 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] <alloc> {
 
 // Four bytes that the kernel reads as the number `n`.
 fn number(n: Byte) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   made = push(push(made, n), 0)
   made = push(push(made, 0), 0)
   made
 }
 
 fn zeros(n: Nat) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop k in 0..n { made = push(made, 0) }
   made
 }
@@ -316,7 +316,7 @@ fn hex_char(d: 0..16) -> 0..128 {
 
 // The digits of a group, with none that is a zero at the front.
 fn hex(t: take Text, n: Nat) -> Text <alloc> {
-  var made = t
+  mut made = t
   if n >= 4096 { made = append_ascii(made, hex_char((n / 4096) % 16)) }
   if n >= 256 { made = append_ascii(made, hex_char((n / 256) % 16)) }
   if n >= 16 { made = append_ascii(made, hex_char((n / 16) % 16)) }
@@ -327,26 +327,26 @@ fn hex(t: take Text, n: Nat) -> Text <alloc> {
 // address is in the bytes.
 fn host_text(bytes: List[Byte]) -> str <alloc> {
   if bytes.size < 24 { return "" }
-  var family = bytes[0]
+  mut family = bytes[0]
   if on_macos() { family = bytes[1] }
   if family == 2 {
     return "{bytes[4]}.{bytes[5]}.{bytes[6]}.{bytes[7]}"
   }
-  var mapped = true
+  mut mapped = true
   loop k in 0..10 { if bytes[8 + k] != 0 { mapped = false } }
   if bytes[18] != 255 or bytes[19] != 255 { mapped = false }
   if mapped {
     return "{bytes[20]}.{bytes[21]}.{bytes[22]}.{bytes[23]}"
   }
-  var groups: List[u16] = []
+  mut groups: List[u16] = []
   loop k in 0..8 {
     group: u16 = bytes[8 + 2 * k] * 256 + bytes[9 + 2 * k]
     groups = push(groups, group)
   }
-  var start: Nat = 0
-  var length: Nat = 0
-  var run_start: Nat = 0
-  var run: Nat = 0
+  mut start: Nat = 0
+  mut length: Nat = 0
+  mut run_start: Nat = 0
+  mut run: Nat = 0
   loop k in 0..groups.size {
     if groups[k] == 0 {
       if run == 0 { run_start = k }
@@ -359,9 +359,9 @@ fn host_text(bytes: List[Byte]) -> str <alloc> {
       run = 0
     }
   }
-  var t = text()
-  var skip: Nat = 0
-  var gap = false
+  mut t = text()
+  mut skip: Nat = 0
+  mut gap = false
   loop k in 0..groups.size {
     if skip > 0 {
       skip = skip - 1
@@ -382,7 +382,7 @@ fn host_text(bytes: List[Byte]) -> str <alloc> {
 // too, which Linux does and macOS asks for.
 fn dual_stack(fd: i64) <alloc> {
   off = number(0)
-  var name: i64 = 26
+  mut name: i64 = 26
   if on_macos() or on_windows() { name = 27 }
   __system(6, fd, 41, name, off, 4, 0)
 }
@@ -424,8 +424,8 @@ fn system_listen_on(host: str, wanted: Port) -> Result[Listener, NetError] <allo
   fd = __system(0, where.family, 1, 0, 0, 0, 0)
   if fd < 0 { return .err(failure(address_text(host, port), "socket", fd)) }
   one = number(1)
-  var level: i64 = 1
-  var name: i64 = 2
+  mut level: i64 = 1
+  mut name: i64 = 2
   if on_macos() {
     level = 65535
     name = 4
@@ -472,8 +472,8 @@ fn wait_to_write(fd: i64) <task> {
 fn system_accept(l: Listener) -> Result[Connection, NetError] <alloc, task> {
   if not l.opened { return .err(not_opened(address_text(l.host, l.port), "accept", l.handle)) }
   if __scheduled() {
-    var fd: i64 = -1
-    var failed: i64 = 0
+    mut fd: i64 = -1
+    mut failed: i64 = 0
     loop attempt in 0..1000000 {
       // Windows has no scheduler that waits for a descriptor, so the call waits.
       if not on_windows() { wait_to_read(l.handle) }
@@ -509,15 +509,15 @@ fn system_stop(l: take Listener) {
 // The bytes of a file, up to 60000 of them, or none when it cannot be opened,
 // which is how a file that is not there is read. Only Linux is asked.
 fn file_text(path: str) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   if on_macos() or on_windows() { return made }
-  var name: List[Byte] = []
+  mut name: List[Byte] = []
   loop i in 0..path.size { name = push(name, path[i]) }
   name = push(name, 0)
   fd = __system(19, -100, name, 0, 0, 0, 0)
   if fd < 0 { return made }
   loop round in 0..16 {
-    var buffer: List[Byte] = __reserve(4096)
+    mut buffer: List[Byte] = __reserve(4096)
     got = __system(20, fd, buffer, 4096, 0, 0, 0)
     if got <= 0 { break }
     chunk = __sized(buffer, count(got))
@@ -530,7 +530,7 @@ fn file_text(path: str) -> List[Byte] <alloc> {
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
 fn eight(n: u64) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..8 { made = push(made, bit_and(shift_right(n, 8 * i), 255)) }
   made
 }
@@ -538,7 +538,7 @@ fn eight(n: u64) -> List[Byte] <alloc> {
 // Makes a call that waits on the socket give up after the milliseconds: a read
 // of it for 20 and a write of it for 21, which Linux gives to the level 1.
 fn wait_at_most(fd: i64, name: i64, ms: u64) <alloc> {
-  var value: List[Byte] = eight(ms / 1000)
+  mut value: List[Byte] = eight(ms / 1000)
   value = append(value, eight((ms % 1000) * 1000))
   __system(6, fd, 1, name, value, 16, 0)
 }
@@ -546,13 +546,13 @@ fn wait_at_most(fd: i64, name: i64, ms: u64) <alloc> {
 // The milliseconds the clock of the system says, which only goes forward.
 fn clock() -> u64 <alloc> {
   stamp = append(eight(0), eight(0))
-  var which: i64 = 1
+  mut which: i64 = 1
   if on_macos() { which = 6 }
   _ = __system(18, which, stamp, 0, 0, 0, 0)
   if stamp.size < 16 { return 0 }
-  var seconds: u64 = 0
-  var nanoseconds: u64 = 0
-  var scale: u64 = 1
+  mut seconds: u64 = 0
+  mut nanoseconds: u64 = 0
+  mut scale: u64 = 1
   loop i in 0..8 {
     low: u64 = stamp[i]
     high: u64 = stamp[8 + i]
@@ -569,12 +569,12 @@ fn clock() -> u64 <alloc> {
 fn from_there(from: List[Byte], to: List[Byte]) -> bool {
   if to.size == 16 {
     if from.size < 8 { return false }
-    var same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
+    mut same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
     loop k in 4..8 { if from[k] != to[k] { same = false } }
     return same
   }
   if to.size != 28 or from.size < 24 { return false }
-  var same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
+  mut same = from[0] == to[0] and from[2] == to[2] and from[3] == to[3]
   loop k in 8..24 { if from[k] != to[k] { same = false } }
   same
 }
@@ -590,12 +590,12 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
     _ = __system(9, fd, 0, 0, 0, 0, 0)
     return .none
   }
-  var framed: List[Byte] = []
+  mut framed: List[Byte] = []
   framed = push(push(framed, bit_and(shift_right(question.size, 8), 255)), bit_and(question.size, 255))
   framed = append(framed, question)
   size = framed.size
   packet = freeze(framed)
-  var sent: Nat = 0
+  mut sent: Nat = 0
   loop attempt in 0..64 {
     if sent >= size { break }
     rest = packet[sent..]
@@ -606,12 +606,12 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
     }
     if given > 0 { sent = saturating_add(sent, count(given)) }
   }
-  var got: List[Byte] = []
-  var wanted: Nat = 2
+  mut got: List[Byte] = []
+  mut wanted: Nat = 2
   loop attempt in 0..64 {
     if got.size >= wanted { break }
-    var buffer: List[Byte] = __reserve(4096)
-    var n: i64 = 0
+    mut buffer: List[Byte] = __reserve(4096)
+    mut n: i64 = 0
     if __scheduled() {
       // A task waits for the bytes until the time is gone, and the others run.
       n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
@@ -634,7 +634,7 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
   }
   _ = __system(9, fd, 0, 0, 0, 0, 0)
   if got.size < wanted or wanted < 14 { return .none }
-  var whole: List[Byte] = []
+  mut whole: List[Byte] = []
   loop k in 0..got.size { if k >= 2 and k < wanted { whole = push(whole, got[k]) } }
   .some(whole)
 }
@@ -660,7 +660,7 @@ fn send_to(fd: i64, packet: List[Byte], server: Place) {
 // a name that does not exist, over TCP when it was cut short; a failure of the
 // server is said, and any other code is ignored.
 fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Place, ms: u64) -> Asked <alloc, task> {
-  var made = asked
+  mut made = asked
   if made.answered { return made }
   match read_reply(message, made.id, name, made.kind) {
     .some(r) {
@@ -706,10 +706,10 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
   ids = random([0, 0, 0, 0])
   if ids.size < 4 { return .err(.failed((address, "lookup: no random bytes"))) }
   first: u16 = ids[0] * 256 + ids[1]
-  var second: u16 = ids[2] * 256 + ids[3]
+  mut second: u16 = ids[2] * 256 + ids[3]
   if second == first { second = bit_xor(first, 1) }
-  var one = Asked(id: first, kind: 1, packet: [], answered: false, failed: false, addresses: [])
-  var two = Asked(id: second, kind: 28, packet: [], answered: false, failed: false, addresses: [])
+  mut one = Asked(id: first, kind: 1, packet: [], answered: false, failed: false, addresses: [])
+  mut two = Asked(id: second, kind: 28, packet: [], answered: false, failed: false, addresses: [])
   match query(first, name, 1) {
     .some(q) { one.packet = q }
     .none { return .ok(.none) }
@@ -721,9 +721,9 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
   total: u64 = conf.seconds * 1000
   step: u64 = total / conf.tries
   start = clock()
-  var sent: u64 = 0
-  var retries: Nat = 4
-  var failed = false
+  mut sent: u64 = 0
+  mut retries: Nat = 4
+  mut failed = false
   loop turn in 0..1000 {
     now = clock()
     spent = wrapping_sub(now, start)
@@ -738,12 +738,12 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
     }
     next = wrapping_sub(wrapping_mul(sent, step), spent)
     left = total - spent
-    var wait: u64 = if next > left { left } else { next }
+    mut wait: u64 = if next > left { left } else { next }
     if wait == 0 { wait = 1 }
-    var buffer: List[Byte] = __reserve(4800)
+    mut buffer: List[Byte] = __reserve(4800)
     from = zeros(28)
     length = number(28)
-    var got: i64 = 0
+    mut got: i64 = 0
     if __scheduled() {
       // A task of a group waits for the datagram until the time to send again,
       // and the others run meanwhile.
@@ -780,7 +780,7 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
     if failed { return .err(.failed((address, "lookup: the nameserver failed"))) }
     return .err(.failed((address, "lookup: no nameserver answered in time")))
   }
-  var found: List[List[Byte]] = []
+  mut found: List[List[Byte]] = []
   loop a in 0..one.addresses.size { found = push(found, copy(one.addresses[a])) }
   loop a in 0..two.addresses.size { found = push(found, copy(two.addresses[a])) }
   if found.size == 0 { return .ok(.none) }
@@ -792,11 +792,11 @@ fn ask_name(fd: i64, servers: List[Place], conf: Config, name: List[Byte], addre
 // gives less the lookup has none, and says so, and never goes on with bytes that
 // were not filled.
 fn random_bytes(bytes: take List[Byte]) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   if on_macos() or on_windows() { return made }
   size = bytes.size
   if size > 256 { return made }
-  var buffer: List[Byte] = __reserve(size)
+  mut buffer: List[Byte] = __reserve(size)
   got = __system(21, buffer, size, 0, 0, 0, 0)
   if got < 0 or count(got) != size { return made }
   __sized(buffer, size)
@@ -810,22 +810,22 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
   inside = hosts(hosts_text, host)
   if inside.size > 0 { return .ok(inside) }
   conf = config(resolv_text)
-  var wide = false
+  mut wide = false
   loop v in 0..conf.servers.size { if conf.servers[v].size == 16 { wide = true } }
-  var family: i64 = 2
+  mut family: i64 = 2
   if wide { family = 10 }
-  var fd = __system(0, family, 2, 0, 0, 0, 0)
+  mut fd = __system(0, family, 2, 0, 0, 0, 0)
   if fd < 0 and wide {
     family = 2
     fd = __system(0, 2, 2, 0, 0, 0, 0)
   }
   if fd < 0 { return .err(failure(named, "socket", fd)) }
   if family == 10 { dual_stack(fd) }
-  var servers: List[Place] = []
+  mut servers: List[Place] = []
   loop v in 0..conf.servers.size {
     address = conf.servers[v]
     if address.size == 4 and family == 10 {
-      var mapped: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255]
+      mut mapped: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255]
       mapped = append(mapped, address)
       servers = push(servers, sockaddr(mapped, port))
     } else if address.size == 16 or family == 2 {
@@ -875,7 +875,7 @@ fn system_connect_to(host: str, port: 1..65536) -> Result[Connection, NetError] 
     }
   }
   addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53, address_text(host, port), fn(bytes) { random_bytes(bytes) })
-  var last: NetError = .unknown_host(address_text(host, port))
+  mut last: NetError = .unknown_host(address_text(host, port))
   loop a in 0..addresses.size {
     match connect_place(sockaddr(addresses[a], port), host, port) {
       .ok(c) { return .ok(c) }
@@ -894,7 +894,7 @@ fn system_read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetE
   if not c.opened { return .err(not_opened(address_text(c.host, c.port), "read", c.handle)) }
   buffer: List[Byte] = __reserve(most)
   if __scheduled() {
-    var got: i64 = would_block()
+    mut got: i64 = would_block()
     loop attempt in 0..1000000 {
       // The call that does not wait is asked first, and the task waits for the
       // connection only when it would have blocked.
@@ -927,8 +927,8 @@ fn count(given: i64) -> Nat {
 
 fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] <alloc, task> {
   if not c.opened { return .err(not_opened(address_text(c.host, c.port), "write", c.handle)) }
-  var sent: Nat = 0
-  var flags: i64 = no_signal()
+  mut sent: Nat = 0
+  mut flags: i64 = no_signal()
   // A task that a scheduler runs does not block: the call that does not wait is
   // asked, and the task waits for the connection when it would have blocked.
   if __scheduled() { flags = no_signal_wait() }
@@ -985,7 +985,7 @@ fn system_send(s: Socket, to: Address, bytes: Slice[Byte]) -> Result[(), NetErro
 
 fn system_receive(s: Socket, most: Nat) -> Result[(Address, List[Byte]), NetError] <alloc> {
   if not s.opened { return .err(not_opened(address_text(s.host, s.port), "receive", s.handle)) }
-  var buffer: List[Byte] = []
+  mut buffer: List[Byte] = []
   if most > 0 { buffer = __reserve(most) }
   from = zeros(28)
   length = number(28)

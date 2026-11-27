@@ -9,14 +9,14 @@ built:
   - "`i8` to `i64` and `u8` to `u64`, `==`, `!=`, `<`, `<=`, `>`, and `>=` between two of one type, and an error where two types meet in an operator"
   - "`Int`, `Nat`, and `Byte`, in every file with no import, the same types as `i64`, `u64`, and `u8`, `Nat` the type of the `size` of a `List` and of a `str` and of a `loop` variable over `0..xs.size`, and `use std.bits (u8, u16, u32, u64, i8, i16, i32, i64)`, or any of them, the names of sizes, which a file that writes one with no import is refused"
   - "`a..b` written as a type, with whole numbers for its bounds, held by a parameter, a result, a field, a list, an `Option`, and a tuple, an empty range as a type, a range of 65 to 128 bits written as a type, held in two words, a literal that must be in the range, and `==`, `<`, and the rest between two of one range, and the text of one. A range is one type of its bounds, so one range meets another only where their bounds are the same, and a range whose second bound is below its first refused"
-  - "a range taken where a range that holds every number of it is needed, with nothing written, at a binding, a `var`, an argument, a field, an item of a list, a result, and a block of an `if` or a `match` given where a type is needed, kept at the size of the wider range, and the smallest range that holds the blocks of an `if` or a `match` that give ranges where no type is needed"
+  - "a range taken where a range that holds every number of it is needed, with nothing written, at a binding, a `mut`, an argument, a field, an item of a list, a result, and a block of an `if` or a `match` given where a type is needed, kept at the size of the wider range, and the smallest range that holds the blocks of an `if` or a `match` that give ranges where no type is needed"
   - "a range taken where a narrower one is needed, at the same places, which compiles when a condition or a `requires` shows that it fits, and is refused otherwise with an error that says what could not be proven"
   - "`==`, `!=`, `<`, `<=`, `>`, and `>=` between two different ranges, as the numbers they hold are, whatever their bounds, among them an `Int` and a `Nat`, which no type of 64 bits holds both of, and two ranges of 65 to 128 bits"
   - "a range whose bound is the name of a parameter, `0..n` or `m..256`, as the type of a parameter: the body knows that the parameter is below `n` or at least `m`, as a `requires` says, and a call compiles when its argument is shown to be, and is the empty type where `n` is not above the first bound"
-  - "a name for a bound in the type of a result, as `0..n` or `m..256`, which the function is shown to give and a caller knows, and in the type of a binding made with `=`, which is shown where it is written and known wherever the name is used, and a name in the type of a field, of a `var`, or inside another type refused with the reason, and a `var` or an unbound name refused as a bound"
+  - "a name for a bound in the type of a result, as `0..n` or `m..256`, which the function is shown to give and a caller knows, and in the type of a binding made with `=`, which is shown where it is written and known wherever the name is used, and a name in the type of a field, of a `mut`, or inside another type refused with the reason, and a `mut` or an unbound name refused as a bound"
   - "the `size` of a name as a bound, `0..xs.size` or `xs.size..256`, wherever a name is a bound, where `xs` is a `List` or a `Slice` that is a parameter or an `=` binding, and no other field and no bound that is worked out, such as `0..n + 1` or `0..g.rows`, which is refused with \"a bound is a whole number, a name, or the `size` of a name\""
   - "not the `size` of a `str` or of an array as a bound, as no fact is known of the size of a text"
-  - "a `var` with no stated type given the smallest range that holds every value it is given"
+  - "a `mut` with no stated type given the smallest range that holds every value it is given"
 ---
 
 # Number types
@@ -37,7 +37,7 @@ This prints `200 -3`. `0..256` holds 0 to 255, and `-5..6` holds -5 to 5. A type
 
 Say what a number holds in its type, as narrowly as the function means it. A parameter that is an index is a `0..xs.size`, not a `Nat` with a `requires`, and a sum is left as the range arithmetic gives it. `saturating_`, `checked_`, and `wrapping_` are for arithmetic that is meant to saturate, to fail, or to wrap, and never a way to make a sum fit a type it would have fitted with a narrower one.
 
-A name with no stated type has the range that its body gives it: the smallest that holds every value it is given, as [Inference](inference.md) says. `n = 5` is a `5..6`, and a `var` given `0` and then `9` is a `0..10`.
+A name with no stated type has the range that its body gives it: the smallest that holds every value it is given, as [Inference](inference.md) says. `n = 5` is a `5..6`, and a `mut` given `0` and then `9` is a `0..10`.
 
 ## A range as a type
 
@@ -112,7 +112,7 @@ m = n + 1
 i: 0..m = n
 ```
 
-A name is not a bound in the type of a field, of a `var`, or inside another type such as `List[0..n]`.
+A name is not a bound in the type of a field, of a `mut`, or inside another type such as `List[0..n]`.
 
 ```
 struct Cursor {
@@ -121,7 +121,7 @@ struct Cursor {
 }
 ```
 
-`Cursor` is refused, because a field's type names no other field. What holds between two fields of a struct is said by a [proof field](proof-fields.md), which is the one way to say it. A `var` can change, so a type that named one would change with it, and a `var` is refused as a bound for the same reason.
+`Cursor` is refused, because a field's type names no other field. What holds between two fields of a struct is said by a [proof field](proof-fields.md), which is the one way to say it. A `mut` can change, so a type that named one would change with it, and a `mut` is refused as a bound for the same reason.
 
 A value goes the other way only where it is shown to fit, or taken in by `narrow` or `clamp`, as [Integer arithmetic](arithmetic.md#where-a-value-enters-a-narrower-range) says.
 

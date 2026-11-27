@@ -631,7 +631,7 @@ impl<'a> Checker<'a> {
                 None => Ty::Unknown,
             };
             // A lambda that is kept takes the values it reads, which the ownership
-            // check gives away. One that a `var` holds could change or move after a
+            // check gives away. One that a `mut` holds could change or move after a
             // lambda that is bound reads it, so it is refused as one that is lent.
             if !ty.unknown()
                 && !ownership::copies(defs, body.scope, &ty)
@@ -709,7 +709,7 @@ impl<'a> Checker<'a> {
     /// and result, the result last, are of the types `wanted`, which may be
     /// partly known, and gives its type. Its body is checked where it is
     /// written, against the effects of the function it is written in, and
-    /// it may assign that function's `var`s.
+    /// it may assign that function's `mut`s.
     pub(super) fn lambda(
         &mut self,
         body: &mut Body<'a>,

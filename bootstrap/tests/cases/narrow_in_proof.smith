@@ -9,13 +9,13 @@ fn sh(x: u64, by: Byte) -> u64
 }
 
 fn main() <console, alloc> {
-  var n: u64 = 0
+  mut n: u64 = 0
   loop i in 0..64 {
     j: Byte = i
     n = bit_or(n, sh(1, j))
   }
   print("{n}")
-  var m: u64 = 0
+  mut m: u64 = 0
   loop i in 0..64 {
     m = bit_or(m, sh(1, i))
   }

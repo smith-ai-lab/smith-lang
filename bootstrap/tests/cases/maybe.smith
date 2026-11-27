@@ -28,7 +28,7 @@ fn main() <console> {
   print(describe(.lost(.some(Cat(name: "Tom")))))
   print(describe(Pet.lost(Maybe.none)))
   print(describe(.stray("Rex")))
-  var seen = "nothing"
+  mut seen = "nothing"
   found: Maybe[Pet] = .some(.cat(Cat(name: "Felix")))
   match found {
     .some(p) { seen = describe(p) }

@@ -4,11 +4,11 @@ title: What arith proves
 description: The procedure that proves a + - * fits and an index is in range, what facts it starts from, what it cannot decide, and what the compiler says when it cannot prove.
 status: partial
 built:
-  - "`arith`, which decides linear arithmetic over the integers and proves that a plain `+`, `-`, or `*` fits, from the range of each value's type, the value of a literal, what a binding that is not a `var` was given, the condition of each `if` the operation is inside, joined with `and`, `or`, and `not`, and the range of each `loop i in a..b` over whole numbers, and, inside one round of a loop, what that round last gave each `var` of a whole number the loop assigns, stated against what it held when the round began, and what stays so after an `if` or a `match` some of whose blocks end in `break`"
-  - "and the index of a `List` read as `xs[i]`, which `arith` proves below `xs.size`, and the `size` of a list as a value in a comparison, in a `requires`, an `if`, and the range of a `loop`, which a list has from the list it was given, whether bound to a name or to a `var`"
-  - "and, for a `var` of a list, a struct, or a tuple, and each of its fields, what is known of it, as of any value, until it or a field of it is assigned, at which a fact about it is forgotten, in a loop, a lambda, and an arm of an `if` or a `match` as it is outside one, and a `var` the loop or lambda assigns is not known from before it"
+  - "`arith`, which decides linear arithmetic over the integers and proves that a plain `+`, `-`, or `*` fits, from the range of each value's type, the value of a literal, what a binding that is not a `mut` was given, the condition of each `if` the operation is inside, joined with `and`, `or`, and `not`, and the range of each `loop i in a..b` over whole numbers, and, inside one round of a loop, what that round last gave each `mut` of a whole number the loop assigns, stated against what it held when the round began, and what stays so after an `if` or a `match` some of whose blocks end in `break`"
+  - "and the index of a `List` read as `xs[i]`, which `arith` proves below `xs.size`, and the `size` of a list as a value in a comparison, in a `requires`, an `if`, and the range of a `loop`, which a list has from the list it was given, whether bound to a name or to a `mut`"
+  - "and, for a `mut` of a list, a struct, or a tuple, and each of its fields, what is known of it, as of any value, until it or a field of it is assigned, at which a fact about it is forgotten, in a loop, a lambda, and an arm of an `if` or a `match` as it is outside one, and a `mut` the loop or lambda assigns is not known from before it"
   - "and the range of what `bit_and`, `bit_or`, `bit_xor`, `shift_right`, and `shift_left` give, of an unsigned number or, for a shift left, of any whole number, from what is known of the numbers they are given"
-  - "and, for a `var` of a whole number, outside a loop as inside one, what it was last given, where no assignment to it lies between that and the use on any path, an `if`, a `match`, a loop that may run no time, an earlier round of a loop, and a lambda each counting as one that may lie between"
+  - "and, for a `mut` of a whole number, outside a loop as inside one, what it was last given, where no assignment to it lies between that and the use on any path, an `if`, a `match`, a loop that may run no time, an earlier round of a loop, and a lambda each counting as one that may lie between"
   - "and `/` and `%`, whose divisor `arith` must prove is not zero, and, for a signed number, that the least number is not divided by -1 where the result would not fit, and which it treats as one unknown quantity of the range of the result, or as the number itself when both sides are literals, with what is true of every pair said of it: for a divisor that is a literal above zero, the quotient times it is within less than the divisor of the dividend, and the remainder is the dividend less that; for an unsigned dividend, neither is above it, and the remainder is below the divisor"
   - "and, from the `invariant` of a `loop`, what it says, in the block and, where no `break` ends the loop, after it, the invariant itself being proven before the first pass and at the end of each pass, with the counter one more, from the facts of the start of the pass"
   - "and `+`, `-`, and `*` on a `Nat`, proven as on any whole number, with the fix \"check the operands first\", as a `Nat` has no wrapping, saturating, or checked function"
@@ -43,7 +43,7 @@ fn rest(x: Byte) -> Byte { 255 - x }
 
 `rest(250)` is `5`.
 
-**The value of a literal, and of a name that is not a `var`.** A name is what it was given, so what is known of the value is known of the name.
+**The value of a literal, and of a name that is not a `mut`.** A name is what it was given, so what is known of the value is known of the name.
 
 ```
 fn bump(x: Byte) -> Byte {
@@ -83,23 +83,23 @@ fn before(x: Byte) -> Byte {
 
 **The range of a `loop`.** Inside `loop i in 0..n`, `i` is below `n`, as [Loops](loop.md) says. So `i + 1` fits where `i + 2` does not.
 
-**The facts of a `var`.** A `var` has the facts its type states, and, where no loop assigns it, those of the value it was last given. Inside one round of a loop that assigns it, it also has those of the value that round last gave it, stated against what it held when the round began.
+**The facts of a `mut`.** A `mut` has the facts its type states, and, where no loop assigns it, those of the value it was last given. Inside one round of a loop that assigns it, it also has those of the value that round last gave it, stated against what it held when the round began.
 
 ```
 fn five() -> Byte {
-  var v: Byte = 5
+  mut v: Byte = 5
   v + 100
 }
 ```
 
 `v` is last given `5`, so `v + 100` is 105, which fits.
 
-Inside a loop that assigns a `var`, what is known is what that round last gave it, stated against what it held when the round began, and a fact that holds when the round began holds still.
+Inside a loop that assigns a `mut`, what is known is what that round last gave it, stated against what it held when the round began, and a fact that holds when the round began holds still.
 
 ```
 fn rounds() -> Byte {
-  var v: Byte = 100
-  var t: Byte = 0
+  mut v: Byte = 100
+  mut t: Byte = 0
   loop i in 0..3 {
     v = 50
     t = v + 200
@@ -112,7 +112,7 @@ fn rounds() -> Byte {
 
 ```
 fn climb(x: Byte) -> Byte {
-  var v: Byte = 0
+  mut v: Byte = 0
   loop i in 0..10 {
     if x > 200 { break }
     v = x + 50
@@ -123,7 +123,7 @@ fn climb(x: Byte) -> Byte {
 
 `climb(100)` is `150` and `climb(250)` is `0`. The line after the `if` is reached only when `x > 200` is false, so `x + 50` fits. Without the `if`, `v = x + 50` is refused, as `x + 50` may be above 255, which `v` does not hold.
 
-**The size of a list.** A list has the `size` of the list it was given, whether it is bound to a name or to a `var`, and `size` is a value in a comparison, as in a `requires`, an `if`, and the range of a `loop`. It is what proves an index, as [Indexing](indexing.md) says.
+**The size of a list.** A list has the `size` of the list it was given, whether it is bound to a name or to a `mut`, and `size` is a value in a comparison, as in a `requires`, an `if`, and the range of a `loop`. It is what proves an index, as [Indexing](indexing.md) says.
 
 ```
 use std.bits (u64)
@@ -133,14 +133,14 @@ fn plus(xs: List[Byte]) -> u64 {
 }
 
 fn at(xs: List[Byte], i: u64) -> Byte {
-  var ys = xs
+  mut ys = xs
   if i < ys.size { ys[i] } else { 0 }
 }
 ```
 
 `plus([1, 2, 3])` is `103`, and `at([1, 2, 3], 1)` is `2` while `at([1, 2, 3], 5)` is `0`. In `plus`, `xs.size < 100` makes `xs.size + 100` fit, and in `at`, the `ys` that `xs` was given has the size of `xs`, so `i < ys.size` proves `ys[i]`.
 
-**A `var` of a list, a struct, or a tuple.** What is known of it, and of each of its fields, is known as of any value, until it or a field of it is assigned. Then a fact about it is forgotten.
+**A `mut` of a list, a struct, or a tuple.** What is known of it, and of each of its fields, is known as of any value, until it or a field of it is assigned. Then a fact about it is forgotten.
 
 ```
 struct Pair {
@@ -149,12 +149,12 @@ struct Pair {
 }
 
 fn kept(q: Pair) -> Byte {
-  var p = q
+  mut p = q
   if p.a < 100 { p.a + 100 } else { 0 }
 }
 
 fn forgotten(q: Pair) -> Byte {
-  var p = q
+  mut p = q
   if p.a < 100 {
     p.a = 250
     p.a + 100
@@ -162,7 +162,7 @@ fn forgotten(q: Pair) -> Byte {
 }
 ```
 
-`kept(Pair(a: 5, b: 1))` is `105`. `forgotten` is refused, as `p.a + 100` may be above 255, since `p.a` was assigned after `p.a < 100` was known. The same holds in a loop, a lambda, and an arm of an `if` or a `match` as outside one, and a `var` that the loop or lambda assigns is not known from before it.
+`kept(Pair(a: 5, b: 1))` is `105`. `forgotten` is refused, as `p.a + 100` may be above 255, since `p.a` was assigned after `p.a < 100` was known. The same holds in a loop, a lambda, and an arm of an `if` or a `match` as outside one, and a `mut` that the loop or lambda assigns is not known from before it.
 
 **A bit operation.** What [`bit_and`, `bit_or`, `bit_xor`, `shift_right`, and `shift_left`](bits.md#a-number-that-is-not-negative) give for numbers that are not negative has the exact range that page says, from what is known of the numbers they are given.
 
@@ -184,11 +184,11 @@ fn up(x: Byte) -> Byte { if x < 64 { shift_left(x, 2) + 3 } else { 0 } }
 
 It claims no more. `bit_and(x, 63) + 200` is refused, since 63 + 200 does not fit a `u8`, and so is `bit_or(x, y) + 248` with `x < 8` and `y < 9`, which is below 16. Nothing is known of what these give for a number that may be negative but the range of its size, and a shift by an amount that is not proven is refused, as [Bit operations](bits.md) says.
 
-**An invariant of a `loop`.** What the invariant says holds at the start of each pass, so it is a fact in the block, with the counter as the counter of the pass and each `var` the loop assigns as what it held when the pass began. `arith` proves it first: before the first pass, with the counter as the first end of the range, and at the end of each pass, with the counter one more, from the facts of the start of the pass and what the pass did. Nothing is searched for, so it proves only an invariant that holds as it is written.
+**An invariant of a `loop`.** What the invariant says holds at the start of each pass, so it is a fact in the block, with the counter as the counter of the pass and each `mut` the loop assigns as what it held when the pass began. `arith` proves it first: before the first pass, with the counter as the first end of the range, and at the end of each pass, with the counter one more, from the facts of the start of the pass and what the pass did. Nothing is searched for, so it proves only an invariant that holds as it is written.
 
 ```
 fn total(xs: [8]0..4) -> 0..25 {
-  var acc: 0..25 = 0
+  mut acc: 0..25 = 0
   loop i in 0..8 invariant acc <= 3 * i {
     acc = acc + xs[i]
   }
@@ -280,7 +280,7 @@ The author supplies the missing fact in one of three ways: with a [`requires`](c
 | What a literal or an unassigned name is | The binding |
 | A condition | The `if` whose block the operation is in |
 | `i` below the end | The range of `loop i in a..b` |
-| What a `var` was last given | The value assigned, in a round of a loop or outside any |
+| What a `mut` was last given | The value assigned, in a round of a loop or outside any |
 | What a caller owes | The `requires` of the function |
 | What a function gave | The `ensures` of a function that was called |
 | What a bit operation gave | The numbers it was given |

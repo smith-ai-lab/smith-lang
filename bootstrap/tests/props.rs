@@ -659,7 +659,7 @@ fn a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_i
     });
 }
 
-/// Both functions have a `var k`, and the loop over no numbers runs none of
+/// Both functions have a `mut k`, and the loop over no numbers runs none of
 /// the calls inside it, so the `k` of `outer` is what it was before the loop.
 fn a_var_a_function_called_in_place_has_the_value_it_had_when_a_loop_around_the_call_runs_no_round()
 {
@@ -668,7 +668,7 @@ use std.console (console, print)
 use std.int (wrapping_add)
 
 fn inner(n: u32, body: fn(u32)) <diverge> {
-  var k: u32 = 0
+  mut k: u32 = 0
   loop {
     if k == n { break }
     body(1)
@@ -677,7 +677,7 @@ fn inner(n: u32, body: fn(u32)) <diverge> {
 }
 
 fn outer(n: u32, body: fn(u32)) <diverge> {
-  var k: u32 = 0
+  mut k: u32 = 0
   loop {
     if k == 1 { break }
     loop i in 0..n {
@@ -688,7 +688,7 @@ fn outer(n: u32, body: fn(u32)) <diverge> {
 }
 
 fn main() <diverge, console, alloc> {
-  var a: u32 = 0
+  mut a: u32 = 0
   outer(0) fn(x) {
     a = wrapping_add(a, x)
   }
@@ -1301,9 +1301,9 @@ fn file_with_syntax_errors(g: &mut Gen) -> (String, Vec<(Pos, &'static str)>) {
         ("", "print(\"a\")", None),
         ("", "x = \"a\"", None),
         ("x = (1)", "(2)", Some("not supported yet")),
-        ("var x = (1)", "(2)", Some("not supported yet")),
+        ("mut x = (1)", "(2)", Some("not supported yet")),
         ("x = (1)", "(3)", Some("not supported yet")),
-        ("var x = (1)", "(4)", Some("not supported yet")),
+        ("mut x = (1)", "(4)", Some("not supported yet")),
         ("x = (1)", "(5)", Some("not supported yet")),
         ("print(\"a\" ", "\"b\")", Some("`,` or `)`")),
         ("x.y ", "+= \"a\"", Some("not supported yet")),

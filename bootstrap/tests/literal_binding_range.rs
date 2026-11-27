@@ -45,7 +45,7 @@ fn a_number_bound_to_a_name_keeps_its_range_beside_a_typed_value_in_a_function_a
     let head = "use std.console (console, print)\n\n";
     let sources = [
         format!("{head}fn g(a: 1..3) -> 11..13 {{\n  k = 10\n  a + k\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{g(2)}}\")\n}}\n"),
-        format!("{head}fn g(a: 1..3) -> 11..13 {{\n  var k = 10\n  a + k\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{g(2)}}\")\n}}\n"),
+        format!("{head}fn g(a: 1..3) -> 11..13 {{\n  mut k = 10\n  a + k\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{g(2)}}\")\n}}\n"),
     ];
     for source in sources {
         assert_eq!(printed(&source), "12\n", "for\n{source}");

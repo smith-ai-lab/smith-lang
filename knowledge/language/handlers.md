@@ -8,7 +8,7 @@ built:
   - "a call of an operation runs the lambda that the handler in force gives for it, with the arguments it is called with and the defaults it leaves out, under the handlers that were in force outside that handler, and the executable holds no trace of the handler: the call is the lambda lowered in place"
   - "a function that carries a handled effect and takes no function, as `report` does, runs under the handlers it is called under: the handler in force where it is called answers it, it is built once for each handler it runs under, found by where the handler is installed, and it is given what the functions of those handlers use, so `at_one()` is `1` and `at_two()` is `2` from one copy of `report`"
   - "a handler inside a handler, whose function asks the effect again, is answered by the handler outside it, for a function that carries the effect as well as for the code under `with`"
-  - "a handler keeps its state in a `var` that its function assigns, as `fake_clock` does: the code under `with`, a function that carries the effect and runs under the handler, the functions that one calls, and a `loop` that asks, all count on the one state, and `two_readings` is `(1, 2)`"
+  - "a handler keeps its state in a `mut` that its function assigns, as `fake_clock` does: the code under `with`, a function that carries the effect and runs under the handler, the functions that one calls, and a `loop` that asks, all count on the one state, and `two_readings` is `(1, 2)`"
   - "`fake_clock`, `two_readings`, `doubled_clock`, and `doubled` of this page run today with `wrapping_add` and `wrapping_mul` written where the page writes `clamp`, which is not built, and `doubled()` is `84`; `loud_clock` runs as written, prints `asked`, and without `<console>` is refused with the error the page gives, whose fix keeps the effects of the parameters"
   - "a `return` in a function that carries the effect and runs under a handler whose functions assign a name is refused as not built yet"
   - "a lambda given to a task is lowered as a function of its own, built for the handlers in force where it is written, with the names it reads, and what a handler that holds no state reads, kept in its frame; one under a handler that holds state is given that state through each poll"
@@ -62,7 +62,7 @@ use std.bits (u64)
 use std.int (clamp)
 
 fn fake_clock[T](body: fn() -> T <time>) -> T {
-  var ticks: u64 = 0
+  mut ticks: u64 = 0
   time(
     now: {
       ticks = clamp(ticks + 1)
@@ -80,7 +80,7 @@ fn two_readings() -> (u64, u64) {
 
 `two_readings` returns `(1, 2)` and carries no effect. Each `now()` runs the lambda that `fake_clock` supplied.
 
-- A handler keeps its state in a `var`. The lambda assigns `ticks`, a local of the function it is written in, which a lambda may do because one that assigns a name around it is only passed to a call, and cannot outlive that function.
+- A handler keeps its state in a `mut`. The lambda assigns `ticks`, a local of the function it is written in, which a lambda may do because one that assigns a name around it is only passed to a call, and cannot outlive that function.
 - An operation is an ordinary call. Its lambda runs and returns a value to the code that asked, so a handler cannot stop that code or run it twice. Each `now()` above gets one value, and the code after it goes on.
 
 ## Handlers inside handlers
@@ -186,7 +186,7 @@ A lambda that is given to a task is kept in the task's frame until its group end
 | `fn h[T](body: fn() -> T <e>) -> T` | A handler of `e`: it runs `body` with `e` handled |
 | `e(op: { ... }, body: body)` | Inside a handler, the operation `op` is that lambda |
 | `with h()` then lines | The lines run under `h`, so they do not carry `e` |
-| `var` in a handler | The handler's state, assigned by its lambdas |
+| `mut` in a handler | The handler's state, assigned by its lambdas |
 | `fn h[T](body: fn() -> T <e>) -> T <f>` | A handler whose lambdas use `f`, which its caller must have |
 
 Next: [The effects Smith provides](provided-effects.md)

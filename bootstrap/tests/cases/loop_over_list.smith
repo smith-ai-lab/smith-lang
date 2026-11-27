@@ -9,7 +9,7 @@ struct Person {
 }
 
 fn sum(xs: List[u64]) -> u64 {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop v in xs { total = wrapping_add(total, v) }
   total
 }
@@ -25,7 +25,7 @@ fn main() <console, alloc> {
   xs: List[u64] = [1, 2, 3]
   print("{sum(xs)}")
   print("{first_over(xs, 1)} {first_over(xs, 5)}")
-  var ys: List[Byte] = [4, 5]
+  mut ys: List[Byte] = [4, 5]
   loop v in ys {
     ys = push(ys, v)
     print("{v}")
@@ -37,7 +37,7 @@ fn main() <console, alloc> {
   }
   empty: List[Byte] = []
   loop v in empty { print("never") }
-  var people: List[Person] = []
+  mut people: List[Person] = []
   people = push(people, Person(name: "ada", age: 36))
   people = push(people, Person(name: "alan", age: 41))
   loop p in people {

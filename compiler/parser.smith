@@ -104,7 +104,7 @@ fn pos(c: Cursor) -> Pos { token_here(c).pos }
 fn step(c: take Cursor) -> Cursor {
   after = saturating_add(c.at, 1)
   if after < c.tokens.size {
-    var next = c
+    mut next = c
     next.at = after
     next
   } else {
@@ -114,7 +114,7 @@ fn step(c: take Cursor) -> Cursor {
 
 fn skip_breaks(c: take Cursor) -> Cursor {
   rounds = c.tokens.size
-  var next = c
+  mut next = c
   loop round in 0..rounds {
     if is_newline_tok(tok(next)) { next = step(next) } else { break }
   }
@@ -157,8 +157,8 @@ fn ident(c: take Cursor, wanted: u64) -> Result[Got, Failed] {
 // before it.
 fn skip_item(c: take Cursor, from: Nat) -> Cursor {
   rounds = saturating_add(c.tokens.size, 1)
-  var next = Cursor(tokens: c.tokens, at: from)
-  var depth: Nat = 0
+  mut next = Cursor(tokens: c.tokens, at: from)
+  mut depth: Nat = 0
   loop round in 0..rounds {
     t = tok(next)
     if is_eof(t) {
@@ -214,9 +214,9 @@ struct Names {
 // The names between the parentheses of a `use`, and the `)`.
 fn listed_names(c: take Cursor) -> Result[Names, Failed] <alloc> {
   rounds = c.tokens.size
-  var at = step(c)
-  var names: List[Listed] = []
-  var done = false
+  mut at = step(c)
+  mut names: List[Listed] = []
+  mut done = false
   loop round in 0..rounds {
     if not done {
       at = skip_breaks(at)
@@ -249,8 +249,8 @@ fn use_line(c: take Cursor) -> Result[UseLine, Failed] <alloc> {
   start = pos(c)
   rounds = c.tokens.size
   first = try ident(step(c), 1)
-  var at = first.at
-  var module: List[Name] = [first.name]
+  mut at = first.at
+  mut module: List[Name] = [first.name]
   loop round in 0..rounds {
     if is_punct(tok(at), p_dot()) {
       more = try ident(step(at), 2)
@@ -266,7 +266,7 @@ fn use_line(c: take Cursor) -> Result[UseLine, Failed] <alloc> {
   if listed and has_name(renamed.alias) {
     return .err(fail(at, 8))
   }
-  var names: List[Listed] = []
+  mut names: List[Listed] = []
   if listed {
     inside = try listed_names(at)
     names = inside.names
@@ -293,10 +293,10 @@ struct Uses {
 // it is read to the next item and no further.
 fn parse_uses(tokens: take List[Token]) -> Uses <alloc> {
   rounds = tokens.size
-  var at = Cursor(tokens: tokens, at: 0)
-  var uses: List[Use] = []
-  var errors: List[ParseError] = []
-  var items = false
+  mut at = Cursor(tokens: tokens, at: 0)
+  mut uses: List[Use] = []
+  mut errors: List[ParseError] = []
+  mut items = false
   loop round in 0..rounds {
     at = skip_breaks(at)
     start = at.at

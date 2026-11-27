@@ -107,7 +107,7 @@ impl<'a> Checker<'a> {
                     if changed_place(&arg.value).is_none() {
                         self.errors.push(Error::new(
                             arg.value.pos(),
-                            "what is passed `mut` is a `var`, or a field or an item of one, as nothing would see the change to anything else",
+                            "what is passed `mut` is a `mut`, or a field or an item of one, as nothing would see the change to anything else",
                         ));
                         continue;
                     }

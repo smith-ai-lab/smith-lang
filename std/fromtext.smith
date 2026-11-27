@@ -6,8 +6,8 @@ pub trait FromText[T] {
 }
 
 fn whole(text: str) -> bool {
-  var digits = false
-  var only = true
+  mut digits = false
+  mut only = true
   loop i in 0..text.size {
     b = text[i]
     if b >= '0' and b <= '9' {

@@ -21,11 +21,11 @@ fn hex_digit(d: u64, upper: bool) -> Byte {
 }
 
 pub fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc> {
-  var digits: List[Byte] = []
+  mut digits: List[Byte] = []
   if 16 <= width {
     loop i in 16..width { digits = push(digits, '0') }
   }
-  var started: bool = false
+  mut started: bool = false
   loop j in 0..16 {
     pos = 15 - j
     d = bit_and(shift_right(n, pos * 4), 15)
@@ -36,11 +36,11 @@ pub fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc> {
 }
 
 pub fn binary(n: u64; width: Byte = 0) -> str <alloc> {
-  var digits: List[Byte] = []
+  mut digits: List[Byte] = []
   if 64 <= width {
     loop i in 64..width { digits = push(digits, '0') }
   }
-  var started: bool = false
+  mut started: bool = false
   loop j in 0..64 {
     pos = 63 - j
     d = bit_and(shift_right(n, pos), 1)

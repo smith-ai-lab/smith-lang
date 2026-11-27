@@ -10,7 +10,7 @@ const NO_CLOSING_QUOTE: &str = "this string has no closing quote on the line it 
 const KEYWORDS: &[&str] = &[
     "and", "as", "break", "derive", "effect", "effects", "else", "ensures", "enum", "fn", "for",
     "foreign", "if", "impl", "in", "loop", "match", "mut", "not", "or", "out", "pub", "requires",
-    "return", "struct", "take", "trait", "try", "use", "var", "with", "without",
+    "return", "struct", "take", "trait", "try", "use", "with", "without",
 ];
 
 /// Punctuation and operators, longest first so that the first match is the

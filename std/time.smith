@@ -11,7 +11,7 @@ pub effect time {
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
 fn put(bytes: take List[Byte], n: u64) -> List[Byte] <alloc> {
-  var made = bytes
+  mut made = bytes
   loop i in 0..8 {
     made = push(made, bit_and(shift_right(n, 8 * i), 255))
   }
@@ -20,8 +20,8 @@ fn put(bytes: take List[Byte], n: u64) -> List[Byte] <alloc> {
 
 // The number that the eight bytes from `at` are, the low one first.
 fn word(bytes: List[Byte], at: Nat) -> u64 {
-  var n: u64 = 0
-  var scale: u64 = 1
+  mut n: u64 = 0
+  mut scale: u64 = 1
   loop i in 0..bytes.size {
     if i >= at and i < at + 8 {
       wide: u64 = bytes[i]
@@ -40,7 +40,7 @@ fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
 // A reading of the clock past the end of what an `Instant` holds is taken for
 // that end.
 fn system_now() -> Instant <alloc> {
-  var stamp: List[Byte] = __reserve(16)
+  mut stamp: List[Byte] = __reserve(16)
   stamp = put(put(stamp, 0), 0)
   _ = __system(10, 0, stamp)
   reading: 0..4611686018427387904 = clamp(milliseconds(word(stamp, 0), word(stamp, 8)))
@@ -55,13 +55,13 @@ fn system_sleep(span: Duration) <alloc, task> {
     wait_for_time(span)
     return
   }
-  var left = ms
+  mut left = ms
   loop attempt in 0..64 {
     seconds: u64 = left / 1000
     nanoseconds: u64 = (left % 1000) * 1000000
-    var wait: List[Byte] = []
+    mut wait: List[Byte] = []
     wait = put(put(wait, seconds), nanoseconds)
-    var rest: List[Byte] = __reserve(16)
+    mut rest: List[Byte] = __reserve(16)
     rest = put(put(rest, 0), 0)
     result = __system(11, wait, rest)
     if result != -4 { break }

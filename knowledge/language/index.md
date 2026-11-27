@@ -12,10 +12,10 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [first-program.md](first-program.md): a program that starts at `main`, prints a line, and is run with `smith run`.
 - [functions.md](functions.md): typed parameters, a return type, a block whose last expression is its value, named arguments, defaults, and comments.
 - [bindings.md](bindings.md): how `x = e` defines an immutable name, which is never defined again while it can be used, how a binding states its type, and where a name can be used.
-- [var.md](var.md): locals that change, declared with `var`, given a new value with `=`, and accumulated into with `+=`, `-=`, `*=`, and `/=`.
+- [mut.md](mut.md): locals that change, declared with `mut`, given a new value with `=`, and accumulated into with `+=`, `-=`, `*=`, and `/=`.
 - [inference.md](inference.md): what is written at the top level is the contract and what is inside a body is solved, a whole number the smallest range that holds every value it is given, and the errors that say what was inferred.
 - [if.md](if.md): `if` as an expression that chooses between blocks, `else if`, and the words `not`, `and`, and `or`.
-- [structs.md](structs.md): structs with named fields and defaults, reading a field, assigning to a field of a `var`, and a definition at the top level of a file.
+- [structs.md](structs.md): structs with named fields and defaults, reading a field, assigning to a field of a `mut`, and a definition at the top level of a file.
 - [tuples.md](tuples.md): tuples that group values without names, patterns that take them apart and assign, and the empty tuple.
 - [enums.md](enums.md): enums that hold exactly one of their cases, each case holding a type or nothing, and how a case is built.
 - [match.md](match.md): `match`, which takes a value apart with a pattern and a block for each way it can be, patterns for cases, tuples, and literals, and the rules for covering every case, including a range of whole numbers.
@@ -78,7 +78,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [for.md](for.md): `for` as a description of an array by the value at every index, and where each index gets its size.
 - [element-wise.md](element-wise.md): the operators on arrays that mean what they mean in linear algebra, no broadcasting, and `map`.
 - [reductions.md](reductions.md): `sum`, `max`, and `mean`, which reduce a view to a value, and a reduction inside a `for`.
-- [accumulation.md](accumulation.md): a `for` whose block accumulates into a `var` with `+=` or `*=`, why `=` is refused there, and an indexed accumulation.
+- [accumulation.md](accumulation.md): a `for` whose block accumulates into a `mut` with `+=` or `*=`, why `=` is refused there, and an indexed accumulation.
 - [linear-algebra.md](linear-algebra.md): `@`, which means `matmul`, how its sizes are checked by the types, a batch as a `for`, and a linear layer.
 - [float-rules.md](float-rules.md): float code that is fast and repeatable, how a float reduction is regrouped, `sum_ordered`, and which products are fused.
 - [random-arrays.md](random-arrays.md): a random function that fills a whole array from one key, `split_n`, and `keys[i]` inside a `for`.
@@ -120,7 +120,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 ## Tasks
 
 - [tasks.md](tasks.md): a task group opened with `tasks()`, children started with `spawn` and waited for with `join`, and the `spawn` effect.
-- [task-sharing.md](task-sharing.md): what a spawned lambda may use: an ordinary value is shared, a `var` is read as it was at the spawn, and a single-use value moves into the child.
+- [task-sharing.md](task-sharing.md): what a spawned lambda may use: an ordinary value is shared, a `mut` is read as it was at the spawn, and a single-use value moves into the child.
 - [task-arenas.md](task-arenas.md): each child task's own arena, a result built in the parent's, and a server as one task per connection and one arena per request.
 - [task-handlers.md](task-handlers.md): a child runs under the handlers in force where it was spawned, and a handler's operations run one at a time.
 - [async.md](async.md): all I/O is async and reads as sequential code, suspending a task under an async handler and blocking under a blocking one.

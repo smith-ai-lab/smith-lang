@@ -223,8 +223,8 @@ fn holders(t: &str) -> Vec<(&'static str, String, &'static str, &'static str)> {
             "f(xs)",
         ),
         (
-            "a var",
-            format!("fn f(c: P) -> {t} {{\n  var d = c\n  P(x: d.y, y: d.x).x\n}}"),
+            "a mut",
+            format!("fn f(c: P) -> {t} {{\n  mut d = c\n  P(x: d.y, y: d.x).x\n}}"),
             "",
             "f(c)",
         ),
@@ -301,7 +301,7 @@ fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_th
                         format!("  lo: {}\n  hi: {}\n  more: {}\n", a.name, a.name, b.name)
                     };
                     with_header(format!(
-                        "struct Span {{\n{fields}}}\n\nstruct Holder {{\n  span: Span\n  tag: {}\n}}\n\nfn widen(s: Span) -> Span {{\n  Span(lo: s.lo, hi: s.hi, more: s.more)\n}}\n\nfn main() <console, alloc> {{\n  s = Span(lo: {lo}, hi: {hi}, more: 3)\n  var xs: List[Span] = []\n  xs = push(xs, s)\n  xs = push(xs, widen(s))\n  h = Holder(span: s, tag: 1)\n  print(\"{{xs.size}} {{h.span.hi}} {{s == widen(s)}} {{s < widen(s)}}\")\n  print(\"{{s}}\")\n  print(\"{{repr(h)}}\")\n}}\n",
+                        "struct Span {{\n{fields}}}\n\nstruct Holder {{\n  span: Span\n  tag: {}\n}}\n\nfn widen(s: Span) -> Span {{\n  Span(lo: s.lo, hi: s.hi, more: s.more)\n}}\n\nfn main() <console, alloc> {{\n  s = Span(lo: {lo}, hi: {hi}, more: 3)\n  mut xs: List[Span] = []\n  xs = push(xs, s)\n  xs = push(xs, widen(s))\n  h = Holder(span: s, tag: 1)\n  print(\"{{xs.size}} {{h.span.hi}} {{s == widen(s)}} {{s < widen(s)}}\")\n  print(\"{{s}}\")\n  print(\"{{repr(h)}}\")\n}}\n",
                         b.name
                     ))
                 };
@@ -321,7 +321,7 @@ fn a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not(
         let named = ["x", "y"][which];
         let source = |field: &str| {
             with_header(format!(
-                "struct P {{\n  x: {t}\n  y: {t}\n  ok: x <= y\n  z: {t}\n}}\n\nfn f(c: P) -> P {{\n  var d = c\n  d.{field} = 1\n  d\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(P(x: 0, y: 0, z: 0)).z}}\")\n}}\n",
+                "struct P {{\n  x: {t}\n  y: {t}\n  ok: x <= y\n  z: {t}\n}}\n\nfn f(c: P) -> P {{\n  mut d = c\n  d.{field} = 1\n  d\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(P(x: 0, y: 0, z: 0)).z}}\")\n}}\n",
                 t = t.name
             ))
         };
@@ -332,7 +332,7 @@ fn a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not(
         assert!(errors.iter().any(|e| e.fix.as_deref() == Some(whole.as_str())), "{errors:?}");
         // The type of another field that names a field is as good as a statement.
         let sized = with_header(format!(
-            "struct Row {{\n  n: {t}\n  cells: [n]f32\n}}\n\nfn main() {{\n  var r = Row(n: 3, cells: [1.0, 2.0, 3.0])\n  r.n = 9\n}}\n",
+            "struct Row {{\n  n: {t}\n  cells: [n]f32\n}}\n\nfn main() {{\n  mut r = Row(n: 3, cells: [1.0, 2.0, 3.0])\n  r.n = 9\n}}\n",
             t = t.name
         ));
         refused(&sized, "`n` cannot be assigned, as the type of `cells` names it");

@@ -476,7 +476,7 @@ impl Emit[{ty}] {{
 }}
 
 fn all[T: Emit, W: Sink](xs: List[T], to: take W) -> W {{
-  var w = to
+  mut w = to
   loop i in 0..xs.size {{
     w = emit(xs[i], w)
   }}
@@ -627,7 +627,7 @@ fn main() <console, alloc> {{
     };
     let once = source("    put(to, value)\n");
     assert!(errors(&once).is_empty(), "{:?}", errors(&once));
-    let twice = source("    var w = put(to, value)\n    w = put(to, value)\n    w\n");
+    let twice = source("    mut w = put(to, value)\n    w = put(to, value)\n    w\n");
     let at = {
         let first = twice.find("put(to, value)").unwrap();
         let second = twice[first + 1..].find("put(to, value)").unwrap() + first + 1;

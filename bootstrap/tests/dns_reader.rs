@@ -128,7 +128,7 @@ fn read(m: List[Byte], kind: u16) -> Nat <alloc> {{
 
 // The message with the byte at `at` made `value`.
 fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] <alloc> {{
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..m.size {{
     if i == at {{ made = push(made, value) }} else {{ made = push(made, m[i]) }}
   }}
@@ -137,7 +137,7 @@ fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] <alloc> {{
 
 // The message whose first bytes are the first `n`.
 fn first(m: List[Byte], n: Nat) -> List[Byte] <alloc> {{
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..m.size {{
     if i < n {{ made = push(made, m[i]) }}
   }}
@@ -145,14 +145,14 @@ fn first(m: List[Byte], n: Nat) -> List[Byte] <alloc> {{
 }}
 
 fn survey(m: List[Byte], kind: u16) <console, alloc> {{
-  var believed: Nat = 0
+  mut believed: Nat = 0
   loop n in 0..{cuts} {{
     if read(first(m, n), kind) != 99 {{ believed = saturating_add(believed, 1) }}
   }}
-  var corrupted: Nat = 0
+  mut corrupted: Nat = 0
   loop at in 0..m.size {{
     loop k in {from}..{to} {{
-      var value: Byte = 0
+      mut value: Byte = 0
       if k == 1 {{ value = 255 }}
       if k == 2 {{ value = 192 }}
       if k == 3 {{ value = 1 }}

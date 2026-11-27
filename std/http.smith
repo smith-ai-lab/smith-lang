@@ -99,9 +99,9 @@ fn piece(s: str, a: Nat, b: Nat) -> str {
 // The parts of a path between its `/`s, after the first: `/users/7` is `users`
 // and `7`, and `/` has none.
 pub fn segments(path: str) -> List[str] <alloc> {
-  var parts: List[str] = []
+  mut parts: List[str] = []
   if path.size > 1 and path[0] == '/' {
-    var from: Nat = 1
+    mut from: Nat = 1
     loop i in 1..path.size {
       if path[i] == '/' {
         parts = push(parts, piece(path, from, i))
@@ -119,8 +119,8 @@ pub fn segments(path: str) -> List[str] <alloc> {
 pub fn route_match(pattern: str, path: str) -> Option[List[Part]] <alloc> {
   ps = segments(pattern)
   qs = segments(path)
-  var found: List[Part] = []
-  var fits = ps.size == qs.size
+  mut found: List[Part] = []
+  mut fits = ps.size == qs.size
   if fits {
     loop i in 0..ps.size {
       if i < qs.size {
@@ -142,7 +142,7 @@ pub fn route_match(pattern: str, path: str) -> Option[List[Part]] <alloc> {
 // no `=`. Nothing where the piece is empty.
 fn member(query: str, from: Nat, end: Nat) -> Option[Part] {
   if from < end and end <= query.size {
-    var equals: Nat = end
+    mut equals: Nat = end
     loop j in from..end {
       if equals == end and query[j] == '=' {
         equals = j
@@ -160,8 +160,8 @@ fn member(query: str, from: Nat, end: Nat) -> Option[Part] {
 
 // The members of a query, `a=1&b=2`, which are the pieces between `&`s.
 pub fn query_parts(query: str) -> List[Part] <alloc> {
-  var parts: List[Part] = []
-  var from: Nat = 0
+  mut parts: List[Part] = []
+  mut from: Nat = 0
   loop i in 0..query.size {
     if query[i] == '&' {
       match member(query, from, i) {
@@ -205,7 +205,7 @@ pub fn no_params() -> Params {
 pub fn params_of(p: take Params) -> List[Param] { p.params }
 
 fn kind(d: take Params, body: bool) -> Params <alloc> {
-  var w = d
+  mut w = d
   if w.depth == 1 and w.asked {
     w.params = push(w.params, Param(name: w.named, body: body))
     w.asked = false
@@ -214,13 +214,13 @@ fn kind(d: take Params, body: bool) -> Params <alloc> {
 }
 
 fn opened(d: take Params) -> Params <alloc> {
-  var w = kind(d, true)
+  mut w = kind(d, true)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
 fn closed(d: take Params) -> Params {
-  var w = d
+  mut w = d
   w.depth = saturating_sub(w.depth, 1)
   w
 }
@@ -239,7 +239,7 @@ impl Describer[Params] {
   fn end_tuple(d: take Params) -> Params <alloc> { closed(d) }
   fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params <alloc> { opened(d) }
   fn field(d: take Params, name: str, about: str, optional: bool) -> Params <alloc> {
-    var w = d
+    mut w = d
     if w.depth == 1 {
       w.asked = true
       w.named = name
@@ -257,7 +257,7 @@ impl Describer[Params] {
 // The text of the part with the name, which is the empty text where there is
 // none.
 fn find(parts: List[Part], name: str) -> Option[str] {
-  var found: Option[str] = Option.none
+  mut found: Option[str] = Option.none
   loop i in 0..parts.size {
     p = parts[i]
     if p.name == name {
@@ -321,8 +321,8 @@ fn current(r: Reading) -> str {
 // The next parameter, from `at`, that the request has a part for, which
 // is a field the reader offers, or `.none` when there is no other.
 fn next_param(r: take Reading) -> (Reading, Option[str]) {
-  var w = r
-  var found = false
+  mut w = r
+  mut found = false
   loop i in 0..w.params.size {
     if not found and i >= w.at and i < w.params.size {
       p = w.params[i]
@@ -362,13 +362,13 @@ fn is_missing(p: Problem) -> bool {
 }
 
 fn deeper(r: take Reading) -> Reading {
-  var w = r
+  mut w = r
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
 fn shallower(r: take Reading) -> Reading {
-  var w = r
+  mut w = r
   w.depth = saturating_sub(w.depth, 1)
   w
 }
@@ -376,7 +376,7 @@ fn shallower(r: take Reading) -> Reading {
 impl Reader[Reading] {
   fn boolean(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.boolean(w.json)
       w.json = j
       (w, got)
@@ -387,7 +387,7 @@ impl Reader[Reading] {
   }
   fn signed(r: take Reading) -> (Reading, Result[Int, ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.signed(w.json)
       w.json = j
       (w, got)
@@ -398,7 +398,7 @@ impl Reader[Reading] {
   }
   fn unsigned(r: take Reading) -> (Reading, Result[u64, ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.unsigned(w.json)
       w.json = j
       (w, got)
@@ -409,7 +409,7 @@ impl Reader[Reading] {
   }
   fn text(r: take Reading) -> (Reading, Result[str, ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.text(w.json)
       w.json = j
       (w, got)
@@ -420,7 +420,7 @@ impl Reader[Reading] {
   }
   fn nothing(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.nothing(w.json)
       w.json = j
       (w, got)
@@ -430,7 +430,7 @@ impl Reader[Reading] {
   }
   fn present(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
     if r.body {
-      var w = r
+      mut w = r
       (j, got) = Reader.present(w.json)
       w.json = j
       (w, got)
@@ -439,13 +439,13 @@ impl Reader[Reading] {
     }
   }
   fn sequence(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    var w = deeper(r)
+    mut w = deeper(r)
     (j, got) = Reader.sequence(w.json)
     w.json = j
     (w, got)
   }
   fn more(r: take Reading) -> (Reading, Result[bool, ReadError]) <alloc> {
-    var w = r
+    mut w = r
     (j, got) = Reader.more(w.json)
     w.json = j
     match got {
@@ -456,32 +456,32 @@ impl Reader[Reading] {
     }
   }
   fn tuple(r: take Reading, size: Nat) -> (Reading, Result[(), ReadError]) <alloc> {
-    var w = deeper(r)
+    mut w = deeper(r)
     (j, got) = Reader.tuple(w.json, size)
     w.json = j
     (w, got)
   }
   fn end_tuple(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    var w = shallower(r)
+    mut w = shallower(r)
     (j, got) = Reader.end_tuple(w.json)
     w.json = j
     (w, got)
   }
   fn structure(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) <alloc> {
     if r.top {
-      var w = deeper(r)
+      mut w = deeper(r)
       (j, got) = Reader.structure(w.json, name)
       w.json = j
       (w, got)
     } else {
-      var w = r
+      mut w = r
       w.top = true
       (w, Result.ok(()))
     }
   }
   fn field(r: take Reading) -> (Reading, Result[Option[str], ReadError]) <alloc> {
     if r.depth > 0 {
-      var w = r
+      mut w = r
       (j, got) = Reader.field(w.json)
       w.json = j
       match got {
@@ -499,32 +499,32 @@ impl Reader[Reading] {
     }
   }
   fn unknown(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) <alloc> {
-    var w = r
+    mut w = r
     (j, got) = Reader.unknown(w.json, name)
     w.json = j
     (w, got)
   }
   fn case(r: take Reading, of: str) -> (Reading, Result[str, ReadError]) <alloc> {
-    var w = deeper(r)
+    mut w = deeper(r)
     (j, got) = Reader.case(w.json, of)
     w.json = j
     (w, got)
   }
   fn end_case(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    var w = shallower(r)
+    mut w = shallower(r)
     (j, got) = Reader.end_case(w.json)
     w.json = j
     (w, got)
   }
   fn raw(r: take Reading, of: str) -> (Reading, Result[Slice[Byte], ReadError]) <alloc> {
-    var w = r
+    mut w = r
     (j, got) = Reader.raw(w.json, of)
     w.json = j
     (w, got)
   }
   fn fail(r: take Reading, problem: Problem) -> (Reading, ReadError) <alloc> {
     if r.depth > 0 or r.body {
-      var w = r
+      mut w = r
       (j, e) = Reader.fail(w.json, problem)
       w.json = j
       (w, e)
@@ -537,7 +537,7 @@ impl Reader[Reading] {
 
 // Whether one of the parameters is read from the body.
 fn takes_body(r: Reading) -> bool {
-  var found = false
+  mut found = false
   loop i in 0..r.params.size {
     if r.params[i].body {
       found = true
@@ -754,8 +754,8 @@ pub fn delete[F, A, R](path: str, f: F) <routing, alloc>
 // request that fits none is answered 404, and the response is given to `http`.
 pub fn routes[T](body: fn() -> T <routing>) -> T <http, alloc> {
   asked = request()
-  var done = false
-  var response = bare(404)
+  mut done = false
+  mut response = bare(404)
   result = routing(
     fits: fn(method, path) {
       if done or method != asked.method {
@@ -777,7 +777,7 @@ pub fn routes[T](body: fn() -> T <routing>) -> T <http, alloc> {
 
 // The request again, with its own list of headers.
 fn copy_of(r: Request) -> Request <alloc> {
-  var headers: List[(str, str)] = []
+  mut headers: List[(str, str)] = []
   loop i in 0..r.headers.size {
     headers = push(headers, r.headers[i])
   }
@@ -816,7 +816,7 @@ fn after(bytes: Slice[Byte], used: Nat) -> Slice[Byte] {
 // The head of the next request, and the bytes that follow it. A head is at
 // most 16384 bytes, and each round of the loop has one more byte of it.
 fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byte]), Fault] <net, alloc> {
-  var bytes = held
+  mut bytes = held
   loop round in 0..16400 {
     if bytes.size > 0 {
       match request_head(bytes) {
@@ -837,7 +837,7 @@ fn read_head(c: Connection, held: Slice[Byte]) -> Result[(RequestHead, Slice[Byt
 // that follow it.
 fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte], Slice[Byte]), Fault] <net, alloc> {
   if size > most_body() { return Result.err(Fault.refused) }
-  var bytes = held
+  mut bytes = held
   loop round in 0..most_body() {
     if bytes.size >= size {
       if size <= bytes.size {
@@ -854,8 +854,8 @@ fn read_sized(c: Connection, held: Slice[Byte], size: Nat) -> Result[(Slice[Byte
 
 // The bytes of a body in chunks, whole, and the bytes that follow it.
 fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[Byte]), Fault] <net, alloc> {
-  var bytes = held
-  var body: List[Byte] = []
+  mut bytes = held
+  mut body: List[Byte] = []
   loop round in 0..2097154 {
     if bytes.size > 0 {
       match chunk(bytes) {
@@ -901,7 +901,7 @@ fn read_body(c: Connection, head: RequestHead, held: Slice[Byte]) -> Result[(Sli
 // The value of the header that has the name, which is in small letters, as
 // `request_head` gives it.
 fn header_of(headers: List[(str, str)], name: str) -> Option[str] {
-  var found: Option[str] = Option.none
+  mut found: Option[str] = Option.none
   loop i in 0..headers.size {
     (n, v) = headers[i]
     if n == name {
@@ -924,9 +924,9 @@ fn lowered(b: Byte) -> Byte {
 // a time: how many of its bytes the one being read has matched, and whether
 // it has matched them all so far.
 fn has_token(value: str, token: str) -> bool {
-  var found = false
-  var matched: Nat = 0
-  var fits = true
+  mut found = false
+  mut matched: Nat = 0
+  mut fits = true
   loop i in 0..value.size {
     b = value[i]
     if b == ',' {
@@ -961,7 +961,7 @@ fn keeps(head: RequestHead) -> bool {
 }
 
 fn target_path(target: str) -> str {
-  var end = target.size
+  mut end = target.size
   loop i in 0..target.size {
     if end == target.size and target[i] == '?' { end = i }
   }
@@ -969,7 +969,7 @@ fn target_path(target: str) -> str {
 }
 
 fn target_query(target: str) -> str {
-  var at = target.size
+  mut at = target.size
   loop i in 0..target.size {
     if at == target.size and target[i] == '?' { at = i }
   }
@@ -1006,7 +1006,7 @@ fn request_of(method: Method, head: take RequestHead, body: str) -> Request {
 fn answer_with[T](request: Request, body: fn() -> T <http>) -> Response <alloc>
   requires Discard[T]
 {
-  var response = bare(500)
+  mut response = bare(500)
   _ = http(
     request: { copy_of(request) },
     send: fn(r) { response = r },
@@ -1028,7 +1028,7 @@ fn copy_response(r: Response) -> Response <alloc> {
 }
 
 fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
-  var made: List[(HeaderName, HeaderValue)] = []
+  mut made: List[(HeaderName, HeaderValue)] = []
   loop i in 0..headers.size {
     made = push(made, headers[i])
   }
@@ -1070,7 +1070,7 @@ fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
 
 // The status line and the headers of a response, each ended by a line break.
 fn head_bytes(status: 100..600, headers: List[(HeaderName, HeaderValue)]) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   made = ended(append(made, "HTTP/1.1 {status} {reason(status)}".bytes))
   loop i in 0..headers.size {
     (n, v) = headers[i]
@@ -1094,7 +1094,7 @@ fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
       head_ended(made, keep)
     }
     .with_body(w) {
-      var made = head_bytes(w.status, w.headers)
+      mut made = head_bytes(w.status, w.headers)
       made = ended(append(made, "content-type: {content_type(w.body)}".bytes))
       made = ended(append(made, "content-length: {size(w.body)}".bytes))
       append(head_ended(made, keep), content(w.body))

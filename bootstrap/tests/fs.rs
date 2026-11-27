@@ -125,7 +125,7 @@ fn byte_at(i: Nat) -> Byte {{
 }}
 
 fn content(n: Nat) -> List[Byte] <alloc> {{
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..n {{ made = push(made, byte_at(i)) }}
   made
 }}
@@ -293,7 +293,7 @@ fn window_lines(sizes: &[usize]) -> String {
                 format!("        if {from} + k < {n} {{\n          if w[k] != byte_at({from} + k) {{ same = false }}\n        }}\n")
             };
             lines.push_str(&format!(
-                "  match write_all(\"DIR/w{n}\", content({n})) {{\n    .ok(_) {{ }}\n    .err(e) {{ print(\"write {{kind(e)}}\") }}\n  }}\n  match window(\"DIR/w{n}\", {from}, {to}) {{\n    .ok(w) {{\n      var same = true\n      loop k in 0..w.size {{\n{check}      }}\n      print(\"window {n} {from} {to} {{w.size}} {{same}}\")\n    }}\n    .err(e) {{ print(\"window {{kind(e)}}\") }}\n  }}\n"
+                "  match write_all(\"DIR/w{n}\", content({n})) {{\n    .ok(_) {{ }}\n    .err(e) {{ print(\"write {{kind(e)}}\") }}\n  }}\n  match window(\"DIR/w{n}\", {from}, {to}) {{\n    .ok(w) {{\n      mut same = true\n      loop k in 0..w.size {{\n{check}      }}\n      print(\"window {n} {from} {to} {{w.size}} {{same}}\")\n    }}\n    .err(e) {{ print(\"window {{kind(e)}}\") }}\n  }}\n"
             ));
         }
     }

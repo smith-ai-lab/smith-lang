@@ -1,4 +1,4 @@
-not_a_var.smith:5:3: `word` is not a `var`, so it cannot be assigned to
+not_a_var.smith:5:3: `word` is not a `mut`, so it cannot be assigned to
   5 |   word = "second"
     |   ^
-  fix: declare it with `var`: write `var word` where it is defined
+  fix: declare it with `mut`: write `mut word` where it is defined

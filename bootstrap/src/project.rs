@@ -284,13 +284,13 @@ impl Task {
             effects.join(", ")
         ));
         for k in 0..self.flags.len() {
-            t.push_str(&format!("  var s{k}: Option[str] = .none\n"));
+            t.push_str(&format!("  mut s{k}: Option[str] = .none\n"));
         }
         // Only a flag that takes a value leaves the loop waiting for it.
         let waits = self.flags.iter().any(|f| !f.boolean);
-        t.push_str("  var failure: Option[str] = .none\n");
+        t.push_str("  mut failure: Option[str] = .none\n");
         if waits {
-            t.push_str("  var waiting = 0\n");
+            t.push_str("  mut waiting = 0\n");
         }
         t.push_str("  loop i in 0..args.size {\n    arg = args[i]\n");
         let mut branches: Vec<String> = Vec::new();
@@ -349,7 +349,7 @@ impl Task {
                 fail(&format!("--{} is needed", f.name))
             };
             t.push_str(&format!(
-                "  var v{k}: Option[{ty}] = .none\n  match s{k} {{\n    .some(text) {{\n      g{k}: Result[{ty}, ReadError] = from_text(\"{name}\", text)\n      match g{k} {{\n        .ok(x) {{ v{k} = .some(x) }}\n        .err(e) {{ {bad} }}\n      }}\n    }}\n    .none {{ {needed} }}\n  }}\n",
+                "  mut v{k}: Option[{ty}] = .none\n  match s{k} {{\n    .some(text) {{\n      g{k}: Result[{ty}, ReadError] = from_text(\"{name}\", text)\n      match g{k} {{\n        .ok(x) {{ v{k} = .some(x) }}\n        .err(e) {{ {bad} }}\n      }}\n    }}\n    .none {{ {needed} }}\n  }}\n",
                 ty = f.value,
                 name = f.name,
                 bad = fail_with(&format!("\"--{}: `{{text}}` is not read as {}\"", f.name, f.value)),

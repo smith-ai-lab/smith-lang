@@ -48,7 +48,7 @@ fn parser() -> &'static str {
 /// line `input`.
 const DRIVER: &str = r#"
 fn show(b: List[Byte]) -> str <alloc> {
-  var s: str = ""
+  mut s: str = ""
   loop i in 0..b.size {
     if i == 0 { s = "{b[i]}" } else { s = "{s},{b[i]}" }
   }
@@ -107,7 +107,6 @@ fn keyword_text(k: Keyword) -> str {
     .kw_trait { "trait" }
     .kw_try { "try" }
     .kw_use { "use" }
-    .kw_var { "var" }
     .kw_with { "with" }
     .kw_without { "without" }
   }

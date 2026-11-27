@@ -1,8 +1,8 @@
-//! A lambda that gives away a `var` of the function it is written in and
+//! A lambda that gives away a `mut` of the function it is written in and
 //! assigns it again before it ends has given nothing away, so the function it
 //! is passed to may call it any number of times: this holds exactly when every
 //! path out of the lambda assigns the name, a `return` and a `try` that leaves
-//! among them, and a handler's function that appends to what its `var` holds is
+//! among them, and a handler's function that appends to what its `mut` holds is
 //! one, and moves no copy of the value. The expectation of each program is what
 //! the generator that wrote it says its paths do.
 
@@ -61,7 +61,7 @@ const BOTH: &str = "fn both(f: fn(str)) {\n  f(\"a\")\n  f(\"b\")\n}\n\n";
 fn a_lambda_that_appends_to_a_var_it_gives_away_is_accepted_and_the_var_is_whole_after_the_call() {
     let source = format!(
         "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-         fn gather() -> str <alloc> {{\n  var page = text()\n  both() fn(part) {{ page = append(page, part) }}\n  finish(page)\n}}\n\n\
+         fn gather() -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{ page = append(page, part) }}\n  finish(page)\n}}\n\n\
          fn main() <console, alloc> {{\n  print(gather())\n}}\n"
     );
     assert_eq!(outcome(&source).stdout, b"ab\n");
@@ -208,7 +208,7 @@ impl Lambda {
     fn source(&self, c: bool) -> String {
         format!(
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-             fn gather(c: bool) -> str <alloc> {{\n  var page = text()\n  both() fn(part) {{\n{}  }}\n  finish(page)\n}}\n\n\
+             fn gather(c: bool) -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{\n{}  }}\n  finish(page)\n}}\n\n\
              fn main() <console, alloc> {{\n  print(gather({c}))\n}}\n",
             self.body()
         )
@@ -251,7 +251,7 @@ fn a_try_between_the_give_away_and_the_assignment_is_a_path_that_leaves_with_the
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n\
              fn both(f: fn(str) -> Result[(), str]) -> Result[(), str] {{\n  try f(\"a\")\n  f(\"b\")\n}}\n\n\
              fn ok(s: str) -> Result[(), str] {{ .ok(()) }}\n\n\
-             fn gather() -> Result[str, str] <alloc> {{\n  var page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(page))\n}}\n\n\
+             fn gather() -> Result[str, str] <alloc> {{\n  mut page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(page))\n}}\n\n\
              fn main() <console, alloc> {{\n  r = gather()\n  print(\"x\")\n}}\n"
         )
     };
@@ -296,7 +296,7 @@ impl Puts {
             .collect()
     }
 
-    /// The program: a handler that keeps what is put in a `var`, a function that
+    /// The program: a handler that keeps what is put in a `mut`, a function that
     /// puts, and a function that runs both under the handler.
     fn source(&self, in_place: bool) -> String {
         let (ty, param, arg, start, add, end) = match self.text {
@@ -320,7 +320,7 @@ impl Puts {
         if in_place {
             // Everything written where it is asked, with no handler.
             let mut all = String::new();
-            let var = if self.text { "var held = text()" } else { "var held: List[Byte] = []" };
+            let var = if self.text { "mut held = text()" } else { "mut held: List[Byte] = []" };
             all += &format!("fn run() -> {result} <alloc> {{\n  {var}\n");
             for part in &self.parts {
                 for b in part {
@@ -338,7 +338,7 @@ impl Puts {
         } else {
             text += &format!(
                 "effect sink {{\n  fn put({param})\n}}\n\n\
-                 fn gather[T](body: fn() -> T <sink>) -> (T, {result}) <alloc> {{\n  var held{} = {start}\n  \
+                 fn gather[T](body: fn() -> T <sink>) -> (T, {result}) <alloc> {{\n  mut held{} = {start}\n  \
                  r = sink(put: fn({arg}) {{ held = {add} }}, body: body)\n  (r, {end})\n}}\n\n\
                  fn middle() <sink> {{\n{}}}\n\n\
                  fn run() -> {result} <alloc> {{\n  (n, kept) = gather() {{\n{}    middle()\n{}  }}\n  kept\n}}\n\n",
@@ -364,7 +364,7 @@ impl Puts {
     }
 }
 
-/// A handler's function that gives away what its `var` holds and assigns it
+/// A handler's function that gives away what its `mut` holds and assigns it
 /// again is accepted, builds, and gives what was put, whether the code that puts
 /// is under `with` or in a function that carries the effect.
 fn a_handler_that_gathers_a_text_or_pushes_to_a_list_gives_what_was_put_whatever_asks() {

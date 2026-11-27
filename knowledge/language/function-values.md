@@ -128,7 +128,7 @@ fn both() -> (f32, f32) {
 
 `both()` is `(4.0, 16.0)`. A struct that holds a `Pricing` holds the function it holds in turn. A function that returns a function, or a `Pricing`, gives what its body ends with: a function with a name, a construction of a `Pricing`, a name bound to one of those, a call of a function that gives one, or a parameter, whose function is then the argument's at each call, as in `fn wrap(f: fn(f32) -> f32) -> Pricing { Pricing(discount: f) }`, where `wrap(half).discount(3.0)` is `1.5`. A name bound to a function is that function, and whatever gives a function, a call or a field of any value, is called by writing the arguments after it: `chosen()(x)`, `same(p).discount(x)`, and `shop.pricing.discount(x)`.
 
-Two values that hold different functions where one type is needed are refused, since which function it is would depend on what the program does when it runs. These are the arms of an `if` or a `match`, two elements of a list, a `var` given one function and then another, and a function that returns one of two functions by a branch.
+Two values that hold different functions where one type is needed are refused, since which function it is would depend on what the program does when it runs. These are the arms of an `if` or a `match`, two elements of a list, a `mut` given one function and then another, and a function that returns one of two functions by a branch.
 
 ```
 fn pick(wide: bool) -> Pricing {

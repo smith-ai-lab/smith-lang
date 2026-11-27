@@ -4,7 +4,7 @@ title: A struct that holds a proof
 description: A statement about values is a type, a struct holds a proof as a field where a fact joins two values, a fact about one number is its range, an index that travels is a range, and a fact that must hold in every round of a loop is kept in a type.
 status: partial
 built:
-  - "a struct whose field has a statement as its type, a proof field, such as `inside: at <= size`: a construction leaves it out and `arith` builds it from the values given, refused with the goal stated for them where it cannot, or gives a proof of the statement for those values and no other; a value of the struct that is read from a parameter, a field, an item of a list at a number or a name, a `var`, or a name bound by a `loop` has the statement of its fields as a fact; the field is in no value, no layout, and no executable"
+  - "a struct whose field has a statement as its type, a proof field, such as `inside: at <= size`: a construction leaves it out and `arith` builds it from the values given, refused with the goal stated for them where it cannot, or gives a proof of the statement for those values and no other; a value of the struct that is read from a parameter, a field, an item of a list at a number or a name, a `mut`, or a name bound by a `loop` has the statement of its fields as a fact; the field is in no value, no layout, and no executable"
   - "an assignment to a field that a proof field's statement or the type of another field names is refused, with the fix that builds the value again; a field nothing names is assigned as before"
   - "`Eq`, `Ord`, `Fmt`, `Repr`, `Hash`, `Serialize`, and `Describe` of a struct that leave its proof fields out, and the automatic `Deserialize` of a struct that holds one, which reads its data fields and then tests the statement of each proof field of what was read, giving the error `proof` when one is false"
   - "not a fact for a value taken apart by a pattern of its fields; not a proof field in a case of an enum"
@@ -41,11 +41,11 @@ A struct that holds a proof is read as any struct is: the fields that hold data 
 
 ## Changing a field
 
-A field cannot be assigned when a proof field's statement, or the type of another field, names it, through a `var` or a [`mut`](mut-parameters.md) parameter. Assigning it would leave the proof proving something that is no longer so.
+A field cannot be assigned when a proof field's statement, or the type of another field, names it, through a `mut` or a [`mut`](mut-parameters.md) parameter. Assigning it would leave the proof proving something that is no longer so.
 
 ```
 fn past[size: Nat](c: Cursor[size]) -> Cursor[size] {
-  var d = c
+  mut d = c
   d.at = 1000000
   d
 }
@@ -65,7 +65,7 @@ The same holds of a field that the type of another names, as `n` in `struct Row 
 
 ## A fact that must hold in every round
 
-A `var`'s type never changes, so a fact that must hold each time round a `loop` is stated in a type. A `Cursor` is such a type: a `var` of it is never past the end, whatever the loop does to it.
+A `mut`'s type never changes, so a fact that must hold each time round a `loop` is stated in a type. A `Cursor` is such a type: a `mut` of it is never past the end, whatever the loop does to it.
 
 ```
 fn step[size: Nat](c: Cursor[size]) -> Cursor[size] {

@@ -1,4 +1,4 @@
-//! What `arith` knows of a `var` of a whole number, outside a loop as inside
+//! What `arith` knows of a `mut` of a whole number, outside a loop as inside
 //! one: what it was last given and the condition of each `if` around a use,
 //! and nothing from before an assignment that may lie between.
 //!
@@ -73,7 +73,7 @@ enum Step {
     /// `if c < k { if c < j { v = a } ; use }`, with the use being a print of
     /// `v + 0` after the inner `if`.
     Nested(V, i128, i128, i128),
-    /// `v = from + d`, which is a `var` given itself when `from` is `v`.
+    /// `v = from + d`, which is a `mut` given itself when `from` is `v`.
     Add(V, V, i128),
     /// `print("{from + k}")`.
     Plus(V, i128),
@@ -157,7 +157,7 @@ fn source(p: &Program) -> String {
     out.push_str("fn f(c: Byte) <console, alloc> {\n");
     for v in [V::N, V::M] {
         out.push_str(&format!(
-            "  var {}: {} = {}\n",
+            "  mut {}: {} = {}\n",
             v.name(),
             p.ty.name,
             p.start[v.at()]
@@ -267,10 +267,10 @@ fn run(source: &str) -> Outcome {
     scalar::run(&program)
 }
 
-/// For every function with steps that give a `var` a value in a branch, an
+/// For every function with steps that give a `mut` a value in a branch, an
 /// arm, a loop that may run no time, an earlier round of a loop around the
 /// whole, a lambda that is called, and a block after an inner `if`, or that
-/// give it itself or the other `var` plus a number, the program compiles only
+/// give it itself or the other `mut` plus a number, the program compiles only
 /// when no addition overflows for any `c`, and then prints what the steps give.
 fn a_program_that_compiles_never_uses_what_a_var_held_before_an_assignment_that_may_lie_between() {
     generate::check(41, 100, program, |p| {
@@ -302,7 +302,7 @@ struct Fact {
     given: Option<i128>,
     limit: i128,
     k: i128,
-    /// A step that gives the other `var` a value, between the fact and the
+    /// A step that gives the other `mut` a value, between the fact and the
     /// use.
     between: usize,
 }
@@ -320,10 +320,10 @@ fn fact(g: &mut Gen) -> Fact {
     }
 }
 
-/// `var n` is given a number or a parameter, an `if` says it is below a
+/// `mut n` is given a number or a parameter, an `if` says it is below a
 /// limit, and `n + k` is in it. It compiles exactly when `n + k` fits for the
 /// greatest `n` the facts allow, and the same program with a `loop` around it
-/// is accepted and refused as the one without. A step that gives another `var`
+/// is accepted and refused as the one without. A step that gives another `mut`
 /// a value in between changes nothing.
 fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_around_or_not(part: u64) {
     generate::check_part(42, 40, part, 2, fact, |f| {
@@ -343,7 +343,7 @@ fn a_var_has_the_condition_around_a_use_and_what_it_was_given_whether_a_loop_is_
                 ("", "")
             };
             with_header(format!(
-                "fn f(x: {0}, c: Byte) <console, alloc> {{\n  var n: {0} = {init}\n  var m: {0} = 0\n  {open}  {between}\n  if n < {1} {{\n    got: {0} = n + {2}\n    print(\"{{got}}\")\n  }}\n  {close}}}\n\nfn main() <console, alloc> {{\n  f({3}, 1)\n}}\n",
+                "fn f(x: {0}, c: Byte) <console, alloc> {{\n  mut n: {0} = {init}\n  mut m: {0} = 0\n  {open}  {between}\n  if n < {1} {{\n    got: {0} = n + {2}\n    print(\"{{got}}\")\n  }}\n  {close}}}\n\nfn main() <console, alloc> {{\n  f({3}, 1)\n}}\n",
                 f.ty.name,
                 f.limit,
                 f.k,

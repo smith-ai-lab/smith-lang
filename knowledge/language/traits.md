@@ -297,7 +297,7 @@ A function that is bound by `Emit` calls `emit` as it calls any function of a bo
 
 ```
 fn all[T: Emit, W: Sink](xs: List[T], to: take W) -> W {
-  var w = to
+  mut w = to
   loop i in 0..xs.size {
     w = emit(xs[i], w)
   }

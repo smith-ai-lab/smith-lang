@@ -415,7 +415,7 @@ fn asked_with(written: &Written, changes: &[(u64, u64)]) -> (String, usize) {
 /// so that all of them exist at once, each holding the region it was given.
 fn many(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ wrapping_add(first, 1) }}\n    v = down(xs, at + 1)\n    wrapping_add(join(g), v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ wrapping_add(first, 1) }}\n    v = down(xs, at + 1)\n    wrapping_add(join(g), v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -437,7 +437,7 @@ fn a_thousand_tasks_that_wait_with_nothing_built_hold_under_eight_megabytes() {
 /// A task that waits inside an arena in each round of a loop.
 fn arena_rounds(rounds: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    with arena()\n    xs = build(200)\n    g = spawn {{ wrapping_add(r, 1) }}\n    sum = wrapping_add(sum, wrapping_add(total(xs), join(g)))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(5)\n  a = spawn {{ rounds({rounds}) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{\n    with arena()\n    xs = build(200)\n    g = spawn {{ wrapping_add(r, 1) }}\n    sum = wrapping_add(sum, wrapping_add(total(xs), join(g)))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(5)\n  a = spawn {{ rounds({rounds}) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -459,7 +459,7 @@ fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memo
 /// they built after the wait, in an order the seed picks.
 fn two_in_arenas(seed: u64) -> String {
     format!(
-        "{USES}fn build(n: u64, k: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_add(i, k)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn mine(n: u64, k: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  rounds: u64 = 5\n  loop r in 0..rounds {{\n    with arena()\n    xs = build(n, k)\n    g = spawn {{ wrapping_add(r, 1) }}\n    v = join(g)\n    sum = wrapping_add(sum, wrapping_add(total(xs), v))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ mine(50, 1000) }}\n  b = spawn {{ mine(80, 7) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64, k: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_add(i, k)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn mine(n: u64, k: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  rounds: u64 = 5\n  loop r in 0..rounds {{\n    with arena()\n    xs = build(n, k)\n    g = spawn {{ wrapping_add(r, 1) }}\n    v = join(g)\n    sum = wrapping_add(sum, wrapping_add(total(xs), v))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ mine(50, 1000) }}\n  b = spawn {{ mine(80, 7) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -480,7 +480,7 @@ fn two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_c
 /// after another.
 fn one_after_another(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ total(build(100)) }}\n  join(g)\n}}\n\nfn main() <console, alloc, diverge> {{\n  var sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ total(build(100)) }}\n  join(g)\n}}\n\nfn main() <console, alloc, diverge> {{\n  mut sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
     )
 }
 
@@ -549,7 +549,7 @@ fn every_executable_keeps_the_regions_of_tasks_apart_and_gives_the_memory_of_a_j
 /// again, as the scheduler that numbered a task by where its frame is did.
 fn one_after_another_with_values() -> String {
     format!(
-        "{USES}fn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(2)\n  var sum: u64 = 0\n  var round: u64 = 0\n  loop r in 0..9 {{\n    g = spawn {{ wrapping_mul(r, r) }}\n    sum = wrapping_add(wrapping_mul(sum, 10), join(g))\n    round = r\n  }}\n  wrapping_add(sum, round)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(2)\n  mut sum: u64 = 0\n  mut round: u64 = 0\n  loop r in 0..9 {{\n    g = spawn {{ wrapping_mul(r, r) }}\n    sum = wrapping_add(wrapping_mul(sum, 10), join(g))\n    round = r\n  }}\n  wrapping_add(sum, round)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -569,7 +569,7 @@ fn a_child_started_where_a_joined_one_was_is_a_new_task_with_a_value_of_its_own(
 /// after the arena it was started in has ended.
 fn left_running(seed: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  _ = spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  _ = spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  _ = spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  _ = spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -624,13 +624,13 @@ fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had(part
     assert!(checked > 50 / PARTS, "{checked} cases");
 }
 
-const LISTS: &str = "fn build(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
+const LISTS: &str = "fn build(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
 
 /// Children that each build a list and give it, joined one after another, by a
 /// function that gives back what is in the list.
 fn lists_one_after_another(count: u64) -> String {
     format!(
-        "{USES}{LISTS}fn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ build(100) }}\n  xs = join(g)\n  total(xs)\n}}\n\nfn main() <console, alloc, diverge> {{\n  var sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{USES}{LISTS}fn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ build(100) }}\n  xs = join(g)\n  total(xs)\n}}\n\nfn main() <console, alloc, diverge> {{\n  mut sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
     )
 }
 
@@ -669,7 +669,7 @@ fn a_list_of_forty_thousand_numbers_is_joined_in_the_instructions_a_list_of_ten_
 
 fn a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes() {
     let source = format!(
-        "{USES}{LISTS}fn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(4)\n  g = spawn {{ build(1000) }}\n  xs = join(g)\n  var more: u64 = 0\n  loop r in 0..50 {{\n    ys = build(2000)\n    more = wrapping_add(more, total(ys))\n  }}\n  wrapping_add(total(xs), more)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}{LISTS}fn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(4)\n  g = spawn {{ build(1000) }}\n  xs = join(g)\n  mut more: u64 = 0\n  loop r in 0..50 {{\n    ys = build(2000)\n    more = wrapping_add(more, total(ys))\n  }}\n  wrapping_add(total(xs), more)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     );
     let (said, _) = asked(&source);
     let one = (0..1000u64).sum::<u64>();
@@ -695,7 +695,7 @@ fn a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_b
 /// bytes, and joins them on the way back, so that all of them exist at once.
 fn texts(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ \"{{first}}-abcdefghijklmnop\" }}\n    v = down(xs, at + 1)\n    t = join(g)\n    wrapping_add(t.size, v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ \"{{first}}-abcdefghijklmnop\" }}\n    v = down(xs, at + 1)\n    t = join(g)\n    wrapping_add(t.size, v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -732,7 +732,7 @@ fn dropped_children(count: u64, seed: u64, how: &str) -> String {
 /// that the loops of their rounds use.
 fn dropped_items() -> String {
     format!(
-        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  var hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\n"
+        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  mut hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\n"
     )
 }
 
@@ -740,7 +740,7 @@ fn dropped_items() -> String {
 /// handle of each child is `how`.
 fn dropped_rounds(name: &str, how: &str) -> String {
     format!(
-        "fn {name}(n: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    var more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\n"
+        "fn {name}(n: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{\n    {how}\n    mut more: u64 = 0\n    loop q in 0..4 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_add(1, wrapping_mul(more, 0)))\n  }}\n  sum\n}}\n\n"
     )
 }
 
@@ -834,19 +834,19 @@ const DROPS: [&str; 23] = [
     "held = Held.one(spawn { total(build(500)) })",
     "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })",
     "_ = match r < 1000 {\n      .true { spawn { total(build(500)) } }\n      .false { spawn { total(build(500)) } }\n    }",
-    "var t = spawn { total(build(500)) }",
+    "mut t = spawn { total(build(500)) }",
     "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })",
     "ignore(spawn { total(build(500)) })",
-    "var t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }",
+    "mut t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }\n    t = spawn { total(build(500)) }",
     "ns = nest()",
     "d = Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.more([Deep.leaf(spawn { total(build(250)) })])])])])])])])])])])",
     "t = spawn { total(build(500)) }\n    loop i in 0..3 {\n      if r < 5 {\n        sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n        break\n      } else { }\n    }",
-    "var t = spawn { total(build(500)) }\n    loop i in 0..2 {\n      sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n      t = spawn { total(build(500)) }\n    }",
+    "mut t = spawn { total(build(500)) }\n    loop i in 0..2 {\n      sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n      t = spawn { total(build(500)) }\n    }",
     "match Held.one(spawn { total(build(500)) }) {\n      .none { }\n      .one(t) { }\n    }",
     "t = spawn { total(build(500)) }\n    sum = wrapping_add(sum, wrapping_mul(maybe(t, r < 5), 0))",
     "(a, b) = (spawn { total(build(250)) }, spawn { total(build(250)) })\n    sum = wrapping_add(sum, wrapping_mul(join(a), 0))",
     "both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })\n    sum = wrapping_add(sum, wrapping_mul(join(both.first), 0))",
-    "var both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })\n    both.first = spawn { total(build(250)) }\n    both.second = spawn { total(build(250)) }",
+    "mut both = Both(first: spawn { total(build(250)) }, second: spawn { total(build(250)) })\n    both.first = spawn { total(build(250)) }\n    both.second = spawn { total(build(250)) }",
     "t = spawn { total(build(500)) }\n    xs = build(3)\n    loop x in xs {\n      if r < 5 {\n        sum = wrapping_add(sum, wrapping_mul(join(t), 0))\n        break\n      } else { }\n    }",
 ];
 
@@ -896,7 +896,7 @@ fn every_executable_gives_back_the_memory_of_children_whose_handles_are_dropped(
 enum Hold {
     Name,
     Var,
-    /// A `var` that is assigned over before it is read.
+    /// A `mut` that is assigned over before it is read.
     Assigned,
     Tuple,
     Struct,
@@ -908,14 +908,14 @@ enum Hold {
     Deep(usize),
     /// A parameter of a function.
     Param,
-    /// A `var` that a loop joins and starts again.
+    /// A `mut` that a loop joins and starts again.
     Reborn,
     /// A name that a loop joins and leaves on one path, and that ends it where
     /// the range does on the other.
     Looped,
     /// A list that is made where the loop over it is written.
     Over,
-    /// A `var` struct whose fields are assigned over before they are read.
+    /// A `mut` struct whose fields are assigned over before they are read.
     Fielded,
     /// A name that a loop over a list joins and leaves on one path, and that
     /// ends it where the list does on the other.
@@ -996,7 +996,7 @@ impl Item {
             (Hold::Tuple | Hold::Struct | Hold::Fielded, End::Half) => self.value(0),
             _ => all,
         };
-        // A `var` that a loop joins and starts again joins twice before it ends.
+        // A `mut` that a loop joins and starts again joins twice before it ends.
         let before = match self.hold {
             Hold::Reborn => 2 * self.value(0),
             _ => 0,
@@ -1030,7 +1030,7 @@ impl Item {
         let w = |k: u64| self.work(k);
         match self.hold {
             Hold::Name | Hold::Var => {
-                let bind = if matches!(self.hold, Hold::Var) { "var " } else { "" };
+                let bind = if matches!(self.hold, Hold::Var) { "mut " } else { "" };
                 format!(
                     "{bind}h{id} = {}\n{}",
                     w(0),
@@ -1038,7 +1038,7 @@ impl Item {
                 )
             }
             Hold::Assigned => format!(
-                "var h{id} = {}\nh{id} = {}\n{}",
+                "mut h{id} = {}\nh{id} = {}\n{}",
                 self.work(9),
                 w(0),
                 ends(add(&format!("join(h{id})")), String::new())
@@ -1061,7 +1061,7 @@ impl Item {
                 };
                 if matches!(self.hold, Hold::Fielded) {
                     format!(
-                        "var p{id} = Both(first: {}, second: {})\np{id}.first = {}\np{id}.second = {}\n{}",
+                        "mut p{id} = Both(first: {}, second: {})\np{id}.first = {}\np{id}.second = {}\n{}",
                         w(8),
                         w(9),
                         w(0),
@@ -1101,7 +1101,7 @@ impl Item {
                 }
             }
             Hold::Reborn => format!(
-                "var h{id} = {}\nloop i{id} in 0..2 {{\n{}\nh{id} = {}\n}}\n{}",
+                "mut h{id} = {}\nloop i{id} in 0..2 {{\n{}\nh{id} = {}\n}}\n{}",
                 w(0),
                 add(&format!("join(h{id})")),
                 w(0),
@@ -1201,7 +1201,7 @@ impl Held_ {
             })
             .collect();
         format!(
-            "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn finish(t: take Task[u64]) -> u64 <task> {{\n  join(t)\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles(n: u64) -> List[Task[u64]] <task, alloc> {{\n  [spawn {{ total(build(n)) }}, spawn {{ total(build(wrapping_add(n, 1))) }}, spawn {{ total(build(wrapping_add(n, 2))) }}]\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..n {{\n{body}    var more: u64 = 0\n    loop q in 0..2 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_mul(more, 0))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({})\n  a = spawn {{ rounds({rounds}) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n",
+            "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn finish(t: take Task[u64]) -> u64 <task> {{\n  join(t)\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(t) }} else {{ 0 }}\n}}\n\nfn handles(n: u64) -> List[Task[u64]] <task, alloc> {{\n  [spawn {{ total(build(n)) }}, spawn {{ total(build(wrapping_add(n, 1))) }}, spawn {{ total(build(wrapping_add(n, 2))) }}]\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{\n{body}    mut more: u64 = 0\n    loop q in 0..2 {{\n      j = spawn {{ wrapping_add(r, 1) }}\n      more = wrapping_add(more, join(j))\n    }}\n    sum = wrapping_add(sum, wrapping_mul(more, 0))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({})\n  a = spawn {{ rounds({rounds}) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n",
             self.seed
         )
     }
@@ -1214,7 +1214,7 @@ impl Held_ {
     }
 }
 
-/// A program that holds children in names, `var`s, patterns, parameters, structs,
+/// A program that holds children in names, `mut`s, patterns, parameters, structs,
 /// lists in lists, enums, and loops, and joins them or drops them on any path,
 /// gives each child's value once, and asks the system for the same memory for 100
 /// rounds as for 10: a child that was freed before its join would give another
@@ -1241,7 +1241,7 @@ fn generated_children(part: u64) {
 /// ready, one of them with a child of its own, and ends without joining any.
 fn left_waiting(rounds: u64) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 <task> {{\n  _ = spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  _ = spawn {{ waits(r) }}\n  _ = spawn {{ parent(r) }}\n  _ = spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 <diverge> {{\n  var sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 <task> {{\n  _ = spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  _ = spawn {{ waits(r) }}\n  _ = spawn {{ parent(r) }}\n  _ = spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 <diverge> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
     )
 }
 
@@ -1308,7 +1308,7 @@ fn a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_a
 /// and a task that was asked to end would go on through the whole list.
 fn a_task_that_waits_inside_a_loop_over_a_value_looks_for_the_request_to_end_in_the_block_of_the_loop()
  {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn total(xs: List[u64]) -> u64 <task, alloc> {\n  var sum: u64 = 0\n  loop x in xs {\n    test_ready(x)\n    sum = wrapping_add(sum, x)\n  }\n  sum\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [1, 2, 3])\n  xs: List[u64] = [1, 2, 3]\n  a = spawn { total(xs) }\n  join(a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn total(xs: List[u64]) -> u64 <task, alloc> {\n  mut sum: u64 = 0\n  loop x in xs {\n    test_ready(x)\n    sum = wrapping_add(sum, x)\n  }\n  sum\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [1, 2, 3])\n  xs: List[u64] = [1, 2, 3]\n  a = spawn { total(xs) }\n  join(a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(scalar::check(&program), Ok(()));
     assert!(reads_the_request_in(&program, "total"));

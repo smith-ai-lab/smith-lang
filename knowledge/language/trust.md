@@ -4,7 +4,7 @@ title: What is trusted
 description: The rule that Smith trusts nothing but a small kernel that checks proofs step by step, the four rules that keep a proof from being a lie, and the list of what is still taken on trust.
 status: partial
 built:
-  - "the kernel, in `bootstrap/src/kernel.rs`, which works a core term out one step at a time with no compiled code and depends on the core term alone: numbers, the comparisons, `+`, `-`, `*`, structs, tuples, lists, enums, `match`, bindings, calls of functions of the file, lambdas, loops, a round at a time with the `var`s handed on; a run is given a number of steps and fails naming it when it takes more; and a `bool` carries the comparison that decided it, with where it is written and the numbers it compared; it proves a `requires` of a predicate whose arguments are written out, as [Contracts](contracts.md#a-requirement-that-is-worked-out) says, checks the steps of a proof function against the statement it owes, of which `same`, `unfold`, `replace`, `arith`, a call of a proof function, and the name of a proof the function was given are read, `arith` by the kernel's own solution of the sums of equalities, with no checker's `arith` in it, and works out `xs.size`, `xs[i]`, `t.bytes`, a loop over a text, `push(xs, x)`, and `xs[a..b]` of a slice, of which a proof may use the size, as the next section says of what is added"
+  - "the kernel, in `bootstrap/src/kernel.rs`, which works a core term out one step at a time with no compiled code and depends on the core term alone: numbers, the comparisons, `+`, `-`, `*`, structs, tuples, lists, enums, `match`, bindings, calls of functions of the file, lambdas, loops, a round at a time with the `mut`s handed on; a run is given a number of steps and fails naming it when it takes more; and a `bool` carries the comparison that decided it, with where it is written and the numbers it compared; it proves a `requires` of a predicate whose arguments are written out, as [Contracts](contracts.md#a-requirement-that-is-worked-out) says, checks the steps of a proof function against the statement it owes, of which `same`, `unfold`, `replace`, `arith`, a call of a proof function, and the name of a proof the function was given are read, `arith` by the kernel's own solution of the sums of equalities, with no checker's `arith` in it, and works out `xs.size`, `xs[i]`, `t.bytes`, a loop over a text, `push(xs, x)`, and `xs[a..b]` of a slice, of which a proof may use the size, as the next section says of what is added"
 ---
 
 # What is trusted
@@ -53,7 +53,7 @@ Each closes a way a proof could be had for nothing.
 
 - **A type holds itself only where it is held.** A type may contain itself as a field, a case, or an element, as [Types that contain themselves](recursive-types.md) describes. It may not contain itself as a parameter of a function it holds. `enum T { wrap: fn(T) -> T }` is refused: with it, a computation that never ends can be written with no recursion for the check of [termination](termination.md) to see, and a computation that never ends proves anything.
 - **What gives a proof carries no effect and ends.** A proof is erased, so the code that gives it is never run. A function that returns a proof and carries `diverge` would prove its statement by never returning. So anything of a proof's type carries no effect at all, and a program with a [`hole`](hole.md) left in it is checked but not built.
-- **A statement names only what cannot change.** A proof of `x < 10` says nothing once `x` is given another value. So a statement, as the type of a proof, names no `var`, as the size of an array names none. What `arith` knows of a `var` from one line to the next is its own matter, and is forgotten at each assignment.
+- **A statement names only what cannot change.** A proof of `x < 10` says nothing once `x` is given another value. So a statement, as the type of a proof, names no `mut`, as the size of an array names none. What `arith` knows of a `mut` from one line to the next is its own matter, and is forgotten at each assignment.
 - **A proof is used and never looked into.** A proof is passed, held, and given where one is owed. No code picks a value by which proof it was given, as erasing the proof would then change what the program does.
 
 ## What is still taken on trust
@@ -76,7 +76,7 @@ No name is added to this list without the owner's agreement, and a fact a librar
 | --- | --- |
 | A type holds itself only where it is held | `enum T { wrap: fn(T) -> T }` |
 | What gives a proof carries no effect and ends | A proof from a function with `diverge`, and a build with a `hole` in it |
-| A statement names only what cannot change | A proof about a `var` |
+| A statement names only what cannot change | A proof about a `mut` |
 | A proof is used and never looked into | A `match` that picks a value by a proof |
 
 Next: [Array buffers](buffers.md)
