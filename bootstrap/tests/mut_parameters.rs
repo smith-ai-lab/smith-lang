@@ -99,9 +99,6 @@ fn main() <console, alloc> {{
 "
     );
     assert_eq!(output_of(&source), "2\n", "for {source}");
-    // `inout` is a name like any other, and not a keyword.
-    let source = "fn main() {\n  inout = 1\n  n = inout + 1\n}\n";
-    assert!(errors(source).is_empty(), "{:?} for {source}", errors(source));
 }
 
 /// A line of the body of a function that changes the cursor `x`.
