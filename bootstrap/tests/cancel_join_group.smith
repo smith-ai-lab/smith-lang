@@ -1,0 +1,98 @@
+// The chain of `cancel_join.smith`, run by the group of the program: the fourth task sleeps for ten
+// minutes, and the second, which sleeps 100 milliseconds, then runs out of memory.
+use std.bits (u64)
+use std.console (console, print)
+use std.instant (ms)
+use std.int (wrapping_add)
+use std.list (push)
+use std.net (Connection, close, connection, handle, net, release)
+use std.task (join, outcome, spawn, task, tasks)
+use std.time (sleep, time)
+
+fn eat() -> u64 <alloc> {
+  var xs: List[u64] = []
+  loop i in 0..9223372036854775807 {
+    xs = push(xs, i)
+  }
+  0
+}
+
+fn opened(id: u64) -> Connection <console, alloc> {
+  print("opened {id}")
+  connection(id)
+}
+
+fn n3(c: take Connection) -> u64 <net, task, console, alloc, time> {
+  a = opened(8)
+  sleep(ms(600000))
+  close(a)
+  close(c)
+  0
+}
+
+fn n2(c: take Connection) -> u64 <net, task, console, alloc, time> {
+  a = opened(6)
+  g = opened(7)
+  t = spawn { n3(g) }
+  var total: u64 = 0
+  match outcome(t) {
+    .ok(v) { total = wrapping_add(total, v) }
+    .err(failure) { }
+  }
+  close(a)
+  close(c)
+  total
+}
+
+fn n1(c: take Connection) -> u64 <net, task, console, alloc, time> {
+  a = opened(4)
+  g = opened(5)
+  t = spawn { n2(g) }
+  sleep(ms(100))
+  b = opened(14)
+  more = eat()
+  close(b)
+  close(a)
+  close(c)
+  0
+}
+
+fn n0(c: take Connection) -> u64 <net, task, console, alloc, time> {
+  a = opened(2)
+  g = opened(3)
+  t = spawn { n1(g) }
+  r = outcome(t)
+  close(a)
+  close(c)
+  0
+}
+
+fn run() -> u64 <net, diverge, alloc, console, time> {
+  with tasks()
+  g = opened(1)
+  t = spawn { n0(g) }
+  r = join(t)
+  print("root done")
+  1
+}
+
+fn main() <console, alloc, diverge, time> {
+  r = net(
+    listen_on: fn(host, port) { .err(.refused(host)) },
+    accept: fn(l) { .err(.closed(l.host)) },
+    stop: fn(l) { n = release(l) },
+    connect_to: fn(host, port) { .err(.refused(host)) },
+    read: fn(c, most) { .err(.closed(c.host)) },
+    write: fn(c, bytes) { .ok(()) },
+    close: fn(c) {
+      print("closed {handle(c)}")
+      n = release(c)
+    },
+    bind_to: fn(host, port) { .err(.refused(host)) },
+    send: fn(s, to, bytes) { .err(.closed(s.host)) },
+    receive: fn(s, most) { .err(.closed(s.host)) },
+    unbind: fn(s) { n = release(s) },
+    body: { run() },
+  )
+  print("{r}")
+}
