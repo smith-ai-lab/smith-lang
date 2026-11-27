@@ -828,6 +828,7 @@ impl<'a> Lowering<'a> {
                 handler: id,
                 frame,
                 escapes: false,
+                into: None,
             });
         }
         out.handlers.push(Handler {
@@ -930,6 +931,19 @@ impl<'a> Lowering<'a> {
         let frame = operating.frames.get(i).copied().unwrap_or(*orig);
         let at = out.frames[frame].iter().rposition(|b| b.name == REGION)?;
         Some((out.frames[frame][at].values[0], region.depth))
+    }
+
+    /// The frame of the region of the state of the handler at the place among the
+    /// handlers in force, when its state has one, as the name it has where the
+    /// code being lowered is.
+    pub(super) fn region_of(&self, out: &Out<'a>, handler: usize) -> Option<form::Value> {
+        let h = &out.handlers[handler];
+        let def = h.def.as_deref()?;
+        let i =
+            (def.frames.iter()).position(|(_, names)| names.iter().any(|c| c.name == REGION))?;
+        let frame = h.frames.get(i).copied().unwrap_or(def.frames[i].0);
+        let at = out.frames[frame].iter().rposition(|b| b.name == REGION)?;
+        Some(out.frames[frame][at].values[0])
     }
 
     /// Lowers a call of `alloc`: the body runs in place, between the opening
@@ -1042,6 +1056,19 @@ impl<'a> Lowering<'a> {
             );
             let def = self.capture(out, effect, &operations);
             out.handlers[handler].def = Some(Rc::new(def));
+        }
+        // What the operation is given may be kept in the state of its handler,
+        // which may live longer than the regions made inside it.
+        let given_memory =
+            (args.iter().flat_map(|b| &b.values)).any(|v| out.types[v.0] == form::Type::Address);
+        if given_memory
+            && out.handlers[handler]
+                .def
+                .as_deref()
+                .and_then(region_depth)
+                .is_some()
+        {
+            kept_outside(out, handler);
         }
         out.operating.push(Operating {
             def: out.handlers[handler].def.clone().expect("made"),
@@ -1436,6 +1463,7 @@ impl<'a> Lowering<'a> {
                 reads: Vec::new(),
                 slots: Vec::new(),
                 suspends: false,
+                keeper: None,
             };
         }
         let upto = (handled.iter())
@@ -1494,11 +1522,14 @@ impl<'a> Lowering<'a> {
         // What the functions assign is given after what they only read.
         reads.extend(state_reads);
         let function = self.place(Body::Under(instance.clone(), ids));
+        let keeper = (out.handlers[..upto].iter())
+            .position(|h| h.def.as_deref().and_then(region_depth).is_some());
         Prepared {
             function,
             reads,
             slots,
             suspends: may_suspend,
+            keeper,
         }
     }
 
@@ -1536,6 +1567,7 @@ impl<'a> Lowering<'a> {
             reads: Vec::new(),
             slots: Vec::new(),
             suspends: false,
+            keeper: None,
         }
     }
 
@@ -1551,6 +1583,11 @@ impl<'a> Lowering<'a> {
     ) -> Vec<form::Value> {
         for &(frame, at) in &prepared.reads {
             args.extend(out.frames[frame][at].values.iter().copied());
+        }
+        if let Some(keeper) = prepared.keeper
+            && args.iter().any(|v| out.types[v.0] == form::Type::Address)
+        {
+            kept_outside(out, keeper);
         }
         let mut types = self.scalars(gives);
         let own = types.len();
@@ -1728,5 +1765,35 @@ impl<'a> Lowering<'a> {
     ) -> form::Function {
         let context = self.contexts[ids].clone();
         self.function_with(instance, &context)
+    }
+}
+
+/// How many handlers that have a region are outside a handler, when its state
+/// has a region of its own, which memory that its operations store in it is
+/// built in.
+fn region_depth(def: &HandlerDef) -> Option<usize> {
+    (def.frames.iter())
+        .flat_map(|(_, names)| names)
+        .find(|c| c.name == REGION)
+        .map(|c| c.depth)
+}
+
+/// Says of each region made in the function being lowered whose handler is
+/// inside the handler at `keeper`, which is in force and whose state has a
+/// region, that memory its state holds may be kept in the state of that handler,
+/// as `routes` gives the response that its handler's state holds to `send` of
+/// the handler of `listen`. That state lives longer than the region, so the
+/// region is moved into the region of that state where its block ends, and is
+/// given back with it.
+fn kept_outside(out: &mut Out, keeper: usize) {
+    let depth = (out.handlers[keeper].def.as_deref())
+        .and_then(region_depth)
+        .expect("a handler whose state has a region");
+    let id = out.handlers[keeper].id;
+    let outside: Vec<HandlerId> = out.handlers[..=keeper].iter().map(|h| h.id).collect();
+    for made in out.regions.iter_mut() {
+        if !outside.contains(&made.handler) && made.into.is_none_or(|(_, d)| depth < d) {
+            made.into = Some((id, depth));
+        }
     }
 }

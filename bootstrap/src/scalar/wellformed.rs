@@ -629,8 +629,7 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                         | System::TaskRelease
                         | System::TaskFree
                         | System::TaskMove
-                        | System::RegionFree
-                        | System::RegionMove,
+                        | System::RegionFree,
                     args,
                 } => {
                     let [slot] = &args[..] else {
@@ -640,6 +639,21 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                         return Err(Why::WrongCount);
                     }
                     used(slot, i, Type::Address)?;
+                }
+                Op::System {
+                    call: System::RegionMove,
+                    args,
+                } => {
+                    let [slot, into @ ..] = &args[..] else {
+                        return Err(Why::WrongCount);
+                    };
+                    if !instruction.results.is_empty() || into.len() > 1 {
+                        return Err(Why::WrongCount);
+                    }
+                    used(slot, i, Type::Address)?;
+                    for v in into {
+                        used(v, i, Type::Address)?;
+                    }
                 }
                 Op::System {
                     call: System::TaskFrame,
