@@ -5,7 +5,7 @@ description: Typed parameters, a return type, a block whose last expression is i
 status: partial
 built:
   - "typed parameters and return types over `str`, `bool`, and the types a program defines, blocks, named arguments, defaults, a final lambda parameter after them, a name for the result, `requires` and `ensures` over whole numbers, and `//` comments"
-  - "a list of parameters split by `;`, those before it given by position only and those after it by name only, with a call refused that gives either the other way, a parameter after it that has no default named at every call, and the last parameter before it as the one that a block after a call is for, as `p(class: \"note\") { ... }` is"
+  - "a list of parameters split by `;`, those before it given by position or by name and those after it by name only, with a call refused that gives a parameter after it by position, one given twice, or a position after a named argument, a parameter before it that has no default named in the error when a call leaves it out, a parameter after it that has no default named at every call, naming a parameter before it built to the same code as giving it by position, and the last parameter before it as the one that a block after a call is for, as `p(class: \"note\") { ... }` is"
   - "the comment on a function, a parameter, a struct, a field, an enum, and a case, found from the lines of `//` directly above it, which a library asks for by the line the item starts on, and which a program that asks for none pays nothing for; a parameter, a field, or a case that does not start its own line has none of its own"
   - "a default for a parameter that takes a function, a lambda that uses no parameter and carries only the effects the type of the parameter lists, filled in where the call is written, so a call that leaves it out costs what the call that writes the lambda after it costs"
 ---
@@ -102,7 +102,7 @@ This prints `one`, `two`, and `one`.
 
 ## Parameters by position and by name
 
-A list of parameters is split by `;`. What comes before it is given only by position, and what comes after it only by name. A list with no `;` is all by position.
+A list of parameters is split by `;`. A parameter before it is given by position or by name, as in Python, and one after it only by name. A list with no `;` is all before it.
 
 ```
 use std.console (console, print)
@@ -118,15 +118,16 @@ fn main() <console> {
 }
 ```
 
-This prints `a`, `x`, and `Z`. `label` is given by position, and `n` and `m` by name, so `show("a")` prints `a`, `x`, and `y`, and `show("a", n: "N")` prints `a`, `N`, and `y`.
+This prints `a`, `x`, and `Z`. `label` is given by position, and `n` and `m` by name, so `show("a")` prints `a`, `x`, and `y`, and `show("a", n: "N")` prints `a`, `N`, and `y`. `label` may be named too, so `show(label: "a")` and `show(m: "Z", label: "a")` are built, and give what `show("a")` and `show("a", m: "Z")` give.
 
-Arguments by position come first, in the order of the parameters. Named arguments follow in any order, and are evaluated in the order they are written, so `show("a", m: "Z", n: "N")` works out `"Z"` before `"N"` and gives what `show("a", n: "N", m: "Z")` gives. A call may leave out any parameter after `;` that has a default.
+Arguments by position come first, in the order of the parameters. Named arguments follow in any order, and are evaluated in the order they are written, so `show("a", m: "Z", n: "N")` works out `"Z"` before `"N"` and gives what `show("a", n: "N", m: "Z")` gives. A call may leave out any parameter that has a default.
 
-- `show(label: "a")` is refused: "`label` of `show` is given by position", with the fix "write `show("a")`".
 - `show("a", "N")` is refused: "`n` of `show` is given by name", with the fix "write `show("a", n: "N")`".
-- `show(m: "Z", "a")` is refused: "an argument by position comes after a named one", with the fix "name it, or move it before the named arguments".
+- `show(label: "a", "N")` is refused: "an argument by position comes after a named one", with the fix "name it, or move it before the named arguments".
+- `show("a", label: "b")` is refused: "`label` of `show` is given twice".
+- `show(n: "N")` is refused: "`show` needs an argument for `label`".
 - `show("a", width: "y")` is refused: "`show` has no parameter named `width`".
-- `show("a", n: "x", n: "y")` is refused: "the `n` argument is given twice".
+- `show("a", n: "x", n: "y")` is refused: "`n` of `show` is given twice".
 
 A parameter after `;` that has no default is named at every call.
 
@@ -138,7 +139,7 @@ fn pair(a: str; b: str) -> str { a }
 
 `;` stands in a list of parameters, once, and nowhere else. A call, a function type, and a block of statements never hold one, so `show("a"; n: "x")` is refused: "expected `,` or `)`, found `;`". A struct is built with its fields named, as `Cursor(at: 4)`, and has no `;`. A function type, as `fn(Nat) -> Nat`, has no names, so its arguments are by position.
 
-The last parameter before `;` may take a function, and is then given as a block after the call, as [`with`](with.md) and [Lambdas](lambdas.md) describe. The parameters after `;` are written in the parentheses.
+The last parameter before `;` may take a function, and is then given as a block after the call, as [`with`](with.md) and [Lambdas](lambdas.md) describe. It may be named instead, as `p(block: { ... })`, but not both: naming it and also writing a block is refused as given twice. The parameters after `;` are written in the parentheses.
 
 ```
 fn p(block: fn(); class: str = "", id: str = "") { ... }
@@ -230,8 +231,9 @@ fn first(
 | `fn f(a: T) { e }` | A function that gives nothing |
 | `fn f(a: T) -> V <console> { e }` | A function with an effect |
 | `f(x, y)` | A call with arguments by position |
-| `fn f(a: T; b: U) -> V { e }` | A function whose `a` is given by position and `b` by name |
+| `fn f(a: T; b: U) -> V { e }` | A function whose `a` is given by position or by name and `b` by name |
 | `f(x, b: y)` and `f(x, c: z, b: y)` | A call with arguments by name after those by position, in any order |
+| `f(a: x, b: y)` | A call that names `a`, which stands before the `;`, and gives what `f(x, b: y)` gives |
 | `fn f(a: T, b: U = e) -> V { e }` | A function whose `b` is given by position, and defaults to `e` |
 | `fn f(a: T; b: U = e) -> V { e }` | A function whose `b` is given by name, and defaults to `e` |
 | `// text` | A comment, on its own line |
