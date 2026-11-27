@@ -1,0 +1,14 @@
+use std.bits (u8)
+use std.console (console, print)
+
+struct Node {
+  value: u8
+  kids: List[Node]
+}
+
+fn main() <console, alloc> {
+  a = Node(value: 0, kids: [Node(value: 1, kids: []), Node(value: 1, kids: [])])
+  b = Node(value: 0, kids: [Node(value: 1, kids: []), Node(value: 2, kids: [])])
+  c = Node(value: 0, kids: [Node(value: 1, kids: []), Node(value: 1, kids: [])])
+  print("{a == a} {a == b} {a == c}")
+}
