@@ -27,7 +27,7 @@ fn uniform(k: take Key) -> f32
 
 `split` and `uniform` own the key they are given. A caller that has passed its `Key` to either has no key left.
 
-A function that changes a value it is given takes it and gives it back, or marks it [`inout`](inout.md), which means the same. Nothing is copied.
+A function that changes a value it is given takes it and gives it back, or marks it [`mut`](mut-parameters.md), which means the same. Nothing is copied.
 
 ## Lending
 
@@ -148,4 +148,4 @@ So a random key cannot be reused. Randomness needs no effect, because every rand
 | `f: fn(T) -> R` | `f` is lent: it is called any number of times, and is a function that has `Copy` |
 | `f: take fn(T) -> R` | The callee owns `f`, and calling it spends it |
 
-Next: [Changing a value in place](inout.md)
+Next: [Changing a value in place](mut-parameters.md)

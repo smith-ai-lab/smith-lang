@@ -454,11 +454,11 @@ impl Parser<'_> {
             (name, pos, None)
         };
         self.expect_punct(":", "`:` and the parameter's type")?;
-        let inout = self.tok() == &Tok::Keyword("inout");
-        if inout {
+        let mutable = self.tok() == &Tok::Keyword("mut");
+        if mutable {
             self.bump();
         }
-        let take = !inout && self.taking();
+        let take = !mutable && self.taking();
         // A function with a body takes a proof; a signature that has none, as a
         // trait's or an effect's, does not.
         let proof = if self.bound_names_allowed {
@@ -507,7 +507,7 @@ impl Parser<'_> {
             ty,
             default,
             take,
-            inout,
+            mutable,
             takes,
             effects,
             by_name: false,
@@ -530,9 +530,9 @@ impl Parser<'_> {
             return Err(self.expected("`(` and the function type's parameters", self.tok()));
         }
         let marked = self.list(|p| {
-            if p.tok() == &Tok::Keyword("inout") {
+            if p.tok() == &Tok::Keyword("mut") {
                 p.unbuilt
-                    .push(Error::unsupported(p.pos(), "`inout` in a function type"));
+                    .push(Error::unsupported(p.pos(), "`mut` in a function type"));
                 p.bump();
             }
             let take = p.taking();
@@ -623,7 +623,7 @@ impl Parser<'_> {
             name: None,
             value: Expr::Lambda(Box::new(self.lambda()?)),
             after: true,
-            inout: None,
+            mutable: None,
             given_back: false,
         }))
     }
@@ -757,8 +757,8 @@ impl Parser<'_> {
             self.bump();
             self.skip_newlines();
         }
-        let inout = (self.tok() == &Tok::Keyword("inout")).then(|| self.pos());
-        if inout.is_some() {
+        let mutable = (self.tok() == &Tok::Keyword("mut")).then(|| self.pos());
+        if mutable.is_some() {
             self.bump();
         }
         let value = self.expr()?;
@@ -766,7 +766,7 @@ impl Parser<'_> {
             name,
             value,
             after: false,
-            inout,
+            mutable,
             given_back: false,
         })
     }

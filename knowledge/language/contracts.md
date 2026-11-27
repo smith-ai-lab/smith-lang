@@ -139,14 +139,14 @@ This is refused: "cannot prove that `lo <= r and r <= hi`, which `clamp` ensures
 
 A signature that has an `ensures` names its result.
 
-An [`inout`](inout.md) parameter is named by its value when the function returns, and `old(x)` names the value it was given, so an `ensures` says what the function did to it.
+A [`mut`](mut-parameters.md) parameter is named by its value when the function returns, and `old(x)` names the value it was given, so an `ensures` says what the function did to it.
 
 ```
 struct Cursor {
   at: Nat
 }
 
-fn step(c: inout Cursor)
+fn step(c: mut Cursor)
   requires c.at < 1000000
   ensures c.at == old(c).at + 1
 {
@@ -154,7 +154,7 @@ fn step(c: inout Cursor)
 }
 ```
 
-The caller knows `c.at` is one more than it was, and nothing else about `c`. `old` is written only in an `ensures`, and only of an `inout` parameter: `old(x)` of any other name is refused, as it is the same before and after.
+The caller knows `c.at` is one more than it was, and nothing else about `c`. `old` is written only in an `ensures`, and only of a `mut` parameter: `old(x)` of any other name is refused, as it is the same before and after.
 
 ```
 fn bigger(a: Byte) -> Byte

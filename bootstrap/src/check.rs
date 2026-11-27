@@ -38,8 +38,8 @@ mod effects_with_and_try;
 mod frames;
 mod functions_calls_and_lambdas;
 mod infer;
-mod inout;
 mod lists_and_text;
+mod mut_parameters;
 mod names;
 mod numbers_and_operators;
 mod ownership;
@@ -2222,8 +2222,8 @@ fn written(f: &Function, effects: &[&str]) -> String {
         .collect();
     let params: Vec<String> = (f.params.iter())
         .map(|p| {
-            let inout = if p.inout { "inout " } else { "" };
-            let mut text = format!("{}: {inout}{}", p.name, written_type(&p.ty));
+            let mutable = if p.mutable { "mut " } else { "" };
+            let mut text = format!("{}: {mutable}{}", p.name, written_type(&p.ty));
             if !p.effects.is_empty() {
                 let effects: Vec<&str> = p.effects.iter().map(|(e, _)| e.as_str()).collect();
                 text.push_str(&format!(" <{}>", effects.join(", ")));
@@ -8652,9 +8652,9 @@ impl<'a> Checker<'a> {
             used: Vec::new(),
             names: view.params.clone(),
             params: view.params.len(),
-            // A parameter marked `inout` is changed for the caller, so it is
+            // A parameter marked `mut` is changed for the caller, so it is
             // assigned to as a `var` is.
-            vars: (f.params.iter().filter(|p| p.inout))
+            vars: (f.params.iter().filter(|p| p.mutable))
                 .map(|p| p.name.clone())
                 .collect(),
             numbers,
@@ -10755,7 +10755,7 @@ fn construction_as_call(defs: &Defs, s: usize) -> (Function, Signature) {
                 pos: field.pos,
             }),
             take: false,
-            inout: false,
+            mutable: false,
             takes: Vec::new(),
             effects: Vec::new(),
             by_name: false,

@@ -33,9 +33,9 @@ enum Keyword {
   kw_if
   kw_impl
   kw_in
-  kw_inout
   kw_loop
   kw_match
+  kw_mut
   kw_not
   kw_or
   kw_out
@@ -478,12 +478,12 @@ fn keyword_of(word: str) -> Option[Keyword] {
     .some(.kw_impl)
   } else if word == "in" {
     .some(.kw_in)
-  } else if word == "inout" {
-    .some(.kw_inout)
   } else if word == "loop" {
     .some(.kw_loop)
   } else if word == "match" {
     .some(.kw_match)
+  } else if word == "mut" {
+    .some(.kw_mut)
   } else if word == "not" {
     .some(.kw_not)
   } else if word == "or" {

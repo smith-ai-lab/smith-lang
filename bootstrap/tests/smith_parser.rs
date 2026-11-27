@@ -93,9 +93,9 @@ fn keyword_text(k: Keyword) -> str {
     .kw_if { "if" }
     .kw_impl { "impl" }
     .kw_in { "in" }
-    .kw_inout { "inout" }
     .kw_loop { "loop" }
     .kw_match { "match" }
+    .kw_mut { "mut" }
     .kw_not { "not" }
     .kw_or { "or" }
     .kw_out { "out" }

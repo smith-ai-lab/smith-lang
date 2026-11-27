@@ -3220,14 +3220,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Each parameter marked `inout` that is a whole number is a `var` that
+    /// Each parameter marked `mut` that is a whole number is a `var` that
     /// starts as what the caller passes.
     pub(super) fn hold_changed(&mut self, body: &mut Body<'a>, f: &Function) {
         if !Self::decided(body) {
             return;
         }
         for (at, p) in f.params.iter().enumerate() {
-            if let (true, Some((_, Ty::Int(t)))) = (p.inout, body.names.get(at)) {
+            if let (true, Some((_, Ty::Int(t)))) = (p.mutable, body.names.get(at)) {
                 let id = body.facts.id(Key::Name(at, t.min(), t.max()));
                 let held = Lin {
                     terms: BTreeMap::from([(id, 1)]),
