@@ -25,8 +25,12 @@ pub const ONCE: &[Test] = &[
         the_evaluator_refuses_a_division_by_zero_and_the_least_number_by_minus_one_and_only_those,
     ),
     (
-        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives",
-        an_arm64_executable_of_a_division_gives_what_the_evaluator_gives,
+        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives_part_1_of_2",
+        || an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(0),
+    ),
+    (
+        "an_arm64_executable_of_a_division_gives_what_the_evaluator_gives_part_2_of_2",
+        || an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(1),
     ),
     (
         "no_pass_runs_a_division_where_the_source_would_not_have_run_it",
@@ -195,8 +199,8 @@ fn arm64(program: &Program) -> Vec<Vec<u8>> {
         .collect()
 }
 
-fn an_arm64_executable_of_a_division_gives_what_the_evaluator_gives() {
-    generate::check(7383, 120, allowed, |(op, bits, a, b)| {
+fn an_arm64_executable_of_a_division_gives_what_the_evaluator_gives(part: u64) {
+    generate::check_part(7383, 120, part, 2, allowed, |(op, bits, a, b)| {
         for opaque in [true, false] {
             let program = dividing(*op, *bits, *a, *b, opaque);
             let said = scalar::run(&program);
