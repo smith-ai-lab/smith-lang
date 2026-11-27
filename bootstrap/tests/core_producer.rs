@@ -3,6 +3,7 @@
 //! term out with the arithmetic of Rust on 128 bits and shares nothing with
 //! the compiler.
 
+use smith::diag::Error;
 use smith::core::{self, Callee, Function, Kind, Lit, Make, Operator, Pattern, Term};
 use smith::scalar::{self, Outcome};
 use smith::{core_terms, lower};
@@ -175,7 +176,7 @@ fn outcome(source: &str) -> Outcome {
 /// One function of numbers and `bool`, which is one case of the test: its
 /// definitions, named by the place `k` of the case so that ten of them are one
 /// program, and the numbers it is called with.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Program {
     pub k: usize,
     pub defs: String,
@@ -200,6 +201,49 @@ pub struct Batch {
 /// How many cases are one program: a program is checked with the library each
 /// time, so the cost of a test is the number of programs.
 pub const BATCH: usize = 10;
+
+/// The cases of a batch that the errors of its program are in, which is the case
+/// whose definitions are at the line of each error. A case is refused alone as it
+/// is as one of ten, as no case reads another. An error that is in no case is
+/// not a refusal of one.
+pub fn refused(cases: &[Program], errors: &[Error]) -> Option<Vec<usize>> {
+    let source = batch_source(cases);
+    let line_of = |is: &dyn Fn(&str) -> bool| source.lines().position(is).map(|at| at + 1);
+    let main = line_of(&|l| l.starts_with("fn main()"))?;
+    let mut starts = Vec::new();
+    for case in cases {
+        let (helper, function) = (format!("fn h{}(", case.k), format!("fn f{}(", case.k));
+        starts.push((line_of(&|l| l.starts_with(&helper) || l.starts_with(&function))?, case.k));
+    }
+    let mut refused = Vec::new();
+    for error in errors {
+        let line = error.pos.line;
+        if line >= main {
+            return None;
+        }
+        let (_, k) = starts.iter().rev().find(|(start, _)| *start <= line)?;
+        refused.push(*k);
+    }
+    Some(refused)
+}
+
+/// Works the cases of a batch out as one program, which `work` does, and where
+/// `arith` refuses the program because it cannot prove a case fits, works out the
+/// cases it does not refuse as one program: a case that is refused is not what
+/// is tested. Where the errors cannot be told apart by their cases, each case is
+/// worked out alone.
+pub fn tried(cases: &[Program], work: impl Fn(&[Program]) -> Result<(), Vec<Error>>) {
+    let Err(errors) = work(cases) else { return };
+    if let Some(refused) = refused(cases, &errors) {
+        let rest: Vec<Program> = cases.iter().filter(|c| !refused.contains(&c.k)).cloned().collect();
+        if rest.is_empty() || work(&rest).is_ok() {
+            return;
+        }
+    }
+    for case in cases {
+        let _ = work(std::slice::from_ref(case));
+    }
+}
 
 pub fn batch(g: &mut Gen) -> Batch {
     Batch {
@@ -287,24 +331,14 @@ pub fn program(g: &mut Gen, k: usize) -> Program {
 /// bindings, and calls of functions like it, the term is worked out to what
 /// the program prints.
 fn the_core_term_of_a_function_of_numbers_and_bool_gives_what_the_program_prints() {
-    generate::check(120, 200 / BATCH as u64, batch, |batch| {
-        // A program `arith` cannot prove fits is refused, which is not what is
-        // tested here: its cases are then each tried alone.
-        if !worked_out(&batch.cases) {
-            for case in &batch.cases {
-                worked_out(std::slice::from_ref(case));
-            }
-        }
-    });
+    generate::check(120, 200 / BATCH as u64, batch, |batch| tried(&batch.cases, worked_out));
 }
 
-/// Whether the cases are accepted as one program, and if they are, that the
-/// term of each is worked out to the line the program prints for it.
-fn worked_out(cases: &[Program]) -> bool {
+/// The errors that refuse the cases as one program, or, if they are accepted,
+/// that the term of each is worked out to the line the program prints for it.
+fn worked_out(cases: &[Program]) -> Result<(), Vec<Error>> {
     let source = batch_source(cases);
-    let Ok(all) = core_terms(source.as_bytes()) else {
-        return false;
-    };
+    let all = core_terms(source.as_bytes())?;
     let mut expected = String::new();
     for case in cases {
         let name = case.name();
@@ -324,7 +358,7 @@ fn worked_out(cases: &[Program]) -> bool {
         },
         "{source}"
     );
-    true
+    Ok(())
 }
 
 fn a_sum_a_difference_and_a_product_are_calls_of_operators_with_the_exact_range() {
