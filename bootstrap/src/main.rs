@@ -73,9 +73,26 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
     let mut timings = false;
     let mut args = args;
     while let Some((flag, rest)) = args.split_first() {
-        match text(flag)? {
+        let flag = text(flag)?;
+        match flag {
+            "--version" if rest.is_empty() && !timings => {
+                println!("smith {VERSION}");
+                return Ok(ExitCode::SUCCESS);
+            }
+            "--timings" if timings => return Err("`--timings` is given twice".to_string()),
             "--timings" => timings = true,
             "--watch" => return Err("smith --watch is not built yet".to_string()),
+            "--target" => {
+                return Err(
+                    "`--target` is a flag of `build` and `run`, written after the command: smith build --target <target>"
+                        .to_string(),
+                );
+            }
+            _ if flag.starts_with('-') => {
+                return Err(format!(
+                    "unknown flag `{flag}`; the flags of smith are --timings and --watch\n{USAGE}"
+                ));
+            }
             _ => break,
         }
         args = rest;
@@ -85,14 +102,6 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
     };
     let name = text(name)?;
     match name {
-        "--version" if rest.is_empty() && !timings => {
-            println!("smith {VERSION}");
-            Ok(ExitCode::SUCCESS)
-        }
-        "--target" => Err(
-            "`--target` is a flag of `build` and `run`, written after the command: smith build --target <target>"
-                .to_string(),
-        ),
         "build" => {
             let request = request(rest, false, timings)?;
             build(&request)?;
@@ -113,7 +122,6 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
         "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
             Err(format!("smith {name} is not supported yet"))
         }
-        _ if name.starts_with('-') => Err(format!("unknown command `{name}`\n{USAGE}")),
         task => run_task(task, rest, timings),
     }
 }

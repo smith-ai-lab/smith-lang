@@ -20,6 +20,10 @@ pub const ONCE: &[Test] = &[
         a_flag_of_a_command_before_it_is_refused_and_watch_is_not_built_yet,
     ),
     (
+        "a_flag_of_smith_given_twice_or_a_word_that_is_no_flag_before_the_command_is_refused",
+        a_flag_of_smith_given_twice_or_a_word_that_is_no_flag_before_the_command_is_refused,
+    ),
+    (
         "a_task_is_timed_by_the_flag_before_it_and_a_parameter_of_the_name_is_given_its_value",
         a_task_is_timed_by_the_flag_before_it_and_a_parameter_of_the_name_is_given_its_value,
     ),
@@ -202,6 +206,33 @@ fn every_word_after_the_file_of_run_is_given_to_the_program_unchanged() {
             let expected: String = words.iter().map(|w| format!("{w}\n")).collect();
             assert_eq!(String::from_utf8_lossy(&ran.stdout), expected, "{words:?}");
             assert!(ran.stderr.is_empty(), "{words:?}: {}", stderr(&ran));
+        },
+    );
+}
+
+fn a_flag_of_smith_given_twice_or_a_word_that_is_no_flag_before_the_command_is_refused() {
+    let dir = project("flags-twice", &[("hello.smith", HELLO)]);
+    let said = smith(&dir, &["--timings", "--timings", "build", "hello.smith"]);
+    let err = stderr(&said);
+    assert_eq!(said.status.code(), Some(1), "{err}");
+    assert!(err.contains("`--timings` is given twice"), "{err}");
+    assert!(!dir.join("hello").exists());
+
+    generate::check(
+        9514,
+        6,
+        |g: &mut Gen| {
+            let length = 1 + g.below(6);
+            let name: String = (0..length).map(|_| *g.pick(b"abxyz") as char).collect();
+            format!("{}{name}", *g.pick(&["-", "--"]))
+        },
+        |flag| {
+            let said = smith(&dir, &[flag, "build", "hello.smith"]);
+            let err = stderr(&said);
+            assert_eq!(said.status.code(), Some(1), "{flag}: {err}");
+            assert!(err.contains(&format!("unknown flag `{flag}`")) && err.contains("--timings") && err.contains("--watch"), "{flag}: {err}");
+            assert!(!err.contains("unknown command"), "{flag}: {err}");
+            assert!(!dir.join("hello").exists(), "{flag}");
         },
     );
 }

@@ -381,11 +381,13 @@ fn a_name_that_is_no_command_runs_a_task_or_says_why_it_found_none() {
         assert_eq!(stderr(&said), built, "{name}");
     });
 
-    // Only a name that starts with `-` is an unknown command, in any folder.
+    // A word that starts with `-` is no name, in any folder: it is an unknown
+    // flag of `smith`.
     for dir in [&none, &with_tasks, &broken] {
         let said = smith(dir, &["--nope"]);
         assert_eq!(said.status.code(), Some(1));
-        assert!(stderr(&said).contains("unknown command `--nope`"), "{}", stderr(&said));
+        assert!(stderr(&said).contains("unknown flag `--nope`"), "{}", stderr(&said));
+        assert!(!stderr(&said).contains("unknown command"), "{}", stderr(&said));
     }
 
     // A name that is a task still runs it.
