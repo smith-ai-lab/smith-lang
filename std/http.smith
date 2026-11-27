@@ -914,14 +914,14 @@ fn header_of(headers: List[(str, str)], name: str) -> Option[str] {
   found
 }
 
-// Whether the value of a header that is a list of tokens, as `connection` is,
-// has the token, whatever the case of its letters. A token is read a byte at
-// a time: how many of its bytes the one being read has matched, and whether
 // The byte, in a small letter if it is a capital letter.
 fn lowered(b: Byte) -> Byte {
   if b >= 'A' and b <= 'Z' { b + 32 } else { b }
 }
 
+// Whether the value of a header that is a list of tokens, as `connection` is,
+// has the token, whatever the case of its letters. A token is read a byte at
+// a time: how many of its bytes the one being read has matched, and whether
 // it has matched them all so far.
 fn has_token(value: str, token: str) -> bool {
   var found = false

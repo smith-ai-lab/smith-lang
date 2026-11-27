@@ -1,0 +1,496 @@
+use std.http1 (ResponseHead, body_of, chunk, response_head)
+use std.list (append, copy, freeze, push)
+use std.message (HeaderName, HeaderValue, Method, Payload, content, content_type, size)
+use std.net (Connection, NetError, connect, net, read, write)
+use std.deserialize (ReadError)
+use std.fromtext (from_text)
+use std.int (saturating_add, saturating_sub)
+use std.utf8 (utf8)
+
+// The address of a request, the most bytes of body it will read, and the headers
+// it adds to those the library writes.
+pub struct Url {
+  pub url: str
+  pub most: Nat
+  pub headers: List[(HeaderName, HeaderValue)] = []
+}
+
+// The address of a request that has a body, the most bytes of body it will read,
+// and the body.
+pub struct Upload {
+  pub url: str
+  pub most: Nat
+  pub payload: Payload
+  pub headers: List[(HeaderName, HeaderValue)] = []
+}
+
+// What a program asks of another server. Each case holds exactly what its
+// method has.
+pub enum Request {
+  get: Url
+  head: Url
+  delete: Url
+  post: Upload
+  put: Upload
+  patch: Upload
+}
+
+// What the server answered, as it was said, with no limit in its type: the
+// body is as long as the server sent, of at most the limit that was asked.
+pub struct Reply {
+  pub status: 100..600
+  pub headers: List[(str, str)]
+  pub body: List[Byte]
+}
+
+// The bytes of a body, with the proof that there are at most `most` of them.
+pub struct Body[most: Nat] {
+  pub bytes: List[Byte]
+  pub inside: bytes.size <= most
+}
+
+// What a server answered, whatever its status, with a body of at most `most`
+// bytes.
+pub struct Response[most: Nat] {
+  pub status: 100..600
+  pub headers: List[(str, str)]
+  pub body: Body[most]
+}
+
+// What a server answered to a request for the head alone: a status and headers,
+// and no body.
+pub struct HeadResponse {
+  pub status: 100..600
+  pub headers: List[(str, str)]
+}
+
+// Why there is no response, with the address of the request.
+pub enum FetchError {
+  address: str
+  unreachable: str
+  untrusted: str
+  failed: (str, str)
+  too_big: (str, Nat)
+}
+
+// What a person reads: the address, and then what went wrong.
+impl Fmt[FetchError] {
+  fn fmt(value: FetchError) -> str <alloc> {
+    match value {
+      .address(url) { "{url}: not an address" }
+      .unreachable(url) { "{url}: server not reached" }
+      .untrusted(url) { "{url}: certificate not trusted" }
+      .failed((url, said)) { "{url}: {said}" }
+      .too_big((url, limit)) { "{url}: body longer than {limit} bytes" }
+    }
+  }
+}
+
+pub effect fetch {
+  pub fn send(request: Request) -> Result[Reply, FetchError]
+}
+
+// Where a request goes: the host and port to connect to, the host as the header
+// `host` says it, and what follows the address in the request line.
+struct Place {
+  host: str
+  port: 1..65536
+  named: str
+  target: str
+}
+
+// The text between two places of another, or the empty text.
+fn piece(s: str, a: Nat, b: Nat) -> str {
+  if a <= b and b <= s.size {
+    match utf8(s.bytes[a..b]) {
+      .ok(t) { t }
+      .err(e) { "" }
+    }
+  } else {
+    ""
+  }
+}
+
+// Whether the text begins with the prefix.
+fn begins(s: str, prefix: str) -> bool {
+  var yes = s.size >= prefix.size
+  loop i in 0..prefix.size {
+    if i < s.size and s[i] != prefix[i] { yes = false }
+  }
+  yes
+}
+
+// Where the first of `a`, `b`, or `c` is in the text, or its size.
+fn first_of(s: str, a: Byte, b: Byte, c: Byte) -> Nat {
+  var at = s.size
+  loop i in 0..s.size {
+    if at == s.size and (s[i] == a or s[i] == b or s[i] == c) { at = i }
+  }
+  at
+}
+
+// The port a text spells, which is its decimal digits and nothing else.
+fn port_of(s: str) -> Option[1..65536] {
+  read: Result[1..65536, ReadError] = from_text("port", s)
+  match read {
+    .ok(port) { Option.some(port) }
+    .err(e) { Option.none }
+  }
+}
+
+// The place an address names, for an address that begins `http://`, or why it
+// is not one: `https` is not built yet, and any other address is no address.
+fn place_of(url: str) -> Result[Place, FetchError] <alloc> {
+  if begins(url, "https://") {
+    return Result.err(FetchError.failed((url, "https is not built yet")))
+  }
+  if not begins(url, "http://") { return Result.err(FetchError.address(url)) }
+  rest = piece(url, 7, url.size)
+  end = first_of(rest, '/', '?', '#')
+  named = piece(rest, 0, end)
+  tail = piece(rest, end, rest.size)
+  cut = first_of(tail, '#', '#', '#')
+  kept = piece(tail, 0, cut)
+  target = if kept.size == 0 { "/" } else if kept[0] == '?' { "/{kept}" } else { kept }
+  if named.size == 0 { return Result.err(FetchError.address(url)) }
+  var host = named
+  var port: Option[1..65536] = Option.some(80)
+  if named[0] == '[' {
+    var close = named.size
+    loop i in 0..named.size {
+      if close == named.size and named[i] == ']' { close = i }
+    }
+    if close == named.size { return Result.err(FetchError.address(url)) }
+    host = piece(named, 1, close)
+    after = piece(named, saturating_add(close, 1), named.size)
+    if after.size > 0 {
+      if after[0] != ':' { return Result.err(FetchError.address(url)) }
+      port = port_of(piece(after, 1, after.size))
+    }
+  } else {
+    var colon = named.size
+    loop i in 0..named.size {
+      if named[i] == ':' { colon = i }
+    }
+    if colon < named.size {
+      host = piece(named, 0, colon)
+      port = port_of(piece(named, saturating_add(colon, 1), named.size))
+    }
+  }
+  var bad = host.size == 0
+  loop i in 0..host.size {
+    if host[i] == '@' or host[i] == ' ' { bad = true }
+  }
+  if bad { return Result.err(FetchError.address(url)) }
+  match port {
+    .some(p) { Result.ok(Place(host: host, port: p, named: named, target: target)) }
+    .none { Result.err(FetchError.address(url)) }
+  }
+}
+
+// The name of a method as the request line writes it.
+fn method_name(m: Method) -> str {
+  match m {
+    .get { "GET" }
+    .post { "POST" }
+    .put { "PUT" }
+    .delete { "DELETE" }
+    .patch { "PATCH" }
+    .head { "HEAD" }
+  }
+}
+
+// The line break that ends a line of a head.
+fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
+  push(push(line, 13), 10)
+}
+
+// Whether a header of this name is among those the program gave.
+fn names(headers: List[(HeaderName, HeaderValue)], name: str) -> bool <alloc> {
+  var found = false
+  loop i in 0..headers.size {
+    (n, v) = headers[i]
+    if "{n}" == name { found = true }
+  }
+  found
+}
+
+// The head of a request and its body: the request line, `host` unless the program
+// gave one, `connection: close`, the headers the program gave, and for a request
+// with a body the type and the length of it, which are its payload's and no header
+// can be. `type_of` is empty for a request with no body.
+fn request_bytes(method: Method, place: Place, headers: List[(HeaderName, HeaderValue)], type_of: str, body: List[Byte]) -> List[Byte] <alloc> {
+  var made: List[Byte] = []
+  made = ended(append(made, "{method_name(method)} {place.target} HTTP/1.1".bytes))
+  if not names(headers, "host") { made = ended(append(made, "host: {place.named}".bytes)) }
+  made = ended(append(made, "connection: close".bytes))
+  loop i in 0..headers.size {
+    (n, v) = headers[i]
+    made = ended(append(made, "{n}: {v}".bytes))
+  }
+  if type_of.size > 0 {
+    made = ended(append(made, "content-type: {type_of}".bytes))
+    made = ended(append(made, "content-length: {body.size}".bytes))
+  }
+  made = ended(made)
+  append(made, body)
+}
+
+// Why there is no response, before the program is told which request it was.
+enum Trouble {
+  ended
+  refused: str
+  broke: NetError
+  big
+}
+
+// The most a read asks the connection for.
+fn most_read(wanted: Nat) -> 1..65537 {
+  if wanted < 1 { 1 } else if wanted > 65536 { 65536 } else { wanted }
+}
+
+// The bytes held and what the connection sent next, asking for at most `wanted`.
+fn more(c: Connection, held: Slice[Byte], wanted: Nat) -> Result[Slice[Byte], Trouble] <net, alloc> {
+  match read(c, most_read(wanted)) {
+    .ok(.bytes(got)) { Result.ok(freeze(append(copy(held), got.bytes))) }
+    .ok(.ended) { Result.err(Trouble.ended) }
+    .err(e) { Result.err(Trouble.broke(e)) }
+  }
+}
+
+// What follows the first `used` bytes.
+fn after(bytes: Slice[Byte], used: Nat) -> Slice[Byte] {
+  if used <= bytes.size { bytes[used..bytes.size] } else { [] }
+}
+
+// The head of the response, and the bytes that follow it. A head is at most
+// 16384 bytes, and each round has one more byte of it.
+fn read_head(c: Connection) -> Result[(ResponseHead, Slice[Byte]), Trouble] <net, alloc> {
+  var bytes: Slice[Byte] = []
+  loop round in 0..16400 {
+    if bytes.size > 0 {
+      match response_head(bytes) {
+        .complete((head, used)) { return Result.ok((head, after(bytes, used))) }
+        .incomplete { }
+        .refused(why) { return Result.err(Trouble.refused(why)) }
+      }
+    }
+    match more(c, bytes, 65536) {
+      .ok(got) { bytes = got }
+      .err(trouble) { return Result.err(trouble) }
+    }
+  }
+  Result.err(Trouble.refused("a head longer than 16384 bytes"))
+}
+
+// The first `size` bytes of a body that the head says has that many, with those
+// that came with the head.
+fn read_sized(c: Connection, held: Slice[Byte], size: Nat, limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
+  if size > limit { return Result.err(Trouble.big) }
+  var bytes = held
+  loop round in 0..limit + 2 {
+    if bytes.size >= size { return Result.ok(copy(bytes[0..size])) }
+    match more(c, bytes, size - bytes.size) {
+      .ok(got) { bytes = got }
+      .err(trouble) { return Result.err(trouble) }
+    }
+  }
+  Result.err(Trouble.big)
+}
+
+// A body that runs to the end of the connection, of at most `limit` bytes.
+fn read_to_end(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
+  var bytes = held
+  loop round in 0..limit + 2 {
+    if bytes.size > limit { return Result.err(Trouble.big) }
+    match more(c, bytes, saturating_add(saturating_sub(limit, bytes.size), 1)) {
+      .ok(got) { bytes = got }
+      .err(trouble) {
+        match trouble {
+          .ended { return Result.ok(copy(bytes)) }
+          .refused(why) { return Result.err(trouble) }
+          .broke(e) { return Result.err(trouble) }
+          .big { return Result.err(trouble) }
+        }
+      }
+    }
+  }
+  Result.err(Trouble.big)
+}
+
+// A body in chunks, whole, of at most `limit` bytes.
+fn read_chunks(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
+  var bytes = held
+  var body: List[Byte] = []
+  loop round in 0..limit + 65536 {
+    if bytes.size > 0 {
+      match chunk(bytes) {
+        .complete((piece, used)) {
+          if piece.size == 0 { return Result.ok(body) }
+          if body.size + piece.size > limit { return Result.err(Trouble.big) }
+          body = append(body, piece)
+          bytes = after(bytes, used)
+        }
+        .incomplete {
+          match more(c, bytes, 65536) {
+            .ok(got) { bytes = got }
+            .err(trouble) { return Result.err(trouble) }
+          }
+        }
+        .refused(why) { return Result.err(Trouble.refused(why)) }
+      }
+    } else {
+      match more(c, bytes, 65536) {
+        .ok(got) { bytes = got }
+        .err(trouble) { return Result.err(trouble) }
+      }
+    }
+  }
+  Result.err(Trouble.big)
+}
+
+// Whether a response to this method with this status has a body at all, which a
+// response to `HEAD` and one of status 1xx, 204, or 304 never has.
+fn has_body(method: Method, status: 100..600) -> bool {
+  match method {
+    .head { false }
+    other { status >= 200 and status != 204 and status != 304 }
+  }
+}
+
+// The body of the response after its head, as its head says it is framed.
+fn read_body(c: Connection, head: ResponseHead, held: Slice[Byte], method: Method, limit: Nat) -> Result[List[Byte], Trouble] <net, alloc> {
+  if not has_body(method, head.status) { return Result.ok([]) }
+  match body_of(head.headers) {
+    .ok(framing) {
+      match framing {
+        .none { read_to_end(c, held, limit) }
+        .length(n) { read_sized(c, held, n, limit) }
+        .chunked { read_chunks(c, held, limit) }
+      }
+    }
+    .err(why) { Result.err(Trouble.refused(why)) }
+  }
+}
+
+// What the request says to the server and what the server answers, on a
+// connection that is closed when it ends, on every path.
+fn converse(c: Connection, method: Method, wire: List[Byte], limit: Nat) -> Result[Reply, Trouble] <net, alloc> {
+  match write(c, freeze(copy(wire))) {
+    .ok(sent) { }
+    .err(e) { return Result.err(Trouble.broke(e)) }
+  }
+  (head, held) = try read_head(c)
+  body = try read_body(c, head, held, method, limit)
+  Result.ok(Reply(status: head.status, headers: head.headers, body: body))
+}
+
+// What went wrong, as the error of the request to `url`.
+fn error_of(url: str, limit: Nat, trouble: Trouble) -> FetchError <alloc> {
+  match trouble {
+    .ended { FetchError.failed((url, "the server closed the connection before it answered")) }
+    .refused(why) { FetchError.failed((url, "not an answer: {why}")) }
+    .big { FetchError.too_big((url, limit)) }
+    .broke(e) {
+      match e {
+        .unknown_host(address) { FetchError.unreachable(url) }
+        .refused(address) { FetchError.unreachable(url) }
+        .in_use(address) { FetchError.failed((url, "{e}")) }
+        .closed(address) { FetchError.failed((url, "{e}")) }
+        .failed(said) { FetchError.failed((url, "{e}")) }
+      }
+    }
+  }
+}
+
+// The conversation with the server of a place, on a connection of its own that
+// ends with it, on every path.
+fn conversation(place: Place, method: Method, wire: List[Byte], limit: Nat) -> Result[Result[Reply, Trouble], NetError] <net, alloc> {
+  with c = connect(place.host, place.port)
+  Result.ok(converse(c, method, wire, limit))
+}
+
+// One request to the server at `url`, and its answer, which is the server's
+// whatever its status, or why there is none.
+fn exchange(method: Method, url: str, headers: List[(HeaderName, HeaderValue)], type_of: str, body: List[Byte], limit: Nat) -> Result[Reply, FetchError] <net, alloc> {
+  place = try place_of(url)
+  wire = request_bytes(method, place, headers, type_of, body)
+  match conversation(place, method, wire, limit) {
+    .ok(inner) {
+      match inner {
+        .ok(reply) { Result.ok(reply) }
+        .err(trouble) { Result.err(error_of(url, limit, trouble)) }
+      }
+    }
+    .err(e) { Result.err(error_of(url, limit, Trouble.broke(e))) }
+  }
+}
+
+// What a request is asked of the network as.
+fn answer(request: Request) -> Result[Reply, FetchError] <net, alloc> {
+  match request {
+    .get(u) { exchange(.get, u.url, u.headers, "", [], u.most) }
+    .head(u) { exchange(.head, u.url, u.headers, "", [], u.most) }
+    .delete(u) { exchange(.delete, u.url, u.headers, "", [], u.most) }
+    .post(u) { exchange(.post, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
+    .put(u) { exchange(.put, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
+    .patch(u) { exchange(.patch, u.url, u.headers, "{content_type(u.payload)}", content(u.payload), u.most) }
+  }
+}
+
+// The handler of a native executable: it answers `fetch` for the block by writing
+// each request to a connection of its own, through `net`, and reading the answer,
+// of which it holds at most the bytes of body the request says. A call that waits
+// suspends its task, as every call of `net` does.
+pub fn client[T](body: fn() -> T <fetch>) -> T <net, alloc> {
+  fetch(
+    send: fn(request) { answer(request) },
+    body: body,
+  )
+}
+
+// The headers again, as a list of the request's own.
+fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
+  var made: List[(HeaderName, HeaderValue)] = []
+  loop i in 0..headers.size {
+    made = push(made, headers[i])
+  }
+  made
+}
+
+// The response to a request, with a body of at most `limit` bytes.
+fn ask[limit: Nat](request: take Request, url: str) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  reply = try send(request)
+  if reply.body.size <= limit {
+    Result.ok(Response(status: reply.status, headers: reply.headers, body: Body(bytes: reply.body)))
+  } else {
+    Result.err(FetchError.too_big((url, limit)))
+  }
+}
+
+pub fn get[limit: Nat = 1048576](url: str; headers: List[(HeaderName, HeaderValue)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  ask[limit](Request.get(Url(url: url, most: limit, headers: copied(headers))), url)
+}
+
+pub fn delete[limit: Nat = 1048576](url: str; headers: List[(HeaderName, HeaderValue)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  ask[limit](Request.delete(Url(url: url, most: limit, headers: copied(headers))), url)
+}
+
+pub fn post[limit: Nat = 1048576](url: str, payload: take Payload; headers: List[(HeaderName, HeaderValue)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  ask[limit](Request.post(Upload(url: url, most: limit, payload: payload, headers: copied(headers))), url)
+}
+
+pub fn put[limit: Nat = 1048576](url: str, payload: take Payload; headers: List[(HeaderName, HeaderValue)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  ask[limit](Request.put(Upload(url: url, most: limit, payload: payload, headers: copied(headers))), url)
+}
+
+pub fn patch[limit: Nat = 1048576](url: str, payload: take Payload; headers: List[(HeaderName, HeaderValue)] = []) -> Result[Response[limit], FetchError] <fetch, alloc> {
+  ask[limit](Request.patch(Upload(url: url, most: limit, payload: payload, headers: copied(headers))), url)
+}
+
+// The status and the headers of what the server answers to a request for the head
+// alone. There is no body to read, so there is no limit.
+pub fn head(url: str; headers: List[(HeaderName, HeaderValue)] = []) -> Result[HeadResponse, FetchError] <fetch, alloc> {
+  reply = try send(Request.head(Url(url: url, most: 0, headers: copied(headers))))
+  Result.ok(HeadResponse(status: reply.status, headers: reply.headers))
+}

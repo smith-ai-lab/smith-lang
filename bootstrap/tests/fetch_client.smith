@@ -1,0 +1,141 @@
+use std.bits (u64)
+use std.console (console, print)
+use std.deserialize (ReadError)
+use std.fetch (client, delete, get, head, patch, post, put)
+use std.fromtext (from_text)
+use std.instant (ms)
+use std.list (freeze)
+use std.message (bytes, form, header_name, header_value, json, text)
+use std.net (net)
+use std.task (join, spawn, task, tasks)
+use std.time (sleep, time)
+use std.utf8 (utf8)
+
+struct Item {
+  id: u64
+  name: str
+}
+
+fn shown(b: take List[Byte]) -> str <alloc> {
+  match utf8(freeze(b)) {
+    .ok(t) { t }
+    .err(e) { "not text" }
+  }
+}
+
+fn address(port: 1..65536, path: str) -> str <alloc> {
+  "http://127.0.0.1:{port}{path}"
+}
+
+// Each kind of request, one connection each, and what each gets.
+fn basic(port: 1..65536, closed: 1..65536) <console, net, alloc> {
+  with client()
+  match get[64](address(port, "/a")) {
+    .ok(r) { print("get {r.status} {shown(r.body.bytes)} {r.headers.size}") }
+    .err(e) { print("get {e}") }
+  }
+  match post[64](address(port, "/b"), json(Item(id: 7, name: "Ana"))) {
+    .ok(r) { print("post {r.status} {shown(r.body.bytes)}") }
+    .err(e) { print("post {e}") }
+  }
+  match put[64](address(port, "/c"), form([("a b", "c&d")])) {
+    .ok(r) { print("put {r.status}") }
+    .err(e) { print("put {e}") }
+  }
+  match patch[64](address(port, "/d"), text("x"), headers: [(header_name("X-Id"), header_value("9"))]) {
+    .ok(r) { print("patch {r.status}") }
+    .err(e) { print("patch {e}") }
+  }
+  match delete[64](address(port, "/e")) {
+    .ok(r) { print("delete {r.status}") }
+    .err(e) { print("delete {e}") }
+  }
+  match head(address(port, "/f")) {
+    .ok(r) { print("head {r.status} {r.headers.size}") }
+    .err(e) { print("head {e}") }
+  }
+  match get[4](address(port, "/big")) {
+    .ok(r) { print("big {r.status}") }
+    .err(e) { print("big {e}") }
+  }
+  match get[5](address(port, "/exact")) {
+    .ok(r) { print("exact {r.status} {shown(r.body.bytes)}") }
+    .err(e) { print("exact {e}") }
+  }
+  match get[64](address(port, "/chunked")) {
+    .ok(r) { print("chunked {r.status} {shown(r.body.bytes)}") }
+    .err(e) { print("chunked {e}") }
+  }
+  match get[64](address(port, "/moved")) {
+    .ok(r) { print("moved {r.status} {r.headers.size}") }
+    .err(e) { print("moved {e}") }
+  }
+  match get[64](address(closed, "/gone")) {
+    .ok(r) { print("gone {r.status}") }
+    .err(e) { print("gone {e}") }
+  }
+  match get("http://127.0.0.1:{port}") {
+    .ok(r) { print("root {r.status}") }
+    .err(e) { print("root {e}") }
+  }
+}
+
+// A send that is cancelled when its group ends, while the program goes on.
+fn cancelled(port: 1..65536) <console, net, time, alloc> {
+  with tasks()
+  with client()
+  _ = spawn {
+    match get[64](address(port, "/slow")) {
+      .ok(r) { print("slow {r.status}") }
+      .err(e) { print("slow {e}") }
+    }
+  }
+  sleep(ms(400))
+}
+
+// Two sends at once, in tasks of one group: the first server answers late, and
+// the second's answer is what the program prints first.
+fn pair(first: 1..65536, second: 1..65536) <console, net, time, alloc> {
+  with tasks()
+  with client()
+  a = spawn {
+    match get[64](address(first, "/late")) {
+      .ok(r) { print("late {r.status}") }
+      .err(e) { print("late {e}") }
+    }
+  }
+  b = spawn {
+    match get[64](address(second, "/early")) {
+      .ok(r) { print("early {r.status}") }
+      .err(e) { print("early {e}") }
+    }
+  }
+  join(a)
+  join(b)
+}
+
+fn main(args: List[str]) <console, net, time, alloc> {
+  if args.size < 2 { return }
+  port: Result[1..65536, ReadError] = from_text("port", args[1])
+  match port {
+    .ok(p) {
+      if args[0] == "basic" and args.size > 2 {
+        closed: Result[1..65536, ReadError] = from_text("closed", args[2])
+        match closed {
+          .ok(c) { basic(p, c) }
+          .err(e) { }
+        }
+      } else if args[0] == "pair" and args.size > 2 {
+        second: Result[1..65536, ReadError] = from_text("second", args[2])
+        match second {
+          .ok(q) { pair(p, q) }
+          .err(e) { }
+        }
+      } else if args[0] == "cancelled" {
+        cancelled(p)
+        sleep(ms(2500))
+      }
+    }
+    .err(e) { }
+  }
+}
