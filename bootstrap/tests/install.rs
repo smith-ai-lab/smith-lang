@@ -49,8 +49,16 @@ pub const ONCE: &[Test] = &[
         || running_the_installer_again_installs_the_newer_release(1),
     ),
     (
-        "the_installer_says_so_only_when_the_folder_is_not_on_the_path",
-        the_installer_says_so_only_when_the_folder_is_not_on_the_path,
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_1_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(0),
+    ),
+    (
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_2_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(1),
+    ),
+    (
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_3_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(2),
     ),
     (
         "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_1_of_4",
@@ -376,8 +384,8 @@ fn running_the_installer_again_installs_the_newer_release(part: u64) {
     );
 }
 
-fn the_installer_says_so_only_when_the_folder_is_not_on_the_path() {
-    generate::check(45, 12, supported, |machine| {
+fn the_installer_says_so_only_when_the_folder_is_not_on_the_path(part: u64) {
+    generate::check_part(45, 12, part, 3, supported, |machine| {
         let setup = Setup::new("path", machine);
         let dir = setup.home.join("release");
         release(&dir, "0.1.0");
