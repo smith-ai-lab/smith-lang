@@ -202,10 +202,12 @@ fn the_cases_run_as_their_out_files_say() {
     }
     for target in targets::runnable() {
         for source in cases("out") {
-            let built = targets::build(&std::fs::read(&source).unwrap(), target);
-            let expected = std::fs::read(source.with_extension("out")).unwrap();
-            targets::record(target, &[&built.unwrap(), &expected]);
+            // The executable is built here only to be noted for a fingerprint: a
+            // run is made by `smith run`, which builds the case itself.
             if targets::fingerprinting() {
+                let built = targets::build(&std::fs::read(&source).unwrap(), target);
+                let expected = std::fs::read(source.with_extension("out")).unwrap();
+                targets::record(target, &[&built.unwrap(), &expected]);
                 continue;
             }
             let name = source.file_stem().unwrap().to_str().unwrap();
