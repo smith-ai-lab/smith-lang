@@ -163,9 +163,11 @@ impl<'a> Checker<'a> {
             self.errors.push(
                 Error::new(
                     call.pos,
-                    "`boundary` is a fact that is proven and never computed",
+                    "`boundary` is a fact for a `requires`, an `ensures`, or an `invariant`, and is never computed",
                 )
-                .with_fix("write it in a `requires`, an `ensures`, or an `invariant`"),
+                .with_fix(
+                    "state it in a `requires`, or show it where the program runs by checking that a byte beside the place is ASCII",
+                ),
             );
         }
         let text = &call.args[0].value;

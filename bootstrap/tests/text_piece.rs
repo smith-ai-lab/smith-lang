@@ -40,6 +40,10 @@ pub const ONCE: &[Test] = &[
         "boundary_written_where_the_program_computes_is_refused",
         boundary_written_where_the_program_computes_is_refused,
     ),
+    (
+        "a_piece_at_a_place_inside_a_character_is_refused_after_any_test_of_its_byte_but_one_below_128",
+        a_piece_at_a_place_inside_a_character_is_refused_after_any_test_of_its_byte_but_one_below_128,
+    ),
 ];
 
 pub const MACHINE: &[Test] = &[(
@@ -239,15 +243,82 @@ fn a_place_that_an_ensures_promises_and_an_invariant_keeps_cuts_a_text_there() {
     });
 }
 
+/// `boundary` in an `if`, and in a `check`, which both compute what they
+/// test, is refused, and the message names where it is written instead.
 fn boundary_written_where_the_program_computes_is_refused() {
-    let source = "use std.console (console, print)\n\nfn main() <console> {\n  t = \"ab\"\n  if boundary(t, 1) {\n    print(\"yes\")\n  }\n}\n";
-    let errors = refused(source);
-    assert!(
-        errors
-            .iter()
-            .any(|e| e.contains("`boundary`") && e.contains("never computed")),
-        "{errors:?}"
-    );
+    let wheres = [
+        "if boundary(t, 1) {\n    print(\"yes\")\n  }",
+        "match check(boundary(t, 1)) {\n    .some(p) { print(\"yes\") }\n    .none { print(\"no\") }\n  }",
+    ];
+    for written in wheres {
+        let source = format!(
+            "use std.console (console, print)\n\nfn main() <console> {{\n  t = \"ab\"\n  {written}\n}}\n"
+        );
+        let errors = refused(&source);
+        let named = errors.iter().any(|e| {
+            e.contains("`boundary`")
+                && e.contains("never computed")
+                && ["`requires`", "`ensures`", "`invariant`"]
+                    .iter()
+                    .all(|w| e.contains(w))
+        });
+        assert!(named, "{errors:?} for {source}");
+    }
+}
+
+/// A text of generated characters with at least one of several bytes.
+fn wide(g: &mut Gen) -> Vec<u8> {
+    let mut chars: Vec<char> = (0..g.below(6)).map(|_| *g.pick(CHARACTERS)).collect();
+    let at = g.below(chars.len() + 1);
+    chars.insert(at, *g.pick(&CHARACTERS[3..]));
+    chars.iter().collect::<String>().into_bytes()
+}
+
+/// A program that, for each place, names it and cuts the text there where
+/// its byte passes `test`.
+fn cut_where(bytes: &[u8], places: &[usize], test: &str) -> String {
+    let cuts: String = (places.iter())
+        .map(|i| {
+            format!(
+                "      a{i}: Nat = {i}\n      if a{i} < t.size and t.bytes[a{i}] {test} {{ print(t[..a{i}]) }} else {{ print(\"no\") }}\n"
+            )
+        })
+        .collect();
+    format!(
+        "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn main() <console, alloc> {{\n  match utf8(freeze({})) {{\n    .ok(t) {{\n{cuts}    }}\n    .err(e) {{ print(\"bad\") }}\n  }}\n}}\n",
+        written(bytes)
+    )
+}
+
+/// A byte below 128 is a character of its own, and no other byte is: a test
+/// that passes for a byte inside a character, as `< 200` does, shows no
+/// boundary, and each piece after it is refused naming its place. After
+/// `< 128`, the piece is taken where the byte is ASCII and nowhere else.
+fn a_piece_at_a_place_inside_a_character_is_refused_after_any_test_of_its_byte_but_one_below_128() {
+    generate::check(77806, 2, wide, |bytes| {
+        let inside: Vec<usize> = (0..bytes.len())
+            .filter(|&i| bytes[i] & 0xC0 == 0x80)
+            .collect();
+        let errors = refused(&cut_where(bytes, &inside, "< 200"));
+        for i in &inside {
+            let place = format!("`boundary(t, a{i})`");
+            assert!(
+                errors.iter().any(|e| e.contains(&place)),
+                "no refusal names {place} in {errors:?}"
+            );
+        }
+        let every: Vec<usize> = (0..bytes.len()).collect();
+        let mut stdout = Vec::new();
+        for &i in &every {
+            if bytes[i] < 128 {
+                stdout.extend(&bytes[..i]);
+                stdout.push(b'\n');
+            } else {
+                stdout.extend(b"no\n");
+            }
+        }
+        prints(&cut_where(bytes, &every, "< 128"), stdout);
+    });
 }
 
 fn every_executable_cuts_a_text_as_the_evaluator_does() {
