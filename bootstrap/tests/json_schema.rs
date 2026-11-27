@@ -24,24 +24,52 @@ pub const ONCE: &[Test] = &[
         a_schema_names_every_field_and_case_with_its_comment,
     ),
     (
-        "every_value_written_as_json_fits_the_schema_of_its_type_part_1_of_2",
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_1_of_6",
         || every_value_written_as_json_fits_the_schema_of_its_type(0),
     ),
     (
-        "every_value_written_as_json_fits_the_schema_of_its_type_part_2_of_2",
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_2_of_6",
         || every_value_written_as_json_fits_the_schema_of_its_type(1),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_1_of_3",
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_3_of_6",
+        || every_value_written_as_json_fits_the_schema_of_its_type(2),
+    ),
+    (
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_4_of_6",
+        || every_value_written_as_json_fits_the_schema_of_its_type(3),
+    ),
+    (
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_5_of_6",
+        || every_value_written_as_json_fits_the_schema_of_its_type(4),
+    ),
+    (
+        "every_value_written_as_json_fits_the_schema_of_its_type_part_6_of_6",
+        || every_value_written_as_json_fits_the_schema_of_its_type(5),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_1_of_6",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(0),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_2_of_3",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_2_of_6",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(1),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_3_of_3",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_3_of_6",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(2),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_4_of_6",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(3),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_5_of_6",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(4),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_6_of_6",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(5),
     ),
 ];
 
@@ -408,7 +436,7 @@ fn rename(text: &str) -> String {
 }
 
 fn every_value_written_as_json_fits_the_schema_of_its_type(part: u64) {
-    generate::check_part(6131, 24, part, 2, case, |c| {
+    generate::check_part(6131, 24, part, 6, case, |c| {
         let said = printed(&c.source);
         let (schema, value) = said.split_once('\n').expect("two lines");
         let value = value.trim_end();
@@ -454,7 +482,7 @@ fn escape(text: &str) -> String {
 }
 
 fn a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(part: u64) {
-    generate::check_part(6132, 12, part, 3, fields, |f| {
+    generate::check_part(6132, 12, part, 6, fields, |f| {
         let mut source = String::from("struct S {\n");
         for (k, (t, default)) in f.each.iter().enumerate() {
             let tail = match (*t, default) {
