@@ -37,8 +37,16 @@ pub const ONCE: &[Test] = &[
         no_pass_runs_a_division_where_the_source_would_not_have_run_it,
     ),
     (
-        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it",
-        an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it,
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_1_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(0),
+    ),
+    (
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_2_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(1),
+    ),
+    (
+        "an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it_part_3_of_3",
+        || an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(2),
     ),
 ];
 
@@ -321,8 +329,8 @@ fn no_pass_runs_a_division_where_the_source_would_not_have_run_it() {
     });
 }
 
-fn an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it() {
-    generate::check(7386, 120, guarded_case, |case| {
+fn an_arm64_executable_runs_a_division_only_where_the_source_would_have_run_it(part: u64) {
+    generate::check_part(7386, 120, part, 3,guarded_case, |case| {
         let program = guarded_program(case);
         let said = scalar::run(&program);
         let passed = scalar::passes(&program);
