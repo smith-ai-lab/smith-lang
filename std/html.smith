@@ -1,21 +1,12 @@
 use std.text (Text, append, finish, text as new_text)
-use std.utf8 (utf8)
 
 // The bytes of `s` from `from` up to `end`, which are whole characters, as
-// they are. The piece lies between two escaped bytes, which are ASCII, or at an
-// end of `s`, so `utf8` never refuses it. It is written with `utf8` until
-// `s[from..end]` is built (#778), which makes the piece with nothing read again.
-fn run(to: take Text, s: str, from: Nat, end: Nat) -> Text <alloc> {
-  var t = to
-  if from == 0 and end == s.size {
-    t = append(t, s)
-  } else if from < end and end <= s.size {
-    match utf8(s.bytes[from..end]) {
-      .ok(piece) { t = append(t, piece) }
-      .err(e) { }
-    }
-  }
-  t
+// they are, with nothing read again.
+fn run(to: take Text, s: str, from: Nat, end: Nat) -> Text <alloc>
+  requires from <= end and end <= s.size
+  requires boundary(s, from) and boundary(s, end)
+{
+  append(to, s[from..end])
 }
 
 // How HTML writes a byte that is not text where it stands, or nothing for a
@@ -165,9 +156,15 @@ pub effect markup {
 pub fn escape(s: str) -> str <alloc> {
   var t = new_text()
   var from: Nat = 0
-  loop i in 0..s.size {
-    written = entity(s[i])
-    if written.size > 0 {
+  loop i in 0..s.size
+    invariant from <= i
+    invariant boundary(s, from)
+  {
+    b = s[i]
+    written = entity(b)
+    // Only a byte below 128 is escaped, and such a byte is a character of
+    // its own, so a run ends before it and the next begins after it.
+    if b < 128 and written.size > 0 {
       t = append(run(t, s, from, i), written)
       from = i + 1
     }
