@@ -15,8 +15,12 @@ use crate::numbers::{INTS, with_header};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other",
-        a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other,
+        "a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other_part_1_of_2",
+        || a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other(0),
+    ),
+    (
+        "a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other_part_2_of_2",
+        || a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other(1),
     ),
     (
         "a_comment_above_a_requires_of_a_trait_function_is_told_at_a_call_through_an_impl",
@@ -166,8 +170,8 @@ fn call(g: &mut Gen) -> Call {
 /// blank line and a comment, or nothing, a call that fails some of them is
 /// refused once for each it fails, with the comment of the one it fails as the
 /// message and the goal under it, and with no comment of another.
-fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other() {
-    generate::check(7911, 150, call, |c| {
+fn a_failed_call_is_told_the_comment_above_the_requires_it_fails_and_no_other(part: u64) {
+    generate::check_part(7911, 150, part, 2, call, |c| {
         let failed: Vec<(&Above, &String)> = (c.requires.iter())
             .filter(|(_, _, holds)| !holds)
             .map(|(over, text, _)| (over, text))
