@@ -1249,12 +1249,7 @@ impl State {
                     }
                 }
                 let at = tokens[*first].pos;
-                // An item with whole number parameters that no copy is asked of
-                // has nothing left in its module to take.
-                let is_item = from_file.is_some_and(|f| self.files[f].templates.contains_key(name));
-                if copies.is_empty() && is_item {
-                    changed = true;
-                } else if copies.is_empty() {
+                if copies.is_empty() {
                     if !new_list.is_empty() {
                         new_list.push(Token::new(Tok::Punct(","), at));
                     }
@@ -1278,6 +1273,52 @@ impl State {
         out.extend_from_slice(&tokens[copied_to..]);
         out
     }
+}
+
+/// The names of the items with whole number parameters that the module with this
+/// name exports, which a file may list in a `use` though no item has that name
+/// left in the module, so that a name that is listed and not used is said so as
+/// any other is.
+pub(crate) fn exported_items(name: &str) -> Vec<String> {
+    STATE.with(|s| {
+        let s = s.borrow();
+        let Some(&file) = s.modules.get(name) else {
+            return Vec::new();
+        };
+        let public = |t: &&Rc<Template>| {
+            t.tokens
+                .first()
+                .is_some_and(|t| t.tok == Tok::Keyword("pub"))
+        };
+        s.files[file]
+            .templates
+            .values()
+            .filter(public)
+            .map(|t| t.name.clone())
+            .collect()
+    })
+}
+
+/// The tokens of a module read by itself, with no program that uses it: the items
+/// with whole number parameters are left out, as no copy of them is asked for,
+/// and the names they have are those it exports. None when it has none.
+pub(crate) fn module_alone(text: &str, at: usize) -> Option<(Vec<Token>, Vec<Error>, Vec<String>)> {
+    if !defines_templates(text) {
+        return None;
+    }
+    let tokens = crate::lexer::lex(text.as_bytes()).ok()?;
+    let mut errors = Vec::new();
+    let (base, templates) = split(&tokens, 0, &mut errors)?;
+    let names = templates
+        .iter()
+        .filter(|t| {
+            t.tokens
+                .first()
+                .is_some_and(|t| t.tok == Tok::Keyword("pub"))
+        })
+        .map(|t| t.name.clone())
+        .collect();
+    Some((shift(base, at), errors, names))
 }
 
 /// The tokens of the module with this name, as the checker reads it, which is at

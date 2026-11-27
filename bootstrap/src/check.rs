@@ -4481,7 +4481,17 @@ impl<'l, 'a> Resolver<'l, 'a> {
         self.labels.push((number, label.clone()));
         // A module that has items with whole number parameters, or uses those of
         // another, has its copies of them among its tokens, whole.
-        let made = crate::values::module_tokens(name, number * STEP);
+        let mut items = crate::values::exported_items(name);
+        let mut made = crate::values::module_tokens(name, number * STEP);
+        // A module read by itself, as the whole library is checked, has its items
+        // with whole number parameters left out.
+        if made.is_none()
+            && let Some((tokens, errors, names)) =
+                crate::values::module_alone(&source, number * STEP)
+        {
+            items = names;
+            made = Some((tokens, errors));
+        }
         let divided = if standard && !self.whole && made.is_none() {
             outline(&source)
         } else {
@@ -4526,6 +4536,7 @@ impl<'l, 'a> Resolver<'l, 'a> {
                 .filter(|t| file.exports.contains(&t.name))
                 .flat_map(|t| t.functions.iter().map(|f| f.name.clone())),
         );
+        exports.extend(items);
         let module = Module {
             source,
             pieces: None,
