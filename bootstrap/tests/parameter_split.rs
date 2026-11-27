@@ -16,8 +16,16 @@ pub const ONCE: &[Test] = &[
         a_call_that_gives_each_parameter_as_its_place_in_the_list_says_is_built_and_evaluated_as_it_is_written,
     ),
     (
-        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name",
-        a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name,
+        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_1_of_3",
+        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(0),
+    ),
+    (
+        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_2_of_3",
+        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(1),
+    ),
+    (
+        "a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name_part_3_of_3",
+        || a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(2),
     ),
     (
         "an_argument_by_position_for_a_parameter_after_the_semicolon_is_refused_naming_the_parameter",
@@ -239,11 +247,8 @@ fn a_call_that_gives_each_parameter_as_its_place_in_the_list_says_is_built_and_e
 
 /// A parameter before `;` that a call writes with its name is refused at the
 /// name, which says the parameter is given by position.
-fn a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name() {
-    generate::check(
-        8802,
-        60,
-        |g| {
+fn a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name(part: u64) {
+    generate::check_part(8802, 60, part, 3,|g| {
             let mut shape = shape(g);
             if shape.split == 0 {
                 shape.count += 1;
