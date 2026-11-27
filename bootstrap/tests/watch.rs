@@ -2,6 +2,7 @@
 //! `command-line.md` and `project-tasks.md` say. The tests start the compiler's
 //! executable, change files in a project of their own, and read what it
 //! writes and what the program it started answers.
+#![cfg(unix)]
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
