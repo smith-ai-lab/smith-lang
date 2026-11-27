@@ -472,24 +472,33 @@ fn a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_par
 }
 
 fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
-    let targets = runnable();
-    generate::check(333, 6, |g: &mut Gen| (1 + g.below(5), 1 + g.below(5)), |&(children, reads)| {
-        let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn readings() -> u64 <alloc> {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
+    // The cases are drawn as `generate::check` draws them and are the functions of
+    // one program, so that the library of tasks is lowered and built once, and
+    // the executable prints what the evaluator prints for all of them.
+    let draw = |g: &mut Gen| (1 + g.below(5), 1 + g.below(5));
+    let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\n");
+    let mut main = String::new();
+    for case in 0..6 {
+        let (children, reads) = generate::sample(333, case, draw);
+        s += &format!("fn readings{case}() -> u64 <alloc> {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ wrapping_add(now(), total(build({}))) }}\n", reads + k);
         }
         for k in 0..children {
             s += &format!("  sum = wrapping_add(sum, wrapping_mul(join(t{k}), {}))\n", k + 1);
         }
-        s += "  sum\n}\n\nfn main() <console, alloc> {\n  print(\"{readings()}\")\n}\n";
-        let source = program(&s);
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-        let said = scalar::run(&scalar::passes(&program));
-        assert_eq!(said.status, 0);
-        for &target in &targets {
-            runs_as(source.as_bytes(), target, &said);
-        }
-    });
+        s += "  sum\n}\n\n";
+        main += &format!("  print(\"{{readings{case}()}}\")\n");
+    }
+    s += &format!("fn main() <console, alloc> {{\n{main}}}\n");
+    let source = program(&s);
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let said = scalar::run(&scalar::passes(&program));
+    assert_eq!(said.status, 0);
+    assert_eq!(said.stdout.iter().filter(|&&b| b == b'\n').count(), 6);
+    for target in runnable() {
+        runs_as(source.as_bytes(), target, &said);
+    }
 }
 
 /// A `Task` has no `Copy`, so a second `join` of one handle is a use after it
