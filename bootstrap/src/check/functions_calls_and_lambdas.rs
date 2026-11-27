@@ -22,6 +22,7 @@ impl<'a> Checker<'a> {
         let Some(own) = body.f else { return };
         let target = &*defs.file.functions[callee];
         let itself = std::ptr::eq(own, target);
+        self.note_parts_passed(body, call, callee, sig);
         if itself {
             if body.lambdas > 0 && !body.contract {
                 self.errors.push(Error::unsupported(
@@ -104,6 +105,121 @@ impl<'a> Checker<'a> {
         {
             self.cross.push((from, callee, error));
         }
+    }
+
+    /// Notes the places at which a call passes a part of the parameter of
+    /// the function it is written in at the same place, which `recursion`
+    /// reads. A call checked again keeps only the places found each time.
+    fn note_parts_passed(
+        &mut self,
+        body: &mut Body<'a>,
+        call: &Call,
+        callee: usize,
+        sig: &Signature,
+    ) {
+        let defs = self.defs;
+        let Some(own) = body.f else { return };
+        if body.lambdas > 0 || body.contract || matches!(body.numbers, Numbers::Finding(_)) {
+            return;
+        }
+        let Some(from) = (defs.file.functions.iter()).position(|f| std::ptr::eq(&**f, own)) else {
+            return;
+        };
+        let Some(places) = params_of(&sig.params, sig.by_position(), &call.args) else {
+            return;
+        };
+        let mut parts = Vec::new();
+        for (arg, place) in call.args.iter().zip(places) {
+            if self.part_of(body, &arg.value) == Some(place) {
+                parts.push(place);
+            }
+        }
+        match self.parts_passed.get_mut(&call.pos) {
+            Some((_, _, was)) => was.retain(|p| parts.contains(p)),
+            None => {
+                self.parts_passed.insert(call.pos, (from, callee, parts));
+            }
+        }
+    }
+
+    /// The place of the parameter that `e` is, or is a part of.
+    pub(super) fn whole_or_part(&mut self, body: &mut Body<'a>, e: &Expr) -> Option<usize> {
+        self.param_place(body, e).or_else(|| self.part_of(body, e))
+    }
+
+    /// The place of the parameter that `e` names, when it is one that never
+    /// changes.
+    fn param_place(&self, body: &Body<'a>, e: &Expr) -> Option<usize> {
+        let Expr::Name { name, .. } = e else {
+            return None;
+        };
+        let at = body.names.iter().rposition(|(n, _)| n == name)?;
+        if at >= body.params || body.vars.contains(name) {
+            return None;
+        }
+        body.f?.params.iter().position(|p| &p.name == name)
+    }
+
+    /// The place of the parameter that `e` is a part of, and not the whole
+    /// of: a name bound to a part of it, a field of it or of a part, or a
+    /// piece of it or of a part that `arith` proves shorter.
+    fn part_of(&mut self, body: &mut Body<'a>, e: &Expr) -> Option<usize> {
+        match e {
+            Expr::Name { name, .. } => {
+                let at = body.names.iter().rposition(|(n, _)| n == name)?;
+                if body.vars.contains(name) {
+                    return None;
+                }
+                (body.parts.iter())
+                    .find(|(part, _)| *part == at)
+                    .map(|&(_, k)| k)
+            }
+            Expr::Field { of, .. } => self.whole_or_part(body, of),
+            Expr::Slice { of, from, to, .. } => {
+                let k = self.whole_or_part(body, of)?;
+                self.proves_shorter(body, of, (from.as_deref(), to.as_deref()))
+                    .then_some(k)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether the functions that call one another with `f`, by the calls
+    /// noted, each pass a part of the caller's parameter at one place that
+    /// all of them share, which ends as a value holds only so many parts.
+    /// Each call in `calls` must be one of them.
+    fn structural(&self, f: usize, calls: &[Pos]) -> bool {
+        let edges: Vec<&(usize, usize, Vec<usize>)> = self.parts_passed.values().collect();
+        let reach = |forward: bool| {
+            let mut seen = vec![f];
+            let mut k = 0;
+            while k < seen.len() {
+                let at = seen[k];
+                for &&(a, b, _) in &edges {
+                    let (from, to) = if forward { (a, b) } else { (b, a) };
+                    if from == at && !seen.contains(&to) {
+                        seen.push(to);
+                    }
+                }
+                k += 1;
+            }
+            seen
+        };
+        let (ahead, behind) = (reach(true), reach(false));
+        let circle: Vec<usize> = ahead.into_iter().filter(|g| behind.contains(g)).collect();
+        let mut shared: Option<Vec<usize>> = None;
+        for (a, b, places) in &edges {
+            if circle.contains(a) && circle.contains(b) {
+                let now = shared.get_or_insert_with(|| places.clone());
+                now.retain(|p| places.contains(p));
+            }
+        }
+        let noted = calls.iter().all(|pos| {
+            self.parts_passed
+                .get(pos)
+                .is_some_and(|(a, b, _)| circle.contains(a) && circle.contains(b))
+        });
+        noted && shared.is_some_and(|s| !s.is_empty())
     }
 
     /// Checks the parts of the `decreases` of a function: each is a whole number
@@ -329,6 +445,7 @@ impl<'a> Checker<'a> {
             kept: 0,
             proofs: Vec::new(),
             call_proofs: HashMap::new(),
+            parts: Vec::new(),
         };
         let gives = self.expr(&mut body, value, &Want::Ty(needed.clone()));
         self.expect(&mut body, value, &gives, needed);
@@ -714,7 +831,7 @@ impl<'a> Checker<'a> {
             {
                 again = false;
                 self.errors.truncate(before);
-                body.names.truncate(names_in);
+                body.truncate_names(names_in);
                 body.vars.truncate(vars_in);
                 body.facts.reset(&known);
                 settled = gives.clone();
@@ -771,7 +888,7 @@ impl<'a> Checker<'a> {
             }
             (End::Empty | End::Binding(_), _) => Ty::Nothing,
         };
-        body.names.truncate(outer);
+        body.truncate_names(outer);
         self.lambda_from.retain(|at, _| *at < outer);
         body.vars.truncate(vars);
         body.facts.reset(&known);
@@ -1907,7 +2024,8 @@ impl<'a> Checker<'a> {
             .filter(|&&m| defs.file.functions[m].decreases.is_empty())
             .map(|&m| name(m))
             .collect();
-        if !without.is_empty() {
+        let structural = !without.is_empty() && self.structural(f, &calls);
+        if !without.is_empty() && !structural {
             self.errors.push(
                 Error::new(
                     pos,
@@ -1924,9 +2042,10 @@ impl<'a> Checker<'a> {
             return;
         }
         let parts = defs.file.functions[members[0]].decreases.len();
-        if members
-            .iter()
-            .any(|&m| defs.file.functions[m].decreases.len() != parts)
+        if !structural
+            && members
+                .iter()
+                .any(|&m| defs.file.functions[m].decreases.len() != parts)
         {
             let counts = (members.iter())
                 .map(|&m| format!("{} has {}", name(m), defs.file.functions[m].decreases.len()))
@@ -1943,7 +2062,7 @@ impl<'a> Checker<'a> {
             );
             return;
         }
-        for k in 0..members.len() {
+        for k in (0..members.len()).filter(|_| !structural) {
             let (from, to) = (members[k], members[(k + 1) % members.len()]);
             let found: Vec<Error> = (self.cross.iter())
                 .filter(|(a, b, _)| (*a, *b) == (from, to))
@@ -2015,7 +2134,7 @@ impl<'a> Checker<'a> {
                 // A call of the function from itself ends only by the measure
                 // of its `decreases`, which `call_decreases` proves smaller
                 // where the call is checked.
-                if own.decreases.is_empty() {
+                if own.decreases.is_empty() && !self.structural(f, &[pos]) {
                     self.errors.push(
                         Error::new(
                             pos,

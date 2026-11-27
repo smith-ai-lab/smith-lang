@@ -1655,6 +1655,42 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// Whether `arith` proves that the piece `of[a..b]` has fewer elements
+    /// than `of`, which is `b - a < of.size`.
+    pub(super) fn proves_shorter(
+        &mut self,
+        body: &mut Body<'a>,
+        of: &Expr,
+        ends: (Option<&Expr>, Option<&Expr>),
+    ) -> bool {
+        if !Self::decided(body) || body.contract {
+            return false;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let mut builder = self.builder(body, &mut facts, true);
+        let size = builder.list_size(of);
+        let from = match ends.0 {
+            Some(from) => builder.lin(from),
+            None => Some(constant(0)),
+        };
+        let to = match ends.1 {
+            Some(to) => builder.lin(to),
+            None => size.clone(),
+        };
+        let start = match (&size, &from) {
+            (Some(size), Some(from)) => Some(builder.combine(size, 1, from)),
+            _ => None,
+        };
+        let overflow = builder.overflow;
+        let goal = match (start, to) {
+            (Some(start), Some(to)) if !overflow => self.sum(body, &mut facts, &start, &to, -1),
+            _ => None,
+        };
+        let used = background(&facts, goal.iter());
+        body.facts = facts;
+        goal.as_ref().is_some_and(|g| proves(&used, g))
+    }
+
     /// Whether `arith` proves that the divisor of `left / right` or of
     /// `left % right` is not zero, and if it does not, the goal it could not
     /// prove.
@@ -2306,6 +2342,7 @@ impl<'a> Checker<'a> {
             kept: 0,
             proofs: Vec::new(),
             call_proofs: HashMap::new(),
+            parts: Vec::new(),
         };
         for e in &f.requires {
             self.contract(&mut body, e);

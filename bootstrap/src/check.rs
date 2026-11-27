@@ -7457,6 +7457,7 @@ impl<'a> Checker<'a> {
             zero_divisors: Vec::new(),
             deciding: None,
             cross: Vec::new(),
+            parts_passed: Map::default(),
             walking: Vec::new(),
             walked_calls: Vec::new(),
             kernel_calls: Vec::new(),
@@ -7593,6 +7594,10 @@ struct Checker<'a> {
     /// functions the call is from and to. They are the mistake of the program
     /// only when the two are in a circle of calls, which `recursion` finds.
     cross: Vec<(usize, usize, Error)>,
+    /// Each call of a function from a function of the file, by its place:
+    /// the function it is from, the one it calls, and the places at which it
+    /// passes a part of the caller's parameter at the same place.
+    parts_passed: Map<Pos, (usize, usize, Vec<usize>)>,
     /// The functions `recursion` is walking, and the places of the calls that
     /// lead from each to the next.
     walking: Vec<usize>,
@@ -7932,9 +7937,19 @@ struct Body<'a> {
     /// What each call of a proof function proved, by the address of the call,
     /// for the name the call is bound to or the parameter it is passed for.
     call_proofs: HashMap<usize, Held>,
+    /// The names that are a part of a parameter, each by its place among the
+    /// names, with the place of the parameter among those of the function.
+    parts: Vec<(usize, usize)>,
 }
 
 impl<'a> Body<'a> {
+    /// Leaves only the first `n` names defined, and forgets that a name
+    /// left out is a part of a parameter.
+    fn truncate_names(&mut self, n: usize) {
+        self.names.truncate(n);
+        self.parts.retain(|&(at, _)| at < n);
+    }
+
     /// Defines the names a pattern binds, each with its type and whether it
     /// is a `var`.
     fn define(&mut self, binds: Vec<(String, Ty, bool)>) {
@@ -8682,6 +8697,7 @@ impl<'a> Checker<'a> {
             kept: 0,
             proofs: Vec::new(),
             call_proofs: HashMap::new(),
+            parts: Vec::new(),
         };
         body.facts.solving = self.solve.is_some();
         if let Template::Free(_) = template {
@@ -9620,6 +9636,7 @@ impl<'a> Checker<'a> {
         {
             of = Ty::Enum(defs.flow, vec![kept.clone(), Ty::Unknown]);
         }
+        let whole = self.whole_or_part(body, &m.of);
         let outer = body.names.len();
         let vars = body.vars.len();
         let known = body.facts.mark();
@@ -9648,6 +9665,14 @@ impl<'a> Checker<'a> {
             }
             patterns.push(pattern);
             body.define(binds);
+            // What a case holds is a part of the value matched, and so is
+            // each element of a tuple or a list.
+            if let Some(k) = whole
+                && !matches!(arm.pattern, Pattern::Bind { .. })
+            {
+                body.parts
+                    .extend((outer..body.names.len()).map(|at| (at, k)));
+            }
             self.arm(
                 body,
                 arm,
@@ -9660,7 +9685,7 @@ impl<'a> Checker<'a> {
             } else {
                 paths.push(self.leave_arm(body, &known, &assigned));
             }
-            body.names.truncate(outer);
+            body.truncate_names(outer);
             body.vars.truncate(vars);
             body.facts.reset(&known);
         }
@@ -9805,7 +9830,7 @@ impl<'a> Checker<'a> {
             } else {
                 paths.push(self.leave_arm(body, &known, &assigned));
             }
-            body.names.truncate(outer);
+            body.truncate_names(outer);
             body.vars.truncate(vars);
             body.proofs.truncate(proofs);
             body.facts.reset(&known);
@@ -9836,7 +9861,7 @@ impl<'a> Checker<'a> {
             } else {
                 paths.push(self.leave_arm(body, &known, &assigned));
             }
-            body.names.truncate(outer);
+            body.truncate_names(outer);
             body.vars.truncate(vars);
             body.proofs.truncate(proofs);
             body.facts.reset(&known);
@@ -9970,6 +9995,14 @@ impl<'a> Checker<'a> {
                 self.errors.push(self.defined_twice(body, &o.name, o.pos));
             }
             body.names.push((o.name.clone(), ty));
+            // Each element of a list or a slice is a part of it.
+            if matches!(
+                self.types.get(&addr(&o.value)),
+                Some(Ty::List(_) | Ty::Slice(_))
+            ) && let Some(k) = self.whole_or_part(body, &o.value)
+            {
+                body.parts.push((body.names.len() - 1, k));
+            }
         }
         self.begin_round(body, &assigned);
         self.assume_invariants(body, l);
@@ -9985,7 +10018,7 @@ impl<'a> Checker<'a> {
             self.decreased(body, l, e, start);
         }
         self.invariants_after_pass(body, l, l.range.as_ref());
-        body.names.truncate(outer);
+        body.truncate_names(outer);
         body.vars.truncate(vars);
         body.facts.reset(&known);
         self.forget(body, &assigned);
