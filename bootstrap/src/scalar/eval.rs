@@ -1501,6 +1501,13 @@ impl Machine<'_> {
                         self.read += n;
                         vec![Word::Int(n as u64)]
                     }
+                    // Which kernel the program is built for is not a call, and the
+                    // evaluator answers it as Linux, as a WebAssembly module does,
+                    // so that a program that chooses by it runs.
+                    Op::System {
+                        call: System::Raw(super::Raw::Kind),
+                        ..
+                    } => vec![Word::Int(0)],
                     Op::System {
                         call: System::Raw(_),
                         ..

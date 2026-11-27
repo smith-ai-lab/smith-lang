@@ -333,6 +333,11 @@ struct MadeRegion {
     /// Whether an operation of the handler gave out memory that its state holds,
     /// which the region is then moved with and not given back.
     escapes: bool,
+    /// The outermost handler whose state may keep memory that this state holds,
+    /// because it was given to code that may store it there, with how many
+    /// handlers that have a region are outside it. The region is then moved into
+    /// that handler's region where its block ends, and lives as long as it does.
+    into: Option<(HandlerId, usize)>,
 }
 
 /// The name of the hidden state that stands for the region of a handler's state,
@@ -367,6 +372,10 @@ struct Prepared {
     /// Whether the call may suspend the task, so that the task may be asked to
     /// end while it is in it.
     suspends: bool,
+    /// Where the outermost of the handlers the copy runs under whose state has a
+    /// region is among the handlers in force, when one is, since what the copy is
+    /// given may be kept in that state.
+    keeper: Option<usize>,
 }
 
 /// A `loop` being lowered: the names its body assigns, which each round
@@ -1999,9 +2008,10 @@ impl<'a> Lowering<'a> {
     }
 
     /// Ends the regions of the handlers' state that the block made, in the
-    /// reverse of the order they were made: the region goes with what the block
-    /// gives when that holds memory, or when an operation of its handler gave out
-    /// memory that the state holds, and is given back otherwise.
+    /// reverse of the order they were made: the region goes into the region of a
+    /// handler outside it whose state may keep memory that its state holds, with
+    /// what the block gives when that holds memory, or when an operation of its
+    /// handler gave out memory that the state holds, and is given back otherwise.
     fn end_regions(&mut self, out: &mut Out<'a>, from: usize, result: &[form::Value]) {
         while out.regions.len() > from {
             let made = out.regions.pop().expect("a region");
@@ -2013,18 +2023,19 @@ impl<'a> Lowering<'a> {
             out.frames[made.frame].remove(at);
             let holds =
                 made.escapes || result.iter().any(|v| out.types[v.0] == form::Type::Address);
-            let call = if holds {
-                form::System::RegionMove
-            } else {
-                form::System::RegionFree
+            let into = made.into.map(|(keeper, _)| {
+                let at = (out.handlers.iter())
+                    .position(|h| h.id == keeper)
+                    .expect("the handler outside is in force where the block ends");
+                self.region_of(out, at)
+                    .expect("the handler outside has a region")
+            });
+            let (call, args) = match into {
+                Some(into) => (form::System::RegionMove, vec![address, into]),
+                None if holds => (form::System::RegionMove, vec![address]),
+                None => (form::System::RegionFree, vec![address]),
             };
-            out.emit(
-                form::Op::System {
-                    call,
-                    args: vec![address],
-                },
-                Vec::new(),
-            );
+            out.emit(form::Op::System { call, args }, Vec::new());
         }
     }
 

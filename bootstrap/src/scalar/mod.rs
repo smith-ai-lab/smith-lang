@@ -317,8 +317,11 @@ pub enum System {
     RegionFree,
     /// Gives the pieces of the region whose frame is at the address it takes to
     /// the stack for results, with no byte moved, as `TaskMove` gives those of a
-    /// task, where what the handler's block gave holds an address into them. It
-    /// gives nothing.
+    /// task, where what the handler's block gave holds an address into them. With
+    /// a second argument, the address of the frame of the region of a handler
+    /// outside this one, it gives them to the stack of that region instead, where
+    /// that handler's state may keep an address into them, so that they are given
+    /// back with that region. It gives nothing.
     RegionMove,
     /// Says that the values after the first two arguments, the address of the frame
     /// of a region and how many handlers that have a region it is inside, are kept

@@ -622,6 +622,29 @@ fn with_state(
                 Op::System {
                     call: System::RegionMove,
                     args,
+                } if args.len() == 2 => {
+                    // The region goes into the region of a handler outside it,
+                    // whose state may keep what this one's holds, and is given back
+                    // with it.
+                    if tasks {
+                        let into = args[1];
+                        let [at, left] = load_pair(&mut f, &mut kept, into, REGION_STACK);
+                        let made = fresh(&mut f);
+                        kept.push(Instruction {
+                            results: made.to_vec(),
+                            op: Op::Call {
+                                function: take + 5,
+                                args: with_pool(vec![at, left, args[0]], pool),
+                            },
+                            at: Place::of("<stack_move>"),
+                        });
+                        store_pair(&mut f, &mut kept, into, REGION_STACK, made);
+                    }
+                    continue;
+                }
+                Op::System {
+                    call: System::RegionMove,
+                    args,
                 } => {
                     if tasks {
                         let [at, left] = now.results.expect("the function takes the stack it asks");
@@ -1023,8 +1046,14 @@ fn needing_of(
             // and to put back.
             Op::System {
                 call: System::RegionMove,
-                ..
-            } if regions => now.results = true,
+                args,
+            } if regions => {
+                if args.len() == 2 {
+                    now.regioned = true;
+                } else {
+                    now.results = true;
+                }
+            }
             Op::Call { function, .. } if uses[*function].any() => {
                 let callee = uses[*function];
                 now.regioned |= callee.regioned;
