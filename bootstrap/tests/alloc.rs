@@ -301,14 +301,19 @@ struct Case {
 /// not paid by the one that is run first.
 const PARTS: usize = 4;
 
-/// Every function of every generated program and every function built.
-fn functions() -> &'static [Function] {
-    static FUNCTIONS: OnceLock<Vec<Function>> = OnceLock::new();
-    FUNCTIONS.get_or_init(|| {
-        let mut functions: Vec<Function> = every_function().into_iter().cloned().collect();
-        functions.extend(generated_functions());
-        functions
-    })
+/// The functions of a part: every function of every program built and every
+/// function generated, that many places from the part's own, so that the
+/// generated functions of a part are made by the part and not by the test that
+/// is run first.
+fn functions(part: usize) -> Vec<Function> {
+    let built = every_function();
+    let mut functions: Vec<Function> = built.iter().skip(part).step_by(PARTS).map(|f| (*f).clone()).collect();
+    for case in 0..GENERATED {
+        if (built.len() + case as usize) % PARTS == part {
+            functions.push(generate::sample(91, case, function));
+        }
+    }
+    functions
 }
 
 /// The functions of a part, with every set of registers offered, allocated
@@ -317,7 +322,7 @@ fn cases(part: usize) -> &'static [Case] {
     static CASES: [OnceLock<Vec<Case>>; PARTS] = [const { OnceLock::new() }; PARTS];
     CASES[part].get_or_init(|| {
         let mut cases = Vec::new();
-        for f in functions().iter().skip(part).step_by(PARTS).cloned() {
+        for f in functions(part) {
             let facts = facts(&f);
             for registers in offers(most_together(&facts)) {
                 let allocation = allocate(&f, registers, &vec![false; f.types.len()]);
@@ -706,8 +711,5 @@ fn value_of(b: &mut Builder, ty: Type, n: u64) -> Value {
     }
 }
 
-fn generated_functions() -> Vec<Function> {
-    (0..300)
-        .map(|case| generate::sample(91, case, function))
-        .collect()
-}
+/// How many functions are generated.
+const GENERATED: u64 = 300;

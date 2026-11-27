@@ -115,8 +115,12 @@ pub const ONCE: &[Test] = &[
         || cases_in_the_values_of_cases_are_read_to_any_depth(&[32]),
     ),
     (
-        "the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is",
-        the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is,
+        "the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is_part_1_of_2",
+        || the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is(0),
+    ),
+    (
+        "the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is_part_2_of_2",
+        || the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is(1),
     ),
     (
         "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_1_of_8",
@@ -1120,8 +1124,8 @@ fn spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(par
 
 // The members of an object are in any order.
 
-fn the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is() {
-    generate::check(6007, 8, |g: &mut Gen| {
+fn the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is(part: u64) {
+    generate::check_part(6007, 8, part, 2, |g: &mut Gen| {
         let (defs, t, v, settings) = made(g);
         let w = write(&defs, &t, &v, settings, COMPACT);
         let mut cases = vec![];

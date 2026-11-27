@@ -18,8 +18,12 @@ pub const ONCE: &[Test] = &[
         a_body_past_the_limit_is_refused_as_soon_as_the_bytes_or_the_head_say_so_and_no_more_is_read,
     ),
     (
-        "a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it",
-        a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it,
+        "a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it_part_1_of_2",
+        || a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it(0),
+    ),
+    (
+        "a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it_part_2_of_2",
+        || a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it(1),
     ),
     (
         "a_request_says_the_type_and_the_length_of_its_payload_and_the_headers_it_was_given_part_1_of_3",
@@ -291,12 +295,14 @@ fn calls(batch: &[Played]) -> String {
 /// is read whole when the body is no longer than the limit, with each header it
 /// said, and is `.too_big` when it is longer, with the connection closed once
 /// for each request, and no more asked of it than the head, one byte past the
-/// limit, and what came with the head.
-fn a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it() {
-    generate::check(
+/// limit, and what came with the head. Each part is a batch of four of the eight
+/// responses, so that the program of a part holds four calls.
+fn a_response_of_any_framing_in_any_pieces_is_read_whole_up_to_the_limit_and_too_big_past_it(part: u64) {
+    generate::check_cases(
         1123,
+        part,
         1,
-        |g| (0..8).map(|_| played(g)).collect::<Vec<Played>>(),
+        |g| (0..4).map(|_| played(g)).collect::<Vec<Played>>(),
         |batch| {
             let connections: Vec<Vec<Vec<u8>>> = batch.iter().map(pieces).collect();
             let source = program(&connections, ".err(.refused(\"{host}:{port}\"))", &calls(batch));
