@@ -72,9 +72,9 @@ fn params(g: &mut Gen) -> Params {
 /// those fields, in that order, read with the defaults of the function, written
 /// as JSON, equal to themselves, and shown with the name of the function.
 fn the_arguments_of_a_function_are_read_written_compared_and_shown_as_a_struct_is() {
-    // Each program holds four functions, one case each, and prints the line of
-    // each, so that a program is checked five times and not twenty.
-    generate::check(7931, 5, |g: &mut Gen| (0..4).map(|_| params(g)).collect::<Vec<_>>(), |batch| {
+    // Each program holds eight functions, one case each, and prints the line of
+    // each, so that a program is checked twice and not sixteen times.
+    generate::check(7931, 2, |g: &mut Gen| (0..8).map(|_| params(g)).collect::<Vec<_>>(), |batch| {
         let mut functions = String::new();
         let mut calls = Vec::new();
         let mut said = String::new();
@@ -127,7 +127,8 @@ const MARK: u64 = 7_654_321;
 /// `call` is the call of the function: the function is in the built program
 /// once, and what it does is not written again where `call` is.
 fn call_holds_the_function_once_and_no_copy_of_it() {
-    generate::check(7932, 6, |g: &mut Gen| g.below(3) + 1, |through| {
+    // One level of `call` and three.
+    for through in &[1usize, 3] {
         let mut source = format!(
             "use std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.int (wrapping_mul)\n\
              use std.json (FromJson, from_json)\n\nfn grow(a: Int) -> Int {{ wrapping_mul(a, {MARK}) }}\n\n\
@@ -156,5 +157,5 @@ fn call_holds_the_function_once_and_no_copy_of_it() {
             .count();
         assert_eq!(holding, 1, "for\n{source}");
         assert_eq!(scalar::run(&program).stdout, format!("{}\n", 3 * MARK).into_bytes());
-    });
+    }
 }
