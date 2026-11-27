@@ -42,8 +42,20 @@ pub const ONCE: &[Test] = &[
         a_value_of_the_struct_has_the_statement_of_its_fields_wherever_it_is_held,
     ),
     (
-        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them",
-        the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them,
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_1_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(0),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_2_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(1),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_3_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(2),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_4_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(3),
     ),
     (
         "a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not",
@@ -264,10 +276,12 @@ fn field_type(g: &mut Gen) -> Int {
 /// and every executable are those of the struct with the proof fields taken
 /// out by hand, with the traits it is given and with a list, a function, and a
 /// struct that holds it.
-fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them() {
-    generate::check(
+fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(part: u64) {
+    generate::check_part(
         5604,
         8,
+        part,
+        4,
         |g: &mut Gen| (field_type(g), field_type(g), g.below(100) as u32, g.below(100) as u32),
         |&(a, b, lo, hi)| {
             let (lo, hi) = (lo.min(hi), lo.max(hi));
