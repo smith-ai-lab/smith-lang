@@ -38,8 +38,16 @@ pub const ONCE: &[Test] = &[
         || a_time_is_read_as_the_seconds_since_1970_in_both_forms_and_nothing_else_is(3),
     ),
     (
-        "a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else",
-        a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else,
+        "a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else_part_1_of_3",
+        || a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else(0),
+    ),
+    (
+        "a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else_part_2_of_3",
+        || a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else(1),
+    ),
+    (
+        "a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else_part_3_of_3",
+        || a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else(2),
     ),
     (
         "pem_reads_a_file_of_several_certificates_to_the_bytes_of_each_part_1_of_3",
@@ -62,8 +70,20 @@ pub const ONCE: &[Test] = &[
         the_certificates_that_rfc_7468_gives_as_examples_are_read_to_their_bytes,
     ),
     (
-        "a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads",
-        a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads,
+        "a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads_part_1_of_4",
+        || a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads(0),
+    ),
+    (
+        "a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads_part_2_of_4",
+        || a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads(1),
+    ),
+    (
+        "a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads_part_3_of_4",
+        || a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads(2),
+    ),
+    (
+        "a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads_part_4_of_4",
+        || a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads(3),
     ),
     (
         "a_certificate_of_a_version_other_than_3_is_an_error",
@@ -567,10 +587,11 @@ fn a_time_is_read_as_the_seconds_since_1970_in_both_forms_and_nothing_else_is(pa
     );
 }
 
-fn a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else() {
-    generate::check(
+fn a_certificate_that_is_damaged_in_any_way_is_a_value_or_an_error_and_nothing_else(part: u64) {
+    generate::check_cases(
         6,
-        3,
+        part,
+        1,
         |g| {
             let mut damaged: Vec<Vec<u8>> = (0..12)
                 .map(|_| {
@@ -1143,10 +1164,11 @@ fn the_certificates_that_rfc_7468_gives_as_examples_are_read_to_their_bytes() {
     }
 }
 
-fn a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads() {
-    generate::check(
+fn a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_model_reads(part: u64) {
+    generate::check_cases(
         7,
-        4,
+        part,
+        1,
         |g| {
             let ders: Vec<Vec<u8>> = (0..3).map(|_| bytes(g, 150)).collect();
             (0..16)
@@ -1184,33 +1206,38 @@ fn a_file_that_is_not_pem_of_certificates_is_an_error_and_pem_reads_what_the_mod
         },
         |inputs| {
             // Texts of a kind that a draw may not make: a certificate that is begun and not ended, after one that is, and texts with none.
-            let good = block(&[1, 2, 3], 64, "\n", "CERTIFICATE");
+            // They are the same for every draw, so the first part holds them and no other does.
             let mut inputs = inputs.clone();
-            inputs.push(format!("{good}-----BEGIN CERTIFICATE-----\nAAAA\n").into_bytes());
-            inputs.push(format!("{good}-----BEGIN CERTIFICATE-----\n").into_bytes());
-            inputs.push(Vec::new());
-            inputs.push(b"no certificate here\n".to_vec());
-            inputs.push(block(&[1, 2, 3], 64, "\n", "PRIVATE KEY").into_bytes());
-            // Where lines of nothing and blanks may be and where they may not: before the base64 and after it, but not
-            // between its lines, and blanks at the start of the first line and not at the start of another.
-            for text in [
-                "-----BEGIN CERTIFICATE-----\nAAAA\n\nAAAA\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\nAAAA\nAAAA\n\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\nAAAA\nAAAA\n\n\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\n\n  \n  AAAA\nAAAA\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\nAAAA\n AAAA\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\nAA AA\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE----- \t\r\nAAAA\r-----END CERTIFICATE----- \t",
-                "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n",
-                "-----BEGIN CERTIFICATE-----\nAAAA\n-----END X509 CERTIFICATE-----\n",
-            ] {
-                inputs.push(text.as_bytes().to_vec());
+            if part == 0 {
+                let good = block(&[1, 2, 3], 64, "\n", "CERTIFICATE");
+                inputs.push(format!("{good}-----BEGIN CERTIFICATE-----\nAAAA\n").into_bytes());
+                inputs.push(format!("{good}-----BEGIN CERTIFICATE-----\n").into_bytes());
+                inputs.push(Vec::new());
+                inputs.push(b"no certificate here\n".to_vec());
+                inputs.push(block(&[1, 2, 3], 64, "\n", "PRIVATE KEY").into_bytes());
+                // Where lines of nothing and blanks may be and where they may not: before the base64 and after it, but not
+                // between its lines, and blanks at the start of the first line and not at the start of another.
+                for text in [
+                    "-----BEGIN CERTIFICATE-----\nAAAA\n\nAAAA\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\nAAAA\nAAAA\n\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\nAAAA\nAAAA\n\n\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\n\n  \n  AAAA\nAAAA\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\nAAAA\n AAAA\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\nAA AA\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE----- \t\r\nAAAA\r-----END CERTIFICATE----- \t",
+                    "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----\n",
+                    "-----BEGIN CERTIFICATE-----\nAAAA\n-----END X509 CERTIFICATE-----\n",
+                ] {
+                    inputs.push(text.as_bytes().to_vec());
+                }
             }
             let inputs = &inputs;
             let lines = run(&pem_program(inputs));
             let expected: Vec<String> = inputs.iter().map(|b| pem_line(model_pem(b))).collect();
             assert_eq!(lines, expected);
-            assert!(expected.iter().any(|l| l.starts_with("ok")) && expected.iter().any(|l| l == "err"));
+            if part == 0 {
+                assert!(expected.iter().any(|l| l.starts_with("ok")) && expected.iter().any(|l| l == "err"));
+            }
         },
     );
 }
