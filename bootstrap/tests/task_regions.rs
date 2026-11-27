@@ -83,16 +83,28 @@ pub const ONCE: &[Test] = &[
         a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends,
     ),
     (
-        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_1_of_3",
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_1_of_6",
         || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_2_of_3",
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_2_of_6",
         || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(1),
     ),
     (
-        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_3_of_3",
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_3_of_6",
         || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(2),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_4_of_6",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(3),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_5_of_6",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(4),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends_part_6_of_6",
+        || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(5),
     ),
     (
         "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends_part_1_of_2",
@@ -115,24 +127,44 @@ pub const ONCE: &[Test] = &[
         || a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(2),
     ),
     (
-        "a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends_part_1_of_2",
+        || a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_1_of_2",
+        "a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends_part_2_of_2",
+        || a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_1_of_4",
         || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_2_of_2",
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_2_of_4",
         || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(1),
     ),
     (
-        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_1_of_2",
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_3_of_4",
+        || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(2),
+    ),
+    (
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_4_of_4",
+        || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(3),
+    ),
+    (
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_1_of_4",
         || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_2_of_2",
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_2_of_4",
         || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_3_of_4",
+        || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(2),
+    ),
+    (
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_4_of_4",
+        || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(3),
     ),
     (
         "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_40",
@@ -307,12 +339,20 @@ pub const ONCE: &[Test] = &[
         || a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(2),
     ),
     (
-        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_1_of_2",
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_1_of_4",
         || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_2_of_2",
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_2_of_4",
         || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_3_of_4",
+        || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(2),
+    ),
+    (
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_4_of_4",
+        || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(3),
     ),
     (
         "a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends",
@@ -397,11 +437,8 @@ fn asked(source: &str) -> (String, usize) {
 
 /// `asked` for a program that is lowered already, which `source` is the text of.
 fn ran(program: &scalar::Program, source: &str) -> (String, usize) {
-    let t0 = std::time::Instant::now();
     let pp = scalar::passes(program);
-    let t1 = t0.elapsed();
     let (outcome, requests) = scalar::run_counting(&pp, usize::MAX);
-    eprintln!("RAN passes {:?} run {:?}", t1, t0.elapsed() - t1);
     assert_eq!(outcome.status, 0, "{} for {source}", String::from_utf8_lossy(&outcome.stdout));
     (String::from_utf8(outcome.stdout).expect("text"), requests.iter().sum())
 }
@@ -762,53 +799,58 @@ fn dropped_main(runs: &[&str]) -> String {
 /// the child's memory back when the child has ended, whether it was dropped before
 /// the child ended or after, which the seeds of the scheduler pick between.
 fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read(part: usize) {
-    kept_by_drops(&DROPS[part..=part]);
+    kept_by_drops(&DROPS[part..=part], BOTH);
 }
 
 fn a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[3..4]);
+    kept_by_drops(&DROPS[3..4], BOTH);
 }
 
 fn a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[7 + part..=7 + part]);
+    kept_by_drops(&DROPS[7 + part..=7 + part], BOTH);
 }
 
 fn a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[9 + part..=9 + part]);
+    kept_by_drops(&DROPS[9 + part..=9 + part], BOTH);
 }
 
-fn a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[12..13]);
+fn a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[12..13], part);
 }
 
 fn a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[13 + part..=13 + part]);
+    kept_by_drops(&DROPS[13 + part / 2..=13 + part / 2], part);
 }
 
 fn a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[15 + part..=15 + part]);
+    kept_by_drops(&DROPS[15 + part / 2..=15 + part / 2], part);
 }
 
 fn a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[17 + part..=17 + part]);
+    kept_by_drops(&DROPS[17 + part..=17 + part], BOTH);
 }
 
 fn a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[20 + part..=20 + part]);
+    kept_by_drops(&DROPS[20 + part / 2..=20 + part / 2], part);
 }
 
 fn a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[22..]);
+    kept_by_drops(&DROPS[22..], BOTH);
 }
 
 fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(part: usize) {
-    kept_by_drops(&DROPS[4 + part..5 + part]);
+    kept_by_drops(&DROPS[4 + part / 2..5 + part / 2], part);
 }
 
-fn kept_by_drops(hows: &[&str]) {
+/// What `kept_by_drops` is given as the part of a test that runs both seeds of the
+/// scheduler. A part that is a number runs the seed of an odd or an even part
+/// only, so that the test of a handle that takes long to run is two tests.
+const BOTH: usize = usize::MAX;
+
+fn kept_by_drops(hows: &[&str], part: usize) {
     for how in hows {
         let written = Written::new(dropped_children(ROUNDS, SEED, how));
-        for seed in [1, 2] {
+        for seed in [1, 2].into_iter().filter(|seed| part == BOTH || *seed == 1 + part as u64 % 2) {
             let (few_said, few) = asked_with(&written, &[(ROUNDS, 8), (SEED, seed)]);
             let (many_said, many) = asked_with(&written, &[(ROUNDS, 56), (SEED, seed)]);
             assert_eq!((few_said, many_said), ("8\n".to_string(), "56\n".to_string()), "{how}");
