@@ -410,16 +410,32 @@ impl Big {
     }
 }
 
-/// `n!`-free series helpers use these two numbers, cached to a high precision.
+/// `n!`-free series helpers use these two numbers, cached to a precision that
+/// holds what is asked for, one of a few, as making a number takes time that
+/// grows faster than its size. What the functions of a float of small size ask
+/// for is made to 768 bits, and what the functions of a float of any size ask
+/// for to a precision that holds every size of float.
 fn cached(name: &'static str, prec: usize, make: fn(usize) -> Big) -> Big {
-    static CACHE: OnceLock<Mutex<HashMap<&'static str, Big>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<&'static str, (usize, Big)>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(found) = cache.lock().unwrap().get(name) {
+    // The lock is held while the number is made, so that tests that run at the
+    // same time and ask for it wait for one of them to make it, and do not each
+    // make it.
+    let mut held_by = cache.lock().unwrap();
+    if let Some((held, found)) = held_by.get(name)
+        && *held >= prec
+    {
         return found.clone().kept(prec);
     }
-    let made = make(prec);
-    cache.lock().unwrap().insert(name, made.clone());
-    made
+    // A few more bits are made than are held, for the error of the series.
+    let (held, made) = match prec {
+        0..=704 => (768, make(768 + 64)),
+        705..=832 => (896, make(896 + 64)),
+        833..=1024 => (1024, make(1024 + 64)),
+        _ => (prec.max(1900), make(prec.max(1900))),
+    };
+    held_by.insert(name, (held, made.clone()));
+    made.kept(prec)
 }
 
 /// `atan(1 / n)`, by its series.
@@ -479,11 +495,11 @@ fn atanh_series(z: &Big, prec: usize) -> Big {
 }
 
 fn pi(prec: usize) -> Big {
-    cached("pi", prec, |_| pi_to(1900)).kept(prec)
+    cached("pi", prec, pi_to)
 }
 
 fn ln2(prec: usize) -> Big {
-    cached("ln2", prec, |_| ln2_to(800)).kept(prec)
+    cached("ln2", prec, ln2_to)
 }
 
 /// `e^x`.
