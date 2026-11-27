@@ -519,7 +519,17 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
       n
     },
     finish: fn(child) {
-      if not has_ended(child) { __wait(.task(child)) }
+      // A task that is asked to end while it waits for a child asks the child to
+      // end, and goes on waiting, so that the child ends by its exits before the
+      // task does, and the frame the task is given is the frame of a child that
+      // has ended.
+      loop round in 0..9223372036854775807 {
+        if has_ended(child) { break }
+        if is_cancelled(current) and not is_cancelled(child) {
+          __set_word(child, 1, wrapping_add(state(child), 64))
+        }
+        __wait(.task(child))
+      }
       first = leave(first, child)
       __set_word(anchor, 0, first)
       f = __frame_at(child)
@@ -843,7 +853,17 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
       n
     },
     finish: fn(child) {
-      if not has_ended(child) { __wait(.task(child)) }
+      // A task that is asked to end while it waits for a child asks the child to
+      // end, and goes on waiting, so that the child ends by its exits before the
+      // task does, and the frame the task is given is the frame of a child that
+      // has ended.
+      loop round in 0..9223372036854775807 {
+        if has_ended(child) { break }
+        if is_cancelled(current) and not is_cancelled(child) {
+          __set_word(child, 1, wrapping_add(state(child), 64))
+        }
+        __wait(.task(child))
+      }
       first = leave(first, child)
       __set_word(anchor, 0, first)
       f = __frame_at(child)
