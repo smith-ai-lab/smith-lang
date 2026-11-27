@@ -2,13 +2,13 @@ use std.alloc (arena)
 use std.bits (u16, u64)
 use std.deserialize (Deserialize, Problem, ReadError, Reader)
 use std.describe (Describe, Describer)
-use std.fetch (Method)
 use std.fromtext (from_text)
 use std.html (Html)
 use std.http1 (RequestHead, body_of, chunk, request_head)
 use std.int (saturating_add, saturating_sub)
 use std.json (In, json_ended, json_in, to_json)
 use std.list (append, copy, freeze, push)
+use std.message (HeaderName, HeaderValue, Method, Payload, bytes, check_value, content, content_type, header_name, html, json, lowered, size, text)
 use std.net (Connection, Listener, NetError, accept, close, listen_on, net, read, stop, write)
 use std.serialize (Serialize)
 use std.task (quiet, spawn, tasks)
@@ -25,153 +25,7 @@ pub struct Request {
 pub struct Response {
   pub status: 100..600
   pub headers: List[(HeaderName, HeaderValue)]
-  pub body: str
-}
-
-// The name of a header the library writes. It is a token in small letters, and
-// it is never one of the three that say where the body ends and whether the
-// connection is kept, which `listen` writes itself, so a response never says
-// two lengths. Only `header_name` and `check_name` make one.
-pub struct HeaderName {
-  token: str
-}
-
-// The value of a header, which holds no line break, so that a header never
-// adds a line of its own. Only `header_value` and `check_value` make one.
-pub struct HeaderValue {
-  text: str
-}
-
-// Why a text is not the name or the value of a header, with the text.
-pub enum HeaderError {
-  not_a_token: str
-  written_by_the_library: str
-  line_break: str
-}
-
-impl Fmt[HeaderError] {
-  fn fmt(value: HeaderError) -> str <alloc> {
-    match value {
-      .not_a_token(t) { "{t}: not a header name, which is letters, digits, and the marks of a token" }
-      .written_by_the_library(t) { "{t}: a header the library writes, so it is not given" }
-      .line_break(t) { "{t}: a header value holds no line break" }
-    }
-  }
-}
-
-impl Fmt[HeaderName] {
-  fn fmt(value: HeaderName) -> str <alloc> { value.token }
-}
-
-impl Fmt[HeaderValue] {
-  fn fmt(value: HeaderValue) -> str <alloc> { value.text }
-}
-
-fn lowered(b: Byte) -> Byte {
-  if b >= 'A' and b <= 'Z' { b + 32 } else { b }
-}
-
-// Whether a byte may be in the name of a header: a letter, a digit, or one of
-// ``!#$%&'*+-.^_`|~``.
-fn token_byte(b: Byte) -> bool {
-  (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '!' or b == '#' or b == '$' or b == '%' or b == '&' or b == 39 or b == '*' or b == '+' or b == '-' or b == '.' or b == '^' or b == '_' or b == 96 or b == '|' or b == '~'
-}
-
-// Whether a text is a token: one byte or more, each of which a name may hold.
-pub fn a_token(t: str) -> bool {
-  var yes = t.size > 0
-  loop b in t {
-    if not token_byte(b) {
-      yes = false
-      break
-    }
-  }
-  yes
-}
-
-// Whether a text is the name, whatever the case of its letters.
-fn is_named(t: str, name: str) -> bool {
-  var yes = t.size == name.size
-  have = t.bytes
-  want = name.bytes
-  loop i in 0..have.size {
-    if i >= want.size {
-      yes = false
-      break
-    }
-    if lowered(have[i]) != want[i] {
-      yes = false
-      break
-    }
-  }
-  yes
-}
-
-// Whether a header of this name may be given, which is so for any but the
-// three that the library writes.
-pub fn not_written_by_the_library(t: str) -> bool {
-  not is_named(t, "content-length") and not is_named(t, "connection") and not is_named(t, "transfer-encoding")
-}
-
-// Whether a text holds no line break, so that a header made of it cannot add
-// a line of its own.
-pub fn one_line(s: str) -> bool {
-  var yes = true
-  loop b in s {
-    if b == 13 or b == 10 {
-      yes = false
-      break
-    }
-  }
-  yes
-}
-
-// The text with its letters in small letters.
-fn small(t: str) -> str <alloc> {
-  var bytes: List[Byte] = []
-  loop i in 0..t.size {
-    bytes = push(bytes, lowered(t[i]))
-  }
-  match utf8(freeze(bytes)) {
-    .ok(made) { made }
-    .err(e) { "" }
-  }
-}
-
-// The name of a header, written out. A name that is no token, or that the
-// library writes, is refused where the call is written, whatever the case of its
-// letters, and the name is kept in small letters.
-pub fn header_name(t: str) -> HeaderName <alloc>
-  requires a_token(t)
-  requires not_written_by_the_library(t)
-{
-  HeaderName(token: small(t))
-}
-
-// The name of a header that is known only when the program runs, or the reason
-// it is not one.
-pub fn check_name(t: str) -> Result[HeaderName, HeaderError] <alloc> {
-  if not a_token(t) {
-    .err(.not_a_token(t))
-  } else if not not_written_by_the_library(t) {
-    .err(.written_by_the_library(t))
-  } else {
-    .ok(HeaderName(token: small(t)))
-  }
-}
-
-// The value of a header, written out. A value with a line break is refused where
-// the call is written.
-pub fn header_value(t: str) -> HeaderValue
-  requires one_line(t)
-{
-  HeaderValue(text: t)
-}
-
-// The value of a header that is known only when the program runs, or the reason
-// it is not one.
-pub fn check_value(t: str) -> Result[HeaderValue, HeaderError] {
-  if one_line(t) { .ok(HeaderValue(text: t)) } else { .err(.line_break(t)) }
+  pub body: Option[Payload]
 }
 
 pub struct Part {
@@ -713,42 +567,47 @@ pub trait Respond[T] {
   fn respond(value: T) -> Response <alloc>
 }
 
-fn answer(status: 100..600, kind: HeaderValue, body: str) -> Response <alloc> {
-  Response(status: status, headers: [(header_name("content-type"), kind)], body: body)
+fn answer(status: 100..600, body: take Payload) -> Response {
+  Response(status: status, headers: [], body: .some(body))
+}
+
+// A response with no body, which says no type and a length of 0.
+fn bare(status: 100..600) -> Response {
+  Response(status: status, headers: [], body: .none)
 }
 
 impl[T] Respond[T]
   requires Serialize[T]
 {
   fn respond(value: T) -> Response <alloc> {
-    answer(200, header_value("application/json"), to_json(value))
+    answer(200, json(value))
   }
 }
 
 impl Respond[Html] {
   fn respond(value: Html) -> Response <alloc> {
-    answer(200, header_value("text/html; charset=utf-8"), "{value}")
+    answer(200, html(value))
   }
 }
 
 impl Respond[Text] {
   fn respond(value: Text) -> Response <alloc> {
-    answer(200, header_value("text/plain; charset=utf-8"), value.text)
+    answer(200, text(value.text))
   }
 }
 
 impl Respond[Redirect] {
   fn respond(value: Redirect) -> Response <alloc> {
     match check_value(value.to) {
-      .ok(place) { Response(status: 302, headers: [(header_name("location"), place)], body: "") }
-      .err(e) { Response(status: 500, headers: [], body: "") }
+      .ok(place) { Response(status: 302, headers: [(header_name("location"), place)], body: .none) }
+      .err(e) { bare(500) }
     }
   }
 }
 
 impl Respond[()] {
   fn respond(value: ()) -> Response <alloc> {
-    Response(status: 204, headers: [], body: "")
+    bare(204)
   }
 }
 
@@ -760,7 +619,7 @@ impl[T, E] Respond[Result[T, E]]
   fn respond(value: Result[T, E]) -> Response <alloc> {
     match value {
       .ok(v) { Respond[T].respond(v) }
-      .err(e) { answer(Status[E].status(e), header_value("application/json"), to_json(e)) }
+      .err(e) { answer(Status[E].status(e), json(e)) }
     }
   }
 }
@@ -804,7 +663,7 @@ fn add[F, A, R](method: Method, path: str, f: F) <routing, alloc>
       got: Result[A, ReadError] = FromRequest[A].from_request(r)
       match got {
         .ok(args) { answered(Respond[R].respond(Function.call(f, args))) }
-        .err(e) { answered(answer(400, header_value("application/json"), to_json(Rejected(path: e.path, problem: e.problem)))) }
+        .err(e) { answered(answer(400, json(Rejected(path: e.path, problem: e.problem)))) }
       }
     }
     .none { }
@@ -868,7 +727,7 @@ pub fn delete[F, A, R](path: str, f: F) <routing, alloc>
 pub fn routes[T](body: fn() -> T <routing>) -> T <http, alloc> {
   asked = request()
   var done = false
-  var response = Response(status: 404, headers: [], body: "")
+  var response = bare(404)
   result = routing(
     fits: fn(method, path) {
       if done or method != asked.method {
@@ -1114,7 +973,7 @@ fn request_of(method: Method, head: take RequestHead, body: str) -> Request {
 fn answer_with[T](request: Request, body: fn() -> T <http>) -> Response <alloc>
   requires Discard[T]
 {
-  var response = Response(status: 500, headers: [], body: "")
+  var response = bare(500)
   _ = http(
     request: { copy_of(request) },
     send: fn(r) { response = r },
@@ -1129,7 +988,15 @@ fn copy_response(r: Response) -> Response <alloc> {
   loop i in 0..r.headers.size {
     headers = push(headers, r.headers[i])
   }
-  Response(status: r.status, headers: headers, body: r.body)
+  Response(status: r.status, headers: headers, body: copy_body(r.body))
+}
+
+// The body again, with its own bytes.
+fn copy_body(b: Option[Payload]) -> Option[Payload] <alloc> {
+  match b {
+    .some(p) { .some(bytes(content(p), content_type(p))) }
+    .none { .none }
+  }
 }
 
 fn reason(status: 100..600) -> str {
@@ -1165,8 +1032,9 @@ fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
   push(push(line, 13), 10)
 }
 
-// The bytes of a response: its status line, its headers, then the length, which
-// is the only one on the wire as no header can be one, and the body.
+// The bytes of a response: its status line, its headers, then the type and the
+// length of its body, which are the only ones on the wire as no header can be
+// one, and the body.
 fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
   var made: List[Byte] = []
   made = ended(append(made, "HTTP/1.1 {r.status} {reason(r.status)}".bytes))
@@ -1174,20 +1042,29 @@ fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
     (n, v) = r.headers[i]
     made = ended(append(made, "{n}: {v}".bytes))
   }
-  made = ended(append(made, "content-length: {r.body.size}".bytes))
+  match r.body {
+    .some(p) {
+      made = ended(append(made, "content-type: {content_type(p)}".bytes))
+      made = ended(append(made, "content-length: {size(p)}".bytes))
+    }
+    .none { made = ended(append(made, "content-length: 0".bytes)) }
+  }
   if not keep { made = ended(append(made, "connection: close".bytes)) }
   made = ended(made)
-  append(made, r.body.bytes)
+  match r.body {
+    .some(p) { append(made, content(p)) }
+    .none { made }
+  }
 }
 
 // What is answered to a request that is refused.
 fn refusal() -> Response {
-  Response(status: 400, headers: [], body: "")
+  bare(400)
 }
 
 // What is answered to a request whose method is none that is served.
 fn not_implemented() -> Response {
-  Response(status: 501, headers: [], body: "")
+  bare(501)
 }
 
 // Sends the bytes, and whether they all went.

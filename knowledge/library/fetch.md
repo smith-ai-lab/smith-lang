@@ -4,7 +4,7 @@ title: Requests to another server
 description: The fetch effect of std.fetch, by which a program sends an HTTP request to another server and gets its response, and what answers it natively and in a WebAssembly module.
 status: partial
 built:
-  - "`Method` of `std.fetch`, the enum of `get`, `post`, `put`, `delete`, `patch`, and `head`, which `Request.method` of [`std.http`](http.md) is"
+  - "`Method` of [`std.message`](message.md), the enum of `get`, `post`, `put`, `delete`, `patch`, and `head`, which `Request.method` of [`std.http`](http.md) is, and `Payload` with its makers `json`, `form`, `text`, `html`, and `bytes`, which a request's body is"
   - "not the effect `fetch`, `Request`, `Response`, `Body`, `FetchError`, or any handler"
 ---
 
@@ -44,11 +44,6 @@ struct Url {
   headers: List[(str, str)] = []
 }
 
-pub struct Payload {
-  content_type: str
-  bytes: List[Byte]
-}
-
 struct Upload {
   url: str
   payload: Payload
@@ -64,15 +59,6 @@ struct Response[most: Nat] {
 struct Body[most: Nat] {
   bytes: List[Byte]
   inside: bytes.size <= most
-}
-
-enum Method {
-  get
-  post
-  put
-  delete
-  patch
-  head
 }
 
 enum FetchError {
@@ -126,7 +112,8 @@ struct HeadResponse {
 ```
 
 ```
-use std.fetch (fetch, get, head, json, post)
+use std.fetch (fetch, get, head, post)
+use std.message (json)
 
 fn demo(item: Item) -> Result[(), FetchError] <fetch, alloc> {
   page = try get[65536]("http://example.com/keys")
@@ -140,16 +127,17 @@ A call that does not fit is refused where it is written, with a message that nam
 
 ## A body
 
-A body is a `Payload`, made by one of four functions, and only by them.
+A body is a `Payload` of [`std.message`](message.md#a-payload), made by one of five functions, and only by them.
 
 | Written | Is |
 | --- | --- |
 | `json(value)` | The JSON of any value with [`Serialize`](serialize.md), with the content type `application/json` |
 | `form(pairs)` | A list of `(str, str)` as `application/x-www-form-urlencoded` |
 | `text(s)` | The text `s`, with the content type `text/plain; charset=utf-8` |
-| `bytes(data, content_type)` | The bytes `data`, with the content type `content_type` |
+| `html(page)` | An [`Html`](html.md), with the content type `text/html; charset=utf-8` |
+| `bytes(data, content_type)` | The bytes `data`, with the content type `content_type`, a `HeaderValue` |
 
-The `content-type` and `content-length` of the request are the payload's, so they cannot disagree with it. A `headers` entry that names either is refused where it is written when the name is written out, and is `.err(.failed(...))` before anything is sent when it is not known until the program runs.
+The `content-type` and `content-length` of the request are the payload's, so they cannot disagree with it. A `headers` entry that names either is refused where it is written when the name is written out, because `header_name` refuses both, and is `.err(.failed(...))` before anything is sent when it is not known until the program runs, because `check_name` does.
 
 `send` takes the enum `Request`, so a handler of `fetch` matches the case and gets exactly what that method has: `.get(u)` has the `Url`, and `.post(u)` has the `Upload` with its `Payload`.
 
@@ -168,4 +156,4 @@ What answers `fetch` is the [deployment](../language/deployments.md) and not the
 | `get[n](u)` | The response of the server at `u`, with a body of at most `n` bytes, or why there is none; `delete` is the same |
 | `post[n](u, json(x))` | The same, with a body sent; `put` and `patch` are the same |
 | `head(u)` | The status and headers of the server at `u`, with no body, and no limit |
-| `json(x)`, `form(p)`, `text(s)`, `bytes(d, t)` | A `Payload` for `post`, `put`, or `patch` |
+| `json(x)`, `form(p)`, `text(s)`, `html(h)`, `bytes(d, t)` | A `Payload` of `std.message` for `post`, `put`, or `patch` |
