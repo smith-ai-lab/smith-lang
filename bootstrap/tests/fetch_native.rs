@@ -38,7 +38,30 @@ pub const MACHINE: &[Test] = &[
     ),
 ];
 
-const PROGRAM: &str = include_str!("fetch_client.smith");
+const CLIENT: &str = include_str!("fetch_client.smith");
+/// The program of the tests that wait, which carries time, as Windows does not build yet.
+const WAITS: &str = include_str!("fetch_waits.smith");
+
+#[derive(Clone, Copy)]
+enum Which {
+    Client,
+    Waits,
+}
+
+impl Which {
+    fn source(self) -> &'static str {
+        match self {
+            Which::Client => CLIENT,
+            Which::Waits => WAITS,
+        }
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Which::Client => "client",
+            Which::Waits => "waits",
+        }
+    }
+}
 
 /// The targets that talk to the kernel: those of Linux, macOS, and Windows.
 fn kernel() -> Vec<Target> {
@@ -52,16 +75,16 @@ fn kernel() -> Vec<Target> {
 }
 
 /// The program, built once for each kind of chip, by the compiler's executable.
-fn program(target: Target) -> &'static [u8] {
-    static X64: OnceLock<Vec<u8>> = OnceLock::new();
-    static ARM64: OnceLock<Vec<u8>> = OnceLock::new();
-    let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
-    cell.get_or_init(|| {
+fn program(which: Which, target: Target) -> &'static [u8] {
+    static X64: [OnceLock<Vec<u8>>; 2] = [OnceLock::new(), OnceLock::new()];
+    static ARM64: [OnceLock<Vec<u8>>; 2] = [OnceLock::new(), OnceLock::new()];
+    let cells = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
+    cells[which as usize].get_or_init(|| {
         if targets::fingerprinting() {
-            targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+            targets::build(which.source().as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
         } else {
-            let dir = folder(&format!("fetch_client_{}", target.name()));
-            std::fs::write(dir.join("client.smith"), PROGRAM).unwrap();
+            let dir = folder(&format!("fetch_{}_{}", which.name(), target.name()));
+            std::fs::write(dir.join("client.smith"), which.source()).unwrap();
             let built = smith(&dir, &["build", "--target", target.name(), "client.smith"]);
             assert!(built.status.success(), "{}", stderr(&built));
             std::fs::read(dir.join(target.executable_name("client"))).unwrap()
@@ -71,8 +94,8 @@ fn program(target: Target) -> &'static [u8] {
 
 /// Notes the program for each target a fingerprint is made for, and says whether
 /// this machine runs it.
-fn runs(target: Target) -> bool {
-    targets::record(target, &[program(target)]);
+fn runs(which: Which, target: Target) -> bool {
+    targets::record(target, &[program(which, target)]);
     !targets::fingerprinting()
 }
 
@@ -91,11 +114,11 @@ impl Drop for Asker {
     }
 }
 
-fn start(target: Target, name: &str, args: &[String]) -> Asker {
+fn start(which: Which, target: Target, name: &str, args: &[String]) -> Asker {
     let dir = crate::scratch::path(&format!("fetch_native_{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("program");
-    crate::executable::write(&path, program(target));
+    crate::executable::write(&path, program(which, target));
     let child = Command::new(&path)
         .args(args)
         .stdout(Stdio::piped())
@@ -187,13 +210,13 @@ fn response(status: &str, headers: &[&str], body: &[u8]) -> Vec<u8> {
 /// a redirect is given as it is, and a server that is not there is `unreachable`.
 fn a_client_gives_the_status_headers_and_body_of_a_server_on_this_machine_for_each_method() {
     for target in kernel() {
-        if !runs(target) {
+        if !runs(Which::Client, target) {
             continue;
         }
         let (listener, port) = listening();
         let (closed, closed_port) = listening();
         drop(closed);
-        let mut asker = start(target, "basic", &["basic".into(), port.to_string(), closed_port.to_string()]);
+        let mut asker = start(Which::Client, target, "basic", &["basic".into(), port.to_string(), closed_port.to_string()]);
         let host = format!("127.0.0.1:{port}");
         let next = |line: &str| {
             let asked = take(&listener);
@@ -256,11 +279,11 @@ fn output_of(child: &mut Child) -> Vec<u8> {
 /// while the program is still running.
 fn a_send_that_is_cancelled_closes_its_connection_while_the_program_goes_on() {
     for target in kernel() {
-        if !runs(target) || target.name().starts_with("windows") {
+        if target.name().starts_with("windows") || !runs(Which::Waits, target) {
             continue;
         }
         let (listener, port) = listening();
-        let mut asker = start(target, "cancelled", &["cancelled".into(), port.to_string()]);
+        let mut asker = start(Which::Waits, target, "cancelled", &["cancelled".into(), port.to_string()]);
         let mut asked = take(&listener);
         assert_eq!(asked.line(), "GET /slow HTTP/1.1");
         let end = Instant::now() + Duration::from_secs(2);
@@ -285,12 +308,12 @@ fn a_send_that_is_cancelled_closes_its_connection_while_the_program_goes_on() {
 /// the server would wait for ever, and the test fails by the time it takes.
 fn a_send_that_waits_suspends_its_task_and_no_other() {
     for target in kernel() {
-        if !runs(target) || target.name().starts_with("windows") {
+        if target.name().starts_with("windows") || !runs(Which::Waits, target) {
             continue;
         }
         let (first, first_port) = listening();
         let (second, second_port) = listening();
-        let mut asker = start(target, "pair", &["pair".into(), first_port.to_string(), second_port.to_string()]);
+        let mut asker = start(Which::Waits, target, "pair", &["pair".into(), first_port.to_string(), second_port.to_string()]);
         let mut late = take(&first);
         assert_eq!(late.line(), "GET /late HTTP/1.1");
         let mut early = take(&second);
