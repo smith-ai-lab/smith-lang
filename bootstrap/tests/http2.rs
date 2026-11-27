@@ -87,8 +87,12 @@ pub const ONCE: &[Test] = &[
         || a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_and_learned_by_no_one(2),
     ),
     (
-        "blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program",
-        blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program,
+        "blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program_part_1_of_2",
+        || blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program(0),
+    ),
+    (
+        "blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program_part_2_of_2",
+        || blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program(1),
     ),
 ];
 
@@ -1530,11 +1534,8 @@ fn a_header_named_authorization_cookie_or_set_cookie_is_written_never_indexed_an
     );
 }
 
-fn blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program() {
-    generate::check(
-        59608,
-        10,
-        |g| {
+fn blocks_of_any_bytes_are_read_or_an_error_and_never_end_the_program(part: u64) {
+    generate::check_part(59608, 10, part, 2,|g| {
             (0..10)
                 .map(|_| {
                     let mut b = some_bytes(g, 24);
