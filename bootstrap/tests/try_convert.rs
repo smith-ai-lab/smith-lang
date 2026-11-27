@@ -15,8 +15,16 @@ use crate::numbers::with_header;
 
 pub const ONCE: &[Test] = &[
     (
-        "try_returns_the_converted_failure_of_the_first_step_that_fails",
-        try_returns_the_converted_failure_of_the_first_step_that_fails,
+        "try_returns_the_converted_failure_of_the_first_step_that_fails_part_1_of_3",
+        || try_returns_the_converted_failure_of_the_first_step_that_fails(0),
+    ),
+    (
+        "try_returns_the_converted_failure_of_the_first_step_that_fails_part_2_of_3",
+        || try_returns_the_converted_failure_of_the_first_step_that_fails(1),
+    ),
+    (
+        "try_returns_the_converted_failure_of_the_first_step_that_fails_part_3_of_3",
+        || try_returns_the_converted_failure_of_the_first_step_that_fails(2),
     ),
     (
         "try_without_a_conversion_of_a_failure_is_refused_with_both_results_named",
@@ -90,11 +98,8 @@ fn chain(g: &mut Gen, leave_out: bool) -> Chain {
 /// where each step gives a `Result` whose failure converts to `F` or is `F`,
 /// the function gives what the steps give while they succeed and the first
 /// failure converted when one does not.
-fn try_returns_the_converted_failure_of_the_first_step_that_fails() {
-    generate::check(
-        230,
-        60,
-        |g| chain(g, false),
+fn try_returns_the_converted_failure_of_the_first_step_that_fails(part: u64) {
+    generate::check_part(230, 60, part, 3,|g| chain(g, false),
         |c| {
             let program = lower(c.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
             assert_eq!(
