@@ -372,7 +372,7 @@ fn timings_list_every_stage_in_order_and_change_nothing_else() {
         }
         let target = any().name();
         let without = smith(&plain, &["build", "--target", target, &file]);
-        let with = smith(&timed, &["build", "--timings", "--target", target, &file]);
+        let with = smith(&timed, &["--timings", "build", "--target", target, &file]);
         assert!(without.status.success() && with.status.success(), "{file}");
         assert!(without.stderr.is_empty(), "{file}: {}", stderr(&without));
         assert!(with.stdout.is_empty(), "{file}");
@@ -399,7 +399,7 @@ fn a_failed_build_lists_the_stages_that_ran_after_its_errors() {
         std::fs::copy(&source, dir.join(&file)).unwrap();
         let built = smith(
             &dir,
-            &["build", "--timings", "--target", any().name(), &file],
+            &["--timings", "build", "--target", any().name(), &file],
         );
         assert!(!built.status.success(), "{file}");
         let text = stderr(&built);
@@ -426,7 +426,7 @@ fn run_prints_the_timings_before_the_program_runs() {
     std::fs::write(dir.join("hello.smith"), HELLO).unwrap();
     let ran = crate::clock::output_within(
         Command::new("sh")
-            .args(["-c", "\"$0\" run --timings hello.smith 2>&1"])
+            .args(["-c", "\"$0\" --timings run hello.smith 2>&1"])
             .arg(env!("CARGO_BIN_EXE_smith"))
             .current_dir(&dir),
         true,

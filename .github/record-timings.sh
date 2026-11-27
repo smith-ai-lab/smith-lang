@@ -52,7 +52,7 @@ for out in "$root"/bootstrap/tests/cases/*.out; do
     dir="$work/$case_name.$target"
     mkdir "$dir"
     # A target the compiler cannot build for yet fails here and is skipped.
-    if ! (cd "$dir" && "$smith" build --timings --target "$target" "$source" 2>"$dir/stages"); then
+    if ! (cd "$dir" && "$smith" --timings build --target "$target" "$source" 2>"$dir/stages"); then
       continue
     fi
     while read -r stage time unit; do

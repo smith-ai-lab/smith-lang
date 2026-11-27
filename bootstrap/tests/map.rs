@@ -303,7 +303,7 @@ fn run_and_check_take_no_map() {
         assert!(!output.status.success(), "{command}");
         let said = stderr(&output);
         assert!(said.contains("unknown flag `--map`"), "{command}: {said}");
-        assert!(said.contains("usage: smith build"), "{command}: {said}");
+        assert!(said.contains("usage: smith [--timings] build"), "{command}: {said}");
         assert!(!Path::new(&dir.join("hello.map")).exists(), "{command}");
     }
 }
