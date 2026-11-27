@@ -83,22 +83,9 @@ pub const MACHINE: &[Test] = &[
 const USES: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.task (join, spawn, task, test_scheduler)\n\n";
 
 /// A program in which two children each start a grandchild, join it, and give
-/// what it gave and one more, and the parent adds what the two give.
-fn nested(seed: u64, n: u64, m: u64) -> String {
-    format!(
-        "{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(g)\n  wrapping_add(v, 1)\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child({n}) }}\n  b = spawn {{ child({m}) }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
-    )
-}
-
-/// A program in which two children say which they are, and the parent joins both.
-fn two_say(seed: u64) -> String {
-    format!(
-        "{USES}fn run() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(a), join(b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
-    )
-}
-
-/// `nested` for each of the cases, as one program with a function for each, so
-/// that the library of tasks is lowered once.
+/// what it gave and one more, and the parent adds what the two give, for each of
+/// the cases, as one program with a function for each, so that the library of
+/// tasks is lowered once.
 fn nested_all(cases: &[(u64, u64, u64)]) -> String {
     let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(g)\n  wrapping_add(v, 1)\n}}\n\n");
     for (i, &(n, m, seed)) in cases.iter().enumerate() {
@@ -111,7 +98,8 @@ fn nested_all(cases: &[(u64, u64, u64)]) -> String {
     s + "}\n"
 }
 
-/// `two_say` for each of the seeds, each run twice, as one program.
+/// A function in which two children say which they are, and the parent joins both,
+/// for each of the seeds, each run twice, as one program.
 fn two_say_all(seeds: std::ops::Range<u64>) -> String {
     let mut s = USES.to_string();
     for seed in seeds.clone() {
@@ -223,17 +211,27 @@ fn a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refuse
     assert!(errors.contains("installed under its scheduler"), "{errors}");
 }
 
+/// For each of the seeds, a function in which two children say which they are and
+/// the parent joins both, and the function of `nested_all` for the numbers 4 and
+/// 9, as one program, so that the library of tasks is lowered and built once.
+fn every_seed(seeds: &[u64]) -> String {
+    let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(g)\n  wrapping_add(v, 1)\n}}\n\n");
+    let mut main = String::new();
+    for seed in seeds {
+        s += &format!("fn say{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
+        s += &format!("fn nest{seed}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child(4) }}\n  b = spawn {{ child(9) }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
+        main += &format!("  print(\"{{say{seed}()}}\")\n  print(\"{{nest{seed}()}}\")\n");
+    }
+    format!("{s}fn main() <console, alloc, diverge> {{\n{main}}}\n")
+}
+
 fn every_executable_runs_the_tasks_of_a_seed_in_the_order_the_evaluator_does() {
-    let targets = runnable();
-    for seed in [0u64, 1, 2, 5, 11] {
-        for source in [two_say(seed), nested(seed, 4, 9)] {
-            let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-            let said = scalar::run(&scalar::passes(&program));
-            assert_eq!(said.status, 0);
-            for &target in &targets {
-                runs_as(source.as_bytes(), target, &said);
-            }
-        }
+    let source = every_seed(&[0, 1, 2, 5, 11]);
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let said = scalar::run(&scalar::passes(&program));
+    assert_eq!(said.status, 0);
+    for target in runnable() {
+        runs_as(source.as_bytes(), target, &said);
     }
 }
 
@@ -283,26 +281,39 @@ fn a_block_that_assigns_a_var_of_its_function_gives_it_back_to_the_function() {
     }
 }
 
+/// The program of `MEMORY` run under the scheduler of a test of each of two seeds
+/// and under the group of `tasks()`, which waits as the scheduler of a program
+/// does and runs one task after another, and the program of `DEEP`, as the
+/// functions of one program, so that the library of tasks is lowered and built
+/// once, and the executable prints the four numbers the evaluator prints.
+fn holding_and_deep() -> String {
+    let (memory, main) = MEMORY.split_once("fn main()").expect("a main");
+    assert!(main.contains("run(SEED)"));
+    let memory = memory
+        .replace("use std.list (push)", "use std.list (freeze, push)")
+        .replace("use std.task (join, spawn, task, test_scheduler)", "use std.task (join, spawn, task, tasks, test_scheduler)");
+    let (_, run) = memory.split_once("fn run(seed: u64)").expect("a run");
+    let under_the_group = format!("fn run(seed: u64){run}")
+        .replace("fn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)", "fn run_tasks(seed: u64) -> u64 <alloc> {\n  with tasks()");
+    let (_, deep) = DEEP.split_once("fn build(n: u64)").expect("a build");
+    let (deep, _) = deep.split_once("fn main()").expect("a main");
+    let deep = format!("fn build(n: u64){deep}")
+        .replace("fn build(n: u64)", "fn build_up(n: u64)")
+        .replace("build(25)", "build_up(25)")
+        .replace("fn run(seed: u64)", "fn deep(seed: u64)");
+    format!(
+        "{memory}{under_the_group}{deep}fn main() <console, alloc, diverge> {{\n  print(\"{{run(3)}}\")\n  print(\"{{run(11)}}\")\n  print(\"{{deep(2)}}\")\n  print(\"{{run_tasks(3)}}\")\n}}\n"
+    )
+}
+
 fn every_executable_keeps_what_a_task_holds_across_a_wait_and_goes_twenty_five_levels_down() {
-    let targets = runnable();
-    for source in [
-        MEMORY.replace("SEED", "3"),
-        MEMORY.replace("SEED", "11"),
-        DEEP.replace("SEED", "2"),
-        // The same under the group of `tasks()`, which waits as the scheduler of a
-        // program does and runs one task after another.
-        MEMORY
-            .replace("test_scheduler)", "tasks)")
-            .replace("fn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)", "fn run(seed: u64) -> u64 <alloc> {\n  with tasks()")
-            .replace("<console, alloc, diverge>", "<console, alloc>")
-            .replace("SEED", "3"),
-    ] {
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-        let said = scalar::run(&scalar::passes(&program));
-        assert_eq!(said.status, 0);
-        for &target in &targets {
-            runs_as(source.as_bytes(), target, &said);
-        }
+    let source = holding_and_deep();
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let said = scalar::run(&scalar::passes(&program));
+    assert_eq!(said.status, 0);
+    assert_eq!(String::from_utf8_lossy(&said.stdout), format!("{0}\n{0}\n325\n{0}\n", memory_answer()));
+    for target in runnable() {
+        runs_as(source.as_bytes(), target, &said);
     }
 }
 
