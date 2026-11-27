@@ -41,7 +41,7 @@ pub const ONCE: &[Test] = &[
 
 /// A handler of `fs` that prints the number of each file it is asked to close,
 /// so the program says what the handler was asked.
-fn program(functions: &str, tasks: &str, seed: u64) -> String {
+fn program(functions: &str, tasks: &str) -> String {
     format!(
         "use std.bits (u64)
 use std.console (console, print)
@@ -52,14 +52,14 @@ use std.list (freeze, push)
 use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 {functions}
-fn run() -> u64 <fs, diverge, alloc> {{
-  with test_scheduler_with_io({seed}, [])
+fn run(seed: u64) -> u64 <fs, diverge, alloc> {{
+  with test_scheduler_with_io(seed, [])
 {tasks}
   late = test_ready_by(99, ms(10))
   1
 }}
 
-fn main() <console, alloc, diverge> {{
+fn main(args: List[str]) <console, alloc, diverge> {{
   r = fs(
     open_file: fn(path) {{ .err(.missing(path)) }},
     create_file: fn(path, executable) {{ .err(.missing(path)) }},
@@ -70,12 +70,29 @@ fn main() <console, alloc, diverge> {{
     size: fn(f) {{ .err(.missing(f.path)) }},
     read: fn(f, range) {{ .err(.missing(f.path)) }},
     write: fn(f, at, bytes) {{ .err(.missing(f.path)) }},
-    body: {{ run() }},
+    body: {{ run(args.size) }},
   )
   print(\"{{r}}\")
 }}
 "
     )
+}
+
+/// What the program prints when it is started with `seeds` words, for each
+/// number of them from 0: the number of words is the seed of the scheduler,
+/// so that one program is built once and run for each seed.
+fn said_for(source: &str, seeds: usize) -> Vec<Vec<String>> {
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    assert_eq!(scalar::check(&program), Ok(()), "for {source}");
+    let program = scalar::passes(&program);
+    (0..seeds)
+        .map(|seed| {
+            let outcome = scalar::run_with_words(&program, &vec![Vec::new(); seed]);
+            let text = String::from_utf8(outcome.stdout).expect("text");
+            assert_eq!(outcome.status, 0, "{text} for {source}");
+            text.lines().map(str::to_string).collect()
+        })
+        .collect()
 }
 
 fn said(source: &str) -> Vec<String> {
@@ -101,13 +118,9 @@ const HOLD: &str = "fn hold(n: u64) -> u64 <fs, task> {
 ";
 
 fn a_cancelled_task_closes_the_file_it_holds_through_the_handler_in_force_once() {
-    for seed in 0..8 {
-        let source = program(HOLD, "  _ = spawn { hold(5) }\n  _ = spawn { hold(6) }", seed);
-        assert_eq!(
-            sorted(said(&source)),
-            ["1", "closed 5", "closed 6"],
-            "seed {seed}"
-        );
+    let source = program(HOLD, "  _ = spawn { hold(5) }\n  _ = spawn { hold(6) }");
+    for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
+        assert_eq!(sorted(said), ["1", "closed 5", "closed 6"], "seed {seed}");
     }
 }
 
@@ -126,13 +139,9 @@ fn hold_two(n: u64) -> u64 <fs, task> {
 ";
 
 fn a_cancelled_task_closes_both_files_of_a_struct_it_holds() {
-    for seed in 0..8 {
-        let source = program(PAIR, "  _ = spawn { hold_two(10) }", seed);
-        assert_eq!(
-            sorted(said(&source)),
-            ["1", "closed 10", "closed 11"],
-            "seed {seed}"
-        );
+    let source = program(PAIR, "  _ = spawn { hold_two(10) }");
+    for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
+        assert_eq!(sorted(said), ["1", "closed 10", "closed 11"], "seed {seed}");
     }
 }
 
@@ -146,13 +155,9 @@ const LIST: &str = "fn hold_list(n: u64) -> List[File] <fs, task, alloc> {
 ";
 
 fn a_cancelled_task_closes_each_file_of_a_list_it_holds() {
-    for seed in 0..8 {
-        let source = program(LIST, "  t = spawn { hold_list(20) }", seed);
-        assert_eq!(
-            sorted(said(&source)),
-            ["1", "closed 20", "closed 21"],
-            "seed {seed}"
-        );
+    let source = program(LIST, "  t = spawn { hold_list(20) }");
+    for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
+        assert_eq!(sorted(said), ["1", "closed 20", "closed 21"], "seed {seed}");
     }
 }
 
@@ -167,18 +172,18 @@ const SERVE: &str = "fn serve(f: take File) -> u64 <fs, task> {
 /// lambda was given is closed by the child's first check, once, and the child
 /// does nothing else.
 fn a_task_cancelled_before_it_ran_closes_the_file_its_lambda_was_given() {
-    for seed in 0..8 {
-        let source = program(SERVE, "  f = file(9)\n  _ = spawn { serve(f) }", seed)
+    let source = program(SERVE, "  f = file(9)\n  _ = spawn { serve(f) }")
             .replace("  late = test_ready_by(99, ms(10))\n", "");
-        assert_eq!(sorted(said(&source)), ["1", "closed 9"], "seed {seed}");
+    for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
+        assert_eq!(sorted(said), ["1", "closed 9"], "seed {seed}");
     }
 }
 
 /// A task that is never asked to end, which waits for its handle and then closes
 /// it itself, closes it once: the handler is asked once, and by the function.
 fn a_file_that_is_closed_by_its_function_is_not_closed_again_when_no_task_is_asked_to_end() {
-    let source = program(HOLD, "  _ = spawn { hold(4) }", 0)
-        .replace("test_scheduler_with_io(0, [])", "test_scheduler_with_io(0, [4])");
+    let source = program(HOLD, "  _ = spawn { hold(4) }")
+        .replace("test_scheduler_with_io(seed, [])", "test_scheduler_with_io(seed, [4])");
     assert_eq!(sorted(said(&source)), ["1", "closed 4"]);
 }
 
@@ -214,12 +219,12 @@ fn outer(n: u64) -> u64 <fs, alloc> {
     .err(.refused_write) { print(\"refused write\") }
   }
 ";
-    let source = program(functions, tasks, 3)
+    let source = program(functions, tasks)
         .replace("  late = test_ready_by(99, ms(10))\n", "")
         .replace("use std.task (join,", "use std.task (outcome, join,")
-        .replace("test_scheduler_with_io(3, [])", "test_scheduler(3)")
+        .replace("test_scheduler_with_io(seed, [])", "test_scheduler(3)")
         .replace("test_ready_by, test_scheduler_with_io)", "test_ready_by, test_scheduler_with_io, test_scheduler)")
-        .replace("fn run() -> u64 <fs, diverge, alloc>", "fn run() -> u64 <fs, diverge, alloc, console>");
+        .replace("fn run(seed: u64) -> u64 <fs, diverge, alloc>", "fn run(seed: u64) -> u64 <fs, diverge, alloc, console>");
     // The function that failed ends what it owns first, and then its caller.
     assert_eq!(
         said(&source),
