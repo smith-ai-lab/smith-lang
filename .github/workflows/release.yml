@@ -2,7 +2,9 @@ name: release
 
 # Runs after a merge, never for a pull request or the merge queue, so it
 # cannot hold one up. It publishes a release when the merge changed what the
-# compiler does, and never deletes or replaces one.
+# compiler does. A published release is never deleted or replaced. A draft is
+# not a release: a run that failed can leave one, so a run that finds a draft of
+# the version it plans deletes it and publishes the version.
 on:
   push:
     branches: [main]
@@ -201,9 +203,17 @@ jobs:
           mkdir files
           cp parts/smith-*/* files/
           (cd files && sha256sum smith-* > SHA256SUMS)
-          # Never replaced: a release that already exists is left alone.
-          if gh release view "v$VERSION" --repo "$REPOSITORY" >/dev/null 2>&1; then
-            exit 0
+          # A published release is never replaced: one that exists is left
+          # alone. A draft is not a release, and a failed run can leave one
+          # that would otherwise stop every later run, so it is deleted.
+          if state=$(gh release view "v$VERSION" --repo "$REPOSITORY" --json isDraft --jq .isDraft 2> view.err); then
+            if [ "$state" = false ]; then
+              exit 0
+            fi
+            gh release delete "v$VERSION" --repo "$REPOSITORY" --yes
+          elif ! grep -q 'release not found' view.err; then
+            cat view.err >&2
+            exit 1
           fi
           gh release create "v$VERSION" files/* \
             --repo "$REPOSITORY" \
@@ -212,7 +222,9 @@ jobs:
             --notes-file parts/notes/notes.md
 
   # A run that planned a version and did not publish it is a failed run. This
-  # is the only job that says so when no job before it failed.
+  # is the only job that says so when no job before it failed. It asks GitHub
+  # whether a published release of the version exists, and does not take
+  # `publish` at its word.
   verdict:
     name: the version was published
     needs: [plan, built, publish]
@@ -220,9 +232,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.plan.outputs.version }}
           BUILT: ${{ needs.built.result }}
           PUBLISH: ${{ needs.publish.result }}
         run: |
           echo "v$VERSION: the builds gave $BUILT and publish gave $PUBLISH"
-          test "$PUBLISH" = success
+          state=$(gh release view "v$VERSION" --repo "$REPOSITORY" --json isDraft --jq .isDraft || echo missing)
+          echo "v$VERSION: draft is $state"
+          test "$state" = false
