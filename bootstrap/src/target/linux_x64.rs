@@ -115,6 +115,7 @@ impl System for Linux {
             Raw::Accept => 43,
             Raw::SendTo => 44,
             Raw::RecvFrom => 45,
+            Raw::RecvMsg => 47,
             Raw::Bind => 49,
             Raw::Listen => 50,
             Raw::GetSockName => 51,

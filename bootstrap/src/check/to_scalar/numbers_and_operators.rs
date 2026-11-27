@@ -587,6 +587,29 @@ impl<'a> Lowering<'a> {
         }
         match call.callee.as_str() {
             "__consume" => (ty, Vec::new()),
+            // The address of a list's bytes as a number, which a message of
+            // the kernel holds where it points at other bytes. It is made by
+            // storing the address in a word of the frame and reading the word
+            // back as a number.
+            "__address_of" => {
+                let word = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+                out.emit(
+                    form::Op::Store {
+                        ty: form::Type::Address,
+                        address: word,
+                        value: words[0],
+                    },
+                    Vec::new(),
+                );
+                let number = out.emit(
+                    form::Op::Load {
+                        ty: form::Type::Int(form::Bits::B64),
+                        address: word,
+                    },
+                    vec![form::Type::Int(form::Bits::B64)],
+                )[0];
+                (ty, vec![number])
+            }
             "__reserve" => {
                 let address = out.emit(
                     form::Op::System {
@@ -637,6 +660,7 @@ impl<'a> Lowering<'a> {
                     LSeek,
                     FChmod,
                     CloseFile,
+                    RecvMsg,
                 ];
                 let raw = order[*magnitude as usize];
                 let call = form::System::Raw(raw);

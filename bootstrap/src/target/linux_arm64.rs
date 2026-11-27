@@ -147,6 +147,7 @@ impl System for Linux {
             Raw::GetSockName => 204,
             Raw::SendTo => 206,
             Raw::RecvFrom => 207,
+            Raw::RecvMsg => 212,
             Raw::SetSockOpt => 208,
             Raw::Close | Raw::CloseQueue | Raw::CloseFile => 57,
             Raw::Read => 63,

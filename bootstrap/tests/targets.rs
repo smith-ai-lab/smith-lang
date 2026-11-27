@@ -1123,6 +1123,7 @@ const NET_AND_TIME_WRAPPERS: &[&str] = &[
     "_setsockopt",
     "_sendto",
     "_recvfrom",
+    "_recvmsg",
     "_close",
     "_clock_gettime",
     "_nanosleep",

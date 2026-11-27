@@ -6795,13 +6795,14 @@ impl<'a> Defs<'a> {
 /// Whether a call is of a function the compiler builds for the library's
 /// modules that reach the kernel: `__system`, which asks it for a call,
 /// `__reserve`, which makes a list that has room and no elements, `__sized`,
-/// which says how many of the elements the kernel filled, and `__consume`,
-/// which takes a value that cannot be dropped and has nothing to give.
+/// which says how many of the elements the kernel filled, `__address_of`, which
+/// gives the address of a list's bytes as a number, and `__consume`, which
+/// takes a value that cannot be dropped and has nothing to give.
 fn is_kernel(call: &Call) -> bool {
     call.qualifier.is_none()
         && matches!(
             call.callee.as_str(),
-            "__system" | "__reserve" | "__sized" | "__consume"
+            "__system" | "__reserve" | "__sized" | "__consume" | "__address_of"
         )
         && of_std(call.pos)
 }
