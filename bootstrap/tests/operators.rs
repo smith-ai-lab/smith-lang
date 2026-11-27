@@ -29,8 +29,12 @@ pub const ONCE: &[Test] = &[
         || a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type(2),
     ),
     (
-        "an_operator_on_structs_gives_what_its_function_gives_by_its_name",
-        an_operator_on_structs_gives_what_its_function_gives_by_its_name,
+        "an_operator_on_structs_gives_what_its_function_gives_by_its_name_part_1_of_2",
+        || an_operator_on_structs_gives_what_its_function_gives_by_its_name(0),
+    ),
+    (
+        "an_operator_on_structs_gives_what_its_function_gives_by_its_name_part_2_of_2",
+        || an_operator_on_structs_gives_what_its_function_gives_by_its_name(1),
     ),
     (
         "an_operator_between_types_with_no_impl_is_one_error_that_names_the_trait_and_both_types",
@@ -202,8 +206,8 @@ fn structs(g: &mut Gen) -> Structs {
 /// For every struct a generator builds with an `impl` of `Add`, `Sub`, or
 /// `Mul`, of one type or of two types with a result of a third, the operator
 /// gives what the function gives when it is called by its name.
-fn an_operator_on_structs_gives_what_its_function_gives_by_its_name() {
-    generate::check(221, 60, structs, |c| {
+fn an_operator_on_structs_gives_what_its_function_gives_by_its_name(part: u64) {
+    generate::check_part(221, 60, part, 2, structs, |c| {
         let program = lower(c.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(
             scalar::run(&program),
