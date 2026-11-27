@@ -46,7 +46,7 @@ fn once(port: 1..65536) -> Result[(), NetError] <console, net, alloc> {
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   match try read(c, 4096) {
-    .bytes(bytes) { write(c, freeze(bytes)) }
+    .bytes(chunk) { write(c, freeze(chunk.bytes)) }
     .ended { .ok(()) }
   }
 }
@@ -55,7 +55,7 @@ fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
   var all: List[Byte] = []
   loop round in 0..2000000 {
     match try read(c, 4096) {
-      .bytes(chunk) { all = append(all, chunk) }
+      .bytes(chunk) { all = append(all, chunk.bytes) }
       .ended { return .ok(all) }
     }
   }
@@ -84,7 +84,7 @@ fn ask(port: 1..65536, question: str) -> Result[List[Byte], NetError] <net, allo
   with c = connect("127.0.0.1", port)
   try write(c, question.bytes)
   match try read(c, 4096) {
-    .bytes(bytes) { .ok(bytes) }
+    .bytes(chunk) { .ok(chunk.bytes) }
     .ended { .ok([]) }
   }
 }

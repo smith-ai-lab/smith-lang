@@ -110,7 +110,7 @@ use std.console (console, print)
 use std.http (get, http, listen, routes)
 use std.int (wrapping_add)
 use std.list (push)
-use std.net (connection, handle, listener, net, release)
+use std.net (Chunk, connection, handle, listener, net, release)
 {uses}
 struct User {{
   id: u64
@@ -145,11 +145,11 @@ fn user(id: u64) -> User {{
       }} else {{
         asked = push(asked, handle(c))
         if handle(c) == 2 {{
-          .ok(.bytes({seven}))
+          .ok(.bytes(Chunk(bytes: {seven})))
         }} else if handle(c) == 3 {{
-          .ok(.bytes({eight}))
+          .ok(.bytes(Chunk(bytes: {eight})))
         }} else {{
-          .ok(.bytes({nine}))
+          .ok(.bytes(Chunk(bytes: {nine})))
         }}
       }}
     }},

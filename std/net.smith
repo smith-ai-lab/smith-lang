@@ -68,8 +68,14 @@ fn address_text(host: str, port: 0..65536) -> str <alloc> {
 // What a read of a connection gave: bytes, of which there is at least one, or
 // that the other side has finished sending.
 pub enum Got {
-  bytes: List[Byte]
+  bytes: Chunk
   ended
+}
+
+// Bytes that a read gave, of which there is at least one.
+pub struct Chunk {
+  pub bytes: List[Byte]
+  pub some: bytes.size >= 1
 }
 
 // The port of a listener or a socket: any that the system has free, or one that
@@ -881,7 +887,7 @@ fn system_connect_to(host: str, port: 1..65536) -> Result[Connection, NetError] 
 
 // What a read gave: no bytes is the end of what the other side sends.
 fn arrived(bytes: take List[Byte]) -> Got {
-  if bytes.size == 0 { .ended } else { .bytes(bytes) }
+  if bytes.size == 0 { .ended } else { .bytes(Chunk(bytes: bytes)) }
 }
 
 fn system_read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc, task> {

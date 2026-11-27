@@ -4,7 +4,7 @@ title: The network
 description: The net effect of std.net, for connections and datagrams, each a value used exactly once, with a write that sends everything and a read that gives what has come.
 status: partial
 built:
-  - "`std.net` declares `net`, with the operations, `Address`, `NetError`, `Got`, and `Port` as the page shows them, a read that gives `.ended` when the other side has finished and `.bytes` of at least one byte otherwise, a port of `1..65536` for `connect_to`, `.any` or `.at` of that range for `listen_on` and `bind_to`, and a number outside them refused where it is written, and `Listener`, `Connection`, and `Socket`, each a struct with the system's handle, the `host` and `port` it was opened with, and neither `Copy` nor `Discard`"
+  - "`std.net` declares `net`, with the operations, `Address`, `NetError`, `Got`, and `Port` as the page shows them, a read that gives `.ended` when the other side has finished and `.bytes` of a `Chunk` otherwise, a struct that holds a proof that its list has at least one byte, so a handler that gives `.bytes` of an empty list is refused where it is written, with the goal `[].size >= 1`, and a caller that matches `.bytes(c)` has `c.bytes.size >= 1` as a fact and indexes `c.bytes[0]` with no check, `Chunk` and `Got` being as the page shows them, a port of `1..65536` for `connect_to`, `.any` or `.at` of that range for `listen_on` and `bind_to`, and a number outside them refused where it is written, and `Listener`, `Connection`, and `Socket`, each a struct with the system's handle, the `host` and `port` it was opened with, and neither `Copy` nor `Discard`"
   - "`listen`, `connect`, and `bind`, written for `with`, which lend what they open to the rest of the block and end it afterwards on every path"
   - "on Linux and macOS, on x86-64 and arm64, the system answers every operation, and a call that waits blocks, except in a group of tasks on Linux, which the next line says; a host is `localhost`, a number written with dots, or a number written with colons, and any other name is looked up by `connect_to` on Linux, as [Looking up a name](#looking-up-a-name) says, and is `failed` with the one message that looking up a name is not built on macOS and in `listen`, `bind`, and `send`"
   - "`failed` holds the address and the call's name and the system's error number, as `connect: error 111` on Linux and `connect: error 61` on macOS; `refused`, `in_use`, and `closed` are the system's refusal of a connection, a port that is held, and a write to a connection the other side closed; each case holds the host and the port, as `example.com:80`, and `NetError` has a `Fmt` that writes them with what went wrong"
@@ -47,8 +47,13 @@ enum Port {
 }
 
 enum Got {
-  bytes: List[Byte]
+  bytes: Chunk
   ended
+}
+
+struct Chunk {
+  pub bytes: List[Byte]
+  pub some: bytes.size >= 1
 }
 
 effect net {
@@ -81,12 +86,14 @@ enum NetError {
 }
 ```
 
+A `Chunk` is the bytes a read gave together with the proof that there is at least one, as [A struct that holds a proof](../language/proof-fields.md) says. A handler of `net` builds one from a list it has shown to hold a byte, as `if got.size >= 1 { .ok(.bytes(Chunk(bytes: got))) } else { .ok(.ended) }` does, and is refused where it gives `Chunk(bytes: [])`. A caller that matches `.bytes(c)` indexes `c.bytes[0]` with no check. The proof is in no value, so a `Chunk` is its list when the program runs.
+
 | Operation | Does |
 | --- | --- |
 | `listen_on` | Begins to take connections at a port of this machine, `.any` for one that the system has free or `.at(port)` for the one written. The system holds up to 4096 connections that `accept` has not yet taken, or as many as it allows when that is fewer, so a burst of connections arrives without a wait |
 | `accept` | Waits for the next connection to a listener, and gives it |
 | `connect_to` | Opens a connection to a port of a host |
-| `read` | Waits for bytes and gives those that have come, as `.bytes`, at least one and at most `most`, or `.ended` when the other side has finished sending |
+| `read` | Waits for bytes and gives those that have come, as `.bytes` of a `Chunk`, at least one and at most `most`, or `.ended` when the other side has finished sending |
 | `write` | Sends every byte, or fails |
 | `bind_to` | Takes a port of this machine for datagrams, `.any` or `.at(port)` as `listen_on` does |
 | `send` | Sends the bytes as one datagram to an address |
@@ -120,7 +127,7 @@ use std.net (Connection, NetError, accept, close, listen, net, read, write)
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   match try read(c, 4096) {
-    .bytes(bytes) { write(c, freeze(bytes)) }
+    .bytes(chunk) { write(c, freeze(chunk.bytes)) }
     .ended { .ok(()) }
   }
 }

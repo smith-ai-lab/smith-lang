@@ -70,7 +70,7 @@ use std.console (console, print)
 use std.http (get, http, listen, routes)
 use std.int (wrapping_add)
 use std.list (push)
-use std.net (connection, handle, listener, net, release)
+use std.net (Chunk, connection, handle, listener, net, release)
 use std.task (test_scheduler)
 
 struct User {{
@@ -111,11 +111,11 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
       }} else {{
         asked = push(asked, handle(c))
         if handle(c) == 2 {{
-          .ok(.bytes({seven}))
+          .ok(.bytes(Chunk(bytes: {seven})))
         }} else if handle(c) == 3 {{
-          .ok(.bytes({eight}))
+          .ok(.bytes(Chunk(bytes: {eight})))
         }} else {{
-          .ok(.bytes({nine}))
+          .ok(.bytes(Chunk(bytes: {nine})))
         }}
       }}
     }},
