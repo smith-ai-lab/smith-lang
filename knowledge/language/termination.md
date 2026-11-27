@@ -8,6 +8,7 @@ built:
   - "`diverge` on an open-ended `loop`, which its callers inherit, and a function whose every `loop` is over a range"
   - "`decreases` on a function, of one part or more separated by commas, each a whole number of an unsigned type over the parameters, which is never computed; a function that calls itself and has none is refused, and at every call of itself, the last thing the function does or not, `arith` proves that no part is below zero and that the measure is smaller, as words are in a dictionary"
   - "functions that call each other, each with a `decreases` of the same number of parts: a function in a circle with none is refused with an error that names the circle, so is a circle whose measures have different numbers of parts, and each call from one to another is proven by `arith` to leave no part below zero and the measure, as the callee states it, smaller than the caller's own"
+  - "a recursion into a part of the argument, which needs no `decreases`: a call that passes, in the place of a parameter, a name a `match` on it or on a part of it binds from what a case holds, a field of it or of a part, an element of a `List` or a `Slice` that is such a part as the name of a `loop` over it, or a piece of it or of a part that `arith` proves shorter; functions that call each other in a circle need none when every call in the circle passes a part of the caller's parameter at one place that all of them share; anything else in that place, the parameter itself, a value built in the function, or a part of another parameter, is refused as a missing `decreases` is"
   - "not a call of a function from itself in a lambda"
 ---
 
@@ -32,12 +33,12 @@ fn sum_below(n: u64) -> u64 {
 use std.bits (u64)
 use std.int (wrapping_add)
 
-fn total(xs: List[u64]) -> u64 {
+fn total(xs: Slice[u64]) -> u64 <alloc> {
   if xs.size == 0 { 0 } else { wrapping_add(xs[0], total(xs[1..])) }
 }
 ```
 
-`total` calls itself only on `xs[1..]`, which is a part of `xs`, as [Ranges and slices](ranges.md) says, so it ends and carries no effect. `total([4, 9, 6])` is `19`.
+`total` calls itself only on `xs[1..]`, which is a part of `xs`, as [Ranges and slices](ranges.md) says, so it ends with no `decreases`. It carries `alloc` because the call is not the last thing it does, as [Recursion](recursion.md) says. `total([4, 9, 6])` is `19`.
 
 ## What may not end
 
@@ -121,7 +122,7 @@ A loop's measure may have several parts too, written `loop decreases a, b { ... 
 
 | Written | Means |
 | --- | --- |
-| `loop i in a..b`, a recursion into a part of the argument | Ends, and carries nothing |
+| `loop i in a..b`, a recursion into a part of the argument | Ends, with no `decreases` |
 | `decreases a, b` | A measure of two parts: `a` gets smaller, or `a` stays and `b` gets smaller |
 | `loop { ... }` | May not end, and its function carries `diverge` |
 | `loop decreases e { ... }` | Ends, because `e` is smaller each time round again |

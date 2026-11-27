@@ -40,6 +40,7 @@ impl<'a> Checker<'a> {
             kept: 0,
             proofs: Vec::new(),
             call_proofs: HashMap::new(),
+            parts: Vec::new(),
         };
         // What the proof's caller owes is what it knows.
         for requirement in &def.requires {
