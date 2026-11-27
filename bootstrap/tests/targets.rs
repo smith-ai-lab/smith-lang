@@ -89,16 +89,32 @@ pub const ONCE: &[Test] = &[
         a_windows_executable_that_carries_net_asks_the_loader_for_ws2_32_and_calls_only_its_socket_functions,
     ),
     (
-        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("linux"),
+        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network_part_1_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("linux", 0),
     ),
     (
-        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("windows"),
+        "a_program_smith_watch_builds_is_built_for_every_target_of_linux_that_has_a_network_part_2_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("linux", 1),
     ),
     (
-        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does",
-        || a_program_smith_watch_builds_is_built_for_every_target_of("macos"),
+        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network_part_1_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("windows", 0),
+    ),
+    (
+        "a_program_smith_watch_builds_is_built_for_every_target_of_windows_that_has_a_network_part_2_of_2",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("windows", 1),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_1_of_3",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("macos", 0),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_2_of_3",
+        || a_program_smith_watch_builds_is_built_for_every_target_of("macos", 1),
+    ),
+    (
+        "a_program_smith_watch_builds_for_macos_imports_recvmsg_and_no_other_program_does_part_3_of_3",
+        a_program_built_otherwise_than_by_smith_watch_does_not_import_recvmsg_on_macos,
     ),
     (
         "a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls",
@@ -1322,26 +1338,28 @@ fn every_executable_uses_only_thin_wrappers_over_the_kernel() {
 /// for the socket it listens on, is built as any other program is for every
 /// target of the system that has a network. Only a macOS one imports `recvmsg`,
 /// with the wrappers of the kernel's calls and no other, and the same program
-/// built as any other is built does not.
-fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str) {
+/// built as any other is built does not. The part is the targets of the system
+/// that many places from its own, of two, so that every target is in one, and
+/// the last part of macOS is the program built as any other is.
+fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str, part: usize) {
     let source = include_str!("net_program.smith");
     let files = |_: &str| None::<String>;
     let project = smith::Project { files: &files, entry: None };
-    let build = |target: Target, watched: bool| {
+    let build = |target: Target| {
         smith::compile_project_files_timed(
             source.as_bytes(),
             &project,
             target,
             false,
-            watched,
+            true,
             &mut smith::timings::Timings::new(),
         )
         .unwrap_or_else(|e| panic!("{}: {e:?}", target.name()))
         .executable
     };
-    for target in buildable().into_iter().filter(|t| t.name().starts_with(system)) {
+    for target in buildable().into_iter().filter(|t| t.name().starts_with(system)).skip(part).step_by(2) {
         let name = target.name();
-        let watched = build(target, true);
+        let watched = build(target);
         if system == "macos" {
             let (_, symbols) = mach_o_imports(&watched);
             assert!(symbols.iter().any(|s| s == "_recvmsg"), "{name} does not import _recvmsg");
@@ -1356,20 +1374,30 @@ fn a_program_smith_watch_builds_is_built_for_every_target_of(system: &str) {
                     "{name} imports {symbol}, which is not a thin wrapper over the kernel"
                 );
             }
-            let (_, symbols) = mach_o_imports(&build(target, false));
-            assert!(!symbols.iter().any(|s| s == "_recvmsg"), "{name} imports _recvmsg without being built by smith --watch");
         }
     }
 }
 
+/// The same program built as any other is built does not import `recvmsg` on
+/// any macOS target. The program is lowered once, and the targets write it.
+fn a_program_built_otherwise_than_by_smith_watch_does_not_import_recvmsg_on_macos() {
+    let program = scalar::passes(&lower(include_str!("net_program.smith").as_bytes()).unwrap());
+    for target in buildable().into_iter().filter(|t| t.name().starts_with("macos")) {
+        let name = target.name();
+        let (_, symbols) = mach_o_imports(&target.emit_parts(&program).0);
+        assert!(!symbols.iter().any(|s| s == "_recvmsg"), "{name} imports _recvmsg without being built by smith --watch");
+    }
+}
+
 fn a_macos_executable_that_uses_the_network_and_the_clock_imports_only_the_wrappers_of_the_kernels_calls() {
-    let source = include_str!("net_program.smith");
+    // The program is lowered once, and each target writes it.
+    let program = scalar::passes(&lower(include_str!("net_program.smith").as_bytes()).unwrap());
     let macos: Vec<Target> = buildable()
         .into_iter()
         .filter(|t| t.name().starts_with("macos"))
         .collect();
     for target in macos {
-        let bytes = compile(source.as_bytes(), target).unwrap();
+        let bytes = target.emit_parts(&program).0;
         let name = target.name();
         let (libraries, symbols) = mach_o_imports(&bytes);
         assert_eq!(libraries, ["/usr/lib/libSystem.B.dylib"], "{name} links only libSystem");
@@ -1412,8 +1440,10 @@ fn a_test_that_does_not_depend_on_the_machine_may_not_run_an_executable_the_fing
 /// other target is refused it for the calls it does not have.
 fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without() {
     let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() <console, alloc> {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
+    // The program is lowered once, and each target writes it.
+    let program = scalar::passes(&lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
     for target in buildable() {
-        let bytes = compile(source.as_bytes(), target).unwrap_or_else(|e| panic!("{}: {e:?}", target.name()));
+        let bytes = target.emit_parts(&program).0;
         if target.name().starts_with("macos") {
             let (_, symbols) = mach_o_imports(&bytes);
             for wrapper in ["_kqueue", "_kevent"] {
