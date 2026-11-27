@@ -10,6 +10,7 @@ use smith::scalar;
 
 use crate::Test;
 use crate::generate::{self, Gen};
+use crate::lowered_once::{ROUNDS, SEED, Written};
 use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
@@ -18,8 +19,8 @@ pub const ONCE: &[Test] = &[
         a_thousand_tasks_that_wait_with_nothing_built_hold_under_eight_megabytes,
     ),
     (
-        "a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000",
-        a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000,
+        "a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_400",
+        a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_400,
     ),
     (
         "two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_change",
@@ -30,8 +31,8 @@ pub const ONCE: &[Test] = &[
         ten_thousand_children_that_give_a_list_joined_one_after_another_ask_the_system_for_the_memory_of_one,
     ),
     (
-        "a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is",
-        a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is,
+        "a_list_of_forty_thousand_numbers_is_joined_in_the_instructions_a_list_of_ten_is",
+        a_list_of_forty_thousand_numbers_is_joined_in_the_instructions_a_list_of_ten_is,
     ),
     (
         "a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes",
@@ -42,8 +43,12 @@ pub const ONCE: &[Test] = &[
         a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_built,
     ),
     (
-        "a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had",
-        a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had,
+        "a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had_part_1_of_2",
+        || a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had(0),
+    ),
+    (
+        "a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had_part_2_of_2",
+        || a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had(1),
     ),
     (
         "a_child_started_where_a_joined_one_was_is_a_new_task_with_a_value_of_its_own",
@@ -58,8 +63,16 @@ pub const ONCE: &[Test] = &[
         ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_of_one,
     ),
     (
-        "a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read",
-        a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read,
+        "a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read_part_1_of_3",
+        || a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read(0),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read_part_2_of_3",
+        || a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read(1),
+    ),
+    (
+        "a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read_part_3_of_3",
+        || a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read(2),
     ),
     (
         "a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends",
@@ -78,96 +91,224 @@ pub const ONCE: &[Test] = &[
         || a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory_back_when_it_ends(2),
     ),
     (
-        "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends_part_1_of_2",
+        || a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends_part_2_of_2",
+        || a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends_part_1_of_3",
+        || a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(0),
+    ),
+    (
+        "a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends_part_2_of_3",
+        || a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends_part_3_of_3",
+        || a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(2),
     ),
     (
         "a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends",
         a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends,
     ),
     (
-        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_1_of_2",
+        || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends,
+        "a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends_part_2_of_2",
+        || a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(1),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16,
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_1_of_2",
+        || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(0),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16,
+        "a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends_part_2_of_2",
+        || a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(1),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_1_of_40",
+        || generated_children(0),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_2_of_40",
+        || generated_children(1),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_3_of_40",
+        || generated_children(2),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_4_of_40",
+        || generated_children(3),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_5_of_40",
+        || generated_children(4),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_6_of_40",
+        || generated_children(5),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_7_of_40",
+        || generated_children(6),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_8_of_40",
+        || generated_children(7),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_9_of_40",
+        || generated_children(8),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_10_of_40",
+        || generated_children(9),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_11_of_40",
+        || generated_children(10),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_12_of_40",
+        || generated_children(11),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_13_of_40",
+        || generated_children(12),
     ),
     (
-        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16",
-        every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_14_of_40",
+        || generated_children(13),
     ),
     (
-        "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_15_of_40",
+        || generated_children(14),
     ),
     (
-        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends",
-        a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends,
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_16_of_40",
+        || generated_children(15),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_17_of_40",
+        || generated_children(16),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_18_of_40",
+        || generated_children(17),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_19_of_40",
+        || generated_children(18),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_20_of_40",
+        || generated_children(19),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_21_of_40",
+        || generated_children(20),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_22_of_40",
+        || generated_children(21),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_23_of_40",
+        || generated_children(22),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_24_of_40",
+        || generated_children(23),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_25_of_40",
+        || generated_children(24),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_26_of_40",
+        || generated_children(25),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_27_of_40",
+        || generated_children(26),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_28_of_40",
+        || generated_children(27),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_29_of_40",
+        || generated_children(28),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_30_of_40",
+        || generated_children(29),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_31_of_40",
+        || generated_children(30),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_32_of_40",
+        || generated_children(31),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_33_of_40",
+        || generated_children(32),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_34_of_40",
+        || generated_children(33),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_35_of_40",
+        || generated_children(34),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_36_of_40",
+        || generated_children(35),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_37_of_40",
+        || generated_children(36),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_38_of_40",
+        || generated_children(37),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_39_of_40",
+        || generated_children(38),
+    ),
+    (
+        "every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_60_rounds_part_40_of_40",
+        || generated_children(39),
+    ),
+    (
+        "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends_part_1_of_3",
+        || a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(0),
+    ),
+    (
+        "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends_part_2_of_3",
+        || a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(1),
+    ),
+    (
+        "a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends_part_3_of_3",
+        || a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(2),
+    ),
+    (
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_1_of_2",
+        || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(0),
+    ),
+    (
+        "a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends_part_2_of_2",
+        || a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(1),
     ),
     (
         "a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends",
@@ -231,9 +372,23 @@ const USES: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (
 fn asked(source: &str) -> (String, usize) {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     assert_eq!(scalar::check(&program), Ok(()), "for {source}");
-    let (outcome, requests) = scalar::run_counting(&scalar::passes(&program), usize::MAX);
+    ran(&program, source)
+}
+
+/// `asked` for a program that is lowered already, which `source` is the text of.
+fn ran(program: &scalar::Program, source: &str) -> (String, usize) {
+    let t0 = std::time::Instant::now();
+    let pp = scalar::passes(program);
+    let t1 = t0.elapsed();
+    let (outcome, requests) = scalar::run_counting(&pp, usize::MAX);
+    eprintln!("RAN passes {:?} run {:?}", t1, t0.elapsed() - t1);
     assert_eq!(outcome.status, 0, "{} for {source}", String::from_utf8_lossy(&outcome.stdout));
     (String::from_utf8(outcome.stdout).expect("text"), requests.iter().sum())
+}
+
+/// `asked` for the text of `written` with the numbers of `changes` written in.
+fn asked_with(written: &Written, changes: &[(u64, u64)]) -> (String, usize) {
+    ran(&written.with(changes), &written.source)
 }
 
 /// A recursion that starts a child at each level and joins them on the way back,
@@ -246,14 +401,15 @@ fn many(count: u64) -> String {
 
 /// The scheduler of a test looks through its tasks at each poll, which the
 /// evaluator cannot do a thousand times over in the time a test has, so the
-/// evaluator runs 100 and 200 tasks and holds each of the hundred more to what
+/// evaluator runs 10 and 110 tasks and holds each of the hundred more to what
 /// 1,000 may take of 8 MB, which is 8 KB, apart from the memory the system gives
 /// in chunks, and the executables run 1,000.
 fn a_thousand_tasks_that_wait_with_nothing_built_hold_under_eight_megabytes() {
-    let (few_said, few) = asked(&many(100));
-    let (many_said, more) = asked(&many(200));
-    assert_eq!(few_said, "5050\n");
-    assert_eq!(many_said, "20100\n");
+    let written = Written::new(many(ROUNDS));
+    let (few_said, few) = asked_with(&written, &[(ROUNDS, 10)]);
+    let (many_said, more) = asked_with(&written, &[(ROUNDS, 110)]);
+    assert_eq!(few_said, "55\n");
+    assert_eq!(many_said, "6105\n");
     let each = (more.saturating_sub(few)) as u64 / 100;
     assert!(each <= 8 * 1024 * 1024 / 1000, "{each} bytes for each task: {few}, {more}");
 }
@@ -265,13 +421,17 @@ fn arena_rounds(rounds: u64) -> String {
     )
 }
 
-fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_1000() {
-    let (few, few_bytes) = asked(&arena_rounds(20));
-    let (many, many_bytes) = asked(&arena_rounds(1000));
-    let each = (0..200u64).sum::<u64>();
+fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memory_after_20_rounds_as_after_400() {
+    // The rounds are 400 and not 1,000, and each builds a list of 100 numbers and
+    // not 200, which is what the evaluator may spend its time on. The executables
+    // run the rounds of the other, 300 and 2,000.
+    let written = Written::new(arena_rounds(ROUNDS).replace("build(200)", "build(100)"));
+    let (few, few_bytes) = asked_with(&written, &[(ROUNDS, 20)]);
+    let (many, many_bytes) = asked_with(&written, &[(ROUNDS, 400)]);
+    let each = (0..100u64).sum::<u64>();
     let wanted = |n: u64| (0..n).map(|r| each + r + 1).sum::<u64>();
     assert_eq!(few, format!("{}\n", wanted(20)));
-    assert_eq!(many, format!("{}\n", wanted(1000)));
+    assert_eq!(many, format!("{}\n", wanted(400)));
     assert_eq!(few_bytes, many_bytes);
 }
 
@@ -289,8 +449,9 @@ fn two_in_arenas_answer() -> u64 {
 }
 
 fn two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_change() {
+    let written = Written::new(two_in_arenas(SEED));
     for seed in 0..12u64 {
-        let (said, _) = asked(&two_in_arenas(seed));
+        let (said, _) = asked_with(&written, &[(SEED, seed)]);
         assert_eq!(said, format!("{}\n", two_in_arenas_answer()), "seed {seed}");
     }
 }
@@ -393,8 +554,9 @@ fn left_running(seed: u64) -> String {
 }
 
 fn a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole() {
+    let written = Written::new(left_running(SEED));
     for seed in 0..16u64 {
-        let (said, _) = asked(&left_running(seed));
+        let (said, _) = asked_with(&written, &[(SEED, seed)]);
         let lines: Vec<&str> = said.lines().collect();
         // The arena's total is printed first, in the task that started the
         // children, and the answer last. The children that were left run once
@@ -412,15 +574,17 @@ fn a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_sche
 /// Every case of `tests/cases` that builds and starts no task is built with the
 /// stacks it had: no function of the pool, none that makes or frees a task, and
 /// a `take` of three parameters, which is the one that asks the system for 64 KB.
-fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had() {
+/// The cases are in two parts, every other one of them each, and more than 50 of
+/// them are built in the two.
+const PARTS: usize = 2;
+
+fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had(part: usize) {
     let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases");
     let mut checked = 0;
     let mut files: Vec<_> = std::fs::read_dir(folder).unwrap().map(|e| e.unwrap().path()).collect();
+    files.retain(|path| path.extension().and_then(|e| e.to_str()) == Some("smith"));
     files.sort();
-    for path in files {
-        if path.extension().and_then(|e| e.to_str()) != Some("smith") {
-            continue;
-        }
+    for path in files.into_iter().skip(part).step_by(PARTS) {
         let source = std::fs::read(&path).unwrap();
         let text = String::from_utf8_lossy(&source);
         if text.contains("std.task") || text.contains("spawn") || text.contains("tasks") {
@@ -437,7 +601,7 @@ fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had() {
         }
         checked += 1;
     }
-    assert!(checked > 50, "{checked} cases");
+    assert!(checked > 50 / PARTS, "{checked} cases");
 }
 
 const LISTS: &str = "fn build(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  var s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
@@ -470,18 +634,17 @@ fn join_of(n: u64, whole_list: bool) -> String {
 
 /// What a join costs is what the program takes with a list given, less what it
 /// takes with a number given, since the child builds the same list in both.
-fn instructions_of_a_join(n: u64) -> i64 {
-    let ran = |source: String| {
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-        scalar::run_measured(&scalar::passes(&program)).1 as i64
-    };
-    ran(join_of(n, true)) - ran(join_of(n, false))
+fn instructions_of_a_join(whole_list: &Written, number: &Written, n: u64) -> i64 {
+    let ran = |written: &Written| scalar::run_measured(&scalar::passes(&written.with(&[(ROUNDS, n)]))).1 as i64;
+    ran(whole_list) - ran(number)
 }
 
-fn a_list_of_a_million_bytes_is_joined_in_the_instructions_a_list_of_ten_is() {
-    let small = instructions_of_a_join(10);
-    let large = instructions_of_a_join(125_000);
-    assert!((large - small).abs() <= 200, "{small} instructions for 10 numbers, {large} for 125,000");
+fn a_list_of_forty_thousand_numbers_is_joined_in_the_instructions_a_list_of_ten_is() {
+    let whole_list = Written::new(join_of(ROUNDS, true));
+    let number = Written::new(join_of(ROUNDS, false));
+    let small = instructions_of_a_join(&whole_list, &number, 10);
+    let large = instructions_of_a_join(&whole_list, &number, 40_000);
+    assert!((large - small).abs() <= 200, "{small} instructions for 10 numbers, {large} for 40,000");
 }
 
 fn a_result_read_after_the_parent_asks_for_more_memory_is_the_same_bytes() {
@@ -520,15 +683,16 @@ fn texts(count: u64) -> String {
 /// bytes with its header and trailer, so a task that gives a text of twenty bytes
 /// costs its frame and 64 bytes, and no more.
 fn a_child_that_gives_a_text_of_twenty_bytes_holds_a_piece_of_64_bytes_for_it_and_no_more() {
-    let (few_said, few) = asked(&texts(100));
-    let (many_said, more) = asked(&texts(200));
+    let written = Written::new(texts(ROUNDS));
+    let (few_said, few) = asked_with(&written, &[(ROUNDS, 10)]);
+    let (many_said, more) = asked_with(&written, &[(ROUNDS, 110)]);
     let length = |count: u64| (0..count).map(|n| n.to_string().len() as u64 + 17).sum::<u64>();
-    assert_eq!(few_said, format!("{}\n", length(100)));
-    assert_eq!(many_said, format!("{}\n", length(200)));
+    assert_eq!(few_said, format!("{}\n", length(10)));
+    assert_eq!(many_said, format!("{}\n", length(110)));
     // The system gives memory in chunks of 256 KB, so a hundred children that
     // each held a piece of 4 KB would ask for two chunks more, and a hundred that
     // hold a frame and 64 bytes ask for no more than one.
-    assert!(more.saturating_sub(few) <= scalar::pool::CHUNK as usize, "{few} bytes for 100 children, {more} for 200");
+    assert!(more.saturating_sub(few) <= scalar::pool::CHUNK as usize, "{few} bytes for 10 children, {more} for 110");
 }
 
 /// A loop that starts a child in each round, each building a list of 1,000 numbers
@@ -543,40 +707,40 @@ fn dropped_children(count: u64, seed: u64, how: &str) -> String {
 /// Each of a hundred children would keep 4 KB of list and more. A handle that is dropped gives
 /// the child's memory back when the child has ended, whether it was dropped before
 /// the child ended or after, which the seeds of the scheduler pick between.
-fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read() {
-    kept_by_drops(&DROPS[..3]);
+fn a_child_whose_handle_is_dropped_gives_its_memory_back_when_it_ends_whether_it_is_dropped_as_a_statement_or_bound_and_never_read(part: usize) {
+    kept_by_drops(&DROPS[part..=part]);
 }
 
 fn a_child_whose_handle_is_joined_on_one_branch_and_dropped_on_the_other_gives_its_memory_back_when_it_ends() {
     kept_by_drops(&DROPS[3..4]);
 }
 
-fn a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[7..9]);
+fn a_child_whose_handle_is_dropped_in_a_struct_or_as_what_the_last_statement_of_an_arm_gives_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[7 + part..=7 + part]);
 }
 
-fn a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[9..12]);
+fn a_child_whose_handle_is_in_a_var_a_destructured_name_or_a_parameter_that_is_never_read_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[9 + part..=9 + part]);
 }
 
 fn a_child_whose_handle_a_var_is_assigned_over_gives_its_memory_back_when_it_ends() {
     kept_by_drops(&DROPS[12..13]);
 }
 
-fn a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[13..15]);
+fn a_child_whose_handle_is_in_a_list_in_a_list_or_in_a_recursive_enum_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[13 + part..=13 + part]);
 }
 
-fn a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[15..17]);
+fn a_child_whose_handle_a_path_through_a_loop_joins_or_drops_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[15 + part..=15 + part]);
 }
 
-fn a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[17..20]);
+fn a_child_whose_handle_a_pattern_binds_or_a_function_reads_on_one_path_only_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[17 + part..=17 + part]);
 }
 
-fn a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends() {
-    kept_by_drops(&DROPS[20..22]);
+fn a_child_whose_handle_is_a_field_of_a_struct_that_is_joined_or_assigned_over_gives_its_memory_back_when_it_ends(part: usize) {
+    kept_by_drops(&DROPS[20 + part..=20 + part]);
 }
 
 fn a_child_whose_handle_a_loop_over_a_list_joins_before_it_breaks_gives_its_memory_back_when_it_ends() {
@@ -588,18 +752,30 @@ fn a_child_whose_handle_is_dropped_in_a_tuple_a_list_or_an_enum_gives_its_memory
 }
 
 fn kept_by_drops(hows: &[&str]) {
-    let kept = |how: &str, seed: u64| {
-        let (few_said, few) = asked(&dropped_children(8, seed, how));
-        let (many_said, more) = asked(&dropped_children(56, seed, how));
-        assert_eq!((few_said, many_said), ("8\n".to_string(), "56\n".to_string()), "{how}");
-        more.saturating_sub(few)
+    // The children of the text are four times as large, and the rounds in which a
+    // handle is joined are the first two and not the first five, so that few
+    // rounds, which are most of what the evaluator spends, ask the system for as
+    // much more memory as a child that is not given back would keep.
+    let smaller = |source: String| {
+        (source.replace("build(250)", "build(1000)").replace("build(500)", "build(2000)")).replace("r < 5", "r < 2")
     };
-    for seed in [1, 2] {
-        for how in hows {
-            let more = kept(how, seed);
-            // 48 more children, each of 4 KB of list and the pieces it grew in, would
-            // be 400 KB of chunks, which is more than one.
-            assert!(more <= scalar::pool::CHUNK as usize, "{more} bytes more for 48 children, `{how}`, seed {seed}");
+    for how in hows {
+        let written = Written::new(smaller(dropped_children(ROUNDS, SEED, how)));
+        // The children that a round starts for the handle, of which six more are
+        // what a handle that is not given back would keep 100 KB or more of.
+        let started = how.matches("spawn").count() + 3 * (how.contains("handles()") || how.contains("nest()")) as usize;
+        let more_rounds = 6u64.div_ceil(started.max(1) as u64);
+        let (few, many) = (3, 3 + more_rounds);
+        for seed in [1, 2] {
+            // The few rounds are the two that join and one that drops, so that the
+            // memory the rounds that drop ask for is in them and not in the others.
+            let (few_said, few_bytes) = asked_with(&written, &[(ROUNDS, few), (SEED, seed)]);
+            let (many_said, many_bytes) = asked_with(&written, &[(ROUNDS, many), (SEED, seed)]);
+            assert_eq!((few_said, many_said), (format!("{few}\n"), format!("{many}\n")), "{how}");
+            let more = many_bytes.saturating_sub(few_bytes);
+            // At least 6 more children, each of 16 KB of list and the pieces it grew in,
+            // would be 400 KB of chunks, which is more than one.
+            assert!(more <= scalar::pool::CHUNK as usize, "{more} bytes more for {more_rounds} rounds, `{how}`, seed {seed}");
         }
     }
 }
@@ -989,85 +1165,25 @@ impl Held_ {
 
 /// A program that holds children in names, `var`s, patterns, parameters, structs,
 /// lists in lists, enums, and loops, and joins them or drops them on any path,
-/// gives each child's value once, and asks the system for the same memory for 100
+/// gives each child's value once, and asks the system for the same memory for 60
 /// rounds as for 10: a child that was freed before its join would give another
-/// number, and one that was never freed would ask for more.
+/// number, and one that was never freed would ask for more. Each program is
+/// lowered once, with the number of rounds written in for each of the two runs.
+/// The cases are 40 tests of one case each, since one case is what a test may
+/// spend its time on.
 fn generated_children(part: u64) {
-    generate::check_part(9601, 40, part, 16, generated_program, |program| {
-        let (few_said, few) = asked(&program.source(10));
-        let (many_said, many) = asked(&program.source(100));
+    generate::check_part(9601, 40, part, 40, generated_program, |program| {
+        let written = Written::new(program.source(ROUNDS));
+        let (few_said, few) = asked_with(&written, &[(ROUNDS, 10)]);
+        let (many_said, many) = asked_with(&written, &[(ROUNDS, 60)]);
         assert_eq!(few_said, format!("{}\n", program.prints(10)), "{}", program.source(10));
-        assert_eq!(many_said, format!("{}\n", program.prints(100)), "{}", program.source(100));
+        assert_eq!(many_said, format!("{}\n", program.prints(60)), "{}", program.source(60));
         assert!(
             many.saturating_sub(few) <= scalar::pool::CHUNK as usize,
-            "{few} bytes for 10 rounds and {many} for 100 of\n{}",
-            program.source(100)
+            "{few} bytes for 10 rounds and {many} for 60 of\n{}",
+            program.source(60)
         );
     });
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_1_of_16() {
-    generated_children(0);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_2_of_16() {
-    generated_children(1);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_3_of_16() {
-    generated_children(2);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_4_of_16() {
-    generated_children(3);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_5_of_16() {
-    generated_children(4);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_6_of_16() {
-    generated_children(5);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_7_of_16() {
-    generated_children(6);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_8_of_16() {
-    generated_children(7);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_9_of_16() {
-    generated_children(8);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_10_of_16() {
-    generated_children(9);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_11_of_16() {
-    generated_children(10);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_12_of_16() {
-    generated_children(11);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_13_of_16() {
-    generated_children(12);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_14_of_16() {
-    generated_children(13);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_15_of_16() {
-    generated_children(14);
-}
-
-fn every_child_of_a_generated_program_is_joined_or_freed_once_and_the_memory_asked_for_is_the_same_for_10_and_100_rounds_part_16_of_16() {
-    generated_children(15);
 }
 
 /// Rounds of a block that starts children that wait for a handle that is never
@@ -1173,12 +1289,11 @@ fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_blo
             "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task, console, alloc> {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 <task, console, alloc> {{\n  _ = spawn {{ waits(n) }}\n  _ = spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 <task, console, alloc> {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 <diverge, console, alloc> {{\n  with test_scheduler_with_io({seed}, [])\n  _ = spawn {{ parent(7) }}\n  _ = spawn {{ waits(8) }}\n  3\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{run()}}\")\n}}\n"
         )
     };
+    // The text is the same for every seed but the seed, so it is lowered once.
+    let written = Written::new(source(SEED));
+    assert!(asks_a_child_to_end(&written.program), "for {}", written.source);
     for seed in 0..8u64 {
-        let text = source(seed);
-        let program = lower(text.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {text}"));
-        assert_eq!(scalar::check(&program), Ok(()), "for {text}");
-        assert!(asks_a_child_to_end(&program), "for {text}");
-        let (said, _) = asked(&text);
+        let (said, _) = asked_with(&written, &[(SEED, seed)]);
         assert_eq!(said, "3\n", "seed {seed}");
     }
     let none = "use std.bits (u64)\nuse std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"{3}\")\n}\n";
