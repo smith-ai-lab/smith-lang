@@ -11,28 +11,76 @@ use crate::generate::{self, Gen};
 
 pub const ONCE: &[Test] = &[
     (
-        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32",
-        || unfused_is_fused(FloatBits::F32, Fused::MulAdd, 0),
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_1_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulAdd, 0, 0),
     ),
     (
-        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f32",
-        || unfused_is_fused(FloatBits::F32, Fused::MulSub, 1),
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_2_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulAdd, 0, 1),
     ),
     (
-        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32",
-        || unfused_is_fused(FloatBits::F32, Fused::NegMulAdd, 2),
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_3_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulAdd, 0, 2),
     ),
     (
-        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64",
-        || unfused_is_fused(FloatBits::F64, Fused::MulAdd, 3),
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f32_part_1_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulSub, 1, 0),
     ),
     (
-        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f64",
-        || unfused_is_fused(FloatBits::F64, Fused::MulSub, 4),
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f32_part_2_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulSub, 1, 1),
     ),
     (
-        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64",
-        || unfused_is_fused(FloatBits::F64, Fused::NegMulAdd, 5),
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f32_part_3_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::MulSub, 1, 2),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_1_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::NegMulAdd, 2, 0),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_2_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::NegMulAdd, 2, 1),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f32_part_3_of_3",
+        || unfused_is_fused(FloatBits::F32, Fused::NegMulAdd, 2, 2),
+    ),
+    (
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_1_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulAdd, 3, 0),
+    ),
+    (
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_2_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulAdd, 3, 1),
+    ),
+    (
+        "an_unfused_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_3_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulAdd, 3, 2),
+    ),
+    (
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f64_part_1_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulSub, 4, 0),
+    ),
+    (
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f64_part_2_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulSub, 4, 1),
+    ),
+    (
+        "an_unfused_multiply_subtract_gives_the_bits_the_fused_instruction_gives_for_f64_part_3_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::MulSub, 4, 2),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_1_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::NegMulAdd, 5, 0),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_2_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::NegMulAdd, 5, 1),
+    ),
+    (
+        "an_unfused_negated_multiply_add_gives_the_bits_the_fused_instruction_gives_for_f64_part_3_of_3",
+        || unfused_is_fused(FloatBits::F64, Fused::NegMulAdd, 5, 2),
     ),
 ];
 
@@ -125,12 +173,14 @@ fn written(program: &Program, ty: Type, args: &[u64]) -> Vec<u8> {
     scalar::run(&observed).stdout
 }
 
-fn unfused_is_fused(bits: FloatBits, op: Fused, seed: u64) {
+fn unfused_is_fused(bits: FloatBits, op: Fused, seed: u64, part: usize) {
     let all = generate::sample(seed, 0, |g| triples(bits, g));
     let ty = Type::Float(bits);
     let program = fused_program(bits, op);
     let unfused = scalar::unfuse(&program).expect("a fused instruction");
-    for [a, b, c] in all {
+    // The triples of the part: every third one, so that each part holds some
+    // of each kind.
+    for &[a, b, c] in all.iter().skip(part).step_by(3) {
         let args = [a, b, c];
         let want = written(&program, ty, &args);
         let got = written(&unfused, ty, &args);
