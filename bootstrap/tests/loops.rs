@@ -69,8 +69,20 @@ pub const ONCE: &[Test] = &[
         a_loop_that_decreases_a_measure_ends_without_diverge,
     ),
     (
-        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above",
-        a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above,
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_1_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(0),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_2_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(1),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_3_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(2),
+    ),
+    (
+        "a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above_part_4_of_4",
+        || a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(3),
     ),
     (
         "a_distance_to_an_end_is_proven_where_the_loop_goes_round_again_and_nowhere_before",
@@ -540,8 +552,8 @@ fn round(g: &mut Gen) -> Round {
 /// For every `loop decreases e`, the program compiles exactly when each place
 /// the loop goes round again has `e` smaller than the round began with and
 /// not below zero.
-fn a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above() {
-    generate::check(53, 160, round, |r| {
+fn a_loop_with_decreases_compiles_exactly_when_the_measure_gets_smaller_and_stays_at_zero_or_above(part: u64) {
+    generate::check_part(53, 160, part, 4, round, |r| {
         let (t, guard, step) = (r.ty.name, r.guard, r.step);
         let rest = if r.with_else {
             format!(
