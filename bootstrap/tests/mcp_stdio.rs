@@ -30,8 +30,20 @@ pub const ONCE: &[Test] = &[
         arguments_that_do_not_fit_are_invalid_params_with_the_parameter_named,
     ),
     (
-        "a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds",
-        a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds,
+        "a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds_part_1_of_4",
+        || a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds(0),
+    ),
+    (
+        "a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds_part_2_of_4",
+        || a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds(1),
+    ),
+    (
+        "a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds_part_3_of_4",
+        || a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds(2),
+    ),
+    (
+        "a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds_part_4_of_4",
+        || a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds(3),
     ),
     (
         "what_a_tool_prints_goes_to_the_standard_error_and_the_server_ends_with_the_input",
@@ -298,8 +310,8 @@ fn schema_source(t: &Tool) -> String {
     s
 }
 
-fn a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds() {
-    generate::check(7711, 4, tool, |t| {
+fn a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_the_values_it_holds(part: u64) {
+    generate::check_part(7711, 4, part, 4, tool, |t| {
         let described = {
             let source = schema_source(t);
             let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
@@ -321,11 +333,12 @@ fn a_tool_is_listed_with_the_schema_describe_gives_and_a_call_reaches_it_with_th
 
 fn what_a_tool_prints_goes_to_the_standard_error_and_the_server_ends_with_the_input() {
     let source = "use std.console (console, print)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Says hello.\nfn hello(\n  // Who.\n  name: str,\n) -> str <console, alloc> {\n  print(\"loud {name}\")\n  \"hello {name}\"\n}\n\nfn serve() <messages, console, alloc> {\n  with mcp(name: \"h\", version: \"1\")\n  tool(hello)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
-    let lines = serve(source, &[call(1, "hello", "{\"name\":\"ada\"}"), call(2, "hello", "{\"name\":\"bo\"}")]);
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
+    let lines = serve_program(&program, &[call(1, "hello", "{\"name\":\"ada\"}"), call(2, "hello", "{\"name\":\"bo\"}")]);
     assert_eq!(lines.len(), 2, "only messages are written to the standard output: {lines:?}");
     assert_eq!(result_of(&lines[1]).get("structuredContent").and_then(Json::text), Some("hello bo"));
     // No input is no output, and the end of the input ends the server well.
-    assert!(serve(source, &[]).is_empty());
+    assert!(serve_program(&program, &[]).is_empty());
 }
 
 /// A comment of a function that is not a tool, or of a type it does not take
