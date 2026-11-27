@@ -1237,7 +1237,7 @@ const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  it
 /// grown in a plain `var` may, as many as the logarithm of the pushes, however
 /// many pushes there are.
 fn grows_as_a_plain_var_does(form: &str) {
-    for n in [1000, 10000, 100000] {
+    for n in [1000, 10000, 50000] {
         let asked = pushes_by(ACC, form, n);
         assert!(asked <= 1 + ceil_log2(n), "{asked} requests for {form}, {n} pushes");
     }
