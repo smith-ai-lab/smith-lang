@@ -23,7 +23,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::check::Checked;
+use crate::check::{Checked, Library, STEP};
 use crate::diag::{Error, Pos};
 use crate::lexer::{Piece, Tok, Token};
 
@@ -63,6 +63,9 @@ pub(crate) enum Shape {
 /// A function or a struct with whole number parameters, as it is written.
 pub(crate) struct Template {
     pub name: String,
+    /// The file that has the item: 0 for the file that is built, and the place
+    /// of the module among those that have items of this kind otherwise.
+    pub file: usize,
     is_struct: bool,
     /// Where its name is.
     pos: Pos,
@@ -80,16 +83,47 @@ pub(crate) struct Template {
     brackets: (usize, usize),
 }
 
+/// A file the numbers are put into: the one that is built, or a module that
+/// has an item with whole number parameters or uses one of another module.
+#[derive(Default)]
+struct FileState {
+    /// The name of the module as a `use` writes it, and none for the file that
+    /// is built.
+    module: Option<String>,
+    /// Its tokens, without the items that have whole number parameters, and
+    /// with the lines the lexer gave them.
+    base: Vec<Token>,
+    /// The items it has, by name.
+    templates: HashMap<String, Rc<Template>>,
+    /// The names it takes from another file that are items with whole number
+    /// parameters there, by the name it gives them: the file, and the name the
+    /// item has.
+    imports: HashMap<String, (usize, String)>,
+    /// What the items that are not built say.
+    errors: Vec<Error>,
+    /// How many copies of its items the tokens it was last given have, when it
+    /// was given any in this round.
+    emitted: Option<usize>,
+}
+
 #[derive(Default)]
 struct State {
-    templates: HashMap<String, Rc<Template>>,
+    /// The file that is built, and the modules.
+    files: Vec<FileState>,
+    /// The place of each module that is a file here, by its name.
+    modules: HashMap<String, usize>,
+    /// The modules that have no item of this kind and use none.
+    plain: std::collections::HashSet<String>,
+    /// The place of the file that the module with a number among those read
+    /// is.
+    placed: HashMap<usize, usize>,
     /// The copies made so far, in the order they were first asked for, each by
-    /// its template and its numbers. A copy's place here says where its lines
-    /// are, so it never changes.
-    copies: Vec<(String, Vec<u64>)>,
+    /// the file it is in, its template, and its numbers. A copy's place here
+    /// says where its lines are, so it never changes.
+    copies: Vec<(usize, String, Vec<u64>)>,
     /// What the checker said a name is, by where the name is written: the
-    /// template, and the numbers.
-    said: HashMap<Pos, (String, Vec<u64>)>,
+    /// file of the template, the template, and the numbers.
+    said: HashMap<Pos, (usize, String, Vec<u64>)>,
     /// Whether the checker said something it had not said before.
     grew: bool,
 }
@@ -98,18 +132,28 @@ thread_local! {
     static STATE: RefCell<State> = RefCell::new(State::default());
 }
 
-/// The function or struct with whole number parameters that the name is.
-pub(crate) fn template(name: &str) -> Option<Rc<Template>> {
-    STATE.with(|s| s.borrow().templates.get(name).cloned())
+/// The function or struct with whole number parameters that the name is where
+/// it is written at `at`: one of the file that holds the place, or one that the
+/// file takes from another.
+pub(crate) fn template(name: &str, at: Pos) -> Option<Rc<Template>> {
+    STATE.with(|s| {
+        let s = s.borrow();
+        let file = if at.line < STEP {
+            0
+        } else {
+            *s.placed.get(&(at.line / STEP))?
+        };
+        s.find(file, name)
+    })
 }
 
 /// Says that the name written at `at` is the copy of `template` for these
 /// numbers.
-pub(crate) fn say(at: Pos, template: &str, numbers: Vec<u64>) {
+pub(crate) fn say(at: Pos, template: &Template, numbers: Vec<u64>) {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         if let std::collections::hash_map::Entry::Vacant(slot) = s.said.entry(at) {
-            slot.insert((template.to_string(), numbers));
+            slot.insert((template.file, template.name.clone(), numbers));
             s.grew = true;
         }
     });
@@ -346,6 +390,7 @@ fn template_of(tokens: &[Token], errors: &mut Vec<Error>) -> Option<Template> {
     };
     Some(Template {
         name: name.clone(),
+        file: 0,
         is_struct,
         pos: tokens[at + 1].pos,
         broken,
@@ -505,6 +550,48 @@ fn put_in(tokens: &mut [Token], params: &[Param], numbers: &[u64]) {
     }
 }
 
+/// Writes the numbers where the body of a copy gives a parameter to another
+/// item in brackets after its name, as `make[limit]` and `Box[limit]` do, since
+/// what is in those brackets is a number written out and not a name.
+fn put_in_brackets(tokens: &mut [Token], params: &[Param], numbers: &[u64]) {
+    // Whether each bracket that is open follows a name.
+    let mut after_name: Vec<bool> = Vec::new();
+    for i in 0..tokens.len() {
+        match &tokens[i].tok {
+            Tok::Punct("[") => {
+                let named = i > 0 && matches!(tokens[i - 1].tok, Tok::Ident(_));
+                after_name.push(named);
+            }
+            Tok::Punct("(" | "{") => after_name.push(false),
+            Tok::Punct("]" | ")" | "}") => {
+                after_name.pop();
+            }
+            Tok::Ident(name) if after_name.last() == Some(&true) && i > 0 => {
+                let before = matches!(tokens[i - 1].tok, Tok::Punct("[" | ","));
+                let next = matches!(
+                    tokens.get(i + 1).map(|t| &t.tok),
+                    Some(Tok::Punct("]" | ","))
+                );
+                if before
+                    && next
+                    && let Some(k) = params.iter().position(|p| p.name == *name)
+                {
+                    tokens[i].tok = Tok::Number(numbers[k].to_string());
+                }
+            }
+            Tok::Interp(_) => {}
+            _ => {}
+        }
+        if let Tok::Interp(pieces) = &mut tokens[i].tok {
+            for piece in pieces {
+                if let Piece::Expr(inner) = piece {
+                    put_in_brackets(inner, params, numbers);
+                }
+            }
+        }
+    }
+}
+
 fn move_lines(tokens: &mut [Token], by: usize) {
     for t in tokens {
         t.pos.line += by;
@@ -529,16 +616,33 @@ fn plural(n: usize, thing: &str) -> String {
 impl State {
     /// The copy of the template for the numbers, which is made if it is new.
     fn copy(&mut self, template: &Template, numbers: &[u64]) -> String {
-        let key = (template.name.clone(), numbers.to_vec());
+        let key = (template.file, template.name.clone(), numbers.to_vec());
         if !self.copies.contains(&key) {
             self.copies.push(key);
         }
         copy_name(&template.name, numbers)
     }
 
+    /// The item with whole number parameters that a name is in a file: one it
+    /// has, or one it takes from another file.
+    fn find(&self, file: usize, name: &str) -> Option<Rc<Template>> {
+        let file = self.files.get(file)?;
+        if let Some(template) = file.templates.get(name) {
+            return Some(template.clone());
+        }
+        let (from, original) = file.imports.get(name)?;
+        self.files[*from].templates.get(original).cloned()
+    }
+
     /// Rewrites the uses of templates among the tokens: those that say where
     /// the checker said what a name is, and those that write the numbers.
-    fn rewrite(&mut self, tokens: Vec<Token>, errors: &mut Vec<Error>) -> Vec<Token> {
+    fn rewrite(
+        &mut self,
+        file: usize,
+        tokens: Vec<Token>,
+        errors: &mut Vec<Error>,
+        needed: &mut Vec<(usize, String)>,
+    ) -> Vec<Token> {
         let mut out = Vec::with_capacity(tokens.len());
         let mut i = 0;
         while i < tokens.len() {
@@ -547,7 +651,9 @@ impl State {
                 let pieces = pieces
                     .iter()
                     .map(|piece| match piece {
-                        Piece::Expr(inner) => Piece::Expr(self.rewrite(inner.clone(), errors)),
+                        Piece::Expr(inner) => {
+                            Piece::Expr(self.rewrite(file, inner.clone(), errors, needed))
+                        }
                         text => text.clone(),
                     })
                     .collect();
@@ -560,16 +666,19 @@ impl State {
                 i += 1;
                 continue;
             };
-            if let Some((of, numbers)) = self.said.get(&t.pos).cloned() {
-                if let Some(template) = self.templates.get(&of).cloned()
+            if let Some((from, of, numbers)) = self.said.get(&t.pos).cloned() {
+                if let Some(template) = self.files[from].templates.get(&of).cloned()
                     && self.allowed(&template, &numbers, t.pos, errors)
                 {
                     let name = self.copy(&template, &numbers);
+                    if template.file != file {
+                        needed.push((template.file, name.clone()));
+                    }
                     out.push(Token::new(Tok::Ident(name), t.pos));
                     i += 1;
                     continue;
                 }
-            } else if let Some(template) = self.templates.get(name).cloned()
+            } else if let Some(template) = self.find(file, name)
                 && template.is_struct
                 && !template.broken
                 && template.params.iter().all(|p| p.default.is_some())
@@ -584,10 +693,13 @@ impl State {
                 // writes the defaults.
                 let numbers: Vec<u64> = template.params.iter().filter_map(|p| p.default).collect();
                 let name = self.copy(&template, &numbers);
+                if template.file != file {
+                    needed.push((template.file, name.clone()));
+                }
                 out.push(Token::new(Tok::Ident(name), t.pos));
                 i += 1;
                 continue;
-            } else if let Some(template) = self.templates.get(name).cloned()
+            } else if let Some(template) = self.find(file, name)
                 && tokens.get(i + 1).map(|t| &t.tok) == Some(&Tok::Punct("["))
                 && let Some(close) = closing(&tokens, i + 1)
             {
@@ -595,6 +707,9 @@ impl State {
                     out.push(t.clone());
                 } else if let Some(numbers) = self.written(&template, &tokens[i..=close], errors) {
                     let name = self.copy(&template, &numbers);
+                    if template.file != file {
+                        needed.push((template.file, name.clone()));
+                    }
                     out.push(Token::new(Tok::Ident(name), t.pos));
                 }
                 i = close + 1;
@@ -765,8 +880,8 @@ impl State {
     /// `Nat` that the body defines first, so that it is a value there and not a
     /// number written out.
     fn made(&self, id: usize) -> Vec<Token> {
-        let (name, numbers) = &self.copies[id];
-        let template = &self.templates[name];
+        let (from, name, numbers) = &self.copies[id];
+        let template = &self.files[*from].templates[name];
         let (open, close) = template.brackets;
         let mut tokens: Vec<Token> = template.tokens[..open]
             .iter()
@@ -788,6 +903,9 @@ impl State {
         put_in(signature, &template.params, numbers);
         let mut tokens = signature.to_vec();
         if let Some((open, rest)) = body.split_first() {
+            let mut rest = rest.to_vec();
+            put_in_brackets(&mut rest, &template.params, numbers);
+            let rest = &rest[..];
             tokens.push(open.clone());
             for (p, n) in template.params.iter().zip(numbers) {
                 if mentions(rest, &p.name) {
@@ -860,13 +978,18 @@ fn binding(p: &Param, number: u64) -> Vec<Token> {
 /// Takes out of the tokens of the file each item that has whole number
 /// parameters, and gives what is left and the items taken out. A file with
 /// none is not copied.
-fn split(tokens: &[Token], errors: &mut Vec<Error>) -> Option<(Vec<Token>, Vec<Template>)> {
+fn split(
+    tokens: &[Token],
+    file: usize,
+    errors: &mut Vec<Error>,
+) -> Option<(Vec<Token>, Vec<Template>)> {
     let starts = item_starts(tokens);
     let end = tokens.len() - 1;
     let mut found = Vec::new();
     for (k, &from) in starts.iter().enumerate() {
         let to = starts.get(k + 1).copied().unwrap_or(end);
-        if let Some(template) = template_of(&tokens[from..to], errors) {
+        if let Some(mut template) = template_of(&tokens[from..to], errors) {
+            template.file = file;
             found.push((from, to, template));
         }
     }
@@ -885,47 +1008,337 @@ fn split(tokens: &[Token], errors: &mut Vec<Error>) -> Option<(Vec<Token>, Vec<T
     Some((out, taken))
 }
 
+/// The tokens with each place moved by `by` lines.
+fn shift(tokens: Vec<Token>, by: usize) -> Vec<Token> {
+    let mut tokens = tokens;
+    if by > 0 {
+        move_lines(&mut tokens, by);
+    }
+    tokens
+}
+
+/// What a `use` line takes: the module it is from, written as it is, and the
+/// names it lists, each with the name it is given and where it stands among the
+/// tokens.
+struct UseLine {
+    module: String,
+    /// The `(` that opens the names and the `)` that closes them, if it lists any.
+    list: Option<(usize, usize)>,
+    /// Each name listed, by the name it is, the name it is given, and the tokens
+    /// of the entry from its first to its last.
+    names: Vec<(String, String, usize, usize)>,
+}
+
+/// The `use` lines at the start of a file, which stand before everything else.
+fn use_lines(tokens: &[Token]) -> Vec<UseLine> {
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i < tokens.len() {
+        match &tokens[i].tok {
+            Tok::Newline => {
+                i += 1;
+                continue;
+            }
+            Tok::Keyword("use") => {}
+            _ => break,
+        }
+        i += 1;
+        let mut module = String::new();
+        while let Some(t) = tokens.get(i) {
+            match &t.tok {
+                Tok::Ident(name) => module.push_str(name),
+                Tok::Punct(".") => module.push('.'),
+                _ => break,
+            }
+            i += 1;
+        }
+        if tokens.get(i).map(|t| &t.tok) == Some(&Tok::Keyword("as")) {
+            i += 2;
+        }
+        let mut list = None;
+        let mut names = Vec::new();
+        if tokens.get(i).map(|t| &t.tok) == Some(&Tok::Punct("("))
+            && let Some(close) = closing(tokens, i)
+        {
+            list = Some((i, close));
+            let mut k = i + 1;
+            while k < close {
+                if let Tok::Ident(name) = &tokens[k].tok {
+                    let start = k;
+                    let mut local = name.clone();
+                    k += 1;
+                    if tokens.get(k).map(|t| &t.tok) == Some(&Tok::Keyword("as"))
+                        && let Some(Tok::Ident(given)) = tokens.get(k + 1).map(|t| &t.tok)
+                    {
+                        local = given.clone();
+                        k += 2;
+                    }
+                    names.push((name.clone(), local, start, k - 1));
+                } else {
+                    k += 1;
+                }
+            }
+            i = close + 1;
+        }
+        found.push(UseLine {
+            module,
+            list,
+            names,
+        });
+        while i < tokens.len() && tokens[i].tok != Tok::Newline {
+            i += 1;
+        }
+    }
+    found
+}
+
+/// The modules a source says it takes from, read off the lines that begin with
+/// `use`, so that nothing is lexed to know them.
+fn used_modules(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix("use "))
+        .map(|rest| {
+            let end = rest
+                .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '.'))
+                .unwrap_or(rest.len());
+            rest[..end].to_string()
+        })
+        .collect()
+}
+
+/// Whether a source writes an item that has a whole number as a parameter: a
+/// line that starts a function or a struct, with the name followed by brackets
+/// that hold `: Nat` or `: Pos`.
+fn defines_templates(text: &str) -> bool {
+    text.lines().any(|line| {
+        let line = line.strip_prefix("pub ").unwrap_or(line);
+        let Some(rest) = line
+            .strip_prefix("fn ")
+            .or_else(|| line.strip_prefix("struct "))
+        else {
+            return false;
+        };
+        let end = rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len());
+        let Some(inside) = rest[end..].strip_prefix('[') else {
+            return false;
+        };
+        let inside = inside.split(']').next().unwrap_or(inside);
+        inside.contains(": Nat") || inside.contains(": Pos")
+    })
+}
+
+/// The file of a module that has items with whole number parameters, or uses
+/// those of another module, made if it is new, and none for a module that has
+/// none and uses none.
+fn module_file(state: &mut State, library: &Library, name: &str) -> Option<usize> {
+    if let Some(&file) = state.modules.get(name) {
+        return Some(file);
+    }
+    if state.plain.contains(name) {
+        return None;
+    }
+    let Some(text) = library.source(name) else {
+        state.plain.insert(name.to_string());
+        return None;
+    };
+    // Modules that import each other in a ring are refused by the checker, and
+    // here the module is taken for one that has nothing until it is done.
+    state.plain.insert(name.to_string());
+    let mut uses_one = false;
+    for used in used_modules(&text) {
+        uses_one |= module_file(state, library, &used).is_some();
+    }
+    if !uses_one && !defines_templates(&text) {
+        return None;
+    }
+    let Ok(tokens) = crate::lexer::lex(text.as_bytes()) else {
+        return None;
+    };
+    state.plain.remove(name);
+    let file = state.files.len();
+    let mut errors = Vec::new();
+    let (base, templates) =
+        split(&tokens, file, &mut errors).unwrap_or((tokens.clone(), Vec::new()));
+    state.files.push(FileState::default());
+    state.modules.insert(name.to_string(), file);
+    take_imports(state, file, &base);
+    let at = &mut state.files[file];
+    at.module = Some(name.to_string());
+    at.base = base;
+    at.templates = templates
+        .into_iter()
+        .map(|t| (t.name.clone(), Rc::new(t)))
+        .collect();
+    at.errors = errors;
+    Some(file)
+}
+
+/// Records the names a file takes from modules that are items with whole
+/// number parameters there.
+fn take_imports(state: &mut State, file: usize, base: &[Token]) {
+    let mut taken = HashMap::new();
+    for line in use_lines(base) {
+        let Some(&from) = state.modules.get(&line.module) else {
+            continue;
+        };
+        for (name, local, ..) in &line.names {
+            if state.files[from].templates.contains_key(name) {
+                taken.insert(local.clone(), (from, name.clone()));
+            }
+        }
+    }
+    state.files[file].imports = taken;
+}
+
+impl State {
+    /// The tokens of a file for this round: its own, then the copies of its
+    /// items that have been asked for, with each use that writes numbers or has
+    /// them said made one of a copy, and the `use` lines that take items of other
+    /// files taking the copies this file asks of them. `at` is where the lines
+    /// of the file are, which is 0 for the file that is built.
+    fn file_tokens(&mut self, file: usize, at: usize, errors: &mut Vec<Error>) -> Vec<Token> {
+        let base = self.files[file].base.clone();
+        let end = base.last().cloned().expect("the end of the file");
+        let mut needed = Vec::new();
+        let body = shift(base[..base.len() - 1].to_vec(), at);
+        let mut tokens = self.rewrite(file, body, errors, &mut needed);
+        let mut id = 0;
+        while id < self.copies.len() {
+            if self.copies[id].0 == file {
+                let made = shift(self.made(id), at);
+                let made = self.rewrite(file, made, errors, &mut needed);
+                tokens.push(Token::new(Tok::Newline, end.pos));
+                tokens.extend(made);
+            }
+            id += 1;
+        }
+        tokens.push(Token::new(
+            end.tok,
+            Pos {
+                line: end.pos.line + at,
+                ..end.pos
+            },
+        ));
+        self.files[file].emitted = Some(self.copies.iter().filter(|c| c.0 == file).count());
+        self.take_copies(tokens, &needed)
+    }
+
+    /// The tokens with the `use` lines that take items of other files taking the
+    /// copies of them that `needed` says, in place of the items.
+    fn take_copies(&self, tokens: Vec<Token>, needed: &[(usize, String)]) -> Vec<Token> {
+        let mut out = Vec::with_capacity(tokens.len() + needed.len() * 3);
+        let mut copied_to = 0;
+        for line in use_lines(&tokens) {
+            let Some((open, close)) = line.list else {
+                continue;
+            };
+            let from_file = self.modules.get(&line.module).copied();
+            let mut new_list: Vec<Token> = Vec::new();
+            let mut changed = false;
+            for (name, _, first, last) in &line.names {
+                // The copies of this item that the file asks of the module, each once.
+                let mut copies: Vec<&String> = Vec::new();
+                for (f, copy) in needed {
+                    if Some(*f) == from_file
+                        && copy_of(copy).is_some_and(|(of, _)| of == name)
+                        && !copies.contains(&copy)
+                    {
+                        copies.push(copy);
+                    }
+                }
+                let at = tokens[*first].pos;
+                // An item with whole number parameters that no copy is asked of
+                // has nothing left in its module to take.
+                let is_item = from_file.is_some_and(|f| self.files[f].templates.contains_key(name));
+                if copies.is_empty() && is_item {
+                    changed = true;
+                } else if copies.is_empty() {
+                    if !new_list.is_empty() {
+                        new_list.push(Token::new(Tok::Punct(","), at));
+                    }
+                    new_list.extend_from_slice(&tokens[*first..=*last]);
+                } else {
+                    changed = true;
+                    for copy in copies {
+                        if !new_list.is_empty() {
+                            new_list.push(Token::new(Tok::Punct(","), at));
+                        }
+                        new_list.push(Token::new(Tok::Ident(copy.clone()), at));
+                    }
+                }
+            }
+            if changed {
+                out.extend_from_slice(&tokens[copied_to..=open]);
+                out.extend(new_list);
+                copied_to = close;
+            }
+        }
+        out.extend_from_slice(&tokens[copied_to..]);
+        out
+    }
+}
+
+/// The tokens of the module with this name, as the checker reads it, which is at
+/// `at` lines from the start, when the module has items with whole number
+/// parameters or uses those of another module, and what is not built in it.
+pub(crate) fn module_tokens(name: &str, at: usize) -> Option<(Vec<Token>, Vec<Error>)> {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let file = *s.modules.get(name)?;
+        s.placed.insert(at / STEP, file);
+        let mut errors = s.files[file].errors.clone();
+        let tokens = s.file_tokens(file, at, &mut errors);
+        Some((tokens, errors))
+    })
+}
+
 /// Finds the copies the file asks for and checks it with them, again for each
 /// thing the checker says about a use that leaves the numbers out, until it
 /// says no more. `attempt` checks the tokens of a file, with what the items in
 /// it that are not built say, which the checker reports with its other errors.
+/// The modules the file takes from are looked for in `library`, and those that
+/// have items with whole number parameters get their copies as the file does.
 pub(crate) fn run(
     tokens: Vec<Token>,
+    library: &Library,
     mut attempt: impl FnMut(Vec<Token>, Vec<Error>) -> Result<Checked, Vec<Error>>,
 ) -> Result<Checked, Vec<Error>> {
     let mut pre = Vec::new();
-    let split = split(&tokens, &mut pre);
-    let Some((base, taken)) = split else {
+    let split = split(&tokens, 0, &mut pre);
+    let mut state = State::default();
+    let (base, taken) = match split {
+        Some(split) => split,
+        None => (tokens.clone(), Vec::new()),
+    };
+    state.files.push(FileState::default());
+    for line in use_lines(&base) {
+        module_file(&mut state, library, &line.module);
+    }
+    if taken.is_empty() && state.modules.is_empty() {
         STATE.with(|s| *s.borrow_mut() = State::default());
         return attempt(tokens, Vec::new());
-    };
+    }
     drop(tokens);
-    STATE.with(|s| {
-        *s.borrow_mut() = State {
-            templates: taken
-                .into_iter()
-                .map(|t| (t.name.clone(), Rc::new(t)))
-                .collect(),
-            ..State::default()
-        };
-    });
+    take_imports(&mut state, 0, &base);
+    state.files[0].base = base;
+    state.files[0].templates = taken
+        .into_iter()
+        .map(|t| (t.name.clone(), Rc::new(t)))
+        .collect();
+    STATE.with(|s| *s.borrow_mut() = state);
     let mut last = None;
     for _ in 0..ROUNDS {
         let (tokens, found) = STATE.with(|s| {
             let mut s = s.borrow_mut();
             s.grew = false;
-            let mut errors = Vec::new();
-            let end = base.last().cloned().expect("the end of the file");
-            let mut tokens = s.rewrite(base[..base.len() - 1].to_vec(), &mut errors);
-            let mut id = 0;
-            while id < s.copies.len() {
-                let made = s.made(id);
-                let made = s.rewrite(made, &mut errors);
-                tokens.push(Token::new(Tok::Newline, end.pos));
-                tokens.extend(made);
-                id += 1;
+            s.placed.clear();
+            for file in &mut s.files {
+                file.emitted = None;
             }
-            tokens.push(end);
+            let mut errors = Vec::new();
+            let tokens = s.file_tokens(0, 0, &mut errors);
             (tokens, errors)
         });
         if !found.is_empty() {
@@ -933,7 +1346,16 @@ pub(crate) fn run(
             break;
         }
         let result = attempt(tokens, pre.clone());
-        let grew = STATE.with(|s| s.borrow().grew);
+        // A module that was read before another asked it for a copy is read
+        // again, with the copy.
+        let grew = STATE.with(|s| {
+            let s = s.borrow();
+            s.grew
+                || s.files.iter().enumerate().any(|(file, f)| {
+                    f.emitted
+                        .is_some_and(|had| s.copies.iter().filter(|c| c.0 == file).count() > had)
+                })
+        });
         last = Some(result);
         if !grew {
             break;
@@ -957,11 +1379,14 @@ fn put_back(state: &State, result: Result<Checked, Vec<Error>>) -> Result<Checke
             .into_iter()
             .map(|mut e| {
                 let mut note = String::new();
-                if e.module.is_none() && e.pos.line >= LINES {
-                    let id = e.pos.line / LINES - 1;
-                    e.pos.line %= LINES;
-                    if let Some((name, numbers)) = state.copies.get(id)
-                        && let Some(template) = state.templates.get(name)
+                // A place in a module is the module's lines, and a place in a
+                // copy is in lines after those of the module.
+                let within = e.pos.line % STEP;
+                if within >= LINES {
+                    let id = within / LINES - 1;
+                    e.pos.line = e.pos.line - within + within % LINES;
+                    if let Some((file, name, numbers)) = state.copies.get(id)
+                        && let Some(template) = state.files[*file].templates.get(name)
                         && says
                     {
                         let given: Vec<String> = (template.params.iter().zip(numbers))
@@ -981,8 +1406,12 @@ fn put_back(state: &State, result: Result<Checked, Vec<Error>>) -> Result<Checke
             checked.warnings = fix(checked.warnings, false);
             // An item that no use asks a copy of is dead, as one that `main`
             // does not reach is.
-            for template in state.templates.values() {
-                if !template.broken && !state.copies.iter().any(|(name, _)| *name == template.name)
+            for template in state.files[0].templates.values() {
+                if !template.broken
+                    && !state
+                        .copies
+                        .iter()
+                        .any(|(file, name, _)| *file == 0 && *name == template.name)
                 {
                     checked.warnings.push(
                         Error::new(
