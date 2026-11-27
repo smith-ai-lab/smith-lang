@@ -94,7 +94,7 @@ fn build(smith: &Path, work: &Path, name: &str, source: &str) -> Built {
     for _ in 0..RUNS {
         let start = Instant::now();
         let out = Command::new(smith)
-            .args(["build", "--timings"])
+            .args(["--timings", "build"])
             .arg(&file)
             .current_dir(work)
             .output()

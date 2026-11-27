@@ -226,6 +226,27 @@ impl Read {
 }
 
 impl Task {
+    /// The first of the words that is a flag of `smith` the task has no
+    /// parameter of the name of, which is written in the place of a flag. A
+    /// word that is the value of a flag is not one.
+    pub fn flag_of_smith(&self, words: &[std::ffi::OsString]) -> Option<String> {
+        let mut words = words.iter().filter_map(|w| w.to_str());
+        while let Some(word) = words.next() {
+            let Some(name) = word.strip_prefix("--") else {
+                continue;
+            };
+            match self.flags.iter().find(|f| f.name == name) {
+                Some(flag) if !flag.boolean => {
+                    words.next();
+                }
+                Some(_) => {}
+                None if name == "timings" || name == "watch" => return Some(word.to_string()),
+                None => {}
+            }
+        }
+        None
+    }
+
     /// The errors with the ones in the text the compiler writes for the task
     /// given the place of the task's name, which is in `project.smith`, so that
     /// every error shows a line the programmer wrote.

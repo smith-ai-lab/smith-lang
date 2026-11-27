@@ -13,10 +13,10 @@ use smith::target::Target;
 use smith::timings::Timings;
 
 const USAGE: &str =
-    "usage: smith build [--target <target>] [--timings] [--map] [<file>.smith | <task>]
-       smith <task> [--<flag> <value>...]
-       smith run [--target <target>] [--timings] [<file>.smith [<word>...]]
-       smith check [--timings] [<file>.smith]
+    "usage: smith [--timings] build [--target <target>] [--map] [<file>.smith | <task>]
+       smith [--timings] <task> [--<flag> <value>...]
+       smith [--timings] run [--target <target>] [<file>.smith [<word>...]]
+       smith [--timings] check [<file>.smith]
        smith --version";
 
 /// The version a release was built as, set by the release workflow. A build
@@ -63,23 +63,43 @@ fn text(arg: &OsStr) -> Result<&str, String> {
     })
 }
 
+/// The error for a flag of `smith` written after the command.
+fn flag_of_smith(flag: &str, command: &str) -> String {
+    format!("`{flag}` is a flag of `smith`, written before the command: smith {flag} {command}")
+}
+
 fn command(args: &[OsString]) -> Result<ExitCode, String> {
+    // The flags of `smith` come right after `smith`, before the command.
+    let mut timings = false;
+    let mut args = args;
+    while let Some((flag, rest)) = args.split_first() {
+        match text(flag)? {
+            "--timings" => timings = true,
+            "--watch" => return Err("smith --watch is not built yet".to_string()),
+            _ => break,
+        }
+        args = rest;
+    }
     let Some((name, rest)) = args.split_first() else {
         return Err(USAGE.to_string());
     };
     let name = text(name)?;
     match name {
-        "--version" if rest.is_empty() => {
+        "--version" if rest.is_empty() && !timings => {
             println!("smith {VERSION}");
             Ok(ExitCode::SUCCESS)
         }
+        "--target" => Err(
+            "`--target` is a flag of `build` and `run`, written after the command: smith build --target <target>"
+                .to_string(),
+        ),
         "build" => {
-            let request = request(rest, false)?;
+            let request = request(rest, false, timings)?;
             build(&request)?;
             Ok(ExitCode::SUCCESS)
         }
         "run" => {
-            let request = request(rest, true)?;
+            let request = request(rest, true, timings)?;
             if Target::host() != Some(request.target) {
                 return Err(format!(
                     "smith run runs only programs for this machine, and {} is not its target",
@@ -89,22 +109,21 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
             let executable = build(&request)?;
             run(&executable, &request.words)
         }
-        "check" => check(rest),
+        "check" => check(rest, timings),
         "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
             Err(format!("smith {name} is not supported yet"))
         }
         _ if name.starts_with('-') => Err(format!("unknown command `{name}`\n{USAGE}")),
-        task => run_task(task, rest),
+        task => run_task(task, rest, timings),
     }
 }
 
 /// What a command line asks for. When `with_words`, every word after the
 /// file's name is for the program and no flag is read among them.
-fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
+fn request(args: &[OsString], with_words: bool, timings: bool) -> Result<Request, String> {
     let mut target = None;
     let mut entry = None;
     let mut task = None;
-    let mut timings = false;
     let mut map = false;
     let mut words = Vec::new();
     let mut args = args.iter();
@@ -122,8 +141,9 @@ fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
                     names.join(", ")
                 )
             })?);
-        } else if arg == "--timings" {
-            timings = true;
+        } else if arg == "--timings" || arg == "--watch" {
+            let command = if with_words { "run" } else { "build" };
+            return Err(flag_of_smith(arg, command));
         } else if arg == "--map" && !with_words {
             map = true;
         } else if arg.starts_with("--") {
@@ -161,13 +181,12 @@ fn request(args: &[OsString], with_words: bool) -> Result<Request, String> {
 /// Checks the entry, `main.smith` unless a file is named, and reports its
 /// errors, or else its warnings, writing no file. It fails if there are
 /// any. With `--timings` it then prints how long each stage took.
-fn check(args: &[OsString]) -> Result<ExitCode, String> {
+fn check(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
     let mut entry = None;
-    let mut timings = false;
     for arg in args {
         let arg = text(arg)?;
-        if arg == "--timings" {
-            timings = true;
+        if arg == "--timings" || arg == "--watch" {
+            return Err(flag_of_smith(arg, "check"));
         } else if arg.starts_with("--") {
             return Err(format!("unknown flag `{arg}`\n{USAGE}"));
         } else if entry.is_some() {
@@ -508,8 +527,12 @@ fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<Pa
 }
 
 /// Builds a task for this machine and runs it with the flags it is given.
-fn run_task(task: &str, flags: &[OsString]) -> Result<ExitCode, String> {
-    project_with_task(task)?;
+fn run_task(task: &str, flags: &[OsString], timings: bool) -> Result<ExitCode, String> {
+    let (_, read) = project_with_task(task)?;
+    let found = read.task(task).expect("project_with_task found it");
+    if let Some(flag) = found.flag_of_smith(flags) {
+        return Err(flag_of_smith(&flag, task));
+    }
     let target = Target::host().ok_or_else(|| {
         format!(
             "this machine, {}, is not a target",
@@ -520,7 +543,7 @@ fn run_task(task: &str, flags: &[OsString]) -> Result<ExitCode, String> {
         target,
         entry: PathBuf::from("main.smith"),
         task: Some(task.to_string()),
-        timings: false,
+        timings,
         map: false,
         words: flags.to_vec(),
     };

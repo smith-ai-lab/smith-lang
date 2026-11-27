@@ -459,7 +459,7 @@ fn run_gives_the_program_the_words_after_the_files_name() {
     // a flag of `smith`, and a flag before the file's name is `smith`'s.
     let ran = smith(
         &dir,
-        &["run", "--timings", "each.smith", "--target", "a b", ""],
+        &["--timings", "run", "each.smith", "--target", "a b", ""],
     );
     assert_eq!(ran.status.code(), Some(0), "{}", stderr(&ran));
     assert_eq!(ran.stdout, b"--target\na b\n\n");

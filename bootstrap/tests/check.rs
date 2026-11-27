@@ -203,7 +203,7 @@ fn check_timings_list_the_stages_before_emit() {
     for (file, text, reported) in sources {
         let dir = folder("timed");
         std::fs::write(dir.join(&file), &text).unwrap();
-        let checked = smith(&dir, &["check", "--timings", &file]);
+        let checked = smith(&dir, &["--timings", "check", &file]);
         let shown = stderr(&checked);
         assert_eq!(checked.status.success(), reported.is_empty(), "{file}");
         assert!(shown.starts_with(&reported), "{file}: {shown}");
