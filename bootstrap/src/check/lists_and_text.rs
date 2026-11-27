@@ -120,6 +120,31 @@ pub(super) fn is_freeze(defs: &Defs, call: &Call) -> bool {
 }
 
 impl<'a> Checker<'a> {
+    /// Whether a function may need `arith` to know that a place falls between
+    /// characters: it takes a piece, writes `boundary`, or calls a function
+    /// whose contract says it. Only such a function has the bytes of a text
+    /// it reads as variables, which the other proofs need not carry.
+    pub(super) fn needs_boundaries(&self, f: &Function) -> bool {
+        let defs = self.defs;
+        let says = |e: &Expr| {
+            super::exprs(std::iter::once(e))
+                .iter()
+                .any(|e| matches!(e, Expr::Call(c) if is_boundary(defs, c)))
+        };
+        let contract = |g: &Function| g.requires.iter().chain(&g.ensures).any(says);
+        contract(f)
+            || super::exprs(super::values(&f.body))
+                .iter()
+                .any(|e| match e {
+                    Expr::Slice { .. } => true,
+                    Expr::Call(c) if is_boundary(defs, c) => true,
+                    Expr::Call(c) if c.qualifier.is_none() => defs
+                        .function(c.name_pos, &c.callee)
+                        .is_some_and(|k| contract(&defs.file.functions[k])),
+                    _ => false,
+                })
+    }
+
     /// Checks `utf8(bytes)`, which gives `.ok` of the text that is the same
     /// bytes, or `.err` with the place of the first byte that is not valid.
     pub(super) fn utf8(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {

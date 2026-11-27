@@ -24,6 +24,10 @@ use crate::parser::{ArithOp, Call, Expr, Form, Function, Loop, Pattern, Range, S
 /// 48: each element has at least a byte, and no address has more than 48 bits.
 pub(super) const MAX_SIZE: i128 = (1 << 48) - 1;
 
+/// The greatest byte that is a character of its own in UTF-8, so that a
+/// place on either side of it falls between characters.
+const ASCII_MOST: i128 = 127;
+
 /// What a variable of `arith` stands for.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Key {
@@ -167,6 +171,9 @@ pub(super) struct Facts {
     steps: Vec<(usize, Option<Int>)>,
     /// Whether the ranges of the `var`s are being solved.
     pub(super) solving: bool,
+    /// Whether a byte of a text that is read is a variable of its own, which
+    /// only a function that may need a `boundary` asks for.
+    pub(super) reads_bytes: bool,
     /// Each `boundary(s, i)` that was read, as a fact or as a goal.
     bounds: Vec<Bound>,
     /// Each byte of a text that was read as a whole number.
@@ -192,10 +199,11 @@ struct Bound {
 }
 
 /// A byte of the text `text` that was read: the variable that is its place,
-/// and the variable that is the byte.
+/// the sum the place was when it was read, and the variable that is the byte.
 struct ByteRead {
     text: String,
     at: usize,
+    place: Lin,
     value: usize,
 }
 
@@ -642,7 +650,8 @@ impl Builder<'_, '_> {
                 };
                 Some(self.variable(Key::Call(addr(call), lo, hi)))
             }
-            Expr::Index { of, index, .. } => match self.text_of_bytes(of) {
+            Expr::Index { of, index, .. } if self.facts.reads_bytes => match self.text_of_bytes(of)
+            {
                 Some(text) => self.byte(e, text, index),
                 None => self.goal.then(|| self.fresh(e)),
             },
@@ -686,6 +695,7 @@ impl Builder<'_, '_> {
         self.facts.bytes.push(ByteRead {
             text,
             at,
+            place,
             value: value_id,
         });
         Some(value)
@@ -2406,7 +2416,13 @@ fn background<'g>(facts: &Facts, goals: impl Iterator<Item = &'g Formula>) -> Ve
     }
     for (place, ways, holds) in claims {
         used.push(place);
-        if proves_one_of(&used, &ways) {
+        let bound = (facts.bounds.iter())
+            .find(|b| b.holds == holds)
+            .expect("a claim is of a bound");
+        if plainly(facts, bound, &bound.sum, &known, &used)
+            || by_cases(facts, bound, &known, &used)
+            || proves_one_of(&connected(&used, &ways), &ways)
+        {
             used.push(Formula::Ge(Lin {
                 terms: BTreeMap::from([(holds, 1)]),
                 constant: -1,
@@ -2414,6 +2430,128 @@ fn background<'g>(facts: &Facts, goals: impl Iterator<Item = &'g Formula>) -> Ve
         }
     }
     used
+}
+
+/// Whether the place of `bound` is plainly one that falls between
+/// characters: it is written as 0, as the size, as a place a fact says it
+/// of, or as the place of a byte, or the one after it, that is proven below
+/// 128. This asks `arith` of at most one statement for each, and no `or` of
+/// them, so it is quick, and the ways are worked through only where it fails.
+fn plainly(facts: &Facts, bound: &Bound, place: &Lin, known: &[usize], used: &[Formula]) -> bool {
+    if *place == constant(0) || bound.size.as_ref() == Some(place) {
+        return true;
+    }
+    let holds = |f: Formula| proves(&connected(used, std::slice::from_ref(&f)), &f);
+    let said = (facts.bounds.iter()).any(|other| {
+        other.text == bound.text
+            && other.holds != bound.holds
+            && known.contains(&other.holds)
+            && other.sum == *place
+            && holds(Formula::Ge(Lin {
+                terms: BTreeMap::from([(other.holds, 1)]),
+                constant: -1,
+            }))
+    });
+    said || (facts.bytes.iter()).any(|byte| {
+        let mut after = byte.place.clone();
+        after.constant += 1;
+        byte.text == bound.text
+            && known.contains(&byte.value)
+            && (byte.place == *place || after == *place)
+            && holds(Formula::Ge(Lin {
+                terms: BTreeMap::from([(byte.value, -1)]),
+                constant: ASCII_MOST,
+            }))
+    })
+}
+
+/// Whether the place of `bound` is a value that the paths of an `if` that
+/// joined gave, as a `var` is after one, and on each path it is plainly a
+/// place that falls between characters, with what that path knows.
+fn by_cases(facts: &Facts, bound: &Bound, known: &[usize], used: &[Formula]) -> bool {
+    let mut one = bound.sum.terms.iter();
+    let (Some((&v, &1)), None, 0) = (one.next(), one.next(), bound.sum.constant) else {
+        return false;
+    };
+    used.iter().any(|f| {
+        let Formula::Or(sides) = f else {
+            return false;
+        };
+        let places: Option<Vec<Lin>> = sides.iter().map(|side| equal_to(side, v)).collect();
+        places.is_some_and(|places| {
+            sides.iter().zip(&places).all(|(side, place)| {
+                let mut with = used.to_vec();
+                with.push(side.clone());
+                plainly(facts, bound, place, known, &with)
+            })
+        })
+    })
+}
+
+/// The sum a formula says the variable `v` equals, where it says so with two
+/// facts that each hold `v` once, as `v - x >= 0` and `x - v >= 0`.
+fn equal_to(f: &Formula, v: usize) -> Option<Lin> {
+    fn atoms<'f>(f: &'f Formula, out: &mut Vec<&'f Formula>) {
+        match f {
+            Formula::And(items) => items.iter().for_each(|i| atoms(i, out)),
+            f => out.push(f),
+        }
+    }
+    let mut items = Vec::new();
+    atoms(f, &mut items);
+    items.iter().find_map(|item| {
+        let Formula::Ge(l) = item else {
+            return None;
+        };
+        if l.terms.get(&v) != Some(&1) {
+            return None;
+        }
+        let other = l.negated()?;
+        if !items.contains(&&Formula::Ge(other)) {
+            return None;
+        }
+        // `l` is `v - x`, so `x` is `v - l`.
+        let mut x = l.negated()?;
+        x.terms.remove(&v);
+        Some(x)
+    })
+}
+
+/// The facts that share a variable with the ways, or with another fact that
+/// does, however far: the others say nothing of the ways, so a way follows
+/// from these exactly when it follows from all, where the facts can hold.
+fn connected(facts: &[Formula], ways: &[Formula]) -> Vec<Formula> {
+    let vars: Vec<Vec<usize>> = (facts.iter())
+        .map(|f| {
+            let mut ids = Vec::new();
+            collect(f, &mut ids);
+            ids
+        })
+        .collect();
+    let mut reached = std::collections::HashSet::new();
+    for way in ways {
+        let mut ids = Vec::new();
+        collect(way, &mut ids);
+        reached.extend(ids);
+    }
+    let mut taken = vec![false; facts.len()];
+    loop {
+        let mut grew = false;
+        for (k, ids) in vars.iter().enumerate() {
+            if !taken[k] && ids.iter().any(|v| reached.contains(v)) {
+                taken[k] = true;
+                reached.extend(ids.iter().copied());
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    (facts.iter().zip(taken))
+        .filter(|(_, t)| *t)
+        .map(|(f, _)| f.clone())
+        .collect()
 }
 
 /// The variable `id`, as a sum.
@@ -2470,7 +2608,7 @@ fn boundary_ways(facts: &Facts, bound: &Bound, known: &[usize]) -> Option<Vec<Fo
         // `127 - byte >= 0`.
         let ascii = Formula::Ge(Lin {
             terms: BTreeMap::from([(byte.value, -1)]),
-            constant: 127,
+            constant: ASCII_MOST,
         });
         let mut after = variable(byte.at);
         after.constant = 1;
