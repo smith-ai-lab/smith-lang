@@ -30,20 +30,36 @@ pub const ONCE: &[Test] = &[
         a_character_outside_ascii_is_refused_as_a_u8_and_is_its_code_point_as_a_wider_type,
     ),
     (
-        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_1_of_2",
+        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_1_of_4",
         || a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(0),
     ),
     (
-        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_2_of_2",
+        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_2_of_4",
         || a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(1),
+    ),
+    (
+        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_3_of_4",
+        || a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(2),
+    ),
+    (
+        "a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it_part_4_of_4",
+        || a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(3),
     ),
     (
         "a_match_on_text_takes_the_block_of_the_literal_that_equals_it",
         a_match_on_text_takes_the_block_of_the_literal_that_equals_it,
     ),
     (
-        "a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches",
-        a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches,
+        "a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches_part_1_of_3",
+        || a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches(0),
+    ),
+    (
+        "a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches_part_2_of_3",
+        || a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches(1),
+    ),
+    (
+        "a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches_part_3_of_3",
+        || a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches(2),
     ),
     (
         "a_match_on_whole_numbers_or_text_must_end_with_a_bare_name_and_repeat_nothing",
@@ -215,7 +231,7 @@ fn numbers(g: &mut Gen) -> Numbers {
 }
 
 fn a_match_on_a_whole_number_takes_the_block_of_the_literal_that_equals_it(part: u64) {
-    generate::check_part(13, 120, part, 2, numbers, |n: &Numbers| {
+    generate::check_part(13, 120, part, 4, numbers, |n: &Numbers| {
         let t = n.ty.name;
         let mut by_match = format!("fn f(b: {t}) -> Int {{\n  match b {{\n");
         let mut by_if = format!("fn f(b: {t}) -> Int {{\n  ");
@@ -322,10 +338,12 @@ fn part(g: &mut Gen) -> Part {
 /// The rows of a `match` on a pair, and the cases of one on an `Option`.
 type Patterns = (Vec<(Part, Part, i64)>, Vec<(Part, i64)>);
 
-fn a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches() {
-    generate::check(
+fn a_literal_in_a_case_and_in_a_tuple_is_matched_by_the_first_pattern_that_matches(which: u64) {
+    generate::check_part(
         15,
         120,
+        which,
+        3,
         |g| {
             // A pattern is kept only when some value reaches it, and the last
             // pattern is written only when some value is left for it.

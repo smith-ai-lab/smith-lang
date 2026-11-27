@@ -18,28 +18,80 @@ use crate::targets::any;
 
 pub const ONCE: &[Test] = &[
     (
-        "a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives",
-        a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives,
+        "a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives_part_1_of_4",
+        || a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(0),
     ),
     (
-        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values",
-        a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values,
+        "a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives_part_2_of_4",
+        || a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(1),
+    ),
+    (
+        "a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives_part_3_of_4",
+        || a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(2),
+    ),
+    (
+        "a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives_part_4_of_4",
+        || a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(3),
+    ),
+    (
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_1_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(0),
+    ),
+    (
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_2_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(1),
+    ),
+    (
+        "a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values_part_3_of_3",
+        || a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(2),
     ),
     (
         "a_value_of_the_struct_has_the_statement_of_its_fields_wherever_it_is_held",
         a_value_of_the_struct_has_the_statement_of_its_fields_wherever_it_is_held,
     ),
     (
-        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them",
-        the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them,
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_1_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(0),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_2_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(1),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_3_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(2),
+    ),
+    (
+        "the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them_part_4_of_4",
+        || the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(3),
     ),
     (
         "a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not",
         a_field_that_a_proof_field_names_is_refused_an_assignment_and_another_is_not,
     ),
     (
-        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read",
-        a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read,
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_1_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(0),
+    ),
+    (
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_2_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(1),
+    ),
+    (
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_3_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(2),
+    ),
+    (
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_4_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(3),
+    ),
+    (
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_5_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(4),
+    ),
+    (
+        "a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read_part_6_of_6",
+        || a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(5),
     ),
     (
         "a_value_that_was_read_has_the_fact_and_a_value_that_breaks_it_is_refused_with_its_path",
@@ -100,8 +152,8 @@ fn pair(t: &str, owed: &str) -> (String, String) {
 /// leaves the proof field out compiles exactly when the function that states
 /// the statement in a `requires` is called by the same test, and the program is
 /// the one with the proof field taken out by hand.
-fn a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives() {
-    generate::check(5601, 80, owing, |o: &Owing| {
+fn a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values_it_gives(part: u64) {
+    generate::check_part(5601, 80, part, 4, owing, |o: &Owing| {
         let (t, owed, tested) = (o.ty, &o.owed, &o.tested);
         let (held, bare) = pair(t, owed);
         let body = |make: &str| {
@@ -114,21 +166,23 @@ fn a_construction_compiles_exactly_when_arith_proves_the_statement_of_the_values
             body("need(y, x)")
         ));
         let ok = accepted(&requires);
-        assert_eq!(accepted(&with), ok, "for\n{with}\nand\n{requires}");
+        // A program is accepted exactly when it is lowered, so it is checked once.
+        let made = lower(with.as_bytes());
+        assert_eq!(made.is_ok(), ok, "for\n{with}\nand\n{requires}");
         if o.proves {
             assert!(ok, "for\n{requires}");
         }
         if ok {
-            assert_eq!(lowered(&with), lowered(&by_hand), "for\n{with}\nand\n{by_hand}");
+            let made = made.unwrap_or_else(|e| panic!("{e:?} for\n{with}"));
+            assert_eq!(made, lowered(&by_hand), "for\n{with}\nand\n{by_hand}");
         }
     });
 }
 
 /// A proof written for the field is accepted exactly when it is of the
 /// statement for the values given, and not for what else is known.
-fn a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values()
-{
-    generate::check(5602, 80, owing, |o: &Owing| {
+fn a_construction_that_gives_a_proof_compiles_exactly_when_it_is_of_the_statement_for_those_values(part: u64) {
+    generate::check_part(5602, 80, part, 3,owing, |o: &Owing| {
         let (t, owed, tested) = (o.ty, &o.owed, &o.tested);
         let (held, _) = pair(t, owed);
         let given = with_header(format!(
@@ -229,10 +283,12 @@ fn field_type(g: &mut Gen) -> Int {
 /// and every executable are those of the struct with the proof fields taken
 /// out by hand, with the traits it is given and with a list, a function, and a
 /// struct that holds it.
-fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them() {
-    generate::check(
+fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_them(part: u64) {
+    generate::check_part(
         5604,
         8,
+        part,
+        4,
         |g: &mut Gen| (field_type(g), field_type(g), g.below(100) as u32, g.below(100) as u32),
         |&(a, b, lo, hi)| {
             let (lo, hi) = (lo.min(hi), lo.max(hi));
@@ -291,10 +347,9 @@ const READ_HEAD: &str = "use std.console (console, print)\nuse std.deserialize (
 /// holds the statement is read from JSON exactly when the statement holds of
 /// them, and what is read is the data; where it does not hold, the error names
 /// the struct, the proof field, and the statement.
-fn a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read() {
-    generate::check(
-        5606,
-        6,
+fn a_struct_with_a_proof_field_is_read_exactly_when_the_statement_holds_of_what_is_read(part: u64) {
+    generate::check_part(
+        5606, 6, part, 6,
         |g: &mut Gen| {
             let (text, holds) = condition(g, 1, false);
             let (x, y) = (g.below(21) as i128 - 10, g.below(21) as i128 - 10);

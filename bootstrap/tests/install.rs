@@ -13,8 +13,16 @@ use smith::target::Target;
 
 pub const ONCE: &[Test] = &[
     (
-        "the_installer_picks_the_file_for_the_machine_and_refuses_every_other",
-        the_installer_picks_the_file_for_the_machine_and_refuses_every_other,
+        "the_installer_picks_the_file_for_the_machine_and_refuses_every_other_part_1_of_3",
+        || the_installer_picks_the_file_for_the_machine_and_refuses_every_other(0),
+    ),
+    (
+        "the_installer_picks_the_file_for_the_machine_and_refuses_every_other_part_2_of_3",
+        || the_installer_picks_the_file_for_the_machine_and_refuses_every_other(1),
+    ),
+    (
+        "the_installer_picks_the_file_for_the_machine_and_refuses_every_other_part_3_of_3",
+        || the_installer_picks_the_file_for_the_machine_and_refuses_every_other(2),
     ),
     (
         "a_file_that_does_not_match_its_hash_installs_nothing_part_1_of_2",
@@ -33,20 +41,40 @@ pub const ONCE: &[Test] = &[
         || a_download_that_fails_part_way_installs_nothing(1),
     ),
     (
-        "running_the_installer_again_installs_the_newer_release",
-        running_the_installer_again_installs_the_newer_release,
+        "running_the_installer_again_installs_the_newer_release_part_1_of_2",
+        || running_the_installer_again_installs_the_newer_release(0),
     ),
     (
-        "the_installer_says_so_only_when_the_folder_is_not_on_the_path",
-        the_installer_says_so_only_when_the_folder_is_not_on_the_path,
+        "running_the_installer_again_installs_the_newer_release_part_2_of_2",
+        || running_the_installer_again_installs_the_newer_release(1),
     ),
     (
-        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_1_of_2",
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_1_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(0),
+    ),
+    (
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_2_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(1),
+    ),
+    (
+        "the_installer_says_so_only_when_the_folder_is_not_on_the_path_part_3_of_3",
+        || the_installer_says_so_only_when_the_folder_is_not_on_the_path(2),
+    ),
+    (
+        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_1_of_4",
         || a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(0),
     ),
     (
-        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_2_of_2",
+        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_2_of_4",
         || a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(1),
+    ),
+    (
+        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_3_of_4",
+        || a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(2),
+    ),
+    (
+        "a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing_part_4_of_4",
+        || a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(3),
     ),
     (
         "the_installer_holds_no_version_and_no_hash",
@@ -223,10 +251,12 @@ fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-fn the_installer_picks_the_file_for_the_machine_and_refuses_every_other() {
-    generate::check(
+fn the_installer_picks_the_file_for_the_machine_and_refuses_every_other(part: u64) {
+    generate::check_part(
         41,
         24,
+        part,
+        3,
         |g| (machine(g), version(g)),
         |(machine, version)| {
             let setup = Setup::new("pick", machine);
@@ -330,10 +360,12 @@ fn a_download_that_fails_part_way_installs_nothing(part: u64) {
     });
 }
 
-fn running_the_installer_again_installs_the_newer_release() {
-    generate::check(
+fn running_the_installer_again_installs_the_newer_release(part: u64) {
+    generate::check_part(
         44,
         12,
+        part,
+        2,
         |g| (supported(g), version(g), version(g)),
         |(machine, first, second)| {
             let setup = Setup::new("again", machine);
@@ -352,8 +384,8 @@ fn running_the_installer_again_installs_the_newer_release() {
     );
 }
 
-fn the_installer_says_so_only_when_the_folder_is_not_on_the_path() {
-    generate::check(45, 12, supported, |machine| {
+fn the_installer_says_so_only_when_the_folder_is_not_on_the_path(part: u64) {
+    generate::check_part(45, 12, part, 3, supported, |machine| {
         let setup = Setup::new("path", machine);
         let dir = setup.home.join("release");
         release(&dir, "0.1.0");
@@ -400,7 +432,7 @@ fn cut(g: &mut Gen) -> usize {
 
 fn a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(part: u64) {
     let script = std::fs::read(format!("{}/../install.sh", env!("CARGO_MANIFEST_DIR"))).unwrap();
-    generate::check_cases(46, 10 * part, 10,
+    generate::check_cases(46, 5 * part, 5,
         |g| (supported(g), cut(g)),
         |(machine, length)| {
             let setup = Setup::new("cut", machine);
@@ -437,7 +469,10 @@ fn a_script_cut_off_part_way_installs_the_whole_compiler_or_changes_nothing(part
         },
     );
     // The whole script, and the whole script without its last newline, which
-    // is as much as a cut at the very end leaves.
+    // is as much as a cut at the very end leaves, are checked once.
+    if part != 0 {
+        return;
+    }
     for end in [script.len() - 1, script.len()] {
         let machine = Machine {
             system: "Linux",

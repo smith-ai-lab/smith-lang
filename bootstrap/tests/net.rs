@@ -26,16 +26,84 @@ use crate::targets;
 
 pub const ONCE: &[Test] = &[
     (
-        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it",
-        a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it,
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_1_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(0),
     ),
     (
-        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile",
-        a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile,
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_2_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(1),
     ),
     (
-        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call",
-        a_handler_a_test_writes_answers_net_and_time_with_no_system_call,
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_3_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(2),
+    ),
+    (
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_4_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(3),
+    ),
+    (
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_5_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(4),
+    ),
+    (
+        "a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it_part_6_of_6",
+        || a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(5),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_1_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(0),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_2_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(1),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_3_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(2),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_4_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(3),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_5_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(4),
+    ),
+    (
+        "a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile_part_6_of_6",
+        || a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(5),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_1_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(0),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_2_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(1),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_3_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(2),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_4_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(3),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_5_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(4),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_6_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(5),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_7_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(6),
+    ),
+    (
+        "a_handler_a_test_writes_answers_net_and_time_with_no_system_call_part_8_of_8",
+        || a_handler_a_test_writes_answers_net_and_time_with_no_system_call(7),
     ),
     (
         "a_target_that_has_no_network_and_no_clock_refuses_a_program_that_carries_them_naming_itself",
@@ -454,18 +522,23 @@ fn errors(source: &str) -> Vec<Error> {
 /// A number written where a connection's port, a listener's port, or the size
 /// of a read is asked for, and is not one the type holds: where it is written
 /// is where the program is refused, and the message names the number.
-fn a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it()
-{
+fn a_number_that_is_not_a_port_or_not_a_size_to_read_is_refused_where_it_is_written_and_the_message_names_it(
+    part: u64,
+) {
     // A number below the range, at its end, or far beyond it.
     let wrong = |g: &mut Gen| match g.below(3) {
         0 => 0,
         1 => 65536,
         _ => 65536 + g.below(1_000_000_000) as u64,
     };
-    generate::check_cases(41, 0, 2, wrong, |&wrong| {
+    // A part is one of the two numbers and one of the three places.
+    generate::check_part(41, 2, part / 3, 2, wrong, |&wrong| {
         // The three places. A read has no end that a literal could pass, so
         // the size it is asked for is the one that is below.
         for place in 0..3 {
+            if place != part % 3 {
+                continue;
+            }
             let (before, number, after) = match place {
                 0 => ("fn run() -> Result[(), NetError] <net, alloc> {\n  with c = connect(\"h\", ", wrong, ")\n  .ok(())\n}\n"),
                 1 => (
@@ -514,9 +587,12 @@ fn opened(ty: &str, open: &str, end: &str, lines: &str) -> String {
     )
 }
 
-fn a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile()
-{
-    // A line that lends the resource, so that it is used and not ended.
+fn a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_is_used_after_does_not_compile(
+    part: usize,
+) {
+    // A line that lends the resource, so that it is used and not ended. A part
+    // is one of the three resources and one of the two halves of what is tried
+    // of it.
     for (ty, open, end, uses) in [
         (
             "Listener",
@@ -536,37 +612,59 @@ fn a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_i
             "unbind",
             "  match send(value, Address(host: \"127.0.0.1\", port: 1), freeze([])) {\n    .ok(()) { }\n    .err(e) { }\n  }\n",
         ),
-    ] {
+    ]
+    .into_iter()
+    .skip(part / 2)
+    .take(1)
+    {
         let end = if open == "bind_to" { "unbind" } else { end };
         let ended = format!("  {end}(value)\n");
         let source = |lines: &str| opened(ty, open, end, lines);
-        // Ended once, after it was used: it compiles.
-        let once = errors(&source(&format!("{uses}{ended}")));
-        assert!(once.is_empty(), "{ty} ended once: {once:?}");
-        // Not ended: it is dropped.
-        let not_ended = errors(&source(uses));
-        assert!(
-            not_ended.iter().any(|e| e.message.contains(ty)),
-            "{ty} not ended: {not_ended:?}"
-        );
-        // Ended twice.
-        let twice = errors(&source(&format!("{ended}{ended}")));
-        assert!(!twice.is_empty(), "{ty} ended twice");
-        // Used after it is ended.
-        let after = errors(&source(&format!("{ended}{uses}")));
-        assert!(!after.is_empty(), "{ty} used after it is ended");
+        if part.is_multiple_of(2) {
+            // Ended once, after it was used: it compiles.
+            let once = errors(&source(&format!("{uses}{ended}")));
+            assert!(once.is_empty(), "{ty} ended once: {once:?}");
+            // Not ended: it is dropped.
+            let not_ended = errors(&source(uses));
+            assert!(
+                not_ended.iter().any(|e| e.message.contains(ty)),
+                "{ty} not ended: {not_ended:?}"
+            );
+        } else {
+            // Ended twice.
+            let twice = errors(&source(&format!("{ended}{ended}")));
+            assert!(!twice.is_empty(), "{ty} ended twice");
+            // Used after it is ended.
+            let after = errors(&source(&format!("{ended}{uses}")));
+            assert!(!after.is_empty(), "{ty} used after it is ended");
+        }
     }
 }
 
-fn a_handler_a_test_writes_answers_net_and_time_with_no_system_call() {
+/// The number of parts of the test of the handler that build the program, each
+/// for the target of its own. A part before them works out what it does.
+const HANDLER_BUILDS: usize = 7;
+
+fn a_handler_a_test_writes_answers_net_and_time_with_no_system_call(part: usize) {
     let source = HANDLED;
-    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-    assert!(!program.asks_the_kernel());
-    let outcome = scalar::run(&program);
-    assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "refused example.test:7 11\n");
+    assert_eq!(
+        Target::ALL.len(),
+        HANDLER_BUILDS,
+        "a target has no part, or a part has no target"
+    );
+    // The first part works out what the program does, and the others build it.
+    if part == 0 {
+        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+        assert!(!program.asks_the_kernel());
+        let outcome = scalar::run(&program);
+        assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "refused example.test:7 11\n");
+    }
     // The program under the handler is the program with none, which is
     // refused by a target that has no call to answer it with.
-    for &target in Target::ALL.iter() {
+    for (at, &target) in Target::ALL.iter().enumerate() {
+        if at + 1 != part {
+            continue;
+        }
         let bytes = targets::build(source.as_bytes(), target);
         assert!(bytes.is_ok(), "{}", target.name());
     }

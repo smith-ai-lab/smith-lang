@@ -25,16 +25,116 @@ pub const ONCE: &[Test] = &[
         a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_library,
     ),
     (
-        "every_module_of_the_standard_library_checks_whole_part_1_of_3",
+        "every_module_of_the_standard_library_checks_whole_part_1_of_28",
         || every_module_of_the_standard_library_checks_whole(0),
     ),
     (
-        "every_module_of_the_standard_library_checks_whole_part_2_of_3",
+        "every_module_of_the_standard_library_checks_whole_part_2_of_28",
         || every_module_of_the_standard_library_checks_whole(1),
     ),
     (
-        "every_module_of_the_standard_library_checks_whole_part_3_of_3",
+        "every_module_of_the_standard_library_checks_whole_part_3_of_28",
         || every_module_of_the_standard_library_checks_whole(2),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_4_of_28",
+        || every_module_of_the_standard_library_checks_whole(3),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_5_of_28",
+        || every_module_of_the_standard_library_checks_whole(4),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_6_of_28",
+        || every_module_of_the_standard_library_checks_whole(5),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_7_of_28",
+        || every_module_of_the_standard_library_checks_whole(6),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_8_of_28",
+        || every_module_of_the_standard_library_checks_whole(7),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_9_of_28",
+        || every_module_of_the_standard_library_checks_whole(8),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_10_of_28",
+        || every_module_of_the_standard_library_checks_whole(9),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_11_of_28",
+        || every_module_of_the_standard_library_checks_whole(10),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_12_of_28",
+        || every_module_of_the_standard_library_checks_whole(11),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_13_of_28",
+        || every_module_of_the_standard_library_checks_whole(12),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_14_of_28",
+        || every_module_of_the_standard_library_checks_whole(13),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_15_of_28",
+        || every_module_of_the_standard_library_checks_whole(14),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_16_of_28",
+        || every_module_of_the_standard_library_checks_whole(15),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_17_of_28",
+        || every_module_of_the_standard_library_checks_whole(16),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_18_of_28",
+        || every_module_of_the_standard_library_checks_whole(17),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_19_of_28",
+        || every_module_of_the_standard_library_checks_whole(18),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_20_of_28",
+        || every_module_of_the_standard_library_checks_whole(19),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_21_of_28",
+        || every_module_of_the_standard_library_checks_whole(20),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_22_of_28",
+        || every_module_of_the_standard_library_checks_whole(21),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_23_of_28",
+        || every_module_of_the_standard_library_checks_whole(22),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_24_of_28",
+        || every_module_of_the_standard_library_checks_whole(23),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_25_of_28",
+        || every_module_of_the_standard_library_checks_whole(24),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_26_of_28",
+        || every_module_of_the_standard_library_checks_whole(25),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_27_of_28",
+        || every_module_of_the_standard_library_checks_whole(26),
+    ),
+    (
+        "every_module_of_the_standard_library_checks_whole_part_28_of_28",
+        || every_module_of_the_standard_library_checks_whole(27),
     ),
 ];
 
@@ -174,7 +274,7 @@ fn a_mistake_in_an_item_no_program_reaches_is_found_by_the_check_of_the_whole_li
 }
 
 fn every_module_of_the_standard_library_checks_whole(part: usize) {
-    let errors = smith::check_standard_library_part(part, 3);
+    let errors = smith::check_standard_library_part(part, 28);
     assert!(errors.is_empty(), "{errors:?}");
 }
 

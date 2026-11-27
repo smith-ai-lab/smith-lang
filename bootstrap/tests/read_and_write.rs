@@ -15,20 +15,48 @@ use crate::serialize::{self, Defs, Parts};
 
 pub const ONCE: &[Test] = &[
     (
-        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_1_of_2",
+        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_1_of_5",
         || the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(0),
     ),
     (
-        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_2_of_2",
+        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_2_of_5",
         || the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(1),
     ),
     (
-        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_1_of_2",
+        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_3_of_5",
+        || the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(2),
+    ),
+    (
+        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_4_of_5",
+        || the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(3),
+    ),
+    (
+        "the_program_that_reads_and_writes_a_struct_prints_the_text_it_read_part_5_of_5",
+        || the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(4),
+    ),
+    (
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_1_of_6",
         || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(0),
     ),
     (
-        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_2_of_2",
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_2_of_6",
         || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(1),
+    ),
+    (
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_3_of_6",
+        || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(2),
+    ),
+    (
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_4_of_6",
+        || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(3),
+    ),
+    (
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_5_of_6",
+        || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(4),
+    ),
+    (
+        "a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists_part_6_of_6",
+        || a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(5),
     ),
     (
         "a_program_that_defines_the_names_of_the_library_beside_the_library_listed_as_other_names_does_what_each_says",
@@ -79,7 +107,7 @@ fn main() <console, alloc> {{
 }
 
 fn the_program_that_reads_and_writes_a_struct_prints_the_text_it_read(part: usize) {
-    for (list, error) in LISTS.iter().skip(part).step_by(2) {
+    for (list, error) in LISTS.iter().skip(part).step_by(5) {
         let source = program(list, error);
         assert_eq!(prints(&source), "{\"x\":1}\n", "{source}");
     }
@@ -151,7 +179,7 @@ use std.json (Json, from_json, from_json_as, to_json, to_json_as)
 }
 
 fn a_value_written_read_and_written_again_is_the_same_text_each_time_whatever_the_program_lists(part: u64) {
-    generate::check_part(6101, 6, part, 2, round_trip, |(source, lines)| {
+    generate::check_part(6101, 6, part, 6, round_trip, |(source, lines)| {
         let printed = prints(source);
         let printed: Vec<&str> = printed.lines().collect();
         assert_eq!(printed.len(), *lines, "{source}");

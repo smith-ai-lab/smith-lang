@@ -20,8 +20,12 @@ pub const ONCE: &[Test] = &[
         the_page_of_the_issue_is_written_whole_to_a_request_of_three_headers_in_the_evaluator,
     ),
     (
-        "a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them",
-        a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them,
+        "a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them_part_1_of_2",
+        || a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them(0),
+    ),
+    (
+        "a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them_part_2_of_2",
+        || a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them(1),
     ),
     (
         "a_server_with_no_net_handler_of_its_own_that_installs_listen_and_routes_in_main_is_built",
@@ -838,8 +842,8 @@ fn the_page_of_the_issue_is_written_whole_to_a_request_of_three_headers_by_the_e
 
 /// Every chain is built, as the compiler gives an executable or an error and never
 /// stops, whichever handlers are written between `listen` and `routes`.
-fn a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them() {
-    generate::check(1208, 2, chain, |chain| {
+fn a_server_that_installs_listen_and_routes_in_one_function_is_built_whatever_else_is_installed_with_them(part: u64) {
+    generate::check_cases(1208, part, 1, chain, |chain| {
         let source = program(chain, false);
         if let Err(errors) = lower(source.as_bytes()) {
             panic!("{errors:?} for {source}");

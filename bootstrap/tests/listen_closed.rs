@@ -6,11 +6,13 @@
 //! what was written after `listen` has returned. A server whose `accept` never
 //! gives `.closed` serves for ever, as it did.
 
+use std::sync::{Arc, Mutex};
+
 use smith::lower;
 use smith::target::Target;
 
 use crate::Test;
-use crate::targets::{self, fingerprinting, record, run as execute};
+use crate::targets::{self, fingerprinting, record, run_with_words};
 
 pub const ONCE: &[Test] = &[(
     "a_program_that_calls_quiet_is_refused",
@@ -18,6 +20,10 @@ pub const ONCE: &[Test] = &[(
 )];
 
 pub const MACHINE: &[Test] = &[
+    (
+        "listen_returns_when_it_is_closed_under_the_scheduler_of_the_system_after_no_connection_one_two_and_three",
+        listen_returns_when_it_is_closed_under_the_scheduler_of_the_system_after_no_connection_one_two_and_three,
+    ),
     (
         "listen_returns_when_it_is_closed_at_once_after_no_connection",
         listen_returns_when_it_is_closed_at_once_after_no_connection,
@@ -59,20 +65,23 @@ fn request(id: u64) -> String {
     format!("[{}]", bytes.join(", "))
 }
 
-/// A program that serves `connections` connections, each a request of the number
-/// of its handle, under `listen`, with the handler that keeps what was written,
-/// and prints what each write was, a line of numbers each.
-fn program(seed: Option<u64>, connections: u64) -> String {
-    let scheduler = seed.map_or(String::new(), |s| format!("  with test_scheduler({s})\n"));
+/// A program that serves as many connections as its first word says, each a
+/// request of the number of its handle, under `listen`, with the handler that
+/// keeps what was written, and prints what each write was, a line of numbers each.
+/// When `tested` it serves them under the scheduler of a test, whose seed is its
+/// second word, and when not under the system's. The words are read when the
+/// program runs, so that one executable is every case of the kind.
+fn program(tested: bool) -> String {
     format!(
         "use std.bits (u64)
 use std.console (console, print)
+use std.deserialize (ReadError)
+use std.fromtext (ReadText, from_text)
 use std.http (get, http, listen, routes)
 use std.int (wrapping_add)
 use std.list (push)
 use std.net (Chunk, connection, handle, listener, net, release)
-use std.task (test_scheduler)
-
+{uses}
 struct User {{
   id: u64
   name: str
@@ -87,7 +96,7 @@ fn app() <http, alloc> {{
   get(\"/users/:id\", user)
 }}
 
-fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
+fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
   var accepted: u64 = 0
   var asked: List[u64] = []
   var kept: List[List[Byte]] = []
@@ -95,7 +104,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
     listen_on: fn(host, port) {{ .ok(listener(1)) }},
     accept: fn(l) {{
       accepted = wrapping_add(accepted, 1)
-      if accepted > {connections} {{
+      if accepted > connections {{
         .err(.closed(l.host))
       }} else {{
         .ok(connection(wrapping_add(accepted, 1)))
@@ -135,14 +144,21 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
   (result, kept)
 }}
 
-fn run() -> ((), List[List[Byte]]) <alloc, diverge> {{
-  with recording()
+fn run(connections: u64, seed: u64) -> ((), List[List[Byte]]) <alloc, diverge> {{
+  with recording(connections)
 {scheduler}  with listen(port: 80)
   app()
 }}
 
-fn main() <console, alloc, diverge> {{
-  (done, writes) = run()
+fn number(text: str) -> u64 <alloc> {{
+  got: Result[u64, ReadError] = from_text(\"n\", text)
+  match got {{
+    .ok(v) {{ v }}
+    .err(e) {{ 0 }}
+  }}
+}}
+
+fn show(writes: List[List[Byte]]) <console, alloc> {{
   print(\"{{writes.size}}\")
   loop i in 0..writes.size {{
     inner = writes[i]
@@ -151,7 +167,24 @@ fn main() <console, alloc, diverge> {{
     print(line)
   }}
 }}
+
+fn main(args: List[str]) <console, alloc, diverge> {{
+  if args.size == 2 {{
+    (done, writes) = run(number(args[0]), number(args[1]))
+    show(writes)
+  }}
+}}
 ",
+        uses = if tested {
+            "use std.task (test_scheduler)\n"
+        } else {
+            ""
+        },
+        scheduler = if tested {
+            "  with test_scheduler(seed)\n"
+        } else {
+            ""
+        },
         seven = request(7),
         eight = request(8),
         nine = request(9),
@@ -184,6 +217,32 @@ fn kernel() -> Vec<Target> {
         .collect()
 }
 
+/// The executable of `program` for the target. It is built by the first test that
+/// asks for it and kept for the others, since every case of a kind is the same
+/// executable started with other words, and the program of `std.http` is most of
+/// what it costs to build. A fingerprint is made of the executables the compiler it
+/// is given builds, so it builds each time.
+fn executable(target: Target, tested: bool) -> Arc<Vec<u8>> {
+    /// The target, whether it is the program under the scheduler of a test, and its executable.
+    type Built = (String, bool, Arc<Vec<u8>>);
+    static BUILT: Mutex<Vec<Built>> = Mutex::new(Vec::new());
+    let build = || {
+        Arc::new(targets::build(program(tested).as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}")))
+    };
+    if fingerprinting() {
+        return build();
+    }
+    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
+    match built.iter().find(|(name, kind, _)| name == target.name() && *kind == tested) {
+        Some((_, _, bytes)) => bytes.clone(),
+        None => {
+            let bytes = build();
+            built.push((target.name().to_string(), tested, bytes.clone()));
+            bytes
+        }
+    }
+}
+
 /// `listen` returns where the listener says it is closed, whatever order the
 /// scheduler of a test of each seed runs the connections in, after the
 /// connections it took have been served: when it was closed at once, after one,
@@ -196,16 +255,11 @@ fn listens(connections: u64, schedulers: &[Option<u64>]) {
     expected.sort();
     for target in kernel() {
         for &seed in schedulers {
-            let source = program(seed, connections);
-            let source = if seed.is_none() {
-                source.replace("use std.task (test_scheduler)\n", "")
-            } else {
-                source
-            };
-            let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
-            record(target, &[&bytes, expected.join("\n").as_bytes()]);
+            let bytes = executable(target, seed.is_some());
+            let words = [connections.to_string(), seed.unwrap_or(0).to_string()];
+            record(target, &[&bytes, words.concat().as_bytes(), expected.join("\n").as_bytes()]);
             if !fingerprinting() {
-                let said = execute(&bytes);
+                let said = run_with_words(&bytes, &words);
                 assert_eq!(said.status, 0, "for {connections} connections and {seed:?} on {}", target.name());
                 let found = writes(&String::from_utf8(said.stdout).expect("text"));
                 assert_eq!(found, expected, "for {connections} connections and {seed:?} on {}", target.name());
@@ -214,16 +268,24 @@ fn listens(connections: u64, schedulers: &[Option<u64>]) {
     }
 }
 
+/// The same under the scheduler of the system, which is a program of its own, since
+/// a program has one scheduler.
+fn listen_returns_when_it_is_closed_under_the_scheduler_of_the_system_after_no_connection_one_two_and_three() {
+    for connections in 0..4 {
+        listens(connections, &[None]);
+    }
+}
+
 fn listen_returns_when_it_is_closed_at_once_after_no_connection() {
-    listens(0, &[None, Some(0)]);
+    listens(0, &[Some(0)]);
 }
 
 fn listen_returns_when_it_is_closed_after_one_connection() {
-    listens(1, &[None, Some(0), Some(4)]);
+    listens(1, &[Some(0), Some(4)]);
 }
 
 fn listen_returns_when_it_is_closed_after_two_connections_part_1_of_3() {
-    listens(2, &[None, Some(0), Some(1)]);
+    listens(2, &[Some(0), Some(1)]);
 }
 
 fn listen_returns_when_it_is_closed_after_two_connections_part_2_of_3() {
@@ -235,7 +297,7 @@ fn listen_returns_when_it_is_closed_after_two_connections_part_3_of_3() {
 }
 
 fn listen_returns_when_it_is_closed_after_three_connections_part_1_of_3() {
-    listens(3, &[None, Some(0), Some(1)]);
+    listens(3, &[Some(0), Some(1)]);
 }
 
 fn listen_returns_when_it_is_closed_after_three_connections_part_2_of_3() {

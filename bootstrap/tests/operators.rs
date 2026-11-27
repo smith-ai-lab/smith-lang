@@ -17,12 +17,24 @@ use crate::numbers::{INTS, with_header};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type",
-        a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type,
+        "a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type_part_1_of_3",
+        || a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type(0),
     ),
     (
-        "an_operator_on_structs_gives_what_its_function_gives_by_its_name",
-        an_operator_on_structs_gives_what_its_function_gives_by_its_name,
+        "a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type_part_2_of_3",
+        || a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type(1),
+    ),
+    (
+        "a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type_part_3_of_3",
+        || a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type(2),
+    ),
+    (
+        "an_operator_on_structs_gives_what_its_function_gives_by_its_name_part_1_of_2",
+        || an_operator_on_structs_gives_what_its_function_gives_by_its_name(0),
+    ),
+    (
+        "an_operator_on_structs_gives_what_its_function_gives_by_its_name_part_2_of_2",
+        || an_operator_on_structs_gives_what_its_function_gives_by_its_name(1),
     ),
     (
         "an_operator_between_types_with_no_impl_is_one_error_that_names_the_trait_and_both_types",
@@ -81,11 +93,11 @@ fn generic(g: &mut Gen) -> Generic {
 /// asks of its caller that the answer fits is accepted exactly where it does,
 /// and prints the answer, which the operator in its body works out in one
 /// instruction.
-fn a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type() {
-    generate::check(220, 150, generic, |c| match check(c.source.as_bytes()) {
-        Ok(_) => {
+fn a_generic_function_over_an_operator_compiles_exactly_when_the_answer_fits_the_type(part: u64) {
+    // A program is accepted exactly when it is lowered, so it is checked once.
+    generate::check_part(220, 150, part, 3, generic, |c| match lower(c.source.as_bytes()) {
+        Ok(program) => {
             assert!(c.fits, "accepted, though the answer does not fit");
-            let program = lower(c.source.as_bytes()).expect("lowers");
             assert_eq!(
                 scalar::run(&program),
                 Outcome {
@@ -194,8 +206,8 @@ fn structs(g: &mut Gen) -> Structs {
 /// For every struct a generator builds with an `impl` of `Add`, `Sub`, or
 /// `Mul`, of one type or of two types with a result of a third, the operator
 /// gives what the function gives when it is called by its name.
-fn an_operator_on_structs_gives_what_its_function_gives_by_its_name() {
-    generate::check(221, 60, structs, |c| {
+fn an_operator_on_structs_gives_what_its_function_gives_by_its_name(part: u64) {
+    generate::check_part(221, 60, part, 2, structs, |c| {
         let program = lower(c.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(
             scalar::run(&program),

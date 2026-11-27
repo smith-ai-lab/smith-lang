@@ -19,16 +19,52 @@ pub const ONCE: &[Test] = &[
         a_function_is_given_its_name_and_its_comment_by_function,
     ),
     (
-        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_1_of_3",
-        call_part_1,
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_1_of_12",
+        || call_part(0),
     ),
     (
-        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_2_of_3",
-        call_part_2,
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_2_of_12",
+        || call_part(1),
     ),
     (
-        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_3_of_3",
-        call_part_3,
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_3_of_12",
+        || call_part(2),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_4_of_12",
+        || call_part(3),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_5_of_12",
+        || call_part(4),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_6_of_12",
+        || call_part(5),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_7_of_12",
+        || call_part(6),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_8_of_12",
+        || call_part(7),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_9_of_12",
+        || call_part(8),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_10_of_12",
+        || call_part(9),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_11_of_12",
+        || call_part(10),
+    ),
+    (
+        "call_runs_the_function_with_the_arguments_read_from_json_and_a_default_left_out_is_the_default_part_12_of_12",
+        || call_part(11),
     ),
     (
         "a_lambda_a_generic_function_and_one_that_takes_a_function_have_no_function_and_are_each_one_error",
@@ -182,22 +218,10 @@ impl Callee {
 /// parameter that has a default left out where the JSON leaves it out, `call`
 /// runs the function with them, and JSON that is not read is no call.
 fn call_part(part: u64) {
-    generate::check_part(7922, 12, part, 3, callee, |c| {
+    generate::check_part(7922, 12, part, 12, callee, |c| {
         let source = c.source();
         assert_eq!(outcome(&source).stdout, c.prints(), "for\n{source}");
     });
-}
-
-fn call_part_1() {
-    call_part(0);
-}
-
-fn call_part_2() {
-    call_part(1);
-}
-
-fn call_part_3() {
-    call_part(2);
 }
 
 /// A lambda has no name, a function with type parameters or one that takes a

@@ -42,12 +42,20 @@ pub const ONCE: &[Test] = &[
         the_scalar_form_holds_each_function_main_reaches,
     ),
     (
-        "the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print",
-        the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print,
+        "the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print_part_1_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print(0),
     ),
     (
-        "a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out",
-        a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out,
+        "the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print_part_2_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print(1),
+    ),
+    (
+        "a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out_part_1_of_2",
+        || a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out(0),
+    ),
+    (
+        "a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out_part_2_of_2",
+        || a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out(1),
     ),
     (
         "a_program_with_defaults_builds_to_the_bytes_of_it_written_out",
@@ -66,64 +74,112 @@ pub const ONCE: &[Test] = &[
         a_bound_and_the_requires_of_the_same_trait_build_the_same_program,
     ),
     (
-        "every_placed_mistake_about_traits_is_one_error_at_its_place",
-        every_placed_mistake_about_traits_is_one_error_at_its_place,
+        "every_placed_mistake_about_traits_is_one_error_at_its_place_part_1_of_2",
+        || every_placed_mistake_about_traits_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_traits_is_one_error_at_its_place_part_2_of_2",
+        || every_placed_mistake_about_traits_is_one_error_at_its_place(1),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_enums_to_print",
         the_evaluator_says_what_the_generator_built_a_program_with_enums_to_print,
     ),
     (
-        "a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full",
-        a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full,
+        "a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full_part_1_of_2",
+        || a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full(0),
+    ),
+    (
+        "a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full_part_2_of_2",
+        || a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full(1),
     ),
     (
         "every_placed_mistake_about_enums_is_one_error_at_its_place",
         every_placed_mistake_about_enums_is_one_error_at_its_place,
     ),
     (
-        "the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print",
-        the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print,
+        "the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print_part_1_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print(0),
+    ),
+    (
+        "the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print_part_2_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print(1),
     ),
     (
         "every_placed_mistake_about_tuples_is_one_error_at_its_place",
         every_placed_mistake_about_tuples_is_one_error_at_its_place,
     ),
     (
-        "the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print",
-        the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print,
+        "the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print_part_1_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print(0),
     ),
     (
-        "the_scalar_form_holds_no_function_that_takes_a_function",
-        the_scalar_form_holds_no_function_that_takes_a_function,
+        "the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print_part_2_of_2",
+        || the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print(1),
     ),
     (
-        "an_expression_in_parentheses_is_the_expression",
-        an_expression_in_parentheses_is_the_expression,
+        "the_scalar_form_holds_no_function_that_takes_a_function_part_1_of_2",
+        || the_scalar_form_holds_no_function_that_takes_a_function(0),
     ),
     (
-        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_1_of_2",
+        "the_scalar_form_holds_no_function_that_takes_a_function_part_2_of_2",
+        || the_scalar_form_holds_no_function_that_takes_a_function(1),
+    ),
+    (
+        "an_expression_in_parentheses_is_the_expression_part_1_of_3",
+        || an_expression_in_parentheses_is_the_expression(0),
+    ),
+    (
+        "an_expression_in_parentheses_is_the_expression_part_2_of_3",
+        || an_expression_in_parentheses_is_the_expression(1),
+    ),
+    (
+        "an_expression_in_parentheses_is_the_expression_part_3_of_3",
+        || an_expression_in_parentheses_is_the_expression(2),
+    ),
+    (
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_1_of_4",
         || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(0),
     ),
     (
-        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_2_of_2",
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_2_of_4",
         || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(1),
+    ),
+    (
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_3_of_4",
+        || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(2),
+    ),
+    (
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_4_of_4",
+        || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(3),
     ),
     (
         "a_var_a_function_called_in_place_has_the_value_it_had_when_a_loop_around_the_call_runs_no_round",
         a_var_a_function_called_in_place_has_the_value_it_had_when_a_loop_around_the_call_runs_no_round,
     ),
     (
-        "every_placed_mistake_about_lambdas_is_one_error_at_its_place",
-        every_placed_mistake_about_lambdas_is_one_error_at_its_place,
+        "every_placed_mistake_about_lambdas_is_one_error_at_its_place_part_1_of_2",
+        || every_placed_mistake_about_lambdas_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_lambdas_is_one_error_at_its_place_part_2_of_2",
+        || every_placed_mistake_about_lambdas_is_one_error_at_its_place(1),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_text_to_print",
         the_evaluator_says_what_the_generator_built_a_program_with_text_to_print,
     ),
     (
-        "every_placed_mistake_about_text_is_one_error_at_its_place",
-        every_placed_mistake_about_text_is_one_error_at_its_place,
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_1_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_2_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(1),
+    ),
+    (
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_3_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(2),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_reprs_to_print_part_1_of_2",
@@ -178,8 +234,12 @@ pub const ONCE: &[Test] = &[
         a_program_that_holds_no_number_builds_to_the_same_bytes_whatever_numbers_it_defines,
     ),
     (
-        "what_a_program_does_not_print_is_given_nothing",
-        what_a_program_does_not_print_is_given_nothing,
+        "what_a_program_does_not_print_is_given_nothing_part_1_of_2",
+        || what_a_program_does_not_print_is_given_nothing(0),
+    ),
+    (
+        "what_a_program_does_not_print_is_given_nothing_part_2_of_2",
+        || what_a_program_does_not_print_is_given_nothing(1),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_choices_to_print_part_1_of_2",
@@ -190,8 +250,16 @@ pub const ONCE: &[Test] = &[
         || the_evaluator_says_what_the_generator_built_a_program_with_choices_to_print(1),
     ),
     (
-        "every_placed_mistake_about_choices_is_one_error_at_its_place",
-        every_placed_mistake_about_choices_is_one_error_at_its_place,
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_1_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_2_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(1),
+    ),
+    (
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_3_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(2),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_with_and_try_to_print_part_1_of_3",
@@ -230,20 +298,40 @@ pub const ONCE: &[Test] = &[
         || a_program_with_try_prints_what_it_prints_with_each_try_written_out_as_the_match(2),
     ),
     (
-        "every_placed_mistake_about_with_and_try_is_one_error_at_its_place",
-        every_placed_mistake_about_with_and_try_is_one_error_at_its_place,
+        "every_placed_mistake_about_with_and_try_is_one_error_at_its_place_part_1_of_2",
+        || every_placed_mistake_about_with_and_try_is_one_error_at_its_place(0),
     ),
     (
-        "a_function_main_does_not_reach_is_parsed_and_not_checked",
-        a_function_main_does_not_reach_is_parsed_and_not_checked,
+        "every_placed_mistake_about_with_and_try_is_one_error_at_its_place_part_2_of_2",
+        || every_placed_mistake_about_with_and_try_is_one_error_at_its_place(1),
+    ),
+    (
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_1_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(0),
+    ),
+    (
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_2_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(1),
+    ),
+    (
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_3_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(2),
     ),
     (
         "every_placed_mistake_is_one_error_at_its_place",
         every_placed_mistake_is_one_error_at_its_place,
     ),
     (
-        "every_input_gives_an_executable_or_an_error_with_a_place",
-        every_input_gives_an_executable_or_an_error_with_a_place,
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_1_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(0),
+    ),
+    (
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_2_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(1),
+    ),
+    (
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_3_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(2),
     ),
     (
         "nothing_before_the_target_seam_names_a_system_or_machine",
@@ -316,7 +404,7 @@ fn the_shrinker_gives_the_smallest_failing_input() {
     let prints_no_e = |case: &Case| {
         assert!(!String::from_utf8_lossy(&case.stdout).contains('é'));
     };
-    let failure = generate::find_failure_in_run(0, 1, 1000, &programs::program, &prints_no_e)
+    let failure = generate::find_failure_in_run(0, 3, 1000, &programs::program, &prints_no_e)
         .expect("some program prints `é`");
     // The smallest such program prints `é` and nothing else, and no choice
     // can be made smaller.
@@ -390,8 +478,8 @@ fn program_and_unreached(g: &mut Gen) -> (Case, &'static str) {
     (programs::program(g), *g.pick(programs::UNREACHED))
 }
 
-fn a_function_main_does_not_reach_is_parsed_and_not_checked() {
-    generate::check(12, 121, program_and_unreached, |(case, unreached)| {
+fn a_function_main_does_not_reach_is_parsed_and_not_checked(part: u64) {
+    generate::check_part(12, 121, part, 3, program_and_unreached, |(case, unreached)| {
         let program = lower(&case.source).unwrap_or_else(|e| panic!("{e:?}"));
         let source = with_names(
             &case.source,
@@ -413,8 +501,8 @@ fn a_function_main_does_not_reach_is_parsed_and_not_checked() {
     });
 }
 
-fn the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print() {
-    generate::check(14, 127, traits::program, |case| {
+fn the_evaluator_says_what_the_generator_built_a_program_with_traits_to_print(part: u64) {
+    generate::check_part(14, 127, part, 2, traits::program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected = Outcome {
             stdout: case.stdout.clone(),
@@ -431,10 +519,10 @@ fn program_and_target(g: &mut Gen, targets: usize) -> (traits::TraitCase, usize)
     (traits::program(g), g.below(targets))
 }
 
-fn a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out() {
+fn a_program_with_type_parameters_builds_to_the_bytes_of_it_written_out(part: u64) {
     let targets = targets::buildable();
     let choose = |g: &mut Gen| program_and_target(g, targets.len());
-    generate::check(15, 40, choose, |(case, target)| {
+    generate::check_part(15, 40, part, 2, choose, |(case, target)| {
         // The program is lowered to one form for every target, so the two
         // build to the same bytes for every target when that form is the
         // same.
@@ -488,10 +576,10 @@ fn program_with_enums_and_target(g: &mut Gen, targets: usize) -> (enums::EnumCas
     (enums::program(g), g.below(targets))
 }
 
-fn a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full() {
+fn a_case_written_with_a_dot_builds_to_the_bytes_of_it_written_in_full(part: u64) {
     let targets = targets::buildable();
     let choose = |g: &mut Gen| program_with_enums_and_target(g, targets.len());
-    generate::check(22, 60, choose, |(case, target)| {
+    generate::check_part(22, 60, part, 2, choose, |(case, target)| {
         let built = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let in_full =
             lower(case.in_full.as_bytes()).unwrap_or_else(|e| panic!("{e:?} in\n{}", case.in_full));
@@ -510,8 +598,8 @@ fn every_placed_mistake_about_enums_is_one_error_at_its_place() {
     });
 }
 
-fn the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print() {
-    generate::check(26, 194, tuples::program, |case| {
+fn the_evaluator_says_what_the_generator_built_a_program_with_tuples_to_print(part: u64) {
+    generate::check_part(26, 194, part, 2, tuples::program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected = Outcome {
             stdout: case.stdout.clone(),
@@ -528,8 +616,8 @@ fn every_placed_mistake_about_tuples_is_one_error_at_its_place() {
     });
 }
 
-fn the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print() {
-    generate::check(29, 94, lambdas::program, |case| {
+fn the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print(part: u64) {
+    generate::check_part(29, 94, part, 2, lambdas::program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected = Outcome {
             stdout: case.stdout.clone(),
@@ -544,15 +632,15 @@ fn the_evaluator_says_what_the_generator_built_a_program_with_lambdas_to_print()
 /// is lowered in place with the lambdas it is given. Such a function would
 /// need a value of a function type, as a function with type parameters
 /// would need a type parameter.
-fn the_scalar_form_holds_no_function_that_takes_a_function() {
-    generate::check(30, 91, lambdas::program, |case| {
+fn the_scalar_form_holds_no_function_that_takes_a_function(part: u64) {
+    generate::check_part(30, 91, part, 2, lambdas::program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(program.functions.len(), case.copies);
     });
 }
 
-fn an_expression_in_parentheses_is_the_expression() {
-    generate::check(33, 58, lambdas::program, |case| {
+fn an_expression_in_parentheses_is_the_expression(part: u64) {
+    generate::check_part(33, 58, part, 3, lambdas::program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let wrapped = lower(case.parenthesized.as_bytes())
             .unwrap_or_else(|e| panic!("{e:?} in {}", case.parenthesized));
@@ -561,7 +649,7 @@ fn an_expression_in_parentheses_is_the_expression() {
 }
 
 fn a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(part: u64) {
-    generate::check_part(117, 150, part, 2, lambdas::loop_program, |case| {
+    generate::check_part(117, 150, part, 4, lambdas::loop_program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected = Outcome {
             stdout: case.stdout.clone(),
@@ -615,8 +703,8 @@ fn main() <diverge, console, alloc> {
     assert_eq!(scalar::run(&program), expected);
 }
 
-fn every_placed_mistake_about_lambdas_is_one_error_at_its_place() {
-    generate::check(31, 169, lambdas::program_with_mistake, |case| {
+fn every_placed_mistake_about_lambdas_is_one_error_at_its_place(part: u64) {
+    generate::check_part(31, 169, part, 2, lambdas::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -666,8 +754,8 @@ fn a_program_with_try_prints_what_it_prints_with_each_try_written_out_as_the_mat
     });
 }
 
-fn every_placed_mistake_about_with_and_try_is_one_error_at_its_place() {
-    generate::check(42, 110, tries::program_with_mistake, |case| {
+fn every_placed_mistake_about_with_and_try_is_one_error_at_its_place(part: u64) {
+    generate::check_part(42, 110, part, 2, tries::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -684,8 +772,8 @@ fn the_evaluator_says_what_the_generator_built_a_program_with_text_to_print() {
     });
 }
 
-fn every_placed_mistake_about_text_is_one_error_at_its_place() {
-    generate::check(35, 159, text::program_with_mistake, |case| {
+fn every_placed_mistake_about_text_is_one_error_at_its_place(part: u64) {
+    generate::check_part(35, 159, part, 3, text::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -713,8 +801,8 @@ fn the_evaluator_says_what_the_generator_built_a_program_with_choices_to_print(p
     });
 }
 
-fn every_placed_mistake_about_choices_is_one_error_at_its_place() {
-    generate::check(67, 192, choices::program_with_mistake, |case| {
+fn every_placed_mistake_about_choices_is_one_error_at_its_place(part: u64) {
+    generate::check_part(67, 192, part, 3, choices::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -833,7 +921,7 @@ fn given_to(source: &str) -> Vec<&str> {
         .collect()
 }
 
-fn what_a_program_does_not_print_is_given_nothing() {
+fn what_a_program_does_not_print_is_given_nothing(part: u64) {
     // Programs that print and compare no struct, enum, or tuple with the
     // `Fmt`, the `Repr`, or the `Eq` it is given build to the same bytes
     // when nothing is given to any of their types.
@@ -847,7 +935,7 @@ fn what_a_program_does_not_print_is_given_nothing() {
         };
         (source, g.below(targets.len()))
     };
-    generate::check(63, 36, choose, |(source, target)| {
+    generate::check_part(63, 36, part, 2, choose, |(source, target)| {
         let mut taken = source.clone();
         for name in given_to(source) {
             taken.push_str(&format!(
@@ -931,8 +1019,8 @@ fn every_placed_mistake_is_one_error_at_its_place() {
     });
 }
 
-fn every_placed_mistake_about_traits_is_one_error_at_its_place() {
-    generate::check(17, 163, traits::program_with_mistake, |case| {
+fn every_placed_mistake_about_traits_is_one_error_at_its_place(part: u64) {
+    generate::check_part(17, 163, part, 2, traits::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -1010,10 +1098,10 @@ pub fn bytes(g: &mut Gen) -> Bytes {
     Bytes(source)
 }
 
-fn every_input_gives_an_executable_or_an_error_with_a_place() {
+fn every_input_gives_an_executable_or_an_error_with_a_place(part: u64) {
     let targets = targets::buildable();
     let choose = |g: &mut Gen| damaged(g, targets.len());
-    generate::check(5, 800, choose, |(Bytes(source), target)| {
+    generate::check_part(5, 800, part, 3, choose, |(Bytes(source), target)| {
         if let Err(errors) = compile(source, targets[*target]) {
             assert_well_formed(source, &errors);
         }

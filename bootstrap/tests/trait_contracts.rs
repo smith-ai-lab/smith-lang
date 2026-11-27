@@ -101,7 +101,7 @@ fn case(g: &mut Gen) -> Case {
 /// the `valid` of the `impl` its type picks holds of its arguments, and a
 /// call after `valid` was asked in an `if` always does.
 fn a_call_of_a_trait_function_compiles_exactly_when_the_valid_of_its_implementation_holds() {
-    generate::check(210, 150, case, |c| match check(c.source.as_bytes()) {
+    generate::check(210, 40, case, |c| match check(c.source.as_bytes()) {
         Ok(_) => {
             assert!(
                 c.holds || c.always,

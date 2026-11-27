@@ -18,8 +18,12 @@ pub const ONCE: &[Test] = &[
         the_first_program_of_the_page_answers_a_user_a_missing_user_a_bad_id_and_a_path_with_no_route,
     ),
     (
-        "each_request_is_answered_as_the_route_it_fits_reads_and_answers_it",
-        each_request_is_answered_as_the_route_it_fits_reads_and_answers_it,
+        "each_request_is_answered_as_the_route_it_fits_reads_and_answers_it_part_1_of_2",
+        || each_request_is_answered_as_the_route_it_fits_reads_and_answers_it(0),
+    ),
+    (
+        "each_request_is_answered_as_the_route_it_fits_reads_and_answers_it_part_2_of_2",
+        || each_request_is_answered_as_the_route_it_fits_reads_and_answers_it(1),
     ),
 ];
 
@@ -249,9 +253,9 @@ fn holds(line: &str, status: u16, body: &Body) -> bool {
     }
 }
 
-fn each_request_is_answered_as_the_route_it_fits_reads_and_answers_it() {
+fn each_request_is_answered_as_the_route_it_fits_reads_and_answers_it(which: u64) {
     let asks = |g: &mut Gen| (0..8).map(|_| ask(g)).collect::<Vec<Ask>>();
-    generate::check(8701, 2, asks, |all| {
+    generate::check_part(8701, 2, which, 2, asks, |all| {
         let mut source = format!("{PROGRAM}fn main() <console, alloc> {{\n");
         for a in all {
             source += &call(a);

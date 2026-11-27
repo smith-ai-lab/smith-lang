@@ -4,12 +4,13 @@
 //! where it is written and the numbers it compared.
 
 use smith::core_terms;
+use smith::diag::Error;
 use smith::kernel::{Failure, Machine, Value, Why};
 use smith::lower;
 use smith::scalar::{self, Outcome};
 
 use crate::Test;
-use crate::core_producer::{BATCH, Program, batch, batch_source};
+use crate::core_producer::{BATCH, Program, batch, batch_source, tried};
 use crate::generate::{self, Gen};
 use crate::numbers::with_header;
 
@@ -55,24 +56,14 @@ fn outcome(source: &str) -> Outcome {
 /// For every function of numbers and `bool` the generator makes, the kernel
 /// gives what the program prints, with no limit that is reached.
 fn the_kernel_works_a_function_out_to_what_the_program_prints() {
-    generate::check(130, 200 / BATCH as u64, batch, |batch| {
-        // A program `arith` refuses is not what is tested: its cases are then
-        // each tried alone.
-        if !kernel_gives(&batch.cases) {
-            for case in &batch.cases {
-                kernel_gives(std::slice::from_ref(case));
-            }
-        }
-    });
+    generate::check(130, 200 / BATCH as u64, batch, |batch| tried(&batch.cases, kernel_gives));
 }
 
-/// Whether the cases are accepted as one program, and if they are, that the
-/// kernel gives the line the program prints for each.
-fn kernel_gives(cases: &[Program]) -> bool {
+/// The errors that refuse the cases as one program, or, if they are accepted,
+/// that the kernel gives the line the program prints for each.
+fn kernel_gives(cases: &[Program]) -> Result<(), Vec<Error>> {
     let source = batch_source(cases);
-    let Ok(all) = core_terms(source.as_bytes()) else {
-        return false;
-    };
+    let all = core_terms(source.as_bytes())?;
     let mut expected = String::new();
     for case in cases {
         let name = case.name();
@@ -94,7 +85,7 @@ fn kernel_gives(cases: &[Program]) -> bool {
         },
         "{source}"
     );
-    true
+    Ok(())
 }
 
 const COUNT: &str = "fn count(n: u64) -> u64\n  decreases n\n{\n  if n == 0 { 0 } else { count(n - 1) }\n}\n\nfn main() <console, alloc> {\n  print(\"{count(3)}\")\n}\n";

@@ -99,8 +99,12 @@ pub const ONCE: &[Test] = &[
     ),
     ("a_file_must_be_named_smith", a_file_must_be_named_smith),
     (
-        "timings_list_every_stage_in_order_and_change_nothing_else",
-        timings_list_every_stage_in_order_and_change_nothing_else,
+        "timings_list_every_stage_in_order_and_change_nothing_else_part_1_of_2",
+        || timings_list_every_stage_in_order_and_change_nothing_else(0),
+    ),
+    (
+        "timings_list_every_stage_in_order_and_change_nothing_else_part_2_of_2",
+        || timings_list_every_stage_in_order_and_change_nothing_else(1),
     ),
     (
         "a_failed_build_lists_the_stages_that_ran_after_its_errors",
@@ -198,10 +202,12 @@ fn the_cases_run_as_their_out_files_say() {
     }
     for target in targets::runnable() {
         for source in cases("out") {
-            let built = targets::build(&std::fs::read(&source).unwrap(), target);
-            let expected = std::fs::read(source.with_extension("out")).unwrap();
-            targets::record(target, &[&built.unwrap(), &expected]);
+            // The executable is built here only to be noted for a fingerprint: a
+            // run is made by `smith run`, which builds the case itself.
             if targets::fingerprinting() {
+                let built = targets::build(&std::fs::read(&source).unwrap(), target);
+                let expected = std::fs::read(source.with_extension("out")).unwrap();
+                targets::record(target, &[&built.unwrap(), &expected]);
                 continue;
             }
             let name = source.file_stem().unwrap().to_str().unwrap();
@@ -361,8 +367,9 @@ pub fn cases(extension: &str) -> Vec<PathBuf> {
     found
 }
 
-fn timings_list_every_stage_in_order_and_change_nothing_else() {
-    for source in cases("out") {
+fn timings_list_every_stage_in_order_and_change_nothing_else(part: usize) {
+    // The cases are shared by the two parts, each taking every other one.
+    for source in cases("out").into_iter().skip(part).step_by(2) {
         let name = source.file_stem().unwrap().to_str().unwrap();
         let file = format!("{name}.smith");
         let plain = folder("plain");

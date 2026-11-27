@@ -13,8 +13,12 @@ pub const ONCE: &[Test] = &[
         a_number_that_the_other_side_cannot_hold_is_a_comparison_refused_with_the_fix_to_delete_it,
     ),
     (
-        "a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike",
-        a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike,
+        "a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike_part_1_of_2",
+        || a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike(0),
+    ),
+    (
+        "a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike_part_2_of_2",
+        || a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike(1),
     ),
     (
         "a_comparison_is_refused_in_a_requires_an_ensures_and_a_proof_as_it_is_in_a_body",
@@ -132,8 +136,8 @@ fn answers(op: &str, a: i64, b: i64) -> bool {
 /// number itself, it is refused exactly when the answer is the same for every
 /// pair of numbers the two ranges hold, which is found by trying every pair,
 /// and it says that answer.
-fn a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike() {
-    generate::check(5801, 200, pair, |p| {
+fn a_comparison_of_two_ranges_is_refused_exactly_when_every_pair_of_numbers_answers_alike(part: u64) {
+    generate::check_part(5801, 200, part, 2, pair, |p| {
         let mut declarations = String::new();
         let mut write = |side: &Side, name: &str| {
             if side.written {

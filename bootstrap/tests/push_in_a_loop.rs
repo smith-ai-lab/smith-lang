@@ -26,16 +26,32 @@ pub const ONCE: &[Test] = &[
         a_push_loop_asks_for_memory_once_for_each_doubling_of_the_list,
     ),
     (
-        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_1_of_3",
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_1_of_7",
         || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(0),
     ),
     (
-        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_2_of_3",
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_2_of_7",
         || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(1),
     ),
     (
-        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_3_of_3",
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_3_of_7",
         || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(2),
+    ),
+    (
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_4_of_7",
+        || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(3),
+    ),
+    (
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_5_of_7",
+        || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(4),
+    ),
+    (
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_6_of_7",
+        || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(5),
+    ),
+    (
+        "what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width_part_7_of_7",
+        || what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(6),
     ),
 ];
 
@@ -241,7 +257,7 @@ fn pushed(p: &Pushes) -> (String, String) {
 /// each width, a literal or a number that changes, with few or many numbers
 /// live, is what the evaluator prints, and what the program says it should.
 fn what_an_arm64_executable_pushes_is_what_the_evaluator_says_at_every_width(part: u64) {
-    generate::check_part(5112, 14, part, 3, pushes, |p| {
+    generate::check_part(5112, 14, part, 7, pushes, |p| {
         let (source, printed) = pushed(p);
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         let said = scalar::run(&program);

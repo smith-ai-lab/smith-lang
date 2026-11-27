@@ -17,8 +17,20 @@ use crate::numbers::with_header;
 
 pub const ONCE: &[Test] = &[
     (
-        "an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none",
-        an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none,
+        "an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none_part_1_of_4",
+        || an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(0),
+    ),
+    (
+        "an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none_part_2_of_4",
+        || an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(1),
+    ),
+    (
+        "an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none_part_3_of_4",
+        || an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(2),
+    ),
+    (
+        "an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none_part_4_of_4",
+        || an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(3),
     ),
     (
         "an_invariant_that_is_false_before_the_first_pass_is_refused_at_the_invariant",
@@ -116,9 +128,8 @@ impl Steps {
 /// `var` and nothing but the invariant proves each pass fits it, it prints
 /// what the loop gives, and its executable is that of the program that has the
 /// range inferred and no invariant, on two targets.
-fn an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none()
-{
-    generate::check(71, 12, steps, |s| {
+fn an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(part: u64) {
+    generate::check_part(71, 12, part, 4,steps, |s| {
         let (start, step) = (s.start, s.step);
         let open = s.source(false, "");
         for form in [

@@ -64,6 +64,22 @@ fn digest_of(bytes: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// The digest of each message, from one program that hashes all of them, as
+/// `hashing_all` writes it, which is lowered and run once.
+fn digests_of(messages: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    let (source, _) = hashing_all(messages);
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
+    let out = scalar::run(&program);
+    assert_eq!(out.status, 0, "for\n{source}");
+    let bytes: Vec<u8> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| l.parse().unwrap())
+        .collect();
+    assert_eq!(bytes.len(), 32 * messages.len(), "for\n{source}");
+    bytes.chunks(32).map(<[u8]>::to_vec).collect()
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -71,7 +87,7 @@ fn hex(bytes: &[u8]) -> String {
 /// The empty message, `abc`, and the two messages of FIPS 180-4 that fill one
 /// block and two.
 fn sha256_gives_the_digests_of_fips_180_4_for_its_messages() {
-    for (message, digest) in [
+    let messages = [
         (
             "",
             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -88,17 +104,22 @@ fn sha256_gives_the_digests_of_fips_180_4_for_its_messages() {
             "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
             "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
         ),
-    ] {
-        assert_eq!(hex(&digest_of(message.as_bytes())), digest, "for {message:?}");
+    ];
+    let digests = digests_of(&messages.iter().map(|(m, _)| m.as_bytes().to_vec()).collect::<Vec<_>>());
+    for ((message, digest), got) in messages.iter().zip(&digests) {
+        assert_eq!(hex(got), *digest, "for {message:?}");
     }
 }
 
 /// The lengths around a block, which are where the padding changes, give what
 /// the reference gives.
 fn sha256_gives_what_a_reference_gives_for_the_lengths_around_a_block() {
-    for length in BOUNDARIES {
-        let bytes: Vec<u8> = (0..length).map(|i| (i * 7 + 3) as u8).collect();
-        assert_eq!(hex(&digest_of(&bytes)), sha256::hex(&bytes), "for {length} bytes");
+    let messages: Vec<Vec<u8>> = BOUNDARIES
+        .iter()
+        .map(|&length| (0..length).map(|i| (i * 7 + 3) as u8).collect())
+        .collect();
+    for (bytes, got) in messages.iter().zip(digests_of(&messages)) {
+        assert_eq!(hex(&got), sha256::hex(bytes), "for {} bytes", bytes.len());
     }
 }
 

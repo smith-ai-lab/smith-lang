@@ -7,6 +7,9 @@
 //! least and greatest as often as from anywhere else, and the oracle is a sign
 //! and a magnitude of 128 bits, which shares nothing with the compiler.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use smith::scalar::{self, Outcome};
 use smith::target::Target;
 use smith::{check, compile, lower};
@@ -18,12 +21,24 @@ use crate::targets;
 
 pub const ONCE: &[Test] = &[
     (
-        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly",
-        the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly,
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_1_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(0),
     ),
     (
-        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list",
-        a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list,
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_2_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(1),
+    ),
+    (
+        "the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly_part_3_of_3",
+        || the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(2),
+    ),
+    (
+        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list_part_1_of_2",
+        || a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(0),
+    ),
+    (
+        "a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list_part_2_of_2",
+        || a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(1),
     ),
     (
         "a_proof_is_refused_for_a_range_whose_greatest_number_is_above_what_an_i128_holds",
@@ -247,10 +262,10 @@ fn program_of_pairs(pairs: &[(Sum, Sum)]) -> (String, String) {
 /// printed exactly and compared exactly with the other, whether it needs 64 bits
 /// or not, so a product of two numbers of 64 bits is the whole product. Each
 /// program holds ten pairs, one function each, so that the 60 pairs are six
-/// whole checks and not sixty.
-fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly() {
+/// whole checks and not sixty, in three parts of two.
+fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compared_exactly(part: u64) {
     let pairs = |g: &mut Gen| (0..10).map(|_| (sum(g), sum(g))).collect::<Vec<_>>();
-    generate::check(4301, 6, pairs, |batch| {
+    generate::check_part(4301, 6, part, 3, pairs, |batch| {
         let (source, expected) = program_of_pairs(batch);
         assert_eq!(stdout(&source), expected, "for\n{source}");
     });
@@ -258,11 +273,13 @@ fn the_result_of_an_operator_on_numbers_of_64_bits_or_fewer_is_printed_and_compa
 
 /// A wide number is a parameter, a result, a field of a struct, an element of a
 /// tuple, and an element of a list, and is the same number in each.
-fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list() {
+fn a_wide_number_is_held_by_a_parameter_a_result_a_field_a_tuple_and_a_list(part: u64) {
     const R: &str = "-73786976294838206464..73786976294838206464";
-    generate::check(
+    generate::check_part(
         4302,
         12,
+        part,
+        2,
         |g: &mut Gen| {
             let mut p = sum(g);
             // A sum or a difference is below 2 to the 66.
@@ -651,22 +668,47 @@ fn runtime(g: &mut Gen) -> Runtime {
     }
 }
 
-impl Runtime {
-    fn source(self) -> String {
-        let read = |name: &str, ty: &str| {
-            format!(
-                "fn read_{name}(text: str) -> {ty} <alloc> {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
-            )
-        };
-        with_header(format!(
-            "use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n{}{}fn main(args: List[str]) <console, alloc> {{\n  if args.size == 2 {{\n    a = read_a(args[0])\n    b = read_b(args[1])\n    print(\"{{a * b}}\")\n  }}\n}}\n",
-            read("a", self.types.0.name),
-            read("b", self.types.1.name)
-        ))
-    }
+/// The numbers of one sign that the program of `runtime_program` reads, in the
+/// order it numbers them.
+fn of_sign(signed: bool) -> Vec<Int> {
+    INTS.iter().copied().filter(|t| t.signed == signed).collect()
+}
 
+/// A program that reads three words it is started with: the number of a pair of
+/// types of the same sign, and two numbers, which it reads as the types of the
+/// pair, so that the compiler does not know them, and prints their product. The
+/// pair is numbered by the place of the type of the first among the types of the
+/// sign, times their count, and the place of the type of the second, so that every
+/// pair of the sign is a product in one program, which is built once and started
+/// for each case.
+fn runtime_program(signed: bool) -> String {
+    let same = of_sign(signed);
+    let mut source = String::from("use std.deserialize (ReadError)\nuse std.fromtext (ReadText, from_text)\n\n");
+    for (i, ty) in same.iter().enumerate() {
+        let ty = ty.name;
+        source += &format!(
+            "fn read_{i}(text: str) -> {ty} <alloc> {{\n  got: Result[{ty}, ReadError] = from_text(\"n\", text)\n  match got {{\n    .ok(v) {{ v }}\n    .err(e) {{ 0 }}\n  }}\n}}\n\n"
+        );
+    }
+    source += "fn main(args: List[str]) <console, alloc> {\n  if args.size == 3 {\n    which = read_0(args[0])\n";
+    for a in 0..same.len() {
+        for b in 0..same.len() {
+            source += &format!(
+                "    if which == {} {{\n      print(\"{{read_{a}(args[1]) * read_{b}(args[2])}}\")\n    }}\n",
+                a * same.len() + b
+            );
+        }
+    }
+    source += "  }\n}\n";
+    with_header(source)
+}
+
+impl Runtime {
     fn words(self) -> Vec<String> {
-        vec![self.values.0.to_string(), self.values.1.to_string()]
+        let same = of_sign(self.types.0.signed);
+        let place = |ty: Int| same.iter().position(|t| t.name == ty.name).expect("a type of the sign");
+        let which = place(self.types.0) * same.len() + place(self.types.1);
+        vec![which.to_string(), self.values.0.to_string(), self.values.1.to_string()]
     }
 
     fn expected(self) -> String {
@@ -679,16 +721,23 @@ impl Runtime {
 /// compiler cannot know, is the exact product in every executable that this
 /// machine runs, whether a number is negative, at the least or the greatest of
 /// its type, or anywhere between. On arm64 it is `mul` with `smulh` or `umulh`,
-/// and on x86-64 one `mul` or `imul`.
+/// and on x86-64 one `mul` or `imul`. The programs are one for each sign, which
+/// has every pair of types of the sign in it, and which is built once for each
+/// target, and started with the pair and the two numbers of each case.
 fn every_executable_gives_the_exact_product_of_two_numbers_known_only_when_it_runs() {
+    let built: RefCell<HashMap<(bool, String), Vec<u8>>> = RefCell::new(HashMap::new());
     generate::check(4308, 40, runtime, |r| {
-        let (source, words, said) = (r.source(), r.words(), r.expected());
+        let (words, said) = (r.words(), r.expected());
+        let signed = r.types.0.signed;
         for target in targets::runnable() {
-            let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
-            targets::record(target, &[&bytes, words.concat().as_bytes(), said.as_bytes()]);
+            let mut built = built.borrow_mut();
+            let bytes = built.entry((signed, target.name().to_string())).or_insert_with(|| {
+                targets::build(runtime_program(signed).as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+            });
+            targets::record(target, &[bytes, words.concat().as_bytes(), said.as_bytes()]);
             if !targets::fingerprinting() {
-                let ran = targets::run_with_words(&bytes, &words);
-                assert_eq!(ran.stdout, said.as_bytes(), "{target:?}, with {words:?}, for\n{source}");
+                let ran = targets::run_with_words(bytes, &words);
+                assert_eq!(ran.stdout, said.as_bytes(), "{target:?}, with {words:?}, for\n{}", runtime_program(signed));
             }
         }
     });

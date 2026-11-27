@@ -14,16 +14,36 @@ use crate::targets::any;
 
 pub const ONCE: &[Test] = &[
     (
-        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file",
-        aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file,
+        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file_part_1_of_2",
+        || aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(0),
     ),
     (
-        "aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable",
-        aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable,
+        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file_part_2_of_2",
+        || aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(1),
     ),
     (
-        "aliases_a_function_two_traits_share_is_written_with_its_trait",
-        aliases_a_function_two_traits_share_is_written_with_its_trait,
+        "aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable_part_1_of_3",
+        || aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable(0),
+    ),
+    (
+        "aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable_part_2_of_3",
+        || aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable(1),
+    ),
+    (
+        "aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable_part_3_of_3",
+        || aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable(2),
+    ),
+    (
+        "aliases_a_function_two_traits_share_is_written_with_its_trait_part_1_of_3",
+        || aliases_a_function_two_traits_share_is_written_with_its_trait(0),
+    ),
+    (
+        "aliases_a_function_two_traits_share_is_written_with_its_trait_part_2_of_3",
+        || aliases_a_function_two_traits_share_is_written_with_its_trait(1),
+    ),
+    (
+        "aliases_a_function_two_traits_share_is_written_with_its_trait_part_3_of_3",
+        || aliases_a_function_two_traits_share_is_written_with_its_trait(2),
     ),
     (
         "aliases_each_mistake_is_one_error_at_its_place",
@@ -169,8 +189,8 @@ fn one_file(p: &Pair) -> String {
 /// name, importing the modules and writing the name with the module, and
 /// importing each under a name of its own, give what the two functions give
 /// under different names in one file.
-fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file() {
-    generate::check(20, 40, pair, |p| {
+fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(part: u64) {
+    generate::check_part(20, 40, part, 2, pair, |p| {
         let modules: Vec<String> = (0..2).map(|i| format!("{ITEMS_USES}{}", items(p, i, true))).collect();
         let files: Vec<(&str, &str)> = p
             .modules
@@ -183,16 +203,17 @@ fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file
             .unwrap_or_else(|e| panic!("{e:?}\n{main}\n{files:?}"));
         let one = one_file(p);
         let wanted = smith::lower(one.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{one}"));
-        assert_eq!(printed(&got), printed(&wanted), "for\n{main}\n{files:?}");
-        assert!(!printed(&got).is_empty());
+        let shown = printed(&got);
+        assert_eq!(shown, printed(&wanted), "for\n{main}\n{files:?}");
+        assert!(!shown.is_empty());
     });
 }
 
 /// An alias and a name written with its module are only the name of what
 /// they say, so the executable is the same however a file imports the same
 /// functions.
-fn aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable() {
-    generate::check(21, 12, pair, |p| {
+fn aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable(part: u64) {
+    generate::check_part(21, 12, part, 3,pair, |p| {
         let modules: Vec<String> = (0..2).map(|i| format!("{ITEMS_USES}{}", items(p, i, true))).collect();
         let files = |name: &str| {
             p.modules
@@ -264,8 +285,8 @@ fn traits(g: &mut Gen) -> Traits {
 /// Two traits that have a function of one name are told apart by writing the
 /// trait, whether the file lists the function of one of them or not, and
 /// each gives what a function of its own name gives in one file.
-fn aliases_a_function_two_traits_share_is_written_with_its_trait() {
-    generate::check(22, 40, traits, |t| {
+fn aliases_a_function_two_traits_share_is_written_with_its_trait(part: u64) {
+    generate::check_part(22, 40, part, 3,traits, |t| {
         let [ka, kb] = t.numbers;
         let (a, b) = (shapes(ka), solids(kb));
         let files = [("shapes", a.as_str()), ("solids", b.as_str())];
@@ -289,8 +310,9 @@ fn aliases_a_function_two_traits_share_is_written_with_its_trait() {
              print(\"{{size_a(S(w: {x}))}} {{size_b(S(w: {x}))}}\")\n}}\n"
         );
         let wanted = smith::lower(one.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{one}"));
-        assert_eq!(printed(&got), printed(&wanted), "for\n{main}\n{files:?}");
-        assert!(!printed(&got).is_empty());
+        let shown = printed(&got);
+        assert_eq!(shown, printed(&wanted), "for\n{main}\n{files:?}");
+        assert!(!shown.is_empty());
     });
 }
 

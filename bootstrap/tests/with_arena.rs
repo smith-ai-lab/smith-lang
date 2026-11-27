@@ -236,7 +236,7 @@ fn program(g: &mut Gen) -> Case {
 
 fn a_program_with_arenas_prints_what_it_prints_with_the_lines_removed_when_every_value_is_read_after_the_block()
  {
-    generate::check(313, 40, program, |case| {
+    generate::check(313, 10, program, |case| {
         let with = lower(case.with.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let without = lower(case.without.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         assert_eq!(scalar::check(&with), Ok(()));

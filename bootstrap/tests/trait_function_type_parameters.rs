@@ -24,8 +24,16 @@ pub const ONCE: &[Test] = &[
         a_function_of_a_trait_settles_its_own_type_parameters_from_the_arguments,
     ),
     (
-        "a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print",
-        a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print,
+        "a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print_part_1_of_3",
+        || a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print(0),
+    ),
+    (
+        "a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print_part_2_of_3",
+        || a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print(1),
+    ),
+    (
+        "a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print_part_3_of_3",
+        || a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print(2),
     ),
     (
         "a_function_of_a_trait_with_a_type_parameter_is_used_through_a_bound",
@@ -436,9 +444,8 @@ impl Program {
     }
 }
 
-fn a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print()
- {
-    generate::check(4471, 40, generate_program, |program| {
+fn a_program_with_a_function_of_a_trait_that_takes_type_parameters_prints_what_the_generic_functions_print(part: u64) {
+    generate::check_part(4471, 40, part, 3, generate_program, |program| {
         let (source, printed) = program.source();
         let found = errors(&source);
         assert!(found.is_empty(), "{found:?}\n{source}");

@@ -13,12 +13,20 @@ pub const ONCE: &[Test] = &[
         the_reference_gives_the_correctly_rounded_value_of_numbers_whose_value_is_known,
     ),
     (
-        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_1_of_2",
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_1_of_4",
         || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(0),
     ),
     (
-        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_2_of_2",
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_2_of_4",
         || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(1),
+    ),
+    (
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_3_of_4",
+        || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(2),
+    ),
+    (
+        "the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers_part_4_of_4",
+        || the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_numbers(3),
     ),
     (
         "the_reference_rounds_to_the_nearest_and_the_even_one_of_two_as_near",
@@ -70,7 +78,7 @@ fn the_reference_is_within_a_unit_in_the_last_place_of_the_host_for_generated_nu
             .map(|k| numbers(g, [1.0, 10.0, 700.0, 100.0][k % 4]))
             .collect()
     });
-    for x in xs.into_iter().skip(part * 6).take(6) {
+    for x in xs.into_iter().skip(part * 3).take(3) {
         let (e, host) = (exact::exp_f64(x), x.exp().to_bits());
         assert!(apart(e, host) <= 1, "exp({x}): {e:#x} for {host:#x}");
         let (s, host) = (exact::sin_f64(x), x.sin());

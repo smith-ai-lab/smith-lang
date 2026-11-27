@@ -19,8 +19,16 @@ pub const ONCE: &[Test] = &[
         a_number_written_in_place_beside_a_typed_value_is_still_decided_by_its_use,
     ),
     (
-        "a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is",
-        a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is,
+        "a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is_part_1_of_3",
+        || a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is(0),
+    ),
+    (
+        "a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is_part_2_of_3",
+        || a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is(1),
+    ),
+    (
+        "a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is_part_3_of_3",
+        || a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is(2),
     ),
     (
         "a_comparison_that_the_range_of_a_bound_number_decides_is_refused_as_with_the_range_written",
@@ -81,10 +89,12 @@ struct Use {
     how: usize,
 }
 
-fn a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is() {
-    generate::check(
+fn a_bound_number_beside_a_typed_value_is_accepted_and_refused_as_the_range_written_is(part: u64) {
+    generate::check_part(
         4601,
         120,
+        part,
+        3,
         |g: &mut Gen| {
             let low = g.below(40) as i128 - 20;
             Use {

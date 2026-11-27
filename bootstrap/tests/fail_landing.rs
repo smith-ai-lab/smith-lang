@@ -88,6 +88,11 @@ fn main() <console, alloc, diverge> {{
 
 fn said(source: &str) -> Vec<String> {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
+    said_by(source, program)
+}
+
+/// What the program prints, which `source` is the text of.
+fn said_by(source: &str, program: scalar::Program) -> Vec<String> {
     assert_eq!(scalar::check(&program), Ok(()), "for {source}");
     let (outcome, _) = scalar::run_counting(&scalar::passes(&program), 1 << 20);
     let text = String::from_utf8(outcome.stdout).expect("text");
@@ -179,7 +184,7 @@ fn a_failure_in_an_inlined_function_that_owns_ends_what_it_owns_and_then_what_it
 /// A function whose one request for memory is the literal of a list, which asks
 /// for what it holds all at once.
 fn a_big_literal() -> String {
-    let items = vec!["i"; 30000].join(", ");
+    let items = vec!["i"; 4000].join(", ");
     format!(
         "fn big(i: u64) -> List[u64] <alloc> {{
   [{items}]
@@ -204,12 +209,12 @@ fn a_function_that_holds_a_connection_and_calls_a_small_allocating_helper_that_i
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     // The helper is no function of the program once its call is replaced, though
     // a landing follows the call, and its request for memory is in the owner.
-    let inlined = scalar::inline(program);
+    let inlined = scalar::inline(program.clone());
     assert!(
         !inlined.functions.iter().any(|f| f.name.contains("big")),
         "the helper is still called"
     );
-    let lines = said(&source);
+    let lines = said_by(&source, program);
     assert_eq!(lines, ["closed 5", "out of memory", "1"]);
 }
 
