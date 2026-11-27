@@ -55,8 +55,12 @@ pub const ONCE: &[Test] = &[
         a_child_started_where_a_joined_one_was_is_a_new_task_with_a_value_of_its_own,
     ),
     (
-        "a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole",
-        a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole,
+        "a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole_part_1_of_2",
+        || a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole(0),
+    ),
+    (
+        "a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole_part_2_of_2",
+        || a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole(1),
     ),
     (
         "ten_thousand_children_joined_one_after_another_ask_the_system_for_the_memory_of_one",
@@ -553,9 +557,9 @@ fn left_running(seed: u64) -> String {
     )
 }
 
-fn a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole() {
+fn a_child_left_running_when_the_arena_that_started_it_ends_runs_on_and_the_scheduler_is_whole(part: u64) {
     let written = Written::new(left_running(SEED));
-    for seed in 0..16u64 {
+    for seed in 8 * part..8 * (part + 1) {
         let (said, _) = asked_with(&written, &[(SEED, seed)]);
         let lines: Vec<&str> = said.lines().collect();
         // The arena's total is printed first, in the task that started the
