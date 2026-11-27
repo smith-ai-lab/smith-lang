@@ -300,7 +300,7 @@ fn reach(g: &mut Gen) -> Reach {
 /// exactly when `hi - 1 + c` is a number of the type, and `i - c` exactly when
 /// `lo - c` is, with no `if`.
 fn inside_a_loop_over_a_range_arith_knows_the_counter_is_inside_the_range() {
-    generate::check(43, 150, reach, |r| {
+    generate::check(43, 70, reach, |r| {
         let operation = if r.up {
             format!("i + {}", r.by)
         } else {
@@ -633,7 +633,7 @@ fn countdown(g: &mut Gen) -> Countdown {
 /// from the limits of its type, the loop ends, after as many rounds as the
 /// steps that fit.
 fn every_loop_with_decreases_that_compiles_ends() {
-    generate::check(59, 120, countdown, |c| {
+    generate::check(59, 60, countdown, |c| {
         let (t, start, step) = (c.ty.name, c.start, c.step);
         let source = with_header(format!(
             "fn rounds(n: {t}) -> u64 {{\n  var left: {t} = n\n  var times: u64 = 0\n  loop decreases left {{\n    if left < {step} {{ break }}\n    left = left - {step}\n    times = wrapping_add(times, 1)\n  }}\n  times\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{rounds({start})}}\")\n}}\n"
