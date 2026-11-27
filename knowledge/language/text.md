@@ -11,7 +11,7 @@ built:
   - "`s.bytes` of a `str`, its `Slice[u8]`, with no call and no copy, read only like any slice"
   - "building a `str` by hand is refused"
   - "`s[a..b]`, `s[..k]`, and `s[k..]` of a `str`, a `str` that shares the memory of `s` and has the instructions of `s.bytes[a..b]`, which compiles when `arith` proves `a <= b`, `b <= s.size`, `boundary(s, a)`, and `boundary(s, b)`, and is refused naming the fact it cannot prove"
-  - "`boundary(s, i)` in a `requires`, an `ensures`, and an `invariant`, and refused anywhere else, which `arith` knows at `0` and at `s.size`, at `i` and `i + 1` where `s[i]` or `s.bytes[i]` is known to be below 128, and where a `requires` or an `ensures` says it, of a place it proves equal; not in a `check`"
+  - "`boundary(s, i)` in a `requires`, an `ensures`, and an `invariant`, and refused anywhere else, a `check` among them, which `arith` knows at `0` and at `s.size`, at `i` and `i + 1` where `s[i]` or `s.bytes[i]` is known to be below 128, and where a `requires` or an `ensures` says it, of a place it proves equal"
 ---
 
 # Text and bytes
@@ -63,7 +63,7 @@ fn before_space(s: str, i: Nat) -> str
 }
 ```
 
-`before_space("ab cd", 2)` is `"ab"`. `boundary(s, i)` is a fact of the prelude that is proven and never computed, so it is written only in a `requires`, an `ensures`, an `invariant`, and a [`check`](check.md). `arith` does not look inside it, and knows it of a place in these ways, and of any place it proves equal to one:
+`before_space("ab cd", 2)` is `"ab"`. `boundary(s, i)` is a fact of the prelude that is proven and never computed, so it is written only in a proof: a `requires`, an `ensures`, or a loop's [`invariant`](loop.md#an-invariant). Anywhere the program computes what it tests, as in an `if` or a [`check`](check.md), it is refused with "`boundary` is a fact for a `requires`, an `ensures`, or an `invariant`, and is never computed". `arith` does not look inside it, and knows it of a place in these ways, and of any place it proves equal to one:
 
 - At `0` and at `s.size`.
 - On both sides of a byte below 128: where `s[i] < 128` is known, from an `if`, a `check`, or a `requires`, so are `boundary(s, i)` and `boundary(s, i + 1)`, as such a byte is a character of its own in UTF-8. This is the one way that looks at a byte.
