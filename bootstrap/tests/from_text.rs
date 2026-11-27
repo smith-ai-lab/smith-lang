@@ -121,7 +121,7 @@ fn a_whole_number_is_read_from_its_digits_exactly_when_it_is_in_its_range() {
              .range(t) {{ \"range\" }}\n        .shape(p) {{ \"shape\" }}\n        \
              .malformed {{ \"other\" }}\n        .missing(n) {{ \"other\" }}\n        \
              .case(n) {{ \"other\" }}\n        .unknown(n) {{ \"other\" }}\n        \
-             .twice(n) {{ \"other\" }}\n      }}\n    }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n",
+             .twice(n) {{ \"other\" }}\n        .proof(p) {{ \"other\" }}\n      }}\n    }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n",
             r.least, r.end
         );
         let mut said = String::new();
@@ -188,7 +188,7 @@ fn a_type_with_an_impl_of_its_own_is_read_by_it() {
          match got {{\n    .ok(v) {{ match v {{\n      .low {{ \"low\" }}\n      .high {{ \"high\" }}\n    }} }}\n    \
          .err(e) {{ match e.problem {{\n      .shape((wanted, found)) {{ \"{{e.path}}: wanted {{wanted}}\" }}\n      \
          .range(t) {{ \"range\" }}\n      .malformed {{ \"other\" }}\n      .missing(n) {{ \"other\" }}\n      \
-         .case(n) {{ \"other\" }}\n      .unknown(n) {{ \"other\" }}\n      .twice(n) {{ \"other\" }}\n    }} }}\n  }}\n}}\n\n\
+         .case(n) {{ \"other\" }}\n      .unknown(n) {{ \"other\" }}\n      .twice(n) {{ \"other\" }}\n      .proof(p) {{ \"other\" }}\n    }} }}\n  }}\n}}\n\n\
          fn main() <console, alloc> {{\n  print(show(\"low\"))\n  print(show(\"high\"))\n  print(show(\"mid\"))\n}}\n",
         USES.replace("(ReadText, from_text)", "(FromText, ReadText, from_text)")
     );

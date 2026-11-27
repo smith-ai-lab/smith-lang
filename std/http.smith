@@ -481,6 +481,7 @@ fn is_missing(p: Problem) -> bool {
     .case(c) { false }
     .unknown(u) { false }
     .twice(t) { false }
+    .proof(w) { false }
   }
 }
 

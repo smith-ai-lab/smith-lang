@@ -6,7 +6,7 @@ status: partial
 built:
   - "a struct whose field has a statement as its type, a proof field, such as `inside: at <= size`: a construction leaves it out and `arith` builds it from the values given, refused with the goal stated for them where it cannot, or gives a proof of the statement for those values and no other; a value of the struct that is read from a parameter, a field, an item of a list at a number or a name, a `var`, or a name bound by a `loop` has the statement of its fields as a fact; the field is in no value, no layout, and no executable"
   - "an assignment to a field that a proof field's statement or the type of another field names is refused, with the fix that builds the value again; a field nothing names is assigned as before"
-  - "`Eq`, `Ord`, `Fmt`, `Repr`, `Hash`, `Serialize`, and `Describe` of a struct that leave its proof fields out, and no automatic `Deserialize` for a struct that holds one"
+  - "`Eq`, `Ord`, `Fmt`, `Repr`, `Hash`, `Serialize`, and `Describe` of a struct that leave its proof fields out, and the automatic `Deserialize` of a struct that holds one, which reads its data fields and then tests the statement of each proof field of what was read, giving the error `proof` when one is false"
   - "not a fact for a value taken apart by a pattern of its fields; not a proof field in a case of an enum"
 ---
 
@@ -34,6 +34,10 @@ fn first() -> Cursor[10] { Cursor(at: 4) }
 ```
 
 `first()` is a `Cursor[10]`, since `4 <= 10`. A proof field takes no part in `==`, in the order of two values, or in how one is shown and written: two `Cursor`s are equal when their `at` is, and `Cursor(at: 4)` is how one is written, as [Traits a type is given](automatic-traits.md#a-proof-field-is-left-out) says. `Cursor(at: 11)` is refused there, since `11 <= 10` cannot be proven. A value that is known only when the program runs needs a [`check`](check.md) to give the proof.
+
+## Reading one
+
+A struct that holds a proof is read as any struct is: the fields that hold data are read, and then the statement of each proof field is tested of the values read, once, as [`check`](check.md) tests one. When the statement holds, the value is made and has the statement as a fact. When it does not, the read ends with a [`ReadError`](../library/deserialize.md#what-was-wrong) that names the struct, the proof field, and the statement, with the path of the value as for any other error: "`named` of `NewUser` does not hold: `name.size > 0`".
 
 ## Changing a field
 

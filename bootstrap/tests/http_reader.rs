@@ -43,7 +43,7 @@ fn printed(source: &str) -> String {
 const PROGRAM: &str = "use std.bits (u64, u8)\nuse std.console (console, print)\nuse std.describe (Describe)\nuse std.deserialize (Problem, ReadError)\nuse std.http (FromRequest, Part, no_params, params_of, reading)\n\n\
 struct Note {\n  text: str\n}\n\n\
 struct Args {\n  id: u64\n  limit: Option[u8]\n  size: u8 = 20\n  note: Option[Note]\n}\n\n\
-fn kind(p: Problem) -> str {\n  match p {\n    .missing(m) { \"missing\" }\n    .malformed { \"malformed\" }\n    .shape(s) { \"shape\" }\n    .range(n) { \"range\" }\n    .case(c) { \"case\" }\n    .unknown(u) { \"unknown\" }\n    .twice(t) { \"twice\" }\n  }\n}\n\n\
+fn kind(p: Problem) -> str {\n  match p {\n    .missing(m) { \"missing\" }\n    .malformed { \"malformed\" }\n    .shape(s) { \"shape\" }\n    .range(n) { \"range\" }\n    .case(c) { \"case\" }\n    .unknown(u) { \"unknown\" }\n    .twice(t) { \"twice\" }\n    .proof(w) { \"proof\" }\n  }\n}\n\n\
 fn shown(n: Option[u8]) -> str <alloc> {\n  match n {\n    .some(v) { \"{v}\" }\n    .none { \"-\" }\n  }\n}\n\n\
 fn run(path: take List[Part], query: take List[Part], body: str) <console, alloc> {\n  p = Describe[Args].describe(no_params())\n  r = reading(params_of(p), path, query, body)\n  got: Result[Args, ReadError] = FromRequest[Args].from_request(r)\n  match got {\n    .ok(a) {\n      text = match a.note {\n        .some(n) { n.text }\n        .none { \"-\" }\n      }\n      print(\"ok {a.id} {shown(a.limit)} {a.size} {text}\")\n    }\n    .err(e) { print(\"err {e.path} {kind(e.problem)}\") }\n  }\n}\n\n";
 

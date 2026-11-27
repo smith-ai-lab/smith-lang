@@ -1013,15 +1013,6 @@ impl<'a> Defs<'a> {
             return match &types[0] {
                 Ty::Text | Ty::Nothing | Ty::Int(_) => Some(Vec::new()),
                 Ty::List(of) => Some(vec![of[0].clone()]),
-                // What is read cannot give a proof, as no fact is known of it
-                // when the program is built, so a struct that holds one is not
-                // read by what is given automatically.
-                Ty::Struct(s, _)
-                    if self.deserialize == Some(k)
-                        && self.data_fields(*s).len() < self.fields[*s].len() =>
-                {
-                    None
-                }
                 Ty::Struct(s, args) if !taken(Def::Struct(*s)) => Some(self.data_types(*s, args)),
                 Ty::Enum(e, args) if !taken(Def::Enum(*e)) => (self.cases[*e].iter().flatten())
                     .map(|t| Some(t.subst(args)))

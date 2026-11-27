@@ -155,6 +155,7 @@ fn say(e: ReadError) -> str <alloc> {
     .case(n) { \"case {n}\" }
     .unknown(n) { \"unknown {n}\" }
     .twice(n) { \"twice {n}\" }
+    .proof(p) { \"proof\" }
   }
   \"{e.line}:{e.column} {e.path} {p}\"
 }
