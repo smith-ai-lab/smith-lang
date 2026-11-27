@@ -9,12 +9,13 @@ built:
   - "`Range`, a struct with `start` and `end`, both `Nat`, which `a..b` written as a value builds"
   - "not `Pos`"
   - "`check`, which is built in and needs no `use`, in `match check(e) { .some(p) { ... } .none { ... } }`, as [check](check.md) says"
+  - "`boundary`, which is built in and needs no `use`, as [A piece of a text](text.md#a-piece-of-a-text) says"
   - "a name of the standard library outside the table, such as `print`, `console`, `push`, `narrow`, a `wrapping_` function, or the name of a size, is refused where a file uses it with no `use`, and the error names the module to import it from"
 ---
 
 # The prelude
 
-A small set of names is in scope in every file with no `use`. It is called the prelude, and it is as small as it can be: a name is in it only when the syntax of the language means that name, when it is a trait that every type or every function is given with no `impl`, or, for `Int`, `Nat`, `Pos`, and `Byte`, when it says what a number is for. There is no other way in, and so no name is in it for convenience. The syntax means types, traits, and effects, and never a function, so no function is in it.
+A small set of names is in scope in every file with no `use`. It is called the prelude, and it is as small as it can be: a name is in it only when the syntax of the language means that name, when it is a trait that every type or every function is given with no `impl`, or, for `Int`, `Nat`, `Pos`, and `Byte`, when it says what a number is for. There is no other way in, and so no name is in it for convenience. The syntax means types, traits, and effects, and never a function, so no function is in it. `boundary`, which a piece of a text means, is a fact that is proven and never computed.
 
 ```
 use std.console (console, print)
@@ -38,6 +39,7 @@ The prelude is not a module that a file imports, since its names are in scope al
 | `Order`, `Eq`, and `Ord` | `==`, `!=`, `<`, `<=`, `>`, and `>=` |
 | `Add`, `Sub`, `Mul`, `Div`, `Rem`, `Pow`, and `Neg` | The arithmetic operators |
 | `Index` | `x[i]` |
+| `boundary` | The piece of a text written `s[a..b]`, which needs it of both ends |
 | `Iterate`, and `Flow` | `loop v in x`, `break`, and `return` in one |
 | `Range` | A range written as a value, `a..b`, as [Ranges and slices](ranges.md#a-range-as-a-value) says |
 | `Exit` | What `main` returns |

@@ -11,7 +11,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::arith::{Formula, Lin, proves};
+use super::arith::{Formula, Lin, proves, proves_one_of};
 use super::proof_functions::{Held, owed_by};
 use super::{
     Body, Checker, Int, Numbers, Signature, Ty, addr, params_of, pattern_names, statements,
@@ -167,6 +167,36 @@ pub(super) struct Facts {
     steps: Vec<(usize, Option<Int>)>,
     /// Whether the ranges of the `var`s are being solved.
     pub(super) solving: bool,
+    /// Each `boundary(s, i)` that was read, as a fact or as a goal.
+    bounds: Vec<Bound>,
+    /// Each byte of a text that was read as a whole number.
+    bytes: Vec<ByteRead>,
+    /// While a function's contract is read at a call, the path of the text
+    /// each of its parameters that is a text stands for there.
+    paths: Option<HashMap<String, String>>,
+}
+
+/// A `boundary(s, i)` that was read: the variable that is the place `i`, the
+/// variable that is 1 where the place falls between two characters of `s`
+/// and 0 where it does not, the sum the place was when it was read, and the
+/// sum of the size of `s`. `arith` does not look inside the fact: it knows it
+/// of a place where it was told it of the same place, at 0 and at the size,
+/// and on both sides of a byte below 128, as such a byte is a character of
+/// its own in UTF-8.
+struct Bound {
+    text: String,
+    at: usize,
+    holds: usize,
+    sum: Lin,
+    size: Option<Lin>,
+}
+
+/// A byte of the text `text` that was read: the variable that is its place,
+/// and the variable that is the byte.
+struct ByteRead {
+    text: String,
+    at: usize,
+    value: usize,
 }
 
 /// How much is known at a moment, to go back to when a block ends.
@@ -612,8 +642,53 @@ impl Builder<'_, '_> {
                 };
                 Some(self.variable(Key::Call(addr(call), lo, hi)))
             }
+            Expr::Index { of, index, .. } => match self.text_of_bytes(of) {
+                Some(text) => self.byte(e, text, index),
+                None => self.goal.then(|| self.fresh(e)),
+            },
             _ => self.goal.then(|| self.fresh(e)),
         }
+    }
+
+    /// The path of the text whose bytes `of` reads, when it is a text or the
+    /// bytes of one.
+    fn text_of_bytes(&self, of: &Expr) -> Option<String> {
+        let text = match of {
+            Expr::Field { of, name, .. } if name == "bytes" => &**of,
+            of => of,
+        };
+        (self.is_text(text) || matches!(self.types.get(&addr(text)), Some(Ty::Text)))
+            .then(|| self.path(text))
+            .flatten()
+    }
+
+    /// The byte at `index` of the text `text`, which `e` reads: a variable of
+    /// its own, whose place is noted, so that a byte below 128 is known to
+    /// stand between two characters.
+    fn byte(&mut self, e: &Expr, text: String, index: &Expr) -> Option<Lin> {
+        let Some(place) = self.lin(index) else {
+            return self.goal.then(|| self.fresh(e));
+        };
+        self.facts.fresh += 1;
+        let at = self
+            .facts
+            .id(Key::Fresh(self.facts.fresh, i128::MIN / 4, i128::MAX / 4));
+        let value = self.fresh(e);
+        let me = Lin {
+            terms: BTreeMap::from([(at, 1)]),
+            constant: 0,
+        };
+        let up = self.combine(&me, -1, &place);
+        let down = self.combine(&place, -1, &me);
+        self.state(up);
+        self.state(down);
+        let (&value_id, _) = value.terms.iter().next().expect("one variable");
+        self.facts.bytes.push(ByteRead {
+            text,
+            at,
+            value: value_id,
+        });
+        Some(value)
     }
 
     /// What each struct that a field is read from holds, along the field
@@ -1018,12 +1093,91 @@ impl<'a> Checker<'a> {
                     Some(Formula::Or(vec![up, down]))
                 }
             }
+            Expr::Call(call) if super::lists_and_text::is_boundary(self.defs, call) => {
+                self.said_boundary(body, facts, call, holds)
+            }
             Expr::Call(call) => match self.trait_function_of(facts, call) {
                 Some((k, fi)) => self.said_trait(body, facts, call, (k, fi), holds),
                 None => self.said_predicate(body, facts, call, holds),
             },
             _ => None,
         }
+    }
+
+    /// What `boundary(s, i)` says: that the place `i` falls between two
+    /// characters of the text `s`, a fact `arith` does not look inside.
+    fn said_boundary(
+        &self,
+        body: &Body<'a>,
+        facts: &mut Facts,
+        call: &Call,
+        holds: bool,
+    ) -> Option<Formula> {
+        let [text, at] = call.args.as_slice() else {
+            return None;
+        };
+        let sum = {
+            let mut builder = self.builder(body, facts, false);
+            builder.lin(&at.value).filter(|_| !builder.overflow)?
+        };
+        self.boundary_of(body, facts, &text.value, sum, holds)
+    }
+
+    /// That the place `sum` falls between two characters of the text `text`,
+    /// or, where not `holds`, that it does not.
+    pub(super) fn boundary_of(
+        &self,
+        body: &Body<'a>,
+        facts: &mut Facts,
+        text: &Expr,
+        sum: Lin,
+        holds: bool,
+    ) -> Option<Formula> {
+        let (path, size) = match (&facts.paths, text) {
+            (Some(paths), Expr::Name { name, .. }) => {
+                let path = paths.get(name).cloned();
+                let size =
+                    (facts.subst.as_ref()).and_then(|s| s.get(&format!("{name}.size")).cloned());
+                (path, size)
+            }
+            (Some(_), _) => return None,
+            (None, _) if facts.subst.is_some() => return None,
+            (None, text) => {
+                let mut builder = self.builder(body, facts, false);
+                let path = builder.path(text);
+                let size = builder.list_size(text).filter(|_| !builder.overflow);
+                (path, size)
+            }
+        };
+        // A text that no path names, as one written out, is a text of its
+        // own, which only its two ends are known of.
+        facts.fresh += 1;
+        let path = path.unwrap_or_else(|| format!("#{}", facts.fresh));
+        facts.fresh += 1;
+        let at = facts.id(Key::Fresh(facts.fresh, i128::MIN / 4, i128::MAX / 4));
+        facts.fresh += 1;
+        let truth = facts.id(Key::Fresh(facts.fresh, 0, 1));
+        let place = equal_sums(&variable(at), &sum)?;
+        facts.bounds.push(Bound {
+            text: path,
+            at,
+            holds: truth,
+            sum,
+            size,
+        });
+        let said = match holds {
+            // `truth - 1 >= 0`.
+            true => Lin {
+                terms: BTreeMap::from([(truth, 1)]),
+                constant: -1,
+            },
+            // `-truth >= 0`.
+            false => Lin {
+                terms: BTreeMap::from([(truth, -1)]),
+                constant: 0,
+            },
+        };
+        Some(Formula::And(vec![place, Formula::Ge(said)]))
     }
 
     /// The function of a trait that a call is of, when it names the trait, or
@@ -1177,9 +1331,11 @@ impl<'a> Checker<'a> {
             facts.args.replace(HashMap::new()),
         );
         let sibling = facts.sibling.take();
+        let texts = facts.paths.replace(HashMap::new());
         facts.depth += 1;
         let said = self.said(body, facts, inner, holds);
         facts.depth -= 1;
+        facts.paths = texts;
         facts.sibling = sibling;
         facts.subst = outer.0;
         facts.args = outer.1;
@@ -1227,10 +1383,12 @@ impl<'a> Checker<'a> {
             }
         }
         let outer = facts.subst.replace(sums);
+        let texts = facts.paths.replace(HashMap::new());
         facts.depth += 1;
         let said = self.said(body, facts, inner, holds);
         facts.depth -= 1;
         facts.subst = outer;
+        facts.paths = texts;
         said
     }
 
@@ -1608,6 +1766,7 @@ impl<'a> Checker<'a> {
         of: &Expr,
         ends: (Option<&Expr>, Option<&Expr>),
         pos: Pos,
+        text: bool,
     ) {
         if !Self::decided(body) || body.contract {
             return;
@@ -1624,6 +1783,10 @@ impl<'a> Checker<'a> {
             None => size.clone(),
         };
         let overflow = builder.overflow;
+        let (from_sum, to_sum) = match overflow {
+            true => (None, None),
+            false => (from.clone(), to.clone()),
+        };
         let goal = match (from, to, size) {
             (Some(from), Some(to), Some(size)) if !overflow => {
                 let ordered = self.sum(body, &mut facts, &to, &from, 0);
@@ -1634,11 +1797,38 @@ impl<'a> Checker<'a> {
             }
             _ => None,
         };
+        // A piece of a text begins and ends between two characters.
+        let mut between = Vec::new();
+        if text {
+            for (end, sum) in [(ends.0, from_sum), (ends.1, to_sum)] {
+                let Some(end) = end else { continue };
+                let said = sum.and_then(|sum| self.boundary_of(body, &mut facts, of, sum, true));
+                between.push((end, said));
+            }
+        }
         let goals: Vec<&Formula> = goal.iter().collect();
         let used = background(&facts, goals.into_iter());
+        let xs = written_expr(of);
+        let unknown = between.iter().find(|(_, said)| {
+            !said
+                .as_ref()
+                .is_some_and(|g| proves(&background(&facts, std::iter::once(g)), g))
+        });
         body.facts = facts;
-        if !goal.as_ref().is_some_and(|g| proves(&used, g)) {
-            let xs = written_expr(of);
+        let ordered = goal.as_ref().is_some_and(|g| proves(&used, g));
+        if ordered && let Some((end, _)) = unknown {
+            let at = written_expr(end);
+            self.errors.push(
+                Error::new(
+                    pos,
+                    format!("cannot prove that `boundary({xs}, {at})`, which a piece of `{xs}` needs"),
+                )
+                .with_fix(
+                    "check that the byte is ASCII, or take the position from a function that promises a boundary",
+                ),
+            );
+        }
+        if !ordered {
             let a = ends.0.map_or_else(|| "0".to_string(), written_expr);
             let b = ends.1.map_or_else(|| format!("{xs}.size"), written_expr);
             self.errors.push(
@@ -2177,8 +2367,26 @@ fn background<'g>(facts: &Facts, goals: impl Iterator<Item = &'g Formula>) -> Ve
     for f in facts.known.iter() {
         collect(f, &mut ids);
     }
+    let known = ids.clone();
+    let mut asked = Vec::new();
     for f in goals {
-        collect(f, &mut ids);
+        collect(f, &mut asked);
+    }
+    ids.extend(&asked);
+    // Each `boundary` that a goal asks and no fact says is known where one
+    // of the ways it is known holds.
+    let claims: Vec<(Formula, Vec<Formula>, usize)> = (facts.bounds.iter())
+        .filter(|b| asked.contains(&b.holds) && !known.contains(&b.holds))
+        .filter_map(|b| {
+            let place = equal_sums(&variable(b.at), &b.sum)?;
+            Some((place, boundary_ways(facts, b, &known)?, b.holds))
+        })
+        .collect();
+    for (place, ways, _) in &claims {
+        collect(place, &mut ids);
+        for way in ways {
+            collect(way, &mut ids);
+        }
     }
     ids.sort_unstable();
     ids.dedup();
@@ -2196,7 +2404,83 @@ fn background<'g>(facts: &Facts, goals: impl Iterator<Item = &'g Formula>) -> Ve
             used.push(Formula::Ge(under));
         }
     }
+    for (place, ways, holds) in claims {
+        used.push(place);
+        if proves_one_of(&used, &ways) {
+            used.push(Formula::Ge(Lin {
+                terms: BTreeMap::from([(holds, 1)]),
+                constant: -1,
+            }));
+        }
+    }
     used
+}
+
+/// The variable `id`, as a sum.
+fn variable(id: usize) -> Lin {
+    Lin {
+        terms: BTreeMap::from([(id, 1)]),
+        constant: 0,
+    }
+}
+
+/// `a == b`, or none when a number is too large.
+fn equal_sums(a: &Lin, b: &Lin) -> Option<Formula> {
+    let mut up = a.clone();
+    for (v, k) in &b.terms {
+        let sum = up.terms.get(v).unwrap_or(&0).checked_sub(*k)?;
+        if sum == 0 {
+            up.terms.remove(v);
+        } else {
+            up.terms.insert(*v, sum);
+        }
+    }
+    up.constant = up.constant.checked_sub(b.constant)?;
+    let down = up.negated()?;
+    Some(Formula::And(vec![Formula::Ge(up), Formula::Ge(down)]))
+}
+
+/// The ways the place of `bound` is known to fall between two characters,
+/// one of which must hold: it is 0, or the size of the text; it is a place
+/// that a fact says is one, of the same text; or it is the place of a byte
+/// of the text below 128, or the place after it. Only the facts and the bytes
+/// that what is `known` is about are looked at.
+fn boundary_ways(facts: &Facts, bound: &Bound, known: &[usize]) -> Option<Vec<Formula>> {
+    let place = &bound.sum;
+    let mut ways = vec![equal_sums(place, &constant(0))?];
+    if let Some(size) = &bound.size {
+        ways.push(equal_sums(place, size)?);
+    }
+    for other in &facts.bounds {
+        if other.text == bound.text && other.holds != bound.holds && known.contains(&other.holds) {
+            let said = Formula::Ge(Lin {
+                terms: BTreeMap::from([(other.holds, 1)]),
+                constant: -1,
+            });
+            ways.push(Formula::And(vec![
+                equal_sums(place, &variable(other.at))?,
+                said,
+            ]));
+        }
+    }
+    for byte in &facts.bytes {
+        if byte.text != bound.text || !known.contains(&byte.value) {
+            continue;
+        }
+        // `127 - byte >= 0`.
+        let ascii = Formula::Ge(Lin {
+            terms: BTreeMap::from([(byte.value, -1)]),
+            constant: 127,
+        });
+        let mut after = variable(byte.at);
+        after.constant = 1;
+        ways.push(Formula::And(vec![
+            equal_sums(place, &variable(byte.at))?,
+            ascii.clone(),
+        ]));
+        ways.push(Formula::And(vec![equal_sums(place, &after)?, ascii]));
+    }
+    Some(ways)
 }
 
 /// The places of the expressions that a block can end with: its last
@@ -2433,6 +2717,7 @@ impl<'a> Checker<'a> {
         let mut facts = std::mem::take(&mut body.facts);
         let mut sums = HashMap::new();
         let mut texts: HashMap<String, String> = HashMap::new();
+        let mut paths: HashMap<String, String> = HashMap::new();
         let mut given: HashMap<String, (String, Ty)> = HashMap::new();
         for &(arg, place) in &args {
             let (name, ty) = &sig.params[place];
@@ -2451,6 +2736,13 @@ impl<'a> Checker<'a> {
                 continue;
             }
             if matches!(ty, Ty::Text) {
+                let mut builder = self.builder(body, &mut facts, true);
+                if let Some(size) = builder.list_size(arg).filter(|_| !builder.overflow) {
+                    sums.insert(format!("{name}.size"), size);
+                }
+                if let Some(path) = builder.path(arg) {
+                    paths.insert(name.clone(), path);
+                }
                 texts.insert(name.clone(), written_expr(arg));
                 continue;
             }
@@ -2473,6 +2765,7 @@ impl<'a> Checker<'a> {
             );
         }
         facts.subst = Some(sums);
+        facts.paths = Some(paths);
         facts.args = Some(given);
         self.statements_name_no_var(body, &args, callee);
         // A proof written at the call is one of what the parameter owes.
@@ -2581,6 +2874,7 @@ impl<'a> Checker<'a> {
             facts.known.extend(said);
         }
         facts.subst = None;
+        facts.paths = None;
         facts.args = None;
         body.facts = facts;
     }

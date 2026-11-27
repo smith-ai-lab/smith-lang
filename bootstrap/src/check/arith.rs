@@ -73,6 +73,65 @@ pub fn proves(facts: &[Formula], goal: &Formula) -> bool {
     matches!(satisfiable(Vec::new(), all), Ok(false))
 }
 
+/// Whether, in each case the facts leave once every `or` among them is
+/// decided, one of `ways` follows from that case alone. It asks more than
+/// `proves` of `or` of the ways, and is quicker for it, as the ways are tried
+/// one at a time where the facts are only constraints.
+pub fn proves_one_of(facts: &[Formula], ways: &[Formula]) -> bool {
+    let denied: Option<Vec<Formula>> = ways.iter().map(Formula::not).collect();
+    let Some(denied) = denied else {
+        return false;
+    };
+    let each = |atoms: &[Con]| -> Res<bool> {
+        for way in &denied {
+            if !satisfiable(atoms.to_vec(), vec![way])? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    };
+    matches!(
+        every_case(Vec::new(), facts.iter().collect(), &each),
+        Ok(true)
+    )
+}
+
+/// Whether `holds` is true of every case of the formulas: the constraints
+/// that are left once each `or` is decided, where they have values.
+fn every_case(
+    mut atoms: Vec<Con>,
+    pending: Vec<&Formula>,
+    holds: &dyn Fn(&[Con]) -> Res<bool>,
+) -> Res<bool> {
+    let mut choices: Vec<&[Formula]> = Vec::new();
+    let mut stack = pending;
+    while let Some(f) = stack.pop() {
+        match f {
+            Formula::Ge(l) => atoms.push(Con {
+                co: l.terms.clone(),
+                c: l.constant,
+            }),
+            Formula::And(items) => stack.extend(items),
+            Formula::Or(items) => choices.push(items),
+        }
+    }
+    if !feasible(atoms.clone())? {
+        return Ok(true);
+    }
+    let Some((first, rest)) = choices.split_first() else {
+        return holds(&atoms);
+    };
+    let lefts: Vec<Formula> = rest.iter().map(|c| Formula::Or(c.to_vec())).collect();
+    for side in first.iter() {
+        let mut more: Vec<&Formula> = vec![side];
+        more.extend(lefts.iter());
+        if !every_case(atoms.clone(), more, holds)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// A number grew past 128 bits.
 struct Overflow;
 

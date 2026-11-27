@@ -2208,6 +2208,7 @@ impl<'a> Lowering<'a> {
                 Callee::Push => self.push(out, call, env),
                 Callee::Freeze => self.freeze(out, expr, call, env),
                 Callee::Utf8 => self.utf8(out, expr, call, env),
+                Callee::Boundary => unreachable!("a fact is never computed"),
                 Callee::Narrow(narrowing) => self.narrow_call(out, expr, call, narrowing, env),
                 Callee::Float => self.float_call(out, expr, call, env),
                 Callee::Value => self.call_value(out, call, env),

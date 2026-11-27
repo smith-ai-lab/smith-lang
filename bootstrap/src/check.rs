@@ -6681,6 +6681,9 @@ enum Callee {
     Freeze,
     /// `utf8`, which gives a text of the bytes, or where they stop being valid.
     Utf8,
+    /// `boundary`, a fact that is proven and never computed, which calls
+    /// nothing.
+    Boundary,
     /// `narrow` or one of its three relatives, which take a whole number to
     /// a type that does not hold all of its values.
     Narrow(Narrowing),
@@ -7139,6 +7142,9 @@ impl<'a> Typed<'a> {
                 if is_utf8(defs, call) {
                     return Callee::Utf8;
                 }
+                if lists_and_text::is_boundary(defs, call) {
+                    return Callee::Boundary;
+                }
                 if let Some(narrowing) = narrowing(defs, call) {
                     return Callee::Narrow(narrowing);
                 }
@@ -7222,6 +7228,7 @@ impl<'a> Typed<'a> {
             | Callee::Push
             | Callee::Freeze
             | Callee::Utf8
+            | Callee::Boundary
             | Callee::Handle(_)
             | Callee::Arena
             | Callee::Float
@@ -7460,6 +7467,7 @@ impl<'a> Checker<'a> {
             walking: Vec::new(),
             walked_calls: Vec::new(),
             kernel_calls: Vec::new(),
+            invariant: false,
             unused_effects: Vec::new(),
             circles: Vec::new(),
         }
@@ -7602,6 +7610,9 @@ struct Checker<'a> {
     /// The calls whose `requires` the kernel works out when the program is
     /// checked whole.
     kernel_calls: Vec<proof::KernelCall>,
+    /// Whether an `invariant` is being checked, which is never computed, so
+    /// that a fact such as `boundary` may be written in it.
+    invariant: bool,
     /// The effects a function lists that nothing in its body needs: the place
     /// of the function, its name, the effect, where it is listed, and the
     /// signature without the effects nothing in it needs.
@@ -9952,9 +9963,11 @@ impl<'a> Checker<'a> {
             }
             body.names.push((r.name.clone(), ty));
             // An invariant is about the counter and the names outside.
+            self.invariant = true;
             for invariant in &l.invariants {
                 self.condition(body, invariant);
             }
+            self.invariant = false;
             self.range_ordered(body, r);
             self.invariants_before(body, l, Some(r));
             self.assume_range(body, r);
@@ -9962,9 +9975,11 @@ impl<'a> Checker<'a> {
         if let Some((o, ty)) = element {
             // An invariant of a loop over a value is about the names outside
             // it, as the element is not one before the first pass.
+            self.invariant = true;
             for invariant in &l.invariants {
                 self.condition(body, invariant);
             }
+            self.invariant = false;
             self.invariants_before(body, l, None);
             if body.names.iter().any(|(n, _)| n == &o.name) {
                 self.errors.push(self.defined_twice(body, &o.name, o.pos));

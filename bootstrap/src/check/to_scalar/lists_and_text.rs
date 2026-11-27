@@ -106,6 +106,7 @@ impl<'a> Lowering<'a> {
     pub(super) fn element(&self, list: &Ty) -> Vec<form::Type> {
         match list {
             Ty::List(of) | Ty::Slice(of) => self.scalars(&of[0]),
+            Ty::Text => self.scalars(&Ty::Int(Int::U8)),
             _ => unreachable!("checked"),
         }
     }

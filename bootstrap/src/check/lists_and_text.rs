@@ -67,6 +67,16 @@ pub(super) fn is_utf8(defs: &Defs, call: &Call) -> bool {
         && defs.struct_named("utf8").is_none()
 }
 
+/// Whether a call is of `boundary`, the fact that a place falls between two
+/// characters of a text, which the compiler builds, and no function of the
+/// program takes the name of.
+pub(super) fn is_boundary(defs: &Defs, call: &Call) -> bool {
+    call.qualifier.is_none()
+        && call.callee == "boundary"
+        && !defs.function_names.contains_key("boundary")
+        && defs.struct_named("boundary").is_none()
+}
+
 /// Whether a text, a slice, or an array is given where a list is needed, which
 /// it is used as, with no call and no copy of its elements.
 pub(super) fn as_list(given: &Ty, needed: &Ty) -> bool {
@@ -137,6 +147,37 @@ impl<'a> Checker<'a> {
         Ty::Enum(result, vec![Ty::Text, Ty::Struct(error, Vec::new())])
     }
 
+    /// Checks `boundary(s, i)`, the fact that the place `i` falls between two
+    /// characters of the text `s`, which is written only where nothing is
+    /// computed: in a `requires`, an `ensures`, or an `invariant`.
+    pub(super) fn boundary(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
+        let plain = call.args.iter().all(|a| a.name.is_none() && !a.after);
+        if call.args.len() != 2 || !plain {
+            self.errors.push(Error::new(
+                call.pos,
+                "`boundary` takes a text and a place in it",
+            ));
+            return self.unknown_call(body, call);
+        }
+        if !body.contract && !self.invariant {
+            self.errors.push(
+                Error::new(
+                    call.pos,
+                    "`boundary` is a fact that is proven and never computed",
+                )
+                .with_fix("write it in a `requires`, an `ensures`, or an `invariant`"),
+            );
+        }
+        let text = &call.args[0].value;
+        let given = self.expr(body, text, &Want::Ty(Ty::Text));
+        self.expect(body, text, &given, &Ty::Text);
+        let place = &call.args[1].value;
+        let nat = Ty::Int(Int::U64);
+        let given = self.expr(body, place, &Want::Ty(nat.clone()));
+        self.expect(body, place, &given, &nat);
+        self.defs.bool_ty()
+    }
+
     /// Checks `freeze(list)`, which gives the memory of the list as a slice,
     /// with nothing copied, and `__finish(list)`, which gives the bytes of a
     /// list of bytes as a text, as the library's `Text` knows them valid.
@@ -173,9 +214,10 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Checks `of[a..b]`, `of[..b]`, or `of[a..]`, the part of a slice from
-    /// `a` up to `b`, which shares its memory, and compiles only when `arith`
-    /// proves that `a <= b` and `b <= of.size`.
+    /// Checks `of[a..b]`, `of[..b]`, or `of[a..]`, the part of a slice or a
+    /// text from `a` up to `b`, which shares its memory, and compiles only
+    /// when `arith` proves that `a <= b` and `b <= of.size`, and for a text
+    /// that both ends fall between characters.
     pub(super) fn piece(
         &mut self,
         body: &mut Body<'a>,
@@ -216,12 +258,16 @@ impl<'a> Checker<'a> {
         }
         match slice {
             Ty::Slice(_) => {
-                self.in_piece(body, of, ends, pos);
+                self.in_piece(body, of, ends, pos, false);
                 slice
             }
-            Ty::List(_) | Ty::Text => {
+            Ty::Text => {
+                self.in_piece(body, of, ends, pos, true);
+                slice
+            }
+            Ty::List(_) => {
                 self.errors
-                    .push(Error::unsupported(pos, "a piece of a list or a text"));
+                    .push(Error::unsupported(pos, "a piece of a list"));
                 Ty::Unknown
             }
             Ty::Unknown => Ty::Unknown,
