@@ -119,8 +119,36 @@ pub const ONCE: &[Test] = &[
         the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is,
     ),
     (
-        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says",
-        a_member_that_is_added_is_ignored_or_refused_as_the_setting_says,
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_1_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(0),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_2_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(1),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_3_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(2),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_4_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(3),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_5_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(4),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_6_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(5),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_7_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(6),
+    ),
+    (
+        "a_member_that_is_added_is_ignored_or_refused_as_the_setting_says_part_8_of_8",
+        || a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(7),
     ),
     (
         "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_1_of_4",
@@ -139,12 +167,28 @@ pub const ONCE: &[Test] = &[
         || text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(3),
     ),
     (
-        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_1_of_2",
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_1_of_6",
         || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(0),
     ),
     (
-        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_2_of_2",
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_2_of_6",
         || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(1),
+    ),
+    (
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_3_of_6",
+        || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(2),
+    ),
+    (
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_4_of_6",
+        || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(3),
+    ),
+    (
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_5_of_6",
+        || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(4),
+    ),
+    (
+        "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_6_of_6",
+        || a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(5),
     ),
     (
         "a_rawjson_shares_the_memory_of_the_input",
@@ -167,12 +211,28 @@ pub const ONCE: &[Test] = &[
         reading_asks_for_memory_for_the_texts_of_the_value_and_for_nothing_else,
     ),
     (
-        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_1_of_2",
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_1_of_6",
         || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(0),
     ),
     (
-        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_2_of_2",
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_2_of_6",
         || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(1),
+    ),
+    (
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_3_of_6",
+        || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(2),
+    ),
+    (
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_4_of_6",
+        || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(3),
+    ),
+    (
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_5_of_6",
+        || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(4),
+    ),
+    (
+        "raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json_part_6_of_6",
+        || raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(5),
     ),
     (
         "a_rawjson_built_by_hand_from_text_that_is_not_json_is_refused",
@@ -1269,9 +1329,9 @@ fn a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_an
     }, |(defs, t, v, settings, cases)| run_cases(defs, t, v, *settings, cases));
 }
 
-fn a_member_that_is_added_is_ignored_or_refused_as_the_setting_says() {
+fn a_member_that_is_added_is_ignored_or_refused_as_the_setting_says(part: u64) {
     let added: [&[u8]; 5] = [b"1", b"\"a\\n\"", b"[1,{\"q\":null},[]]", b"{}", b"null"];
-    generate::check(6004, 8, |g: &mut Gen| {
+    generate::check_part(6004, 8, part, 8, |g: &mut Gen| {
         let (defs, t, v, settings) = made(g);
         let w = write(&defs, &t, &v, settings, COMPACT);
         let mut cases = Vec::new();
@@ -1714,7 +1774,7 @@ const WRAP: &str = "struct Wrap {
 ";
 
 fn a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives(part: u64) {
-    generate::check_cases(6006, 3 * part, 3, |g: &mut Gen| {
+    generate::check_cases(6006, part, 1, |g: &mut Gen| {
         let (defs, t, v, settings) = made(g);
         let pad = *g.pick(&["", " ", "\n "]);
         (defs, t, v, settings, pad)
@@ -1930,7 +1990,7 @@ fn a_rawjson_that_is_read_and_written_is_the_bytes_it_was_less_the_space_round_i
 }
 
 fn raw_json_is_ok_exactly_when_reading_a_rawjson_is_and_what_a_rawjson_writes_is_json(part: u64) {
-    generate::check_cases(6009, 3 * part, 3, drawn_texts, |texts| {
+    generate::check_cases(6009, part, 1, drawn_texts, |texts| {
         let mut source = format!(
             "{TEXT}fn show(t: str) <console, alloc> {{
   a: Result[RawJson, ReadError] = from_json(t)
