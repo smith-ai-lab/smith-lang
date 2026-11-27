@@ -11,6 +11,8 @@ use crate::lexer::{Piece, Tok, Token};
 
 mod effects_with_and_try;
 mod functions_calls_and_lambdas;
+mod inout;
+pub(crate) use inout::changed_place;
 mod lift;
 pub(crate) use lift::env_name;
 mod lists_and_text;
@@ -273,8 +275,12 @@ pub struct Param {
     pub pos: Pos,
     pub ty: Type,
     pub default: Option<Expr>,
-    /// Whether the parameter is marked `take`.
+    /// Whether the parameter is marked `take`, which a parameter marked
+    /// `inout` is once it is lowered.
     pub take: bool,
+    /// Whether the parameter is marked `inout`: the function changes it for
+    /// its caller, and is lowered to take it and give it back.
+    pub inout: bool,
     /// For a parameter of a function type, whether each of the function's
     /// own parameters is marked `take`.
     pub takes: Vec<bool>,
@@ -798,6 +804,11 @@ pub struct Arg {
     pub value: Expr,
     /// Whether it is a lambda written after the call.
     pub after: bool,
+    /// Where `inout` is written before it, if it is: the call changes it.
+    pub inout: Option<Pos>,
+    /// Whether the call it is passed `inout` to was lowered to assign the
+    /// value the call gives back to it.
+    pub given_back: bool,
 }
 
 /// Parses a file into its definitions.
@@ -994,6 +1005,12 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
             p.unbuilt.push(Error::unsupported(*pos, "`pub`"));
         }
     }
+    inout::lower(
+        &mut functions,
+        (&impls, &traits),
+        &mut p.errors,
+        &mut p.unbuilt,
+    );
     if !library {
         lift::lift(&mut functions, &mut structs);
     }
@@ -2491,6 +2508,8 @@ impl Parser<'_> {
                     name: None,
                     value: left,
                     after: false,
+                    inout: None,
+                    given_back: false,
                 },
             ),
         }

@@ -2,7 +2,14 @@
 type: specification
 title: Changing a value in place
 description: An inout parameter, which a function changes for its caller, means taking the value and giving the new one back, and is marked inout at the call.
-status: planned
+status: partial
+built:
+  - "`inout` before a parameter's type, in a function that gives nothing, lowered to taking the value and giving it back, so a call that changes a value is built to the code of the call that takes it and assigns what it gives back"
+  - "`f(inout x)` on a line of its own, of a `var`, a field of one, or an item of a list held by one, and of several places that do not overlap"
+  - "a call that leaves out `inout` where the parameter is `inout` refused with the call to write, `inout` where the parameter is not refused, and what is not a `var`, a field, or an item refused"
+  - "one place passed twice, or a place and a part of it, refused"
+  - "a parameter marked `inout`, or a part of it without `Copy`, refused where it is stored, bound to another name, given to a `take` parameter, or returned, and any lambda that reads or assigns it refused"
+  - "what `arith` knew of a value before a call that changes it not known after"
 ---
 
 # Changing a value in place

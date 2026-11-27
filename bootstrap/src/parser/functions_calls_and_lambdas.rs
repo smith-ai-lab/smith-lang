@@ -454,7 +454,11 @@ impl Parser<'_> {
             (name, pos, None)
         };
         self.expect_punct(":", "`:` and the parameter's type")?;
-        let take = self.taking();
+        let inout = self.tok() == &Tok::Keyword("inout");
+        if inout {
+            self.bump();
+        }
+        let take = !inout && self.taking();
         // A function with a body takes a proof; a signature that has none, as a
         // trait's or an effect's, does not.
         let proof = if self.bound_names_allowed {
@@ -503,6 +507,7 @@ impl Parser<'_> {
             ty,
             default,
             take,
+            inout,
             takes,
             effects,
             by_name: false,
@@ -525,6 +530,11 @@ impl Parser<'_> {
             return Err(self.expected("`(` and the function type's parameters", self.tok()));
         }
         let marked = self.list(|p| {
+            if p.tok() == &Tok::Keyword("inout") {
+                p.unbuilt
+                    .push(Error::unsupported(p.pos(), "`inout` in a function type"));
+                p.bump();
+            }
             let take = p.taking();
             Ok((take, p.ty()?))
         })?;
@@ -613,6 +623,8 @@ impl Parser<'_> {
             name: None,
             value: Expr::Lambda(Box::new(self.lambda()?)),
             after: true,
+            inout: None,
+            given_back: false,
         }))
     }
 
@@ -745,11 +757,17 @@ impl Parser<'_> {
             self.bump();
             self.skip_newlines();
         }
+        let inout = (self.tok() == &Tok::Keyword("inout")).then(|| self.pos());
+        if inout.is_some() {
+            self.bump();
+        }
         let value = self.expr()?;
         Ok(Arg {
             name,
             value,
             after: false,
+            inout,
+            given_back: false,
         })
     }
 }

@@ -38,6 +38,7 @@ mod effects_with_and_try;
 mod frames;
 mod functions_calls_and_lambdas;
 mod infer;
+mod inout;
 mod lists_and_text;
 mod names;
 mod numbers_and_operators;
@@ -8648,7 +8649,11 @@ impl<'a> Checker<'a> {
             used: Vec::new(),
             names: view.params.clone(),
             params: view.params.len(),
-            vars: Vec::new(),
+            // A parameter marked `inout` is changed for the caller, so it is
+            // assigned to as a `var` is.
+            vars: (f.params.iter().filter(|p| p.inout))
+                .map(|p| p.name.clone())
+                .collect(),
             numbers,
             decided: HashMap::new(),
             facts: proof::Facts::default(),
@@ -8666,6 +8671,7 @@ impl<'a> Checker<'a> {
         };
         body.facts.solving = self.solve.is_some();
         if let Template::Free(_) = template {
+            self.hold_changed(&mut body, f);
             for requirement in &f.requires {
                 self.assume(&mut body, requirement, true);
             }
@@ -10746,6 +10752,7 @@ fn construction_as_call(defs: &Defs, s: usize) -> (Function, Signature) {
                 pos: field.pos,
             }),
             take: false,
+            inout: false,
             takes: Vec::new(),
             effects: Vec::new(),
             by_name: false,

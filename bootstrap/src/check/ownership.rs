@@ -535,6 +535,49 @@ struct Walk<'a> {
     consumed: HashSet<String>,
     /// The name the loop read next is given, where it begins, to the loop.
     consume: Option<String>,
+    /// The parameters marked `inout`, which the function gives back and does
+    /// not give away.
+    changed: HashSet<String>,
+    /// The places of the expressions that give back what a parameter marked
+    /// `inout` holds: what the function gives, and what a call that changes a
+    /// value is passed.
+    given_back: HashSet<usize>,
+}
+
+/// The places of the expressions of `f` that give back a value a parameter
+/// marked `inout` holds: the end of the body and each `return` of a function
+/// that has one, and each argument passed `inout`.
+fn given_back(f: &Function) -> HashSet<usize> {
+    let mut all = Vec::new();
+    for value in values(&f.body) {
+        walk(value, &mut all);
+    }
+    let mut given = Vec::new();
+    let changes = f.params.iter().any(|p| p.inout);
+    if changes && let Some(Stmt::Expr(last)) = f.body.last() {
+        given.push(last);
+    }
+    for e in &all {
+        match e {
+            Expr::Return { value: Some(v), .. } if changes => given.push(v),
+            Expr::Call(call) => {
+                given.extend(
+                    (call.args.iter())
+                        .filter(|a| a.given_back)
+                        .map(|a| &a.value),
+                );
+            }
+            _ => {}
+        }
+    }
+    let mut out = HashSet::new();
+    for e in given {
+        out.insert(addr(e));
+        if let Expr::Tuple { items, .. } = e {
+            out.extend(items.iter().map(addr));
+        }
+    }
+    out
 }
 
 /// Checks the body of `f`. Mistakes go in `errors`.
@@ -569,6 +612,10 @@ pub(super) fn check(
         visible: Vec::new(),
         consumed: HashSet::new(),
         consume: None,
+        changed: (f.params.iter().filter(|p| p.inout))
+            .map(|p| p.name.clone())
+            .collect(),
+        given_back: given_back(f),
     };
     let flow = if f.result.is_some() {
         Flow::Returned
@@ -999,6 +1046,36 @@ impl<'a> Walk<'a> {
             if let Some(error) = self.error(e.pos(), message) {
                 error.fix = fix;
             }
+            return lent;
+        }
+        // A parameter marked `inout` is given back when the function returns,
+        // so it is not given away, nor is a part of it that has no `Copy`.
+        if self.changed.contains(&path.0)
+            && !matches!(flow, Flow::Lend)
+            && !self.given_back.contains(&addr(e))
+            && !self.copies(e)
+        {
+            let what = match flow {
+                Flow::Bind => "bound to another name".to_string(),
+                Flow::Returned => "returned".to_string(),
+                Flow::Stored => "stored".to_string(),
+                Flow::Taken(callee) => format!("passed to the `take` parameter of `{callee}`"),
+                Flow::Lend => unreachable!("checked"),
+            };
+            let whole = if path.1.is_empty() {
+                format!("`{}` is marked `inout`", path.0)
+            } else {
+                format!(
+                    "`{}` is a part of `{}`, which is marked `inout`",
+                    written(&path),
+                    path.0
+                )
+            };
+            let f = written_name(&self.f.name);
+            self.error(
+                e.pos(),
+                format!("{whole}, so `{f}` gives it back when it returns, and it cannot be {what}"),
+            );
             return lent;
         }
         // A function that is called once has no `Copy`. A lent function has,
