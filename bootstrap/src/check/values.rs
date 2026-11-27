@@ -68,7 +68,7 @@ impl<'a> Checker<'a> {
         call: &Call,
         want: &Want,
     ) -> Option<Ty> {
-        let template = crate::values::template(&call.callee)?;
+        let template = crate::values::template(&call.callee, call.name_pos)?;
         if call.qualifier.is_some() {
             return None;
         }
@@ -110,7 +110,7 @@ impl<'a> Checker<'a> {
             }
         }
         if let Some(numbers) = found.iter().copied().collect::<Option<Vec<u64>>>() {
-            crate::values::say(call.name_pos, &template.name, numbers);
+            crate::values::say(call.name_pos, &template, numbers);
             // What the file is checked with now is not final, and no more of
             // it is lowered.
             self.errors.push(Error::new(

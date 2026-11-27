@@ -320,11 +320,12 @@ pub fn lower_in(
     library: &[(&str, &str)],
 ) -> Result<scalar::Program, Vec<diag::Error>> {
     let tokens = lexer::lex(source).map_err(in_order)?;
-    values::run(tokens, |tokens, unbuilt| {
+    let modules = check::Library::new(library);
+    values::run(tokens, &modules, |tokens, unbuilt| {
         let mut file = parser::parse(&tokens).map_err(in_order)?;
         file.unbuilt.extend(unbuilt);
         with_function_args(&mut file, source);
-        check::check(file, &check::Library::new(library)).map_err(in_order)
+        check::check(file, &modules).map_err(in_order)
     })
     .map(|checked| checked.program)
     .map_err(in_order)
@@ -346,11 +347,12 @@ pub fn compile_in(
 /// before a target is involved.
 pub fn core_terms(source: &[u8]) -> Result<Vec<core::Function>, Vec<diag::Error>> {
     let tokens = lexer::lex(source).map_err(in_order)?;
-    values::run(tokens, |tokens, unbuilt| {
+    let modules = check::Library::standard();
+    values::run(tokens, &modules, |tokens, unbuilt| {
         let mut file = parser::parse(&tokens).map_err(in_order)?;
         file.unbuilt.extend(unbuilt);
         with_function_args(&mut file, source);
-        check::check_core(file, &check::Library::standard()).map_err(in_order)
+        check::check_core(file, &modules).map_err(in_order)
     })
     .map(|checked| checked.core)
     .map_err(in_order)
@@ -368,7 +370,7 @@ fn checked_in(
     let tokens = timings
         .stage("lex", || lexer::lex(source))
         .map_err(in_order)?;
-    values::run(tokens, |tokens, unbuilt| {
+    values::run(tokens, library, |tokens, unbuilt| {
         let mut file = timings
             .stage("parse", || parser::parse(&tokens))
             .map_err(in_order)?;

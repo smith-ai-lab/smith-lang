@@ -12,6 +12,7 @@ built:
   - "an `invariant` of a `loop`, which states a fact that `arith` proves before the first pass and at the end of each pass, as [`loop`](loop.md#an-invariant) says"
   - "a list written `[]` and `.none` given to a name, whose element is the smallest range that holds what is pushed or given to it and the type a use of it needs, and refused with where to state the type where nothing settles it"
   - "a default for a whole number parameter, written `[n: Nat = 10]`, which a use that leaves the number out and that no argument and no type settles gets, and which a type written with some or all of its numbers left off gets, refused where it is written when its kind does not hold it, or when a parameter with no default comes after one with a default"
+  - "a struct or a function with whole number parameters of another module, taken with `use` and used as in the file that has it, with its numbers written, said by an argument or by the type the use must give, or left to a default, whose copies are made in the module that has the item and taken by the `use` line, and a parameter of a function passed on in brackets, as `top[limit]`; not a name written with its module, as `boxes.top[4]`"
   - "a whole number bound to a name with no type, which keeps its own range, `n..n+1`, wherever the name is used, as [Literals](literals.md#where-the-type-comes-from) says"
   - "a block with a `try` that the call gives no type, refused with the type the block gives"
   - "the parameters of a lambda bound to a name that leaves their types out, each the smallest range that holds every argument of the calls of it in the same body, joined before the lambda is checked once with it, with its result what its body gives, and an error that names the range, the calls it was inferred from, and the use that needs less"
@@ -226,6 +227,32 @@ fn top[most: Nat = 10]() -> Box[most] { Box(at: most - 1) }
 `top().at` is `9`, as `top()` is `top[10]()`, and `top[4]().at` is `3`. A call that an argument or the type the call must give settles takes that number, as it does without a default: `a: Box[3] = top()` is `top[3]()`. A `Box` written with its numbers left off is the one written with the defaults, and `Grid[4]` for a `Grid[w: Nat, h: Nat = 2]` is `Grid[4, 2]`.
 
 A default that its kind does not hold is refused where it is written: `[n: Pos = 0]` gives "`0` is not a `Pos`, which `n` is". A parameter with a default comes after every one without, as for a type: `[a: Nat = 1, b: Nat]` is refused, as `b` has no default and comes after `a`, which has one.
+
+A function that is given a whole number may pass it on, written as a name where the number stands: in `fn pass[limit: Nat]() -> Box[limit] { top[limit]() }` the call is `top[16]()` in the copy for 16, and `Box[limit]` is a `Box[16]`.
+
+## A whole number of an item of another module
+
+A struct or a function with whole number parameters is used from another module as it is in the file that defines it. The module lists it with `pub`, a file takes it with `use`, and the numbers are written, or taken from an argument, from the type the use must give, or from a default, as above.
+
+```
+pub struct Box[most: Nat] {
+  pub at: 0..most
+}
+
+pub fn top[most: Nat = 10]() -> Box[most] { Box(at: most - 1) }
+```
+
+```
+use boxes (Box, top)
+use std.console (console, print)
+
+fn main() <console, alloc> {
+  a: Box[3] = top()
+  print("{a.at} {top().at}")
+}
+```
+
+This prints `2 9`. The copy for each number is made in the module that has the item, so it reads the names the module keeps to itself, and the `use` line takes the copies the file asks for. A program split into two modules builds to the same executable as the one with the items in its file. A use that writes its numbers wrong is refused where it is written, in the file that writes it, and an error in a copy is where the item is in its module, with the module's name and the numbers it was found for.
 
 ## When to write an invariant
 

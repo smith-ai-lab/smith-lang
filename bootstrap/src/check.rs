@@ -3858,7 +3858,7 @@ impl<'a> Library<'a> {
     }
 
     /// The source of the module with a name written as in a `use`.
-    fn source(&self, module: &str) -> Option<std::borrow::Cow<'a, str>> {
+    pub(crate) fn source(&self, module: &str) -> Option<std::borrow::Cow<'a, str>> {
         match module.split_once('.') {
             Some(("std", short)) => self
                 .modules
@@ -4479,7 +4479,10 @@ impl<'l, 'a> Resolver<'l, 'a> {
             )
         };
         self.labels.push((number, label.clone()));
-        let divided = if standard && !self.whole {
+        // A module that has items with whole number parameters, or uses those of
+        // another, has its copies of them among its tokens, whole.
+        let made = crate::values::module_tokens(name, number * STEP);
+        let divided = if standard && !self.whole && made.is_none() {
             outline(&source)
         } else {
             None
@@ -4487,14 +4490,21 @@ impl<'l, 'a> Resolver<'l, 'a> {
         if let Some(list) = divided {
             return self.read_divided(name, source, list, label, number);
         }
-        let tokens = match crate::lexer::lex(source.as_bytes()) {
-            Ok(tokens) => shifted(&tokens, number * STEP),
-            Err(errors) => {
+        let tokens = match made {
+            Some((tokens, errors)) => {
                 self.errors
                     .extend(errors.into_iter().map(|e| e.in_module(&label)));
-                self.by_name.insert(name.to_string(), None);
-                return None;
+                tokens
             }
+            None => match crate::lexer::lex(source.as_bytes()) {
+                Ok(tokens) => shifted(&tokens, number * STEP),
+                Err(errors) => {
+                    self.errors
+                        .extend(errors.into_iter().map(|e| e.in_module(&label)));
+                    self.by_name.insert(name.to_string(), None);
+                    return None;
+                }
+            },
         };
         let mut file = match crate::parser::parse_library(&tokens) {
             Ok(file) => file,
