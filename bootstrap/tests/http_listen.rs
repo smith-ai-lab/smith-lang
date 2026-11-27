@@ -451,9 +451,9 @@ fn under_a_handler() -> Vec<String> {
         s.replace('\\', "\\\\").replace('"', "\\\"").replace('{', "\\{").replace('}', "\\}")
     };
     let mut main = String::from(
-        "fn said(r: Response) -> str <alloc> {\n  match r.body {\n    .some(p) {\n      match utf8(freeze(content(p))) {\n        .ok(t) { t }\n        .err(e) { \"\" }\n      }\n    }\n    .none { \"\" }\n  }\n}\n\nfn copy_of(r: Request) -> Request <alloc> {\n  Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)\n}\n\n\
+        "fn said(r: Response) -> str <alloc> {\n  match r {\n    .headers_only(h) { \"\" }\n    .with_body(w) {\n      match utf8(freeze(content(w.body))) {\n        .ok(t) { t }\n        .err(e) { \"\" }\n      }\n    }\n  }\n}\n\nfn copy_of(r: Request) -> Request <alloc> {\n  Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)\n}\n\n\
          fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <alloc> {\n  http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)\n}\n\n\
-         fn ask(method: Method, path: str, body: str) <console, alloc> {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{r.status} {said(r)}\") })\n  app()\n}\n\n\
+         fn ask(method: Method, path: str, body: str) <console, alloc> {\n  with once(Request(method: method, path: path, query: \"\", headers: [], body: body), fn(r) { print(\"{status_of(r)} {said(r)}\") })\n  app()\n}\n\n\
          fn main() <console, alloc> {\n",
     );
     for (method, path, body) in REQUESTS {
@@ -461,7 +461,7 @@ fn under_a_handler() -> Vec<String> {
     }
     main.push_str("}\n");
     let routes = routes()
-        .replace("use std.http (get, http, listen, post, routes)", "use std.console (console, print)\nuse std.http (Request, Response, get, http, post, routes)\nuse std.list (freeze)\nuse std.message (Method, content)\nuse std.utf8 (utf8)")
+        .replace("use std.http (get, http, listen, post, routes)", "use std.console (console, print)\nuse std.http (Request, Response, get, http, post, routes, status_of)\nuse std.list (freeze)\nuse std.message (Method, content)\nuse std.utf8 (utf8)")
         .replace("use std.net (net)\n", "")
         .replace("use std.deserialize (ReadError)\nuse std.fromtext (from_text)\n", "");
     let source = format!("{routes}\n{main}");

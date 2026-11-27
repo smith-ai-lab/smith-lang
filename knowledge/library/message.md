@@ -68,7 +68,7 @@ fn kinds(item: Item, page: Html) -> List[Payload] <alloc> {
 | `html(page)` | An [`Html`](html.md), with the content type `text/html; charset=utf-8`, so a text is never taken for a page |
 | `bytes(data, content_type)` | The bytes `data`, with the content type `content_type`, a `HeaderValue` |
 
-`Payload` has private fields, and only these five functions make one. `content_type(p)` is its type as a `HeaderValue`, `size(p)` is the number of its bytes, which is the `content-length` of the message that carries it, and `content(p)` is its bytes.
+`Payload` has private fields, and only these five functions make one. A response of [`std.http`](http.md) holds one as its `body` only where its status may have a body: a status of 1xx, 204, or 304 has none, so a `WithBody` of one is refused where it is written. `content_type(p)` is its type as a `HeaderValue`, `size(p)` is the number of its bytes, which is the `content-length` of the message that carries it, and `content(p)` is its bytes.
 
 ## The forms
 

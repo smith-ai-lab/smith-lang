@@ -25,6 +25,14 @@ pub const ONCE: &[Test] = &[
         a_status_outside_the_range_of_statuses_is_refused_where_it_is_written,
     ),
     (
+        "a_response_with_a_body_is_refused_for_a_status_that_has_none_where_it_is_written",
+        a_response_with_a_body_is_refused_for_a_status_that_has_none_where_it_is_written,
+    ),
+    (
+        "a_response_with_a_body_is_built_for_every_status_that_may_have_one",
+        a_response_with_a_body_is_built_for_every_status_that_may_have_one,
+    ),
+    (
         "a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number",
         a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number,
     ),
@@ -103,13 +111,49 @@ fn a_name_that_is_no_token_and_a_value_with_a_line_break_are_refused_where_they_
 fn a_status_outside_the_range_of_statuses_is_refused_where_it_is_written() {
     let statuses = |g: &mut Gen| if g.below(2) == 0 { g.below(100) } else { 600 + g.below(400) };
     generate::check(9103, 10, statuses, |status| {
-        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: .none)"));
+        let source = program("HeadersOnly", &format!("r = HeadersOnly(status: {status}, headers: [])"));
         let said = messages(&source);
         assert!(said.iter().any(|m| m.contains("100..600")), "{said:?} for\n{source}");
     });
     let inside = |g: &mut Gen| 100 + g.below(500);
     generate::check(9104, 10, inside, |status| {
-        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: .none)"));
+        let source = program("HeadersOnly", &format!("r = HeadersOnly(status: {status}, headers: [])"));
+        assert!(messages(&source).is_empty(), "{:?} for\n{source}", messages(&source));
+    });
+}
+
+/// A program that builds a response with a body of the status.
+fn with_body(status: u64) -> String {
+    format!(
+        "use std.http (Response, WithBody)\nuse std.message (text)\n\nfn main() <alloc> {{\n  r = Response.with_body(WithBody(status: {status}, headers: [], body: text(\"x\")))\n}}\n"
+    )
+}
+
+fn a_response_with_a_body_is_refused_for_a_status_that_has_none_where_it_is_written() {
+    let statuses = |g: &mut Gen| match g.below(3) {
+        0 => 100 + g.below(100),
+        1 => 204,
+        _ => 304,
+    };
+    generate::check(9108, 10, statuses, |status| {
+        let source = with_body(*status as u64);
+        let said = messages(&source);
+        assert!(
+            said.iter().any(|m| m.contains("has_body") && m.contains("WithBody")),
+            "{said:?} for\n{source}"
+        );
+    });
+}
+
+fn a_response_with_a_body_is_built_for_every_status_that_may_have_one() {
+    let statuses = |g: &mut Gen| loop {
+        let status = 200 + g.below(400);
+        if status != 204 && status != 304 {
+            return status;
+        }
+    };
+    generate::check(9109, 10, statuses, |status| {
+        let source = with_body(*status as u64);
         assert!(messages(&source).is_empty(), "{:?} for\n{source}", messages(&source));
     });
 }
