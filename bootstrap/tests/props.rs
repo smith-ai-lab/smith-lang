@@ -138,12 +138,20 @@ pub const ONCE: &[Test] = &[
         || an_expression_in_parentheses_is_the_expression(2),
     ),
     (
-        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_1_of_2",
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_1_of_4",
         || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(0),
     ),
     (
-        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_2_of_2",
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_2_of_4",
         || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(1),
+    ),
+    (
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_3_of_4",
+        || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(2),
+    ),
+    (
+        "a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it_part_4_of_4",
+        || a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(3),
     ),
     (
         "a_var_a_function_called_in_place_has_the_value_it_had_when_a_loop_around_the_call_runs_no_round",
@@ -162,8 +170,16 @@ pub const ONCE: &[Test] = &[
         the_evaluator_says_what_the_generator_built_a_program_with_text_to_print,
     ),
     (
-        "every_placed_mistake_about_text_is_one_error_at_its_place",
-        every_placed_mistake_about_text_is_one_error_at_its_place,
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_1_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_2_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(1),
+    ),
+    (
+        "every_placed_mistake_about_text_is_one_error_at_its_place_part_3_of_3",
+        || every_placed_mistake_about_text_is_one_error_at_its_place(2),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_reprs_to_print_part_1_of_2",
@@ -609,7 +625,7 @@ fn an_expression_in_parentheses_is_the_expression(part: u64) {
 }
 
 fn a_var_a_lambda_assigns_holds_what_the_calls_give_however_the_function_calls_it(part: u64) {
-    generate::check_part(117, 150, part, 2, lambdas::loop_program, |case| {
+    generate::check_part(117, 150, part, 4, lambdas::loop_program, |case| {
         let program = lower(case.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let expected = Outcome {
             stdout: case.stdout.clone(),
@@ -732,8 +748,8 @@ fn the_evaluator_says_what_the_generator_built_a_program_with_text_to_print() {
     });
 }
 
-fn every_placed_mistake_about_text_is_one_error_at_its_place() {
-    generate::check(35, 159, text::program_with_mistake, |case| {
+fn every_placed_mistake_about_text_is_one_error_at_its_place(part: u64) {
+    generate::check_part(35, 159, part, 3, text::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
