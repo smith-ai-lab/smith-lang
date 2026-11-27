@@ -23,8 +23,16 @@ pub const ONCE: &[Test] = &[
         count_spaces_of_a_text_is_the_number_of_its_spaces,
     ),
     (
-        "utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not",
-        utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not,
+        "utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not_part_1_of_3",
+        || utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not(0),
+    ),
+    (
+        "utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not_part_2_of_3",
+        || utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not(1),
+    ),
+    (
+        "utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not_part_3_of_3",
+        || utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not(2),
     ),
     (
         "the_examples_of_the_page_on_text_hold",
@@ -146,8 +154,8 @@ fn bytes(g: &mut Gen) -> Bytes {
     Bytes { bytes, broken }
 }
 
-fn utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not() {
-    generate::check(302, 150, bytes, |case| {
+fn utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not(part: u64) {
+    generate::check_part(302, 150, part, 3,bytes, |case| {
         let items: Vec<String> = case.bytes.iter().map(u8::to_string).collect();
         let source = format!(
             "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn main() <console, alloc> {{\n  b: List[Byte] = [{}]\n  match utf8(freeze(b)) {{\n    .ok(t) {{\n      print(\"ok {{t.size}}\")\n      loop i in 0..t.size {{ print(\"{{t[i]}}\") }}\n    }}\n    .err(e) {{ print(\"err {{e.at}}\") }}\n  }}\n}}\n",
