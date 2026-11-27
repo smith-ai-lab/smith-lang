@@ -19,12 +19,20 @@ pub const ONCE: &[Test] = &[
         every_example_of_the_page_gives_what_the_page_says,
     ),
     (
-        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_1_of_2",
+        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_1_of_4",
         || every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree(0),
     ),
     (
-        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_2_of_2",
+        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_2_of_4",
         || every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree(1),
+    ),
+    (
+        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_3_of_4",
+        || every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree(2),
+    ),
+    (
+        "every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree_part_4_of_4",
+        || every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_reads_back_as_its_tree(3),
     ),
     (
         "a_text_is_written_so_that_the_reader_gives_the_same_bytes_back",
@@ -723,7 +731,7 @@ fn every_value_is_written_as_the_model_says_for_each_setting_and_is_json_that_re
         let v = value(g, &defs, &t);
         (program(&defs, &t, &v), v)
     };
-    generate::check_part(5601, 15, part, 2, generate, |(source, v)| {
+    generate::check_part(5601, 15, part, 4, generate, |(source, v)| {
         let printed = prints(source);
         let lines = lines(&printed);
         let mut settings: Vec<Settings> = SETTINGS.to_vec();
