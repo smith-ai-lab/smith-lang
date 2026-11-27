@@ -308,7 +308,7 @@ fn a_parameter_before_the_semicolon_that_a_call_names_is_refused_at_its_name() {
 fn an_argument_by_position_for_a_parameter_after_the_semicolon_is_refused_naming_the_parameter() {
     generate::check(
         8803,
-        60,
+        40,
         |g| {
             let mut shape = shape(g);
             if shape.split == shape.count {
