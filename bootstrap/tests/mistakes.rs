@@ -44,10 +44,6 @@ pub const ONCE: &[Test] = &[
         a_type_that_holds_itself_with_no_list_between_is_refused_once_where_it_closes_the_cycle,
     ),
     (
-        "a_trait_a_type_that_holds_itself_through_a_list_would_be_given_is_refused_at_the_use",
-        a_trait_a_type_that_holds_itself_through_a_list_would_be_given_is_refused_at_the_use,
-    ),
-    (
         "a_type_parameter_of_an_implementation_is_refused_unless_its_types_name_it",
         a_type_parameter_of_an_implementation_is_refused_unless_its_types_name_it,
     ),
@@ -437,13 +433,10 @@ fn written(file: &mut File, form: &str, name: &str, mistake: Option<&str>) {
 /// next is held, in place or through a `List`. When `mistake` says what, the
 /// name of the first type, which the walk begins at when `main` uses it, is
 /// written, where the last holds it, as the mistake.
-fn cycle_of_types(g: &mut Gen, links: &[bool], mistake: Option<&str>, first_enum: bool) -> File {
+fn cycle_of_types(g: &mut Gen, links: &[bool], mistake: Option<&str>) -> File {
     let mut file = File::default();
     let n = links.len();
-    let mut kinds: Vec<bool> = (0..n).map(|_| g.one_in(2)).collect();
-    if first_enum {
-        kinds[0] = false;
-    }
+    let kinds: Vec<bool> = (0..n).map(|_| g.one_in(2)).collect();
     let start = 0;
     for (i, is_struct) in kinds.iter().enumerate() {
         let next = (i + 1) % n;
@@ -471,7 +464,7 @@ fn file_with_a_cycle_through_a_list(g: &mut Gen) -> File {
     let mut links: Vec<bool> = (0..n).map(|_| g.one_in(2)).collect();
     let k = g.below(n);
     links[k] = true;
-    let mut file = cycle_of_types(g, &links, None, false);
+    let mut file = cycle_of_types(g, &links, None);
     if g.one_in(2) {
         file.push("fn main() {\n  v: List[Ta] = []\n}\n");
     } else {
@@ -490,7 +483,7 @@ fn a_type_that_holds_itself_only_through_a_list_is_accepted() {
 fn file_with_a_cycle_in_place(g: &mut Gen) -> File {
     let n = 1 + g.below(4);
     let links = vec![false; n];
-    let mut file = cycle_of_types(g, &links, Some("holds itself"), false);
+    let mut file = cycle_of_types(g, &links, Some("holds itself"));
     file.push("fn main() {\n  v: Ta = 5\n}\n");
     file
 }
@@ -503,42 +496,6 @@ fn a_type_that_holds_itself_with_no_list_between_is_refused_once_where_it_closes
         assert!(found.len() == 1 && found[0].message.contains("`List`"), "{found:?}");
         assert!(found[0].unbuilt, "{found:?}");
     });
-}
-
-/// A file that asks `Eq` or `Fmt` of a struct or an enum that reaches itself
-/// through a `List`, once, in a function that takes two of them.
-fn file_with_a_trait_of_a_type_that_holds_itself(g: &mut Gen) -> (File, &'static str) {
-    let n = 1 + g.below(3);
-    let links = vec![true; n];
-    let mut file = cycle_of_types(g, &links, None, true);
-    let (use_of, trait_name) = if g.one_in(2) {
-        ("a == b", "Eq")
-    } else {
-        ("\"{a}\"", "Fmt")
-    };
-    let (head, tail) = use_of.split_once('a').expect("a use names a");
-    file.push("fn f(a: Ta, b: Ta) -> ");
-    file.push(if trait_name == "Eq" { "bool" } else { "str" });
-    file.push(if trait_name == "Eq" { " {\n  " } else { " <alloc> {\n  " });
-    file.push(head);
-    file.mistake("a", "Ta` contains itself");
-    file.push(tail);
-    file.push("\n}\nfn main() <alloc> {\n  v: Ta = .b(\"x\")\n  w: Ta = .b(\"y\")\n  r = f(v, w)\n}\n");
-    (file, trait_name)
-}
-
-fn a_trait_a_type_that_holds_itself_through_a_list_would_be_given_is_refused_at_the_use() {
-    generate::check(
-        5872,
-        60,
-        file_with_a_trait_of_a_type_that_holds_itself,
-        |(file, trait_name): &(File, &str)| {
-            file.check();
-            let found = lower(with_imports(&file.source).as_bytes()).expect_err("a refusal");
-            let named = format!("given no `{trait_name}`");
-            assert!(found.len() == 1 && found[0].message.contains(&named), "{found:?}");
-        },
-    );
 }
 
 /// A file with an implementation that has a type parameter, and a call that

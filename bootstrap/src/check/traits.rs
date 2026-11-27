@@ -793,7 +793,13 @@ impl<'a> Defs<'a> {
         }
         let key = (k, given);
         if stack.contains(&key) {
-            return Found::No;
+            // A type that holds itself through a `List` is given a trait when
+            // its parts are, itself among them, as the trait is a function
+            // that calls itself.
+            return match self.given_parts(k, &self.kept_at_size(k, &key.1)) {
+                Some(_) => Found::Yes(types.to_vec(), By::Given),
+                None => Found::No,
+            };
         }
         stack.push(key);
         let found = self.find_impl(k, types, scope, stack);
@@ -1260,40 +1266,6 @@ impl<'a> Defs<'a> {
         out
     }
 
-    /// A struct or an enum inside `t` that contains itself, which it can only
-    /// do through a `List`, as a type that holds itself in place is refused
-    /// where it is declared. A trait is given to such a type by a function
-    /// that calls itself, which is not built yet.
-    fn containing_itself(&self, t: &Ty) -> Option<Ty> {
-        /// How deep a type may hold types before it is taken to hold itself,
-        /// as a generic type may hold itself with other arguments for ever.
-        const DEEP: usize = 32;
-        fn visit(defs: &Defs, t: &Ty, path: &mut Vec<Ty>, seen: &mut Vec<Ty>) -> Option<Ty> {
-            let parts: Vec<Ty> = match t {
-                Ty::Struct(s, args) => defs.fields[*s].iter().map(|f| f.subst(args)).collect(),
-                Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
-                    .map(|c| c.subst(args))
-                    .collect(),
-                Ty::Tuple(items) | Ty::List(items) | Ty::Slice(items) => {
-                    return items.iter().find_map(|p| visit(defs, p, path, seen));
-                }
-                _ => return None,
-            };
-            if path.contains(t) || path.len() > DEEP {
-                return Some(t.clone());
-            }
-            if seen.contains(t) {
-                return None;
-            }
-            path.push(t.clone());
-            let found = parts.iter().find_map(|p| visit(defs, p, path, seen));
-            path.pop();
-            seen.push(t.clone());
-            found
-        }
-        visit(self, t, &mut Vec::new(), &mut Vec::new())
-    }
-
     /// The trait and the part of `t` that lacks it, for a type `t` that
     /// lacks trait `k` only because one of its parts lacks a trait. The part
     /// is the innermost one, which lacks the trait on its own.
@@ -1351,13 +1323,6 @@ impl<'a> Defs<'a> {
                     ", as `{name}` is not written in the file that is built, where `Function` is made"
                 )
             };
-        }
-        if let Some(own) = self.containing_itself(t) {
-            return format!(
-                ", as `{}` contains itself, and a type that does is given no `{}` until a function may call itself, which is not supported yet",
-                self.text(&own, scope),
-                self.file.traits[k].name
-            );
         }
         if self.deserialize == Some(k)
             && let Ty::Struct(s, _) = t
