@@ -20,8 +20,12 @@ pub const ONCE: &[Test] = &[
         a_check_takes_the_first_arm_exactly_when_the_statement_holds,
     ),
     (
-        "a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes",
-        a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes,
+        "a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes_part_1_of_2",
+        || a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes(0),
+    ),
+    (
+        "a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes_part_2_of_2",
+        || a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes(1),
     ),
     (
         "a_check_of_a_statement_that_names_a_var_or_carries_an_effect_is_refused",
@@ -219,19 +223,21 @@ fn goal(g: &mut Gen) -> Goal {
 /// conditions with `check` is accepted exactly when the one that tests them
 /// with `if` is, which is when the sum fits wherever they hold, and then both
 /// are one program once the passes have run, with no instruction for the proof.
-fn a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes() {
-    generate::check(122, 80, goal, |goal| {
+fn a_check_gives_arith_what_an_if_gives_and_is_the_same_program_after_the_passes(part: u64) {
+    generate::check_part(122, 80, part, 2, goal, |goal| {
         let [with_if, with_check] = &goal.sources;
-        let accepted = |source: &str| check(source.as_bytes()).is_ok();
-        assert_eq!(accepted(with_if), goal.fits, "for\n{with_if}");
-        assert_eq!(accepted(with_check), goal.fits, "for\n{with_check}");
+        // A program is accepted exactly when it is lowered, so each is checked
+        // once.
+        let (made_if, made_check) = (lower(with_if.as_bytes()), lower(with_check.as_bytes()));
+        assert_eq!(made_if.is_ok(), goal.fits, "for\n{with_if}");
+        assert_eq!(made_check.is_ok(), goal.fits, "for\n{with_check}");
         if goal.fits {
-            let lowered = |source: &str| {
-                lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"))
+            let lowered = |made: Result<_, Vec<smith::diag::Error>>, source: &str| {
+                made.unwrap_or_else(|e| panic!("{e:?} for {source}"))
             };
             assert_eq!(
-                lowered(with_check),
-                lowered(with_if),
+                lowered(made_check, with_check),
+                lowered(made_if, with_if),
                 "for\n{with_check}\nand\n{with_if}"
             );
         }
