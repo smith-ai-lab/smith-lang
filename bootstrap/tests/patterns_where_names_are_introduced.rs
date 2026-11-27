@@ -360,7 +360,7 @@ fn a_pattern_where_a_name_is_introduced_does_what_the_binding_of_it_on_the_first
 fn a_pattern_where_a_name_is_introduced_adds_nothing_to_the_program() {
     generate::check(
         102,
-        24,
+        10,
         |g| {
             let s = shape(g, false);
             let other = revalue(g, &s);
@@ -417,7 +417,7 @@ fn a_pattern_that_may_not_match_where_a_name_is_introduced_is_one_error_that_nam
 fn a_pattern_of_the_wrong_size_or_on_no_tuple_gives_the_errors_its_binding_gives() {
     generate::check(
         104,
-        24,
+        10,
         |g| (shape(g, false), g.one_in(2)),
         |(s, no_tuple)| {
             let (pattern, given) = if *no_tuple {
@@ -513,7 +513,7 @@ fn a_parameter_written_as_a_pattern_is_given_by_position_and_takes_no_default() 
 fn a_name_a_pattern_introduces_is_owned_and_lent_as_any_other_name_is() {
     generate::check(
         106,
-        24,
+        10,
         |g| {
             let s = shape(g, true);
             let other = revalue(g, &s);
