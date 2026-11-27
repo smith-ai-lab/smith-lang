@@ -226,6 +226,12 @@ impl Read {
 }
 
 impl Task {
+    /// Whether the task carries `diverge`, which is a task that never ends by
+    /// itself.
+    pub fn diverges(&self) -> bool {
+        self.effects.iter().any(|e| e == "diverge")
+    }
+
     /// The first of the words that is a flag of `smith` the task has no
     /// parameter of the name of, which is written in the place of a flag. A
     /// word that is the value of a flag is not one.

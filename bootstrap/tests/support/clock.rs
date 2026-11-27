@@ -36,7 +36,7 @@ pub fn watch(progress: Option<Progress>) {
     WATCHED.with(|w| *w.borrow_mut() = progress);
 }
 
-fn progressed() {
+pub fn progressed() {
     WATCHED.with(|w| {
         if let Some(progress) = &*w.borrow() {
             *progress.lock().unwrap() = Instant::now();

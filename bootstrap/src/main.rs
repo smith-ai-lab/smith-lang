@@ -12,11 +12,15 @@ use smith::project;
 use smith::target::Target;
 use smith::timings::Timings;
 
+#[cfg(unix)]
+mod watch;
+
 const USAGE: &str =
     "usage: smith [--timings] build [--target <target>] [--map] [<file>.smith | <task>]
        smith [--timings] <task> [--<flag> <value>...]
        smith [--timings] run [--target <target>] [<file>.smith [<word>...]]
        smith [--timings] check [<file>.smith]
+       smith [--timings] --watch <command>
        smith --version";
 
 /// The version a release was built as, set by the release workflow. A build
@@ -71,6 +75,7 @@ fn flag_of_smith(flag: &str, command: &str) -> String {
 fn command(args: &[OsString]) -> Result<ExitCode, String> {
     // The flags of `smith` come right after `smith`, before the command.
     let mut timings = false;
+    let mut watching = false;
     let mut args = args;
     while let Some((flag, rest)) = args.split_first() {
         let flag = text(flag)?;
@@ -81,7 +86,8 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
             }
             "--timings" if timings => return Err("`--timings` is given twice".to_string()),
             "--timings" => timings = true,
-            "--watch" => return Err("smith --watch is not built yet".to_string()),
+            "--watch" if watching => return Err("`--watch` is given twice".to_string()),
+            "--watch" => watching = true,
             "--target" => {
                 return Err(
                     "`--target` is a flag of `build` and `run`, written after the command: smith build --target <target>"
@@ -101,6 +107,9 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
         return Err(USAGE.to_string());
     };
     let name = text(name)?;
+    if watching {
+        return watch_command(name, rest, timings);
+    }
     match name {
         "build" => {
             let request = request(rest, false, timings)?;
@@ -116,7 +125,7 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
                 ));
             }
             let executable = build(&request)?;
-            run(&executable, &request.words)
+            run_to_the_end(&executable, &request.words)
         }
         "check" => check(rest, timings),
         "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
@@ -190,6 +199,15 @@ fn request(args: &[OsString], with_words: bool, timings: bool) -> Result<Request
 /// errors, or else its warnings, writing no file. It fails if there are
 /// any. With `--timings` it then prints how long each stage took.
 fn check(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
+    check_reading(args, timings, &mut Vec::new())
+}
+
+/// `check`, which also says which files it read.
+fn check_reading(
+    args: &[OsString],
+    timings: bool,
+    read: &mut Vec<PathBuf>,
+) -> Result<ExitCode, String> {
     let mut entry = None;
     for arg in args {
         let arg = text(arg)?;
@@ -205,6 +223,7 @@ fn check(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
     }
     let whole_project = entry.is_none();
     let entry = entry.unwrap_or_else(|| PathBuf::from("main.smith"));
+    read.push(absolute(&entry));
     let (_, source) = read_entry(&entry)?;
     let files = Files::in_current_folder(&entry)?;
     let project = files.project();
@@ -231,6 +250,7 @@ fn check(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
         report.push_str(&stages.report());
         report.push('\n');
     }
+    read.extend(files.paths());
     eprint!("{report}");
     Ok(if failed {
         ExitCode::FAILURE
@@ -274,6 +294,17 @@ impl Files {
             read: RefCell::new(BTreeSet::new()),
             project: None,
         })
+    }
+
+    /// The files of the modules that have been read.
+    fn paths(&self) -> Vec<PathBuf> {
+        let read = self.read.borrow();
+        read.iter()
+            .map(|module| {
+                self.root
+                    .join(format!("{}.smith", module.replace('.', "/")))
+            })
+            .collect()
     }
 
     fn project(&self) -> smith::Project<'_> {
@@ -366,8 +397,13 @@ fn read_entry(entry: &Path) -> Result<(&std::ffi::OsStr, Vec<u8>), String> {
 /// after the errors when the build fails, and before returning when it
 /// succeeds.
 fn build(request: &Request) -> Result<PathBuf, String> {
+    build_reading(request, &mut Vec::new())
+}
+
+/// `build`, which also says which files it read.
+fn build_reading(request: &Request, read: &mut Vec<PathBuf>) -> Result<PathBuf, String> {
     let mut timings = Timings::new();
-    let result = build_timed(request, &mut timings);
+    let result = build_timed(request, &mut timings, read);
     match (result, request.timings) {
         (Ok(path), true) => {
             eprintln!("{}", timings.report());
@@ -380,21 +416,27 @@ fn build(request: &Request) -> Result<PathBuf, String> {
 
 /// Builds the entry into an executable in the current folder, and returns
 /// its path.
-fn build_timed(request: &Request, timings: &mut Timings) -> Result<PathBuf, String> {
+fn build_timed(
+    request: &Request,
+    timings: &mut Timings,
+    read: &mut Vec<PathBuf>,
+) -> Result<PathBuf, String> {
     if let Some(task) = &request.task {
-        return build_task(task, request, timings);
+        return build_task(task, request, timings, read);
     }
     let entry = &request.entry;
+    read.push(absolute(entry));
     let (stem, source) = read_entry(entry)?;
     let files = Files::in_current_folder(entry)?;
-    let built = smith::compile_project_files_timed(
+    let compiled = smith::compile_project_files_timed(
         &source,
         &files.project(),
         request.target,
         request.map,
         timings,
-    )
-    .map_err(|errors| {
+    );
+    read.extend(files.paths());
+    let built = compiled.map_err(|errors| {
         let file = entry.to_string_lossy();
         let text = files.render(&file, &source, &errors);
         text.strip_suffix('\n').unwrap_or(&text).to_string()
@@ -437,12 +479,55 @@ fn write_executable(path: &Path, bytes: &[u8], runs: bool) -> std::io::Result<()
     Ok(())
 }
 
+/// Starts a built executable with the words it is started with. `smith --watch`
+/// gives it a socket too, which the program holds at descriptor 3.
+fn run(
+    executable: &Path,
+    words: &[OsString],
+    control: Option<&Control>,
+) -> std::io::Result<std::process::Child> {
+    let mut command = std::process::Command::new(executable);
+    command.args(words);
+    #[cfg(unix)]
+    if let Some(socket) = control {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::CommandExt;
+        unsafe extern "C" {
+            fn dup2(from: i32, to: i32) -> i32;
+            fn fcntl(fd: i32, command: i32, argument: i32) -> i32;
+        }
+        const AT: i32 = 3;
+        const F_SETFD: i32 = 2;
+        let from = socket.as_raw_fd();
+        // SAFETY: only `dup2` and `fcntl` are called between the fork and the
+        // exec, which is safe there. `dup2` leaves the new descriptor open
+        // across the exec, and `fcntl` does it for one that is already there.
+        unsafe {
+            command.pre_exec(move || {
+                if from == AT {
+                    fcntl(AT, F_SETFD, 0);
+                } else if dup2(from, AT) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+    let _ = control;
+    command.spawn()
+}
+
+/// The socket `smith --watch` talks to a program on.
+#[cfg(unix)]
+type Control = std::os::unix::net::UnixStream;
+#[cfg(not(unix))]
+type Control = ();
+
 /// Runs a built executable with the words it is started with, and exits as it
 /// does.
-fn run(executable: &Path, words: &[OsString]) -> Result<ExitCode, String> {
-    let status = std::process::Command::new(executable)
-        .args(words)
-        .status()
+fn run_to_the_end(executable: &Path, words: &[OsString]) -> Result<ExitCode, String> {
+    let status = run(executable, words, None)
+        .and_then(|mut child| child.wait())
         .map_err(|e| format!("{}: {e}", executable.display()))?;
     let code = status.code().unwrap_or(1);
     Ok(ExitCode::from(u8::try_from(code).unwrap_or(1)))
@@ -495,7 +580,15 @@ fn project_with_task(task: &str) -> Result<(PathBuf, project::Read), String> {
 
 /// Builds the executable that starts at a task of `project.smith`, which is
 /// named after the package, in the folder that holds the file.
-fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<PathBuf, String> {
+fn build_task(
+    task: &str,
+    request: &Request,
+    timings: &mut Timings,
+    reading: &mut Vec<PathBuf>,
+) -> Result<PathBuf, String> {
+    if let Some(root) = find_root() {
+        reading.push(root.join("project.smith"));
+    }
     let (root, read) = project_with_task(task)?;
     let found = read.task(task).expect("project_with_task found it");
     let program = found.program();
@@ -505,14 +598,15 @@ fn build_task(task: &str, request: &Request, timings: &mut Timings) -> Result<Pa
         read: RefCell::new(BTreeSet::new()),
         project: Some(read.module.clone()),
     };
-    let built = smith::compile_project_files_timed(
+    let compiled = smith::compile_project_files_timed(
         program.as_bytes(),
         &files.project(),
         request.target,
         request.map,
         timings,
-    )
-    .map_err(|errors| {
+    );
+    reading.extend(files.paths());
+    let built = compiled.map_err(|errors| {
         let errors = found.placed(project::explain(errors));
         let text = files.render("project.smith", program.as_bytes(), &errors);
         text.strip_suffix('\n').unwrap_or(&text).to_string()
@@ -556,5 +650,126 @@ fn run_task(task: &str, flags: &[OsString], timings: bool) -> Result<ExitCode, S
         words: flags.to_vec(),
     };
     let executable = build(&request)?;
-    run(&executable, flags)
+    run_to_the_end(&executable, flags)
+}
+
+/// The path made absolute by the folder the command runs in.
+fn absolute(path: &Path) -> PathBuf {
+    std::env::current_dir().map_or_else(|_| path.to_path_buf(), |folder| folder.join(path))
+}
+
+/// `smith --watch <command>`: the command again each time a file it read
+/// changes.
+#[cfg(unix)]
+fn watch_command(name: &str, rest: &[OsString], timings: bool) -> Result<ExitCode, String> {
+    let mut starter = |executable: &Path, words: &[OsString], control: &Control| {
+        run(executable, words, Some(control))
+    };
+    match name {
+        "build" | "run" => {
+            let running = name == "run";
+            let request = request(rest, running, timings)?;
+            if running && Target::host() != Some(request.target) {
+                return Err(format!(
+                    "smith run runs only programs for this machine, and {} is not its target",
+                    request.target.name()
+                ));
+            }
+            let kind = if running {
+                watch::Kind::Run {
+                    diverge: false,
+                    words: request.words.clone(),
+                }
+            } else {
+                watch::Kind::Report
+            };
+            Ok(watch::watch(kind, &mut starter, || {
+                let mut read = Vec::new();
+                match build_reading(&request, &mut read) {
+                    Ok(path) => watch::Outcome {
+                        executable: running.then_some(path),
+                        read,
+                        ok: true,
+                    },
+                    Err(message) => {
+                        eprintln!("{message}");
+                        watch::Outcome {
+                            executable: None,
+                            read,
+                            ok: false,
+                        }
+                    }
+                }
+            }))
+        }
+        "check" => Ok(watch::watch(watch::Kind::Report, &mut starter, || {
+            let mut read = Vec::new();
+            match check_reading(rest, timings, &mut read) {
+                Ok(code) => watch::Outcome {
+                    executable: None,
+                    read,
+                    ok: code == ExitCode::SUCCESS,
+                },
+                Err(message) => {
+                    eprintln!("{message}");
+                    watch::Outcome {
+                        executable: None,
+                        read,
+                        ok: false,
+                    }
+                }
+            }
+        })),
+        "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
+            Err(format!("smith {name} is not supported yet"))
+        }
+        task => {
+            let (_, read) = project_with_task(task)?;
+            let found = read.task(task).expect("project_with_task found it");
+            if let Some(flag) = found.flag_of_smith(rest) {
+                return Err(flag_of_smith(&flag, task));
+            }
+            let target = Target::host().ok_or_else(|| {
+                format!(
+                    "this machine, {}, is not a target",
+                    Target::host_description()
+                )
+            })?;
+            let request = Request {
+                target,
+                entry: PathBuf::from("main.smith"),
+                task: Some(task.to_string()),
+                timings,
+                map: false,
+                words: rest.to_vec(),
+            };
+            let kind = watch::Kind::Run {
+                diverge: found.diverges(),
+                words: rest.to_vec(),
+            };
+            Ok(watch::watch(kind, &mut starter, || {
+                let mut read = Vec::new();
+                match build_reading(&request, &mut read) {
+                    Ok(path) => watch::Outcome {
+                        executable: Some(path),
+                        read,
+                        ok: true,
+                    },
+                    Err(message) => {
+                        eprintln!("{message}");
+                        watch::Outcome {
+                            executable: None,
+                            read,
+                            ok: false,
+                        }
+                    }
+                }
+            }))
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn watch_command(_: &str, _: &[OsString], _: bool) -> Result<ExitCode, String> {
+    Err("smith --watch is not built for this system yet".to_string())
 }

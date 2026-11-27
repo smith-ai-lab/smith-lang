@@ -9,7 +9,8 @@ built:
   - "a task named as a command, refused where it is written"
   - "a parameter of a task that is written before the `;`, refused where it is written, as a flag is given by name"
   - "a name that is no command and no task, said as one of three errors: no `project.smith`, one that does not compile, or one with no task of that name"
-  - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages, or `smith --watch` of a task"
+  - "`smith --watch <task>`, on Linux and macOS, which runs a task again after each change, as [Watching](command-line.md#watching) says, stops a task that carries `diverge` when the next run is built, and keeps the socket that a task listens on from one run to the next, so that no connection is refused or reset while the program is built again, and the old run, which is told it is closed by `accept` giving `.closed`, serves the connections it took"
+  - "not `build` of `std.project` called from a task, `exec`, a parameter of another type, a task with more than six parameters that have a default, or a project that has grown into several packages, or a task watched on Windows"
 ---
 
 # Project tasks
