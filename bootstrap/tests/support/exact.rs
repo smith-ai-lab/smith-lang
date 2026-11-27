@@ -136,9 +136,22 @@ fn mul_mant(a: &[u32], b: &[u32]) -> Vec<u32> {
     out
 }
 
-/// The quotient of `a` by `b`, which is not 0, a bit at a time.
+/// The quotient of `a` by `b`, which is not 0, a limb at a time when `b` is of up to 64 bits and a bit at a time when it is not.
 fn divide_mant(a: &[u32], b: &[u32]) -> Vec<u32> {
     let mut quotient = vec![0u32; a.len()];
+    if (1..=2).contains(&b.len()) {
+        // A divisor of up to 64 bits, which is what a series divides by, a limb
+        // at a time: the rest is below the divisor, so each quotient is a limb.
+        let d = u128::from(b[0]) | u128::from(b.get(1).copied().unwrap_or(0)) << 32;
+        let mut rest = 0u128;
+        for i in (0..a.len()).rev() {
+            let now = rest << 32 | u128::from(a[i]);
+            quotient[i] = (now / d) as u32;
+            rest = now % d;
+        }
+        trim(&mut quotient);
+        return quotient;
+    }
     let mut rest: Vec<u32> = Vec::new();
     for i in (0..bit_length(a)).rev() {
         rest = shift_left(&rest, 1);
