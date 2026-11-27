@@ -15,8 +15,16 @@ use crate::numbers::{INTS, Int, value, with_header};
 
 pub const ONCE: &[Test] = &[
     (
-        "an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it",
-        an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it,
+        "an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it_part_1_of_3",
+        || an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it(0),
+    ),
+    (
+        "an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it_part_2_of_3",
+        || an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it(1),
+    ),
+    (
+        "an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it_part_3_of_3",
+        || an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it(2),
     ),
     (
         "an_operation_inside_the_conditions_that_bound_its_operands_compiles_exactly_when_it_fits_and_never_wraps_part_1_of_3",
@@ -143,8 +151,8 @@ fn pair(g: &mut Gen) -> Pair {
 /// and `a * b` are the exact range of the result, in two words when no type of
 /// 64 bits holds it, and enter the type exactly when the true result is a value
 /// of the type, and the program prints the true result.
-fn an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it() {
-    generate::check(90, 150, pair, |p| {
+fn an_operation_on_two_numbers_compiles_exactly_when_its_true_result_fits_and_prints_it(part: u64) {
+    generate::check_part(90, 150, part, 3, pair, |p| {
         let source = with_header(format!(
             "fn main() <console, alloc> {{\n  a: {0} = {1}\n  b: {0} = {2}\n  {3}print(\"{{{4}}}\")\n}}\n",
             p.ty.name,
