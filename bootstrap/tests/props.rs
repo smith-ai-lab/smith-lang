@@ -250,8 +250,16 @@ pub const ONCE: &[Test] = &[
         || the_evaluator_says_what_the_generator_built_a_program_with_choices_to_print(1),
     ),
     (
-        "every_placed_mistake_about_choices_is_one_error_at_its_place",
-        every_placed_mistake_about_choices_is_one_error_at_its_place,
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_1_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(0),
+    ),
+    (
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_2_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(1),
+    ),
+    (
+        "every_placed_mistake_about_choices_is_one_error_at_its_place_part_3_of_3",
+        || every_placed_mistake_about_choices_is_one_error_at_its_place(2),
     ),
     (
         "the_evaluator_says_what_the_generator_built_a_program_with_with_and_try_to_print_part_1_of_3",
@@ -298,16 +306,32 @@ pub const ONCE: &[Test] = &[
         || every_placed_mistake_about_with_and_try_is_one_error_at_its_place(1),
     ),
     (
-        "a_function_main_does_not_reach_is_parsed_and_not_checked",
-        a_function_main_does_not_reach_is_parsed_and_not_checked,
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_1_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(0),
+    ),
+    (
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_2_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(1),
+    ),
+    (
+        "a_function_main_does_not_reach_is_parsed_and_not_checked_part_3_of_3",
+        || a_function_main_does_not_reach_is_parsed_and_not_checked(2),
     ),
     (
         "every_placed_mistake_is_one_error_at_its_place",
         every_placed_mistake_is_one_error_at_its_place,
     ),
     (
-        "every_input_gives_an_executable_or_an_error_with_a_place",
-        every_input_gives_an_executable_or_an_error_with_a_place,
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_1_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(0),
+    ),
+    (
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_2_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(1),
+    ),
+    (
+        "every_input_gives_an_executable_or_an_error_with_a_place_part_3_of_3",
+        || every_input_gives_an_executable_or_an_error_with_a_place(2),
     ),
     (
         "nothing_before_the_target_seam_names_a_system_or_machine",
@@ -454,8 +478,8 @@ fn program_and_unreached(g: &mut Gen) -> (Case, &'static str) {
     (programs::program(g), *g.pick(programs::UNREACHED))
 }
 
-fn a_function_main_does_not_reach_is_parsed_and_not_checked() {
-    generate::check(12, 121, program_and_unreached, |(case, unreached)| {
+fn a_function_main_does_not_reach_is_parsed_and_not_checked(part: u64) {
+    generate::check_part(12, 121, part, 3, program_and_unreached, |(case, unreached)| {
         let program = lower(&case.source).unwrap_or_else(|e| panic!("{e:?}"));
         let source = with_names(
             &case.source,
@@ -777,8 +801,8 @@ fn the_evaluator_says_what_the_generator_built_a_program_with_choices_to_print(p
     });
 }
 
-fn every_placed_mistake_about_choices_is_one_error_at_its_place() {
-    generate::check(67, 192, choices::program_with_mistake, |case| {
+fn every_placed_mistake_about_choices_is_one_error_at_its_place(part: u64) {
+    generate::check_part(67, 192, part, 3, choices::program_with_mistake, |case| {
         let expected = case.mistake.as_ref().expect("a placed mistake");
         assert_mistake(case.source.as_bytes(), expected);
     });
@@ -1074,10 +1098,10 @@ pub fn bytes(g: &mut Gen) -> Bytes {
     Bytes(source)
 }
 
-fn every_input_gives_an_executable_or_an_error_with_a_place() {
+fn every_input_gives_an_executable_or_an_error_with_a_place(part: u64) {
     let targets = targets::buildable();
     let choose = |g: &mut Gen| damaged(g, targets.len());
-    generate::check(5, 800, choose, |(Bytes(source), target)| {
+    generate::check_part(5, 800, part, 3, choose, |(Bytes(source), target)| {
         if let Err(errors) = compile(source, targets[*target]) {
             assert_well_formed(source, &errors);
         }
