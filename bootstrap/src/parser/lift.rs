@@ -217,7 +217,7 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
             ty,
             default: None,
             take: false,
-            inout: false,
+            mutable: false,
             takes: Vec::new(),
             effects: Vec::new(),
             by_name: false,

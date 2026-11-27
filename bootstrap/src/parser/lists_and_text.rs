@@ -53,7 +53,7 @@ fn interpolated(
             name: None,
             value,
             after: false,
-            inout: None,
+            mutable: None,
             given_back: false,
         }],
         end: pos,

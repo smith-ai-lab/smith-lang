@@ -179,7 +179,7 @@ impl Parser<'_> {
             name: Some((name.to_string(), op_pos)),
             value,
             after: false,
-            inout: None,
+            mutable: None,
             given_back: false,
         };
         Ok(Expr::Call(Call {
@@ -242,7 +242,7 @@ pub(super) fn compared(left: Expr, op: &str, right: Expr, op_pos: Pos) -> Expr {
                     name: None,
                     value,
                     after: false,
-                    inout: None,
+                    mutable: None,
                     given_back: false,
                 })
                 .collect(),

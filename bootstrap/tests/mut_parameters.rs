@@ -1,15 +1,15 @@
-//! A parameter marked `inout` is a value the function changes for its caller,
-//! and a call that changes one marks it `inout`, as
-//! `knowledge/language/inout.md` says. It means taking the value and giving it
-//! back, so a program that changes a value with `inout` gives what the program
+//! A parameter marked `mut` is a value the function changes for its caller,
+//! and a call that changes one marks it `mut`, as
+//! `knowledge/language/mut-parameters.md` says. It means taking the value and giving it
+//! back, so a program that changes a value with `mut` gives what the program
 //! that takes it and assigns what comes back gives, and is built to the same
 //! code.
 //!
 //! The generator builds the body of a function that changes a `Cursor`: it
 //! adds to its fields, copies one to the other, replaces it, and leaves early
 //! by `return`. It works out what the cursor is after each call, and writes the
-//! function twice, with `inout` and with `take`, and the call twice, with
-//! `inout` and as an assignment, of a `var`, a field of one, or an item of a
+//! function twice, with `mut` and with `take`, and the call twice, with
+//! `mut` and as an assignment, of a `var`, a field of one, or an item of a
 //! list.
 
 use smith::check;
@@ -23,32 +23,32 @@ use crate::programs::pos_after;
 
 pub const ONCE: &[Test] = &[
     (
-        "a_function_changes_a_var_through_an_inout_parameter_as_the_page_says",
-        a_function_changes_a_var_through_an_inout_parameter_as_the_page_says,
+        "a_function_changes_a_var_through_an_mut_parameter_as_the_page_says",
+        a_function_changes_a_var_through_an_mut_parameter_as_the_page_says,
     ),
     (
-        "changing_a_place_with_inout_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code",
-        changing_a_place_with_inout_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code,
+        "changing_a_place_with_mut_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code",
+        changing_a_place_with_mut_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code,
     ),
     (
         "a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_function_that_takes_it_with_the_signature_as_written",
         a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_function_that_takes_it_with_the_signature_as_written,
     ),
     (
-        "a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout",
-        a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout,
+        "a_call_marks_mut_exactly_the_arguments_whose_parameters_are_mut",
+        a_call_marks_mut_exactly_the_arguments_whose_parameters_are_mut,
     ),
     (
-        "what_is_passed_inout_is_a_var_or_a_field_or_an_item_of_one",
-        what_is_passed_inout_is_a_var_or_a_field_or_an_item_of_one,
+        "what_is_passed_mut_is_a_var_or_a_field_or_an_item_of_one",
+        what_is_passed_mut_is_a_var_or_a_field_or_an_item_of_one,
     ),
     (
-        "one_place_is_passed_inout_once_and_places_that_do_not_overlap_are_passed_together",
-        one_place_is_passed_inout_once_and_places_that_do_not_overlap_are_passed_together,
+        "one_place_is_passed_mut_once_and_places_that_do_not_overlap_are_passed_together",
+        one_place_is_passed_mut_once_and_places_that_do_not_overlap_are_passed_together,
     ),
     (
-        "a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_inout",
-        a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_inout,
+        "a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_mut",
+        a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_mut,
     ),
     (
         "what_was_known_of_a_value_before_a_call_changes_it_is_not_known_after",
@@ -83,22 +83,25 @@ struct Doc {
 }
 ";
 
-fn a_function_changes_a_var_through_an_inout_parameter_as_the_page_says() {
+fn a_function_changes_a_var_through_an_mut_parameter_as_the_page_says() {
     let source = format!(
         "{CURSOR}
-fn step(c: inout Cursor) {{
+fn step(c: mut Cursor) {{
   if c.at < 9 {{ c.at = c.at + 1 }}
 }}
 
 fn main() <console, alloc> {{
   var c = Cursor(at: 0, line: 1)
-  step(inout c)
-  step(inout c)
+  step(mut c)
+  step(mut c)
   print(\"{{c.at}}\")
 }}
 "
     );
     assert_eq!(output_of(&source), "2\n", "for {source}");
+    // `inout` is a name like any other, and not a keyword.
+    let source = "fn main() {\n  inout = 1\n  n = inout + 1\n}\n";
+    assert!(errors(source).is_empty(), "{:?} for {source}", errors(source));
 }
 
 /// A line of the body of a function that changes the cursor `x`.
@@ -174,13 +177,13 @@ fn change(g: &mut Gen) -> Change {
     }
 }
 
-/// The program that changes the place `calls` times, with `inout` when
-/// `inout` is true, and by taking it and assigning what comes back otherwise.
-fn change_program(c: &Change, inout: bool) -> String {
+/// The program that changes the place `calls` times, with `mut` when
+/// `mut` is true, and by taking it and assigning what comes back otherwise.
+fn change_program(c: &Change, mutable: bool) -> String {
     let body: Vec<String> = c.lines.iter().map(|l| format!("  {}", l.text())).collect();
-    let function = if inout {
+    let function = if mutable {
         let end = if c.returns { "\n  return" } else { "" };
-        format!("fn change(x: inout Cursor) {{\n{}{end}\n}}", body.join("\n"))
+        format!("fn change(x: mut Cursor) {{\n{}{end}\n}}", body.join("\n"))
     } else {
         let body = body.join("\n").replace("{ return }", "{ return x }");
         let end = if c.returns { "return x" } else { "x" };
@@ -196,8 +199,8 @@ fn change_program(c: &Change, inout: bool) -> String {
         ),
         _ => (format!("var cs = [{start}]"), "cs[0]"),
     };
-    let call = if inout {
-        format!("  change(inout {place})\n")
+    let call = if mutable {
+        format!("  change(mut {place})\n")
     } else {
         format!("  {place} = change({place})\n")
     };
@@ -207,23 +210,23 @@ fn change_program(c: &Change, inout: bool) -> String {
     )
 }
 
-fn changing_a_place_with_inout_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code()
+fn changing_a_place_with_mut_gives_what_taking_it_and_assigning_what_comes_back_gives_and_the_same_code()
  {
     generate::check(12331, 6, change, |c| {
-        let (inout, taken) = (change_program(c, true), change_program(c, false));
+        let (mutable, taken) = (change_program(c, true), change_program(c, false));
         let mut cursor = c.start;
         for _ in 0..c.calls {
             cursor = run(&c.lines, cursor);
         }
         let expected = format!("{} {}\n", cursor.0, cursor.1);
-        assert_eq!(output_of(&inout), expected, "for {inout}");
+        assert_eq!(output_of(&mutable), expected, "for {mutable}");
         assert_eq!(output_of(&taken), expected, "for {taken}");
         for target in Target::ALL {
-            let one = compile(inout.as_bytes(), *target).unwrap_or_else(|e| panic!("{e:?}"));
+            let one = compile(mutable.as_bytes(), *target).unwrap_or_else(|e| panic!("{e:?}"));
             let other = compile(taken.as_bytes(), *target).unwrap_or_else(|e| panic!("{e:?}"));
             assert!(
                 one == other,
-                "the code for {target:?} differs between {inout} and {taken}"
+                "the code for {target:?} differs between {mutable} and {taken}"
             );
         }
     });
@@ -249,7 +252,7 @@ const MISTAKES: &[(&str, bool)] = &[
     ("x.at = \"a\"", false),
     ("x.at = x.at + 1", false),
     ("n = nowhere", false),
-    ("step(inout x.at)", true),
+    ("step(mut x.at)", true),
     ("n = look(x.at)", false),
 ];
 
@@ -257,20 +260,20 @@ const MISTAKES: &[(&str, bool)] = &[
 /// column only on a line after the signature, whose spelling differs.
 fn said(e: &Error, signature: usize) -> (usize, Option<usize>, String, Option<String>) {
     let written = |t: &str| {
-        t.replace("fn change(given: take Cursor) -> Cursor", "fn change(x: inout Cursor)")
-            .replace("fn change(given: Cursor) -> Cursor", "fn change(x: inout Cursor)")
+        t.replace("fn change(given: take Cursor) -> Cursor", "fn change(x: mut Cursor)")
+            .replace("fn change(given: Cursor) -> Cursor", "fn change(x: mut Cursor)")
     };
     let col = (e.pos.line != signature).then_some(e.pos.col);
     (e.pos.line, col, written(&e.message), e.fix.as_deref().map(written))
 }
 
 /// A function that changes a cursor, with `lines` for its body, written with
-/// `inout` or with `take`, and called from `main`. The lines of the body are on
+/// `mut` or with `take`, and called from `main`. The lines of the body are on
 /// the same lines of the file in both.
-fn mistake_program(lines: &[&str], inout: bool) -> String {
+fn mistake_program(lines: &[&str], mutable: bool) -> String {
     let body: String = lines.iter().map(|l| format!("  {l}\n")).collect();
-    let (function, call) = if inout {
-        (format!("fn change(x: inout Cursor) {{\n{body}}}"), "change(inout c)")
+    let (function, call) = if mutable {
+        (format!("fn change(x: mut Cursor) {{\n{body}}}"), "change(mut c)")
     } else {
         (
             format!("fn change(given: take Cursor) -> Cursor {{ var x = given\n{body}  x\n}}"),
@@ -279,7 +282,7 @@ fn mistake_program(lines: &[&str], inout: bool) -> String {
     };
     format!(
         "{CURSOR}
-fn step(c: inout Cursor) {{
+fn step(c: mut Cursor) {{
   if c.at < 9 {{ c.at = c.at + 1 }}
 }}
 
@@ -308,19 +311,19 @@ fn a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_functi
         |(before, (mistake, changes))| {
             let mut lines = before.clone();
             lines.push(mistake);
-            let (inout, taken) = (mistake_program(&lines, true), mistake_program(&lines, false));
-            let signature = 1 + (inout.lines())
+            let (mutable, taken) = (mistake_program(&lines, true), mistake_program(&lines, false));
+            let signature = 1 + (mutable.lines())
                 .position(|l| l.starts_with("fn change"))
                 .expect("the signature");
-            let one: Vec<_> = errors(&inout).iter().map(|e| said(e, signature)).collect();
+            let one: Vec<_> = errors(&mutable).iter().map(|e| said(e, signature)).collect();
             let other: Vec<_> = errors(&taken).iter().map(|e| said(e, signature)).collect();
-            assert!(!one.is_empty(), "nothing refused in {inout}");
-            assert_eq!(one, other, "for {inout} and {taken}");
+            assert!(!one.is_empty(), "nothing refused in {mutable}");
+            assert_eq!(one, other, "for {mutable} and {taken}");
             for (_, _, message, fix) in &one {
                 let text = format!("{message} {}", fix.as_deref().unwrap_or(""));
                 assert!(
                     !text.contains("-> Cursor") && !text.contains("given"),
-                    "an error shows the lowered function: {text} for {inout}"
+                    "an error shows the lowered function: {text} for {mutable}"
                 );
             }
             // A call that changes a value is refused once, at the argument
@@ -328,8 +331,8 @@ fn a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_functi
             if *changes {
                 let line = signature + lines.len();
                 let col = 3 + mistake.find("x.at").expect("the argument");
-                assert_eq!(one.len(), 1, "{one:?} for {inout}");
-                assert_eq!((one[0].0, one[0].1), (line, Some(col)), "for {inout}");
+                assert_eq!(one.len(), 1, "{one:?} for {mutable}");
+                assert_eq!((one[0].0, one[0].1), (line, Some(col)), "for {mutable}");
             }
         },
     );
@@ -337,9 +340,9 @@ fn a_mistake_in_a_function_that_changes_a_parameter_is_reported_as_in_the_functi
 
 #[derive(Debug)]
 struct Marks {
-    /// Whether each parameter is marked `inout`.
+    /// Whether each parameter is marked `mut`.
     params: Vec<bool>,
-    /// Whether each argument is marked `inout`.
+    /// Whether each argument is marked `mut`.
     args: Vec<bool>,
 }
 
@@ -357,11 +360,11 @@ fn marks(g: &mut Gen) -> Marks {
 
 fn marks_program(m: &Marks) -> (String, String, String) {
     let params: Vec<String> = (m.params.iter().enumerate())
-        .map(|(i, &inout)| format!("p{i}: {}Cursor", if inout { "inout " } else { "" }))
+        .map(|(i, &mutable)| format!("p{i}: {}Cursor", if mutable { "mut " } else { "" }))
         .collect();
     let body: Vec<String> = (m.params.iter().enumerate())
-        .map(|(i, &inout)| {
-            if inout {
+        .map(|(i, &mutable)| {
+            if mutable {
                 format!("  if p{i}.at < 9 {{ p{i}.at = p{i}.at + 1 }}\n")
             } else {
                 format!("  n{i} = p{i}.at\n")
@@ -370,7 +373,7 @@ fn marks_program(m: &Marks) -> (String, String, String) {
         .collect();
     let written = |marked: &dyn Fn(usize) -> bool| {
         let args: Vec<String> = (0..m.params.len())
-            .map(|i| format!("{}c{i}", if marked(i) { "inout " } else { "" }))
+            .map(|i| format!("{}c{i}", if marked(i) { "mut " } else { "" }))
             .collect();
         format!("f({})", args.join(", "))
     };
@@ -388,7 +391,7 @@ fn marks_program(m: &Marks) -> (String, String, String) {
     (source, before_call, fixed)
 }
 
-fn a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout() {
+fn a_call_marks_mut_exactly_the_arguments_whose_parameters_are_mut() {
     generate::check(12332, 30, marks, |m| {
         let (source, before_call, fixed) = marks_program(m);
         let errors = errors(&source);
@@ -396,7 +399,7 @@ fn a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout() {
             assert!(errors.is_empty(), "{errors:?} for {source}");
             return;
         }
-        // An argument that is not marked where its parameter is `inout` is
+        // An argument that is not marked where its parameter is `mut` is
         // refused with the call written as it should be.
         if (m.params.iter().zip(&m.args)).any(|(p, a)| *p && !*a) {
             let fix = format!("write `{fixed}`");
@@ -405,7 +408,7 @@ fn a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout() {
                 "no error with the fix {fix} among {errors:?} for {source}"
             );
         }
-        // Each `inout` before an argument whose parameter is not marked is
+        // Each `mut` before an argument whose parameter is not marked is
         // refused where it is written.
         let mut text = before_call.clone() + "f(";
         for (i, (p, a)) in m.params.iter().zip(&m.args).enumerate() {
@@ -416,15 +419,15 @@ fn a_call_marks_inout_exactly_the_arguments_whose_parameters_are_inout() {
                     "no error at {at:?} among {errors:?} for {source}"
                 );
             }
-            text += &format!("{}c{i}, ", if *a { "inout " } else { "" });
+            text += &format!("{}c{i}, ", if *a { "mut " } else { "" });
         }
     });
 }
 
-fn what_is_passed_inout_is_a_var_or_a_field_or_an_item_of_one() {
+fn what_is_passed_mut_is_a_var_or_a_field_or_an_item_of_one() {
     let program = |made: &str, passed: &str| {
         format!(
-            "{CURSOR}\nfn step(c: inout Cursor) {{\n  if c.at < 9 {{ c.at = c.at + 1 }}\n}}\n\nfn start() -> Cursor {{ Cursor(at: 0, line: 0) }}\n\nfn main() <alloc> {{\n  {made}\n  step(inout {passed})\n}}\n"
+            "{CURSOR}\nfn step(c: mut Cursor) {{\n  if c.at < 9 {{ c.at = c.at + 1 }}\n}}\n\nfn start() -> Cursor {{ Cursor(at: 0, line: 0) }}\n\nfn main() <alloc> {{\n  {made}\n  step(mut {passed})\n}}\n"
         )
     };
     let start = "Cursor(at: 0, line: 0)";
@@ -444,7 +447,7 @@ fn what_is_passed_inout_is_a_var_or_a_field_or_an_item_of_one() {
         ("n = 1".to_string(), "start()".to_string()),
     ] {
         let source = program(&made, &passed);
-        let at = pos_after(&source[..source.find(&format!("inout {passed}")).expect("call")]);
+        let at = pos_after(&source[..source.find(&format!("mut {passed}")).expect("call")]);
         let errors = errors(&source);
         assert!(
             errors.iter().any(|e| e.pos.line == at.line),
@@ -472,7 +475,7 @@ fn overlaps(x: &str, y: &str) -> bool {
     x == y || (root(x) == root(y) && !x.contains('[') && (x.starts_with(y) || y.starts_with(x)))
 }
 
-fn one_place_is_passed_inout_once_and_places_that_do_not_overlap_are_passed_together() {
+fn one_place_is_passed_mut_once_and_places_that_do_not_overlap_are_passed_together() {
     generate::check(
         12333,
         30,
@@ -481,20 +484,20 @@ fn one_place_is_passed_inout_once_and_places_that_do_not_overlap_are_passed_toge
             let start = "Cursor(at: 1, line: 2)";
             let source = format!(
                 "{CURSOR}
-fn both[T, U](p: inout T, q: inout U) {{
+fn both[T, U](p: mut T, q: mut U) {{
 }}
 
 fn main() <alloc> {{
   var a = Doc(cursor: {start}, other: Cursor(at: 3, line: 4))
   var b = Doc(cursor: {start}, other: {start})
   var xs = [{start}, Cursor(at: 5, line: 6)]
-  both(inout {x}, inout {y})
+  both(mut {x}, mut {y})
 }}
 "
             );
             let errors = errors(&source);
             if overlaps(x, y) {
-                let at = pos_after(&source[..source.find("both(inout").expect("call")]);
+                let at = pos_after(&source[..source.find("both(mut").expect("call")]);
                 assert!(
                     errors.iter().any(|e| e.pos.line == at.line),
                     "{x} and {y} are passed together in {source}"
@@ -507,7 +510,7 @@ fn main() <alloc> {{
     // Two places that do not overlap are changed as two.
     let source = format!(
         "{CURSOR}
-fn swap(p: inout Cursor, q: inout Cursor) {{
+fn swap(p: mut Cursor, q: mut Cursor) {{
   t = p.at
   p.at = q.at
   q.at = t
@@ -515,9 +518,9 @@ fn swap(p: inout Cursor, q: inout Cursor) {{
 
 fn main() <console, alloc> {{
   var d = Doc(cursor: Cursor(at: 1, line: 0), other: Cursor(at: 2, line: 0))
-  swap(inout d.cursor, inout d.other)
+  swap(mut d.cursor, mut d.other)
   var xs = [Cursor(at: 3, line: 0), Cursor(at: 4, line: 0)]
-  swap(inout xs[0], inout xs[1])
+  swap(mut xs[0], mut xs[1])
   print(\"{{d.cursor.at}} {{d.other.at}} {{xs[0].at}} {{xs[1].at}}\")
 }}
 "
@@ -525,7 +528,7 @@ fn main() <console, alloc> {{
     assert_eq!(output_of(&source), "2 1 4 3\n", "for {source}");
 }
 
-fn a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_inout() {
+fn a_function_does_not_store_return_or_give_a_lambda_a_parameter_marked_mut() {
     let types = "use std.bits (u8)
 
 struct Log {
@@ -559,13 +562,13 @@ fn run(f: fn() -> u8) -> u8 { f() }
     ] {
         let source = format!(
             "{types}
-fn keep(l: inout Log) {{
+fn keep(l: mut Log) {{
   {line}
 }}
 
 fn main() <alloc> {{
   var l = Log(items: [], count: 0)
-  keep(inout l)
+  keep(mut l)
 }}
 "
         );
@@ -580,14 +583,14 @@ fn main() <alloc> {{
     // A part that is copied is only read.
     let source = format!(
         "{types}
-fn keep(l: inout Log) {{
+fn keep(l: mut Log) {{
   n = l.count
   if n < 9 {{ l.count = n + 1 }}
 }}
 
 fn main() <alloc> {{
   var l = Log(items: [], count: 0)
-  keep(inout l)
+  keep(mut l)
 }}
 "
     );
@@ -602,7 +605,7 @@ fn what_was_known_of_a_value_before_a_call_changes_it_is_not_known_after() {
 fn zero(n: u8) requires n == 0 {{
 }}
 
-fn same(n: inout u8) {{
+fn same(n: mut u8) {{
   n = n
 }}
 
@@ -610,7 +613,7 @@ fn main() {{
   var n: u8 = 0
   var m: u8 = 0
   zero(n)
-  same(inout {changed})
+  same(mut {changed})
   zero(n)
 }}
 "

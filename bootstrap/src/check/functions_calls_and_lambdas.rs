@@ -1024,7 +1024,7 @@ impl<'a> Checker<'a> {
 
     pub(super) fn call(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
         let defs = self.defs;
-        if self.passed_inout(body, call) {
+        if self.passed_mut(body, call) {
             return self.unknown_call(body, call);
         }
         let name = call.callee.as_str();
@@ -1231,7 +1231,7 @@ impl<'a> Checker<'a> {
             }
             let refused = self.refusals;
             let refused_errors = self.errors.len();
-            // A call that changes a value with `inout` gives back what it is
+            // A call that changes a value with `mut` gives back what it is
             // passed, so what it gives is settled by its arguments alone, and
             // a mistake in them is the one mistake of the line.
             let gives_back = call.args.iter().any(|a| a.given_back);
@@ -2112,7 +2112,7 @@ impl<'a> Checker<'a> {
             Expr::Lambda(l) => self
                 .source_between(l.pos, l.end)
                 .unwrap_or_else(|| "{ ... }".to_string()),
-            value if arg.inout.is_some() => format!("inout {}", written_expr(value)),
+            value if arg.mutable.is_some() => format!("mut {}", written_expr(value)),
             value => written_expr(value),
         }
     }

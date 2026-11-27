@@ -1,18 +1,18 @@
-//! What `inout` refuses, as `knowledge/language/inout.md` says: a call marks
-//! each argument whose parameter is `inout`, and only those; what it passes
-//! `inout` is a place that can be assigned, on a line of its own; one place is
+//! What `mut` refuses, as `knowledge/language/mut-parameters.md` says: a call marks
+//! each argument whose parameter is `mut`, and only those; what it passes
+//! `mut` is a place that can be assigned, on a line of its own; one place is
 //! passed once. The parser refuses a lambda that holds a parameter marked
-//! `inout`, and has lowered `inout` to taking the value and giving it
-//! back, and the rest of what `inout` means is what that means.
+//! `mut`, and has lowered `mut` to taking the value and giving it
+//! back, and the rest of what `mut` means is what that means.
 
 use super::*;
 use crate::parser::{Param, changed_place};
 
-/// A place passed `inout`: the name, the fields after it, and the item of the
+/// A place passed `mut`: the name, the fields after it, and the item of the
 /// array or list they name, if it is one.
 type Place<'e> = (&'e str, Vec<&'e str>, Option<&'e Expr>);
 
-/// Whether two places passed `inout` are one, or one holds the other. Two
+/// Whether two places passed `mut` are one, or one holds the other. Two
 /// items of one list are one unless each is a different number.
 fn overlap(a: &Place, b: &Place) -> bool {
     if a.0 != b.0 || !a.1.iter().zip(&b.1).all(|(x, y)| x == y) {
@@ -45,15 +45,15 @@ fn written_place(p: &Place) -> String {
 }
 
 impl<'a> Checker<'a> {
-    /// Checks what a call passes `inout`, and that it passes `inout` what its
+    /// Checks what a call passes `mut`, and that it passes `mut` what its
     /// function changes. Gives whether it found a mistake, which it reports.
-    pub(super) fn passed_inout(&mut self, body: &Body<'a>, call: &Call) -> bool {
+    pub(super) fn passed_mut(&mut self, body: &Body<'a>, call: &Call) -> bool {
         let before = self.errors.len();
-        self.inout_mistakes(body, call);
+        self.mut_mistakes(body, call);
         self.errors.len() > before
     }
 
-    fn inout_mistakes(&mut self, body: &Body<'a>, call: &Call) {
+    fn mut_mistakes(&mut self, body: &Body<'a>, call: &Call) {
         let defs = self.defs;
         let local = body.names.iter().any(|(n, _)| *n == call.callee);
         let f = (call.through.is_none() && call.qualifier.is_none() && !local)
@@ -81,8 +81,8 @@ impl<'a> Checker<'a> {
         let mut unmarked = None;
         let mut places: Vec<Place> = Vec::new();
         for (arg, param) in call.args.iter().zip(&params) {
-            let changed = param.is_some_and(|p| p.inout);
-            match arg.inout {
+            let changed = param.is_some_and(|p| p.mutable);
+            match arg.mutable {
                 None if changed => {
                     unmarked = unmarked.or(Some((arg, param.expect("changed"))));
                 }
@@ -91,23 +91,23 @@ impl<'a> Checker<'a> {
                     Error::new(
                         at,
                         format!(
-                            "`inout` is written before an argument that `{callee}` does not change"
+                            "`mut` is written before an argument that `{callee}` does not change"
                         ),
                     )
-                    .with_fix("take away `inout`"),
+                    .with_fix("take away `mut`"),
                 ),
                 Some(_) => {
                     if changed_place(&arg.value).is_none() && field_of_item(&arg.value) {
                         self.errors.push(Error::unsupported(
                             arg.value.pos(),
-                            "passing a field of an item `inout`",
+                            "passing a field of an item `mut`",
                         ));
                         continue;
                     }
                     if changed_place(&arg.value).is_none() {
                         self.errors.push(Error::new(
                             arg.value.pos(),
-                            "what is passed `inout` is a `var`, or a field or an item of one, as nothing would see the change to anything else",
+                            "what is passed `mut` is a `var`, or a field or an item of one, as nothing would see the change to anything else",
                         ));
                         continue;
                     }
@@ -115,7 +115,7 @@ impl<'a> Checker<'a> {
                         self.errors.push(Error::new(
                             call.pos,
                             format!(
-                                "a call that passes `inout` is a line of its own, as `{callee}` gives nothing"
+                                "a call that passes `mut` is a line of its own, as `{callee}` gives nothing"
                             ),
                         ));
                         continue;
@@ -129,7 +129,7 @@ impl<'a> Checker<'a> {
                         let (one, two) = (written_place(other), written_place(&place));
                         let message = if one == two {
                             format!(
-                                "`{one}` is passed `inout` twice, and one place is changed by one argument"
+                                "`{one}` is passed `mut` twice, and one place is changed by one argument"
                             )
                         } else {
                             format!(
@@ -145,8 +145,8 @@ impl<'a> Checker<'a> {
         if let Some((arg, param)) = unmarked {
             let mut fixed = call.clone();
             for (a, p) in fixed.args.iter_mut().zip(&params) {
-                if p.is_some_and(|p| p.inout) && a.inout.is_none() {
-                    a.inout = Some(a.value.pos());
+                if p.is_some_and(|p| p.mutable) && a.mutable.is_none() {
+                    a.mutable = Some(a.value.pos());
                 }
             }
             let names = |_: usize, a: &Arg| a.name.as_ref().map(|(n, _)| n.clone());
@@ -155,7 +155,7 @@ impl<'a> Checker<'a> {
                 Error::new(
                     arg.value.pos(),
                     format!(
-                        "`{callee}` changes `{}` for its caller, so the call marks it `inout`",
+                        "`{callee}` changes `{}` for its caller, so the call marks it `mut`",
                         param.name
                     ),
                 )

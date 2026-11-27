@@ -535,25 +535,25 @@ struct Walk<'a> {
     consumed: HashSet<String>,
     /// The name the loop read next is given, where it begins, to the loop.
     consume: Option<String>,
-    /// The parameters marked `inout`, which the function gives back and does
+    /// The parameters marked `mut`, which the function gives back and does
     /// not give away.
     changed: HashSet<String>,
     /// The places of the expressions that give back what a parameter marked
-    /// `inout` holds: what the function gives, and what a call that changes a
+    /// `mut` holds: what the function gives, and what a call that changes a
     /// value is passed.
     given_back: HashSet<usize>,
 }
 
 /// The places of the expressions of `f` that give back a value a parameter
-/// marked `inout` holds: the end of the body and each `return` of a function
-/// that has one, and each argument passed `inout`.
+/// marked `mut` holds: the end of the body and each `return` of a function
+/// that has one, and each argument passed `mut`.
 fn given_back(f: &Function) -> HashSet<usize> {
     let mut all = Vec::new();
     for value in values(&f.body) {
         walk(value, &mut all);
     }
     let mut given = Vec::new();
-    let changes = f.params.iter().any(|p| p.inout);
+    let changes = f.params.iter().any(|p| p.mutable);
     if changes && let Some(Stmt::Expr(last)) = f.body.last() {
         given.push(last);
     }
@@ -612,7 +612,7 @@ pub(super) fn check(
         visible: Vec::new(),
         consumed: HashSet::new(),
         consume: None,
-        changed: (f.params.iter().filter(|p| p.inout))
+        changed: (f.params.iter().filter(|p| p.mutable))
             .map(|p| p.name.clone())
             .collect(),
         given_back: given_back(f),
@@ -1048,7 +1048,7 @@ impl<'a> Walk<'a> {
             }
             return lent;
         }
-        // A parameter marked `inout` is given back when the function returns,
+        // A parameter marked `mut` is given back when the function returns,
         // so it is not given away, nor is a part of it that has no `Copy`.
         if self.changed.contains(&path.0)
             && !matches!(flow, Flow::Lend)
@@ -1063,10 +1063,10 @@ impl<'a> Walk<'a> {
                 Flow::Lend => unreachable!("checked"),
             };
             let whole = if path.1.is_empty() {
-                format!("`{}` is marked `inout`", path.0)
+                format!("`{}` is marked `mut`", path.0)
             } else {
                 format!(
-                    "`{}` is a part of `{}`, which is marked `inout`",
+                    "`{}` is a part of `{}`, which is marked `mut`",
                     written(&path),
                     path.0
                 )

@@ -1,9 +1,9 @@
-//! A parameter marked `inout` means taking the value and giving it back, as
-//! `knowledge/language/inout.md` says, and it is lowered to that here: the
+//! A parameter marked `mut` means taking the value and giving it back, as
+//! `knowledge/language/mut-parameters.md` says, and it is lowered to that here: the
 //! function takes the parameter and gives it back after its body and at each
-//! `return`, and a call that passes `inout x` on a line of its own assigns
+//! `return`, and a call that passes `mut x` on a line of its own assigns
 //! what the call gives back to `x`. The checker then sees what a program that
-//! is written with `take` would be, and refuses what `inout` refuses.
+//! is written with `take` would be, and refuses what `mut` refuses.
 
 use super::*;
 
@@ -11,9 +11,9 @@ use super::*;
 /// item they name, if it is one.
 pub(crate) type Place = (String, Pos, Vec<Named>, Element);
 
-/// Lowers each function of `functions` that has a parameter marked `inout`,
-/// and each call on a line of its own that passes a place `inout`. What is not
-/// built of `inout` goes in `unbuilt`.
+/// Lowers each function of `functions` that has a parameter marked `mut`,
+/// and each call on a line of its own that passes a place `mut`. What is not
+/// built of `mut` goes in `unbuilt`.
 pub(super) fn lower(
     functions: &mut [Function],
     (impls, traits): (&[Impl], &[Trait]),
@@ -23,15 +23,15 @@ pub(super) fn lower(
     let declared =
         (impls.iter().flat_map(|i| &i.functions)).chain(traits.iter().flat_map(|t| &t.functions));
     for f in declared {
-        if let Some(p) = f.params.iter().find(|p| p.inout) {
+        if let Some(p) = f.params.iter().find(|p| p.mutable) {
             unbuilt.push(Error::unsupported(
                 p.pos,
-                "`inout` in a trait or an implementation",
+                "`mut` in a trait or an implementation",
             ));
         }
     }
     for f in functions.iter_mut() {
-        if f.params.iter().any(|p| p.inout) {
+        if f.params.iter().any(|p| p.mutable) {
             held_by_lambdas(f, errors);
             give_back(f, errors, unbuilt);
         }
@@ -40,11 +40,11 @@ pub(super) fn lower(
 }
 
 /// Refuses each lambda in a function that reads or assigns a parameter of the
-/// function marked `inout`: the function gives it back when it returns, and
+/// function marked `mut`: the function gives it back when it returns, and
 /// nothing else holds it.
 fn held_by_lambdas(f: &mut Function, errors: &mut Vec<Error>) {
     let changed: Vec<String> = (f.params.iter())
-        .filter(|p| p.inout)
+        .filter(|p| p.mutable)
         .map(|p| p.name.clone())
         .collect();
     let mut lambdas = Vec::new();
@@ -58,7 +58,7 @@ fn held_by_lambdas(f: &mut Function, errors: &mut Vec<Error>) {
             errors.push(Error::new(
                 pos,
                 format!(
-                    "`{name}` is marked `inout`, so `{}` gives it back when it returns, and a lambda cannot hold it",
+                    "`{name}` is marked `mut`, so `{}` gives it back when it returns, and a lambda cannot hold it",
                     f.name
                 ),
             ));
@@ -115,28 +115,28 @@ fn names_in_block(
 }
 
 /// Whether a function was lowered to give back the parameters it marks
-/// `inout`, so that its result is not one its source writes.
+/// `mut`, so that its result is not one its source writes.
 pub(crate) fn gives_back(f: &Function) -> bool {
-    f.params.iter().any(|p| p.inout && p.take)
+    f.params.iter().any(|p| p.mutable && p.take)
 }
 
-/// Makes a function with parameters marked `inout` take them and give them
+/// Makes a function with parameters marked `mut` take them and give them
 /// back.
 fn give_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>) {
-    let first = f.params.iter().find(|p| p.inout).expect("one is inout");
+    let first = f.params.iter().find(|p| p.mutable).expect("one is mut");
     if is_operation(f) {
-        unbuilt.push(Error::unsupported(first.pos, "`inout` in an operation"));
+        unbuilt.push(Error::unsupported(first.pos, "`mut` in an operation"));
         return;
     }
     if f.result.is_some() {
         unbuilt.push(Error::unsupported(
             first.pos,
-            "a function that changes a parameter marked `inout` and gives a result",
+            "a function that changes a parameter marked `mut` and gives a result",
         ));
         return;
     }
     let changed: Vec<(String, Type)> = (f.params.iter_mut())
-        .filter(|p| p.inout)
+        .filter(|p| p.mutable)
         .map(|p| {
             p.take = true;
             (p.name.clone(), p.ty.clone())
@@ -166,7 +166,7 @@ fn first_pos(changed: &[(String, Type)]) -> Pos {
     changed[0].1.pos
 }
 
-/// What a function gives back: the parameter marked `inout`, or a tuple of
+/// What a function gives back: the parameter marked `mut`, or a tuple of
 /// them when it has more than one.
 fn given(names: &[&str], pos: Pos) -> Expr {
     let name = |n: &&str| Expr::Name {
@@ -186,7 +186,7 @@ fn given(names: &[&str], pos: Pos) -> Expr {
 type Within<'f> = (&'f str, &'f mut Vec<Error>);
 
 /// Makes each bare `return` of the function, and not of a lambda in it, give
-/// back the parameters marked `inout`. A `return` with a value is refused, as
+/// back the parameters marked `mut`. A `return` with a value is refused, as
 /// the function gives nothing.
 fn returns(stmts: &mut [Stmt], names: &[&str], within: Within) {
     let (f, errors) = within;
@@ -219,7 +219,7 @@ fn returns_in(e: &mut Expr, names: &[&str], (f, errors): Within) {
 }
 
 /// Lowers each call on a line of its own in the statements, and in the
-/// blocks inside them, that passes places `inout`.
+/// blocks inside them, that passes places `mut`.
 fn statements(stmts: &mut Vec<Stmt>) {
     let mut out = Vec::with_capacity(stmts.len());
     for mut stmt in stmts.drain(..) {
@@ -239,10 +239,10 @@ fn blocks_in(e: &mut Expr) {
     each_child(e, &mut blocks_in);
 }
 
-/// The places a call passes `inout`, when it passes one and each is a place.
+/// The places a call passes `mut`, when it passes one and each is a place.
 fn lowered(call: &Call) -> Option<Vec<Place>> {
     let places: Option<Vec<_>> = (call.args.iter())
-        .filter(|a| a.inout.is_some())
+        .filter(|a| a.mutable.is_some())
         .map(|a| changed_place(&a.value))
         .collect();
     places.filter(|p| !p.is_empty())
@@ -257,11 +257,11 @@ pub(crate) fn changed_place(e: &Expr) -> Option<Place> {
     }
 }
 
-/// The statements a call that passes places `inout` is: the call, with what it
+/// The statements a call that passes places `mut` is: the call, with what it
 /// gives back assigned to each place.
 fn assigned(mut call: Call) -> Vec<Stmt> {
     let places = lowered(&call).expect("lowered");
-    for a in call.args.iter_mut().filter(|a| a.inout.is_some()) {
+    for a in call.args.iter_mut().filter(|a| a.mutable.is_some()) {
         a.given_back = true;
     }
     let assign = |(name, pos, fields, at): Place, value| {
@@ -308,7 +308,7 @@ fn assigned(mut call: Call) -> Vec<Stmt> {
             value,
         }];
     }
-    let held = |i: usize| format!("inout@{}:{}.{i}", pos.line, pos.col);
+    let held = |i: usize| format!("mut@{}:{}.{i}", pos.line, pos.col);
     let items = (0..places.len()).map(|i| bind(held(i), pos)).collect();
     let mut out = vec![Stmt::Destructure {
         pattern: Pattern::Tuple { pos, items },

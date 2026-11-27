@@ -42,9 +42,9 @@ fn keyword_place(k: Keyword) -> Nat {
     .kw_if { 12 }
     .kw_impl { 13 }
     .kw_in { 14 }
-    .kw_inout { 15 }
-    .kw_loop { 16 }
-    .kw_match { 17 }
+    .kw_loop { 15 }
+    .kw_match { 16 }
+    .kw_mut { 17 }
     .kw_not { 18 }
     .kw_or { 19 }
     .kw_out { 20 }
