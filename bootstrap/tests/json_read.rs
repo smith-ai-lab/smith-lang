@@ -15,6 +15,7 @@ use smith::{lower, scalar};
 use crate::Test;
 use crate::generate::{self, Gen};
 use crate::lists::header;
+use crate::lowered_once::{ROUNDS, Written as Lowered};
 
 pub const ONCE: &[Test] = &[
     (
@@ -46,12 +47,28 @@ pub const ONCE: &[Test] = &[
         || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(5),
     ),
     (
-        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_1_of_2",
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_1_of_6",
         || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(0),
     ),
     (
-        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_2_of_2",
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_2_of_6",
         || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(1),
+    ),
+    (
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_3_of_6",
+        || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(2),
+    ),
+    (
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_4_of_6",
+        || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(3),
+    ),
+    (
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_5_of_6",
+        || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(4),
+    ),
+    (
+        "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_6_of_6",
+        || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(5),
     ),
     (
         "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_1_of_8",
@@ -86,11 +103,15 @@ pub const ONCE: &[Test] = &[
         || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(7),
     ),
     (
-        "cases_in_the_values_of_cases_are_read_to_any_depth_part_1_of_2",
-        || cases_in_the_values_of_cases_are_read_to_any_depth(&[3, 5]),
+        "cases_in_the_values_of_cases_are_read_to_any_depth_part_1_of_3",
+        || cases_in_the_values_of_cases_are_read_to_any_depth(&[3]),
     ),
     (
-        "cases_in_the_values_of_cases_are_read_to_any_depth_part_2_of_2",
+        "cases_in_the_values_of_cases_are_read_to_any_depth_part_2_of_3",
+        || cases_in_the_values_of_cases_are_read_to_any_depth(&[5]),
+    ),
+    (
+        "cases_in_the_values_of_cases_are_read_to_any_depth_part_3_of_3",
         || cases_in_the_values_of_cases_are_read_to_any_depth(&[32]),
     ),
     (
@@ -134,8 +155,12 @@ pub const ONCE: &[Test] = &[
         reading_asks_for_memory_for_the_lists_of_the_value_and_for_nothing_else,
     ),
     (
-        "reading_a_struct_of_numbers_asks_for_no_memory_of_its_own",
-        reading_a_struct_of_numbers_asks_for_no_memory_of_its_own,
+        "reading_a_struct_of_numbers_asks_for_no_memory_of_its_own_part_1_of_2",
+        || reading_a_struct_of_numbers_asks_for_no_memory_of_its_own(0),
+    ),
+    (
+        "reading_a_struct_of_numbers_asks_for_no_memory_of_its_own_part_2_of_2",
+        || reading_a_struct_of_numbers_asks_for_no_memory_of_its_own(1),
     ),
     (
         "reading_asks_for_memory_for_the_texts_of_the_value_and_for_nothing_else",
@@ -1020,7 +1045,7 @@ fn spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(par
         Style { pad: "", escape: true, negative_zero: true },
         Style { pad: "\r\n\t ", escape: true, negative_zero: true },
     ];
-    generate::check_cases(6002, 3 * part, 3, made_with_defs, |(defs, t, v, settings)| {
+    generate::check_cases(6002, part, 1, made_with_defs, |(defs, t, v, settings)| {
         let cases: Vec<Case> = styles
             .iter()
             .map(|style| Case {
@@ -1717,9 +1742,8 @@ fn a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_
 
 /// What a program prints, what it asks the system for, and what its lists move
 /// into new memory as they grow, in bytes.
-fn asked(source: &str) -> (Vec<u8>, usize, usize) {
-    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
-    let (outcome, requests, copied) = scalar::run_copying(&program, usize::MAX);
+fn asked_of(program: &scalar::Program) -> (Vec<u8>, usize, usize) {
+    let (outcome, requests, copied) = scalar::run_copying(program, usize::MAX);
     (outcome.stdout, requests.iter().sum(), copied.iter().sum())
 }
 
@@ -1739,22 +1763,28 @@ const MAKE: &str = "fn make(n: Nat) -> str <alloc> {
 ";
 
 fn a_rawjson_shares_the_memory_of_the_input() {
-    let program = |n: usize, read: bool| {
+    // Each program is written once, with `ROUNDS` for the number of zeros, and
+    // lowered once, and the program of a number is the one with it written in.
+    let program = |read: bool| {
+        let n = ROUNDS as usize;
         let tail = if read {
             format!("  r: Result[Wrap, ReadError] = from_json(t)\n  match r {{\n    .ok(w) {{ print(if raw_text(w.body).size == {} {{ \"ok\" }} else {{ \"wrong\" }}) }}\n    .err(e) {{ print(say(e)) }}\n  }}\n", 2 * n + 1)
         } else {
             "  print(\"ok\")\n".to_string()
         };
-        with_import(
+        Lowered::new(with_import(
             &["from_json", "raw_text", "RawJson"],
             format!("{TEXT}{WRAP}{MAKE}fn main() <console, alloc> {{\n  t = make({n})\n{tail}}}\n"),
-        )
+        ))
     };
+    let (reading, building) = (program(true), program(false));
     // What the reading asks for, beyond building the text, is the same for a
     // body of a hundred bytes and one of eight thousand.
     let cost = |n: usize| {
-        let (stdout, with, copied) = asked(&program(n, true));
-        let (_, without, copying) = asked(&program(n, false));
+        let size = 2 * ROUNDS + 1;
+        let (stdout, with, copied) =
+            asked_of(&reading.with(&[(ROUNDS, n as u64), (size, 2 * n as u64 + 1)]));
+        let (_, without, copying) = asked_of(&building.with(&[(ROUNDS, n as u64)]));
         assert_eq!(String::from_utf8(stdout).unwrap(), "ok\n");
         (with - without, copied - copying)
     };
@@ -1770,6 +1800,14 @@ fn pushes(text: &str) -> String {
 /// beyond what building the text asks for, which is the same program that does
 /// not read it: the bytes asked for and the bytes moved.
 fn asked_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (usize, usize) {
+    let (reading, building) = written_by_reading(decls, ty, build, check);
+    asked_by_reading_with(&reading, &building, &[])
+}
+
+/// The program that reads and the program that only builds the text, each
+/// written once to be lowered once, for the texts that differ in the number
+/// `ROUNDS` stands for.
+fn written_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (Lowered, Lowered) {
     let program = |read: bool| {
         let tail = if read {
             format!(
@@ -1783,16 +1821,24 @@ fn asked_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (usize, 
             format!("{TEXT}{decls}fn main() <console, alloc> {{\n  var l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
         )
     };
-    let (stdout, with, copied) = asked(&program(true));
-    let (_, without, copying) = asked(&program(false));
-    assert_eq!(String::from_utf8(stdout).unwrap(), "ok\n", "{}", program(true));
+    (Lowered::new(program(true)), Lowered::new(program(false)))
+}
+
+/// What reading asks for beyond building the text, for the number `n` where
+/// `ROUNDS` is written.
+fn asked_by_reading_with(reading: &Lowered, building: &Lowered, changes: &[(u64, u64)]) -> (usize, usize) {
+    let (stdout, with, copied) = asked_of(&reading.with(changes));
+    let (_, without, copying) = asked_of(&building.with(changes));
+    assert_eq!(String::from_utf8(stdout).unwrap(), "ok\n", "{}", reading.source);
     (with - without, copied - copying)
 }
 
 /// What a value that holds no text and no list asks for: what a value of `()`
 /// does, whatever it holds.
 fn asked_by_reading_nothing() -> (usize, usize) {
-    asked_by_reading("", "()", &pushes("null"), "true")
+    // The same for every test that reads it, so it is asked once.
+    static NOTHING: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
+    *NOTHING.get_or_init(|| asked_by_reading("", "()", &pushes("null"), "true"))
 }
 
 // A list asks for memory in proportion to it. The struct of numbers and the
@@ -1800,12 +1846,12 @@ fn asked_by_reading_nothing() -> (usize, usize) {
 // twice for more than three of the cases.
 fn reading_asks_for_memory_for_the_lists_of_the_value_and_for_nothing_else() {
     let nothing = asked_by_reading_nothing();
-    let list = |n: usize| {
-        let build = format!(
-            "  l = push(l, '[')\n  loop i in 0..{n} {{\n    if i > 0 {{ l = push(l, ',') }}\n    l = push(l, '0')\n  }}\n  l = push(l, ']')\n"
-        );
-        asked_by_reading("", "List[u64]", &build, &format!("w.size == {n}"))
-    };
+    // Written once with `ROUNDS` for the number of elements, and lowered once.
+    let build = format!(
+        "  l = push(l, '[')\n  loop i in 0..{ROUNDS} {{\n    if i > 0 {{ l = push(l, ',') }}\n    l = push(l, '0')\n  }}\n  l = push(l, ']')\n"
+    );
+    let (reading, building) = written_by_reading("", "List[u64]", &build, &format!("w.size == {ROUNDS}"));
+    let list = |n: u64| asked_by_reading_with(&reading, &building, &[(ROUNDS, n)]);
     let (moved_small, moved_large) = (list(125).1 - nothing.1, list(250).1 - nothing.1);
     // What the list moves as it grows doubles with it.
     assert!(moved_small > 0 && moved_small <= 64 * 125, "{moved_small} bytes moved for 125 elements");
@@ -1813,17 +1859,20 @@ fn reading_asks_for_memory_for_the_lists_of_the_value_and_for_nothing_else() {
 }
 
 // A struct of numbers asks for what a value of `()` does, whatever it holds.
-fn reading_a_struct_of_numbers_asks_for_no_memory_of_its_own() {
+fn reading_a_struct_of_numbers_asks_for_no_memory_of_its_own(part: usize) {
     let nothing = asked_by_reading_nothing();
-    let few = asked_by_reading("struct N {\n  a: Byte\n}\n\n", "N", &pushes(r#"{"a":1}"#), "w.a == 1");
-    let many = asked_by_reading(
-        "struct N {\n  a: Byte\n  b: bool\n  c: Option[Byte]\n  d: (Byte, i8)\n  e: Mode\n  f: Int\n}\n\nenum Mode {\n  c1\n  c2: Byte\n}\n\n",
-        "N",
-        &pushes(r#"{"a":1,"b":true,"c":null,"d":[7,-8],"e":"c1","f":-9223372036854775808}"#),
-        "w.a == 1",
-    );
-    assert_eq!(few, nothing, "memory asked for a struct of one number");
-    assert_eq!(many, nothing, "memory asked for a struct of numbers");
+    if part == 0 {
+        let few = asked_by_reading("struct N {\n  a: Byte\n}\n\n", "N", &pushes(r#"{"a":1}"#), "w.a == 1");
+        assert_eq!(few, nothing, "memory asked for a struct of one number");
+    } else {
+        let many = asked_by_reading(
+            "struct N {\n  a: Byte\n  b: bool\n  c: Option[Byte]\n  d: (Byte, i8)\n  e: Mode\n  f: Int\n}\n\nenum Mode {\n  c1\n  c2: Byte\n}\n\n",
+            "N",
+            &pushes(r#"{"a":1,"b":true,"c":null,"d":[7,-8],"e":"c1","f":-9223372036854775808}"#),
+            "w.a == 1",
+        );
+        assert_eq!(many, nothing, "memory asked for a struct of numbers");
+    }
 }
 
 // A text asks for memory in proportion to what it holds when it has an escape,
