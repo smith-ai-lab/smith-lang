@@ -14,8 +14,12 @@ use crate::targets::any;
 
 pub const ONCE: &[Test] = &[
     (
-        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file",
-        aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file,
+        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file_part_1_of_2",
+        || aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(0),
+    ),
+    (
+        "aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file_part_2_of_2",
+        || aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(1),
     ),
     (
         "aliases_every_way_to_write_a_name_of_a_module_builds_the_same_executable",
@@ -169,8 +173,8 @@ fn one_file(p: &Pair) -> String {
 /// name, importing the modules and writing the name with the module, and
 /// importing each under a name of its own, give what the two functions give
 /// under different names in one file.
-fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file() {
-    generate::check(20, 40, pair, |p| {
+fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file(part: u64) {
+    generate::check_part(20, 40, part, 2, pair, |p| {
         let modules: Vec<String> = (0..2).map(|i| format!("{ITEMS_USES}{}", items(p, i, true))).collect();
         let files: Vec<(&str, &str)> = p
             .modules
@@ -183,8 +187,9 @@ fn aliases_two_modules_that_export_one_name_give_what_two_names_give_in_one_file
             .unwrap_or_else(|e| panic!("{e:?}\n{main}\n{files:?}"));
         let one = one_file(p);
         let wanted = smith::lower(one.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{one}"));
-        assert_eq!(printed(&got), printed(&wanted), "for\n{main}\n{files:?}");
-        assert!(!printed(&got).is_empty());
+        let shown = printed(&got);
+        assert_eq!(shown, printed(&wanted), "for\n{main}\n{files:?}");
+        assert!(!shown.is_empty());
     });
 }
 
@@ -289,8 +294,9 @@ fn aliases_a_function_two_traits_share_is_written_with_its_trait() {
              print(\"{{size_a(S(w: {x}))}} {{size_b(S(w: {x}))}}\")\n}}\n"
         );
         let wanted = smith::lower(one.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{one}"));
-        assert_eq!(printed(&got), printed(&wanted), "for\n{main}\n{files:?}");
-        assert!(!printed(&got).is_empty());
+        let shown = printed(&got);
+        assert_eq!(shown, printed(&wanted), "for\n{main}\n{files:?}");
+        assert!(!shown.is_empty());
     });
 }
 
