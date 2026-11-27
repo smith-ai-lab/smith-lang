@@ -42,8 +42,10 @@ fn printed(source: &str) -> String {
 /// prints its response, and a handler of `store`.
 const PROGRAM: &str = "use std.bits (u8, u64)
 use std.console (console, print)
-use std.fetch (Method)
 use std.http (NotFound, Request, Response, delete, get, http, post, routes, routing)
+use std.list (freeze)
+use std.message (Method, content)
+use std.utf8 (utf8)
 
 struct User {
   id: u64
@@ -88,12 +90,24 @@ fn copy_of(r: Request) -> Request <alloc> {
   Request(method: r.method, path: r.path, query: r.query, headers: [], body: r.body)
 }
 
+fn said(r: Response) -> str <alloc> {
+  match r.body {
+    .some(p) {
+      match utf8(freeze(content(p))) {
+        .ok(t) { t }
+        .err(e) { \"\" }
+      }
+    }
+    .none { \"\" }
+  }
+}
+
 fn once[T](asked: Request, sink: fn(Response), body: fn() -> T <http>) -> T <alloc> {
   http(request: { copy_of(asked) }, send: fn(r) { sink(r) }, body: body)
 }
 
 fn ask(method: Method, path: str, query: str, body: str) <console, alloc> {
-  with once(Request(method: method, path: path, query: query, headers: [], body: body), fn(r) { print(\"{r.status} {r.body}\") })
+  with once(Request(method: method, path: path, query: query, headers: [], body: body), fn(r) { print(\"{r.status} {said(r)}\") })
   with fixed_store()
   with routes()
   get(\"/users/:id\", user)

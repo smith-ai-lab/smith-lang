@@ -223,6 +223,13 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
 }
 ",
         ),
+        "Payload" => (
+            "Payload, text",
+            "fn main() <alloc> {
+  f(text(\"a\"))
+}
+",
+        ),
         "Link" => (
             "Link, link",
             "fn main() {

@@ -54,7 +54,8 @@ fn outcome(source: &str) -> Outcome {
 
 /// A program with one statement in a function that has `alloc`.
 fn program(uses: &str, line: &str) -> String {
-    format!("use std.http ({uses})\n\nfn main() <alloc> {{\n  {line}\n}}\n")
+    let module = if uses.starts_with("header_") { "message" } else { "http" };
+    format!("use std.{module} ({uses})\n\nfn main() <alloc> {{\n  {line}\n}}\n")
 }
 
 /// The text with the case of each letter chosen by the generator.
@@ -64,7 +65,7 @@ fn cased(g: &mut Gen, text: &str) -> String {
         .collect()
 }
 
-const RESERVED: &[&str] = &["content-length", "connection", "transfer-encoding"];
+const RESERVED: &[&str] = &["content-type", "content-length", "connection", "transfer-encoding"];
 
 fn a_header_the_library_writes_is_refused_where_it_is_written_in_any_case_of_its_letters() {
     let names = |g: &mut Gen| {
@@ -102,13 +103,13 @@ fn a_name_that_is_no_token_and_a_value_with_a_line_break_are_refused_where_they_
 fn a_status_outside_the_range_of_statuses_is_refused_where_it_is_written() {
     let statuses = |g: &mut Gen| if g.below(2) == 0 { g.below(100) } else { 600 + g.below(400) };
     generate::check(9103, 10, statuses, |status| {
-        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: \"\")"));
+        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: .none)"));
         let said = messages(&source);
         assert!(said.iter().any(|m| m.contains("100..600")), "{said:?} for\n{source}");
     });
     let inside = |g: &mut Gen| 100 + g.below(500);
     generate::check(9104, 10, inside, |status| {
-        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: \"\")"));
+        let source = program("Response", &format!("r = Response(status: {status}, headers: [], body: .none)"));
         assert!(messages(&source).is_empty(), "{:?} for\n{source}", messages(&source));
     });
 }
@@ -124,7 +125,7 @@ fn a_refusal_that_points_into_the_library_names_its_file_and_shows_no_raw_number
         let source = program("header_name", &format!("x = header_name(\"{name}\")"));
         let said = messages(&source);
         let note = said.iter().find(|m| m.contains("last comparison")).expect("a note");
-        assert!(note.contains("std/http.smith:"), "{note}");
+        assert!(note.contains("std/message.smith:"), "{note}");
         let long = note.split(|c: char| !c.is_ascii_digit()).any(|d| d.len() >= 8);
         assert!(!long, "{note}");
     });
@@ -137,18 +138,18 @@ fn a_method_that_is_a_text_is_refused_for_a_request() {
     );
     let said = messages(&source);
     assert!(said.iter().any(|m| m.contains("Method")), "{said:?} for\n{source}");
-    let source = "use std.fetch (Method)\nuse std.http (Request)\n\nfn main() <alloc> {\n  r = Request(method: .get, path: \"/\", query: \"\", headers: [], body: \"\")\n}\n";
+    let source = "use std.http (Request)\nuse std.message (Method)\n\nfn main() <alloc> {\n  r = Request(method: .get, path: \"/\", query: \"\", headers: [], body: \"\")\n}\n";
     assert!(messages(source).is_empty(), "{:?}", messages(source));
 }
 
 fn a_name_and_a_value_known_when_the_program_runs_are_made_by_check_or_say_why_not() {
     let names = |g: &mut Gen| {
-        let name = *g.pick(&["x-id", "accept", "content-type", "x-a.b"]);
+        let name = *g.pick(&["x-id", "accept", "location", "x-a.b"]);
         cased(g, name)
     };
     generate::check(9105, 8, names, |name| {
         let source = format!(
-            "use std.console (console, print)\nuse std.http (check_name)\n\nfn main() <console, alloc> {{\n  match check_name(\"{name}\") {{\n    .ok(n) {{ print(\"{{n}}\") }}\n    .err(e) {{ print(\"no\") }}\n  }}\n}}\n"
+            "use std.console (console, print)\nuse std.message (check_name)\n\nfn main() <console, alloc> {{\n  match check_name(\"{name}\") {{\n    .ok(n) {{ print(\"{{n}}\") }}\n    .err(e) {{ print(\"no\") }}\n  }}\n}}\n"
         );
         let said = String::from_utf8(outcome(&source).stdout).unwrap();
         assert_eq!(said, format!("{}\n", name.to_ascii_lowercase()), "for\n{source}");
@@ -159,7 +160,7 @@ fn a_name_and_a_value_known_when_the_program_runs_are_made_by_check_or_say_why_n
     };
     generate::check(9106, 6, refused, |name| {
         let source = format!(
-            "use std.console (console, print)\nuse std.http (check_name, check_value)\n\nfn main() <console, alloc> {{\n  match check_name(\"{name}\") {{\n    .ok(n) {{ print(\"made\") }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n  match check_value(\"a\\nb\") {{\n    .ok(v) {{ print(\"made\") }}\n    .err(e) {{ print(\"line break\") }}\n  }}\n}}\n"
+            "use std.console (console, print)\nuse std.message (check_name, check_value)\n\nfn main() <console, alloc> {{\n  match check_name(\"{name}\") {{\n    .ok(n) {{ print(\"made\") }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n  match check_value(\"a\\nb\") {{\n    .ok(v) {{ print(\"made\") }}\n    .err(e) {{ print(\"line break\") }}\n  }}\n}}\n"
         );
         let said = String::from_utf8(outcome(&source).stdout).unwrap();
         assert!(said.starts_with(&format!("{name}: ")), "{said} for\n{source}");

@@ -1,0 +1,249 @@
+use std.html (Html)
+use std.int (checked_add)
+use std.json (to_json)
+use std.list (append, freeze, push)
+use std.serialize (Serialize)
+use std.utf8 (utf8)
+
+// The method of a request. A server reads it from the request it is asked, and
+// a client writes it in the request it sends, so it is one of the names that
+// HTTP gives and never a text that is not.
+pub enum Method {
+  get
+  post
+  put
+  delete
+  patch
+  head
+}
+
+// The name of a header. It is a token in small letters, and it is never one of
+// the four that the library writes: `content-type` and `content-length`, which
+// the body gives, and `connection` and `transfer-encoding`, which say whether the
+// connection is kept and how the body is carried. So a message never says two
+// lengths or two kinds. Only `header_name` and `check_name` make one.
+pub struct HeaderName {
+  token: str
+}
+
+// The value of a header, which holds no line break, so that a header never
+// adds a line of its own. Only `header_value` and `check_value` make one.
+pub struct HeaderValue {
+  text: str
+}
+
+// Why a text is not the name or the value of a header, with the text.
+pub enum HeaderError {
+  not_a_token: str
+  written_by_the_library: str
+  line_break: str
+}
+
+impl Fmt[HeaderError] {
+  fn fmt(value: HeaderError) -> str <alloc> {
+    match value {
+      .not_a_token(t) { "{t}: not a header name, which is letters, digits, and the marks of a token" }
+      .written_by_the_library(t) { "{t}: a header the library writes, so it is not given" }
+      .line_break(t) { "{t}: a header value holds no line break" }
+    }
+  }
+}
+
+impl Fmt[HeaderName] {
+  fn fmt(value: HeaderName) -> str <alloc> { value.token }
+}
+
+impl Fmt[HeaderValue] {
+  fn fmt(value: HeaderValue) -> str <alloc> { value.text }
+}
+
+// The byte, in a small letter if it is a capital letter.
+pub fn lowered(b: Byte) -> Byte {
+  if b >= 'A' and b <= 'Z' { b + 32 } else { b }
+}
+
+// Whether a byte may be in the name of a header: a letter, a digit, or one of
+// ``!#$%&'*+-.^_`|~``.
+fn token_byte(b: Byte) -> bool {
+  (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '!' or b == '#' or b == '$' or b == '%' or b == '&' or b == 39 or b == '*' or b == '+' or b == '-' or b == '.' or b == '^' or b == '_' or b == 96 or b == '|' or b == '~'
+}
+
+// Whether a text is a token: one byte or more, each of which a name may hold.
+pub fn a_token(t: str) -> bool {
+  var yes = t.size > 0
+  loop b in t {
+    if not token_byte(b) {
+      yes = false
+      break
+    }
+  }
+  yes
+}
+
+// Whether a text is the name, whatever the case of its letters.
+fn is_named(t: str, name: str) -> bool {
+  var yes = t.size == name.size
+  have = t.bytes
+  want = name.bytes
+  loop i in 0..have.size {
+    if i >= want.size {
+      yes = false
+      break
+    }
+    if lowered(have[i]) != want[i] {
+      yes = false
+      break
+    }
+  }
+  yes
+}
+
+// Whether a header of this name may be given, which is so for any but the four
+// that the library writes.
+pub fn not_written_by_the_library(t: str) -> bool {
+  not is_named(t, "content-type") and not is_named(t, "content-length") and not is_named(t, "connection") and not is_named(t, "transfer-encoding")
+}
+
+// Whether a text holds no line break, so that a header made of it cannot add
+// a line of its own.
+pub fn one_line(s: str) -> bool {
+  var yes = true
+  loop b in s {
+    if b == 13 or b == 10 {
+      yes = false
+      break
+    }
+  }
+  yes
+}
+
+// The text with its letters in small letters.
+fn small(t: str) -> str <alloc> {
+  var bytes: List[Byte] = []
+  loop i in 0..t.size {
+    bytes = push(bytes, lowered(t[i]))
+  }
+  match utf8(freeze(bytes)) {
+    .ok(made) { made }
+    .err(e) { "" }
+  }
+}
+
+// The name of a header, written out. A name that is no token, or that the
+// library writes, is refused where the call is written, whatever the case of its
+// letters, and the name is kept in small letters.
+pub fn header_name(t: str) -> HeaderName <alloc>
+  requires a_token(t)
+  requires not_written_by_the_library(t)
+{
+  HeaderName(token: small(t))
+}
+
+// The name of a header that is known only when the program runs, or the reason
+// it is not one.
+pub fn check_name(t: str) -> Result[HeaderName, HeaderError] <alloc> {
+  if not a_token(t) {
+    .err(.not_a_token(t))
+  } else if not not_written_by_the_library(t) {
+    .err(.written_by_the_library(t))
+  } else {
+    .ok(HeaderName(token: small(t)))
+  }
+}
+
+// The value of a header, written out. A value with a line break is refused where
+// the call is written.
+pub fn header_value(t: str) -> HeaderValue
+  requires one_line(t)
+{
+  HeaderValue(text: t)
+}
+
+// The value of a header that is known only when the program runs, or the reason
+// it is not one.
+pub fn check_value(t: str) -> Result[HeaderValue, HeaderError] {
+  if one_line(t) { .ok(HeaderValue(text: t)) } else { .err(.line_break(t)) }
+}
+
+// What a message carries: the bytes of a body and the type that says what they
+// are. Its content type and its length come only from how it was made, so the
+// two headers that describe a body are never written by hand and never disagree
+// with it. Only `json`, `form`, `text`, `html`, and `bytes` make one.
+pub struct Payload {
+  kind: HeaderValue
+  data: List[Byte]
+}
+
+// The type of the content of a payload, as the header `content-type` says it.
+pub fn content_type(p: Payload) -> HeaderValue {
+  p.kind
+}
+
+// The number of bytes in a payload, which is the `content-length` of it.
+pub fn size(p: Payload) -> Nat {
+  p.data.size
+}
+
+// The bytes of a payload.
+pub fn content(p: Payload) -> List[Byte] <alloc> {
+  append([], p.data)
+}
+
+// The JSON of a value, as `application/json`.
+pub fn json[T: Serialize](value: T) -> Payload <alloc> {
+  Payload(kind: header_value("application/json"), data: append([], to_json(value).bytes))
+}
+
+// A text, as `text/plain; charset=utf-8`.
+pub fn text(s: str) -> Payload <alloc> {
+  Payload(kind: header_value("text/plain; charset=utf-8"), data: append([], s.bytes))
+}
+
+// A page, as `text/html; charset=utf-8`.
+pub fn html(page: Html) -> Payload <alloc> {
+  Payload(kind: header_value("text/html; charset=utf-8"), data: append([], "{page}".bytes))
+}
+
+// Bytes of a type that is given, as it is.
+pub fn bytes(data: List[Byte], content_type: HeaderValue) -> Payload <alloc> {
+  Payload(kind: content_type, data: append([], data))
+}
+
+// The digit of a number below 16, in capital letters.
+fn hex_digit(n: 0..16) -> Byte {
+  if n < 10 { '0' + n } else { 'A' + (n - 10) }
+}
+
+// Whether a byte stands for itself in a form: a letter, a digit, or one of `*-._`.
+fn plain_in_form(b: Byte) -> bool {
+  (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or (b >= '0' and b <= '9') or b == '*' or b == '-' or b == '.' or b == '_'
+}
+
+// A text as a part of a form: a space is `+`, and any byte that is not plain is
+// a percent sign and its two digits.
+fn form_part(t: str) -> List[Byte] <alloc> {
+  var made: List[Byte] = []
+  loop i in 0..t.size {
+    b = t[i]
+    if plain_in_form(b) {
+      made = push(made, b)
+    } else if b == ' ' {
+      made = push(made, '+')
+    } else {
+      made = push(push(push(made, '%'), hex_digit(b / 16)), hex_digit(b % 16))
+    }
+  }
+  made
+}
+
+// Pairs of texts, as `application/x-www-form-urlencoded`: each name and value
+// is a form part, joined by `=`, and the pairs by `&`.
+pub fn form(pairs: List[(str, str)]) -> Payload <alloc> {
+  var made: List[Byte] = []
+  loop i in 0..pairs.size {
+    (name, value) = pairs[i]
+    if i > 0 { made = push(made, '&') }
+    made = append(push(append(made, form_part(name)), '='), form_part(value))
+  }
+  Payload(kind: header_value("application/x-www-form-urlencoded"), data: made)
+}
