@@ -38,8 +38,16 @@ pub const ONCE: &[Test] = &[
         an_index_is_never_tested_when_the_program_runs,
     ),
     (
-        "a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to",
-        a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to,
+        "a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to_part_1_of_3",
+        || a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to(0),
+    ),
+    (
+        "a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to_part_2_of_3",
+        || a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to(1),
+    ),
+    (
+        "a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to_part_3_of_3",
+        || a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to(2),
     ),
     (
         "building_a_list_by_pushing_asks_for_memory_a_logarithmic_number_of_times",
@@ -62,8 +70,16 @@ pub const ONCE: &[Test] = &[
         a_list_of_any_type_holds_what_was_put_in_in_order,
     ),
     (
-        "a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name",
-        a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name,
+        "a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name_part_1_of_3",
+        || a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name(0),
+    ),
+    (
+        "a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name_part_2_of_3",
+        || a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name(1),
+    ),
+    (
+        "a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name_part_3_of_3",
+        || a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name(2),
     ),
     (
         "a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room",
@@ -596,8 +612,8 @@ fn names(g: &mut Gen) -> Names {
 /// pushed to, whether the two lists are a `var` and its `copy`, a `var` and
 /// a copy of a snapshot, or a list `push` grew from a copy. Lists that share
 /// a beginning are built in every order of binding and pushing.
-fn a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to() {
-    generate::check(71, 100, names, |n| prints(&n.source, n.lines.clone()));
+fn a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to(part: u64) {
+    generate::check_part(71, 100, part, 3, names, |n| prints(&n.source, n.lines.clone()));
 }
 
 fn ceil_log2(n: usize) -> usize {
@@ -1167,8 +1183,8 @@ fn shared(g: &mut Gen) -> Shared {
 /// or a list that was put in a value and taken out of it, still holds the same
 /// elements after any other name is pushed to, whether the list lies in a
 /// struct, a tuple, an enum, or a list, in every order of binding and pushing.
-fn a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name() {
-    generate::check(89, 80, shared, |s| prints(&s.source, s.lines.clone()));
+fn a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name(part: u64) {
+    generate::check_part(89, 80, part, 3, shared, |s| prints(&s.source, s.lines.clone()));
 }
 
 /// How many times a program asks the system for memory.
