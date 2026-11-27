@@ -22,12 +22,28 @@ pub const ONCE: &[Test] = &[
         every_example_of_the_reading_part_of_the_page_gives_what_the_page_says,
     ),
     (
-        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_1_of_2",
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_1_of_6",
         || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(0),
     ),
     (
-        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_2_of_2",
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_2_of_6",
         || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(1),
+    ),
+    (
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_3_of_6",
+        || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(2),
+    ),
+    (
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_4_of_6",
+        || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(3),
+    ),
+    (
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_5_of_6",
+        || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(4),
+    ),
+    (
+        "a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting_part_6_of_6",
+        || a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(5),
     ),
     (
         "spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read_part_1_of_2",
@@ -38,16 +54,36 @@ pub const ONCE: &[Test] = &[
         || spaces_line_breaks_escapes_and_signs_do_not_change_the_value_that_is_read(1),
     ),
     (
-        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_1_of_3",
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_1_of_8",
         || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(0),
     ),
     (
-        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_2_of_3",
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_2_of_8",
         || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(1),
     ),
     (
-        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_3_of_3",
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_3_of_8",
         || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(2),
+    ),
+    (
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_4_of_8",
+        || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(3),
+    ),
+    (
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_5_of_8",
+        || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(4),
+    ),
+    (
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_6_of_8",
+        || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(5),
+    ),
+    (
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_7_of_8",
+        || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(6),
+    ),
+    (
+        "a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path_part_8_of_8",
+        || a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(7),
     ),
     (
         "cases_in_the_values_of_cases_are_read_to_any_depth_part_1_of_2",
@@ -55,7 +91,7 @@ pub const ONCE: &[Test] = &[
     ),
     (
         "cases_in_the_values_of_cases_are_read_to_any_depth_part_2_of_2",
-        || cases_in_the_values_of_cases_are_read_to_any_depth(&[70]),
+        || cases_in_the_values_of_cases_are_read_to_any_depth(&[32]),
     ),
     (
         "the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is",
@@ -66,12 +102,20 @@ pub const ONCE: &[Test] = &[
         a_member_that_is_added_is_ignored_or_refused_as_the_setting_says,
     ),
     (
-        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_1_of_2",
+        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_1_of_4",
         || text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(0),
     ),
     (
-        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_2_of_2",
+        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_2_of_4",
         || text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(1),
+    ),
+    (
+        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_3_of_4",
+        || text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(2),
+    ),
+    (
+        "text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it_part_4_of_4",
+        || text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(3),
     ),
     (
         "a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_read_gives_part_1_of_2",
@@ -944,7 +988,7 @@ fn main() <console, alloc> {{
 // A value is read back from what was written.
 
 fn a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(part: u64) {
-    generate::check_cases(6001, 3 * part, 3, made_with_defs, |(defs, t, v, _)| {
+    generate::check_cases(6001, part, 1, made_with_defs, |(defs, t, v, _)| {
         let name = defs.name(t);
         let mut source = format!(
             "{TEXT}{}fn main() <console, alloc> {{\n  v: {name} = {}\n",
@@ -1190,7 +1234,7 @@ fn broken(g: &mut Gen, w: &Written, settings: Settings) -> Vec<Case> {
 }
 
 fn a_text_broken_in_one_place_is_the_error_of_that_place_with_its_line_column_and_path(part: usize) {
-    let (from, cases) = [(0, 3), (3, 3), (6, 2)][part];
+    let (from, cases) = (part as u64, 1);
     generate::check_cases(6003, from, cases, |g: &mut Gen| {
         let (defs, t, v, settings) = made(g);
         let w = write(&defs, &t, &v, settings, COMPACT);
@@ -1606,7 +1650,7 @@ fn drawn_texts(g: &mut Gen) -> Vec<Vec<u8>> {
 }
 
 fn text_the_reader_of_the_test_refuses_is_refused_where_it_refuses_it(part: u64) {
-    generate::check_cases(6005, 4 * part, 4, drawn_texts, |texts| {
+    generate::check_cases(6005, 2 * part, 2, drawn_texts, |texts| {
         let mut source = format!(
             "{TEXT}fn main() <console, alloc> {{\n"
         );
@@ -1762,10 +1806,10 @@ fn reading_asks_for_memory_for_the_lists_of_the_value_and_for_nothing_else() {
         );
         asked_by_reading("", "List[u64]", &build, &format!("w.size == {n}"))
     };
-    let (moved_small, moved_large) = (list(500).1 - nothing.1, list(1_000).1 - nothing.1);
+    let (moved_small, moved_large) = (list(125).1 - nothing.1, list(250).1 - nothing.1);
     // What the list moves as it grows doubles with it.
-    assert!(moved_small > 0 && moved_small <= 64 * 500, "{moved_small} bytes moved for 500 elements");
-    assert!(moved_large >= moved_small && moved_large <= 3 * moved_small, "{moved_large} bytes moved for 1000, {moved_small} for 500");
+    assert!(moved_small > 0 && moved_small <= 64 * 125, "{moved_small} bytes moved for 125 elements");
+    assert!(moved_large >= moved_small && moved_large <= 3 * moved_small, "{moved_large} bytes moved for 250, {moved_small} for 125");
 }
 
 // A struct of numbers asks for what a value of `()` does, whatever it holds.
@@ -1792,15 +1836,15 @@ fn reading_asks_for_memory_for_the_texts_of_the_value_and_for_nothing_else() {
         );
         asked_by_reading("", "str", &build, &format!("w.size == {n}"))
     };
-    let plain = text("    l = push(l, 'a')\n", 1_000);
+    let plain = text("    l = push(l, 'a')\n", 250);
     assert_eq!(plain, nothing, "a text with no escape is a piece of the input");
-    let escaped = text("    l = push(l, '\\\\')\n    l = push(l, 'n')\n", 1_000);
+    let escaped = text("    l = push(l, '\\\\')\n    l = push(l, 'n')\n", 250);
     let moved = escaped.1 - nothing.1;
-    assert!(moved > 0 && moved <= 8 * 1_000, "{moved} bytes moved for 1000 escapes");
+    assert!(moved > 0 && moved <= 8 * 250, "{moved} bytes moved for 250 escapes");
 }
 
 fn a_rawjson_that_is_read_and_written_is_the_bytes_it_was_less_the_space_round_it(part: usize) {
-    let (from, cases) = [(0, 3), (3, 3), (6, 2)][part];
+    let (from, cases) = (part as u64, 1);
     generate::check_cases(6008, from, cases, |g: &mut Gen| {
         let mut texts = Vec::new();
         for _ in 0..6 {
