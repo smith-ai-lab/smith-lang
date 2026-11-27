@@ -48,28 +48,52 @@ pub const ONCE: &[Test] = &[
         || every_value_written_as_json_fits_the_schema_of_its_type(5),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_1_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_1_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(0),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_2_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_2_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(1),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_3_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_3_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(2),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_4_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_4_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(3),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_5_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_5_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(4),
     ),
     (
-        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_6_of_6",
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_6_of_12",
         || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(5),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_7_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(6),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_8_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(7),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_9_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(8),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_10_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(9),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_11_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(10),
+    ),
+    (
+        "a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing_part_12_of_12",
+        || a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(11),
     ),
 ];
 
@@ -482,7 +506,7 @@ fn escape(text: &str) -> String {
 }
 
 fn a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(part: u64) {
-    generate::check_part(6132, 12, part, 6, fields, |f| {
+    generate::check_part(6132, 12, part, 12, fields, |f| {
         let mut source = String::from("struct S {\n");
         for (k, (t, default)) in f.each.iter().enumerate() {
             let tail = match (*t, default) {
