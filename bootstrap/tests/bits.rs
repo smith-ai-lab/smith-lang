@@ -66,8 +66,12 @@ pub const ONCE: &[Test] = &[
         arith_knows_a_least_of_a_shift_right_of_an_unsigned_number_and_no_more_than_is_true,
     ),
     (
-        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small",
-        the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small,
+        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small_part_1_of_2",
+        || the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(0),
+    ),
+    (
+        "the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small_part_2_of_2",
+        || the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(1),
     ),
     (
         "a_shift_by_a_number_compiles_exactly_when_it_is_below_the_bits_of_the_type_part_1_of_2",
@@ -841,8 +845,9 @@ fn arith_knows_a_least_of_a_shift_right_of_an_unsigned_number_and_no_more_than_i
 /// bounds makes false, nor one too small, which makes a function that needs
 /// the true least refused: where it is tight, a function that needs it
 /// compiles and one that needs one more does not.
-fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small() {
-    for ty in INTS.iter().filter(|t| !t.signed) {
+fn the_least_of_shift_right_is_not_one_too_large_and_not_one_too_small(part: usize) {
+    // The types are in two parts, every other one to each.
+    for ty in INTS.iter().filter(|t| !t.signed).skip(part).step_by(2) {
         let (m, n) = (ty.max(), i128::from(ty.bits));
         for by in [0, 1, n - 1] {
             for (low, most) in [(m, m), (m - 1, m), (5, m), (1 << (n - 1), m), (0, m), (3, 9)] {
