@@ -1168,6 +1168,9 @@ impl<'a> Checker<'a> {
         if is_utf8(defs, call) {
             return self.utf8(body, call);
         }
+        if lists_and_text::is_boundary(defs, call) {
+            return self.boundary(body, call);
+        }
         if let Some(narrowing) = narrowing(defs, call) {
             return self.narrow(body, call, narrowing, want);
         }

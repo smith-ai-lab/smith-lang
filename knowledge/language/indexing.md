@@ -138,7 +138,7 @@ trait Index[C, I, out T] {
 
 `valid` says which indices a container has, and `at` requires it. For an array, `valid` is that the index is at least 0 and below the size. That is why `x[i]` is written with nothing beside it, and compiles when `arith` proves `valid(x, i)`. `valid` is used to prove, and it is never run for an index.
 
-A [`List`](../library/list.md) implements `Index` with the index below `size`, and a text implements it for a range, as [Ranges and slices](ranges.md) shows. A type whose `at` answers for every index, as one that returns an `Option` does, has a `valid` that is `true`. A [`Map`](../library/map.md) is one, so `m[key]` is `.some` of the value or `.none`, and is never refused.
+A [`List`](../library/list.md) implements `Index` with the index below `size`. A piece of a text is not read through `Index`: it is built in, and asks of both of its ends that they fall between characters, as [A piece of a text](text.md#a-piece-of-a-text) says. A type whose `at` answers for every index, as one that returns an `Option` does, has a `valid` that is `true`. A [`Map`](../library/map.md) is one, so `m[key]` is `.some` of the value or `.none`, and is never refused.
 
 ## Assigning an element
 

@@ -10,7 +10,7 @@ built:
   - "`loop i in a..b` written only where `arith` proves `a <= b`, as [Ranges and slices](ranges.md#a-range-is-ordered) says, so `0..n` needs nothing written and `loop i in 5..2` is refused"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
   - "an `invariant` after the head of a `loop` over a range, a `List`, or a `str`, which `arith` proves holds before the first pass, with the counter as the first end, and holds at the end of each pass, with the counter one more, from its holding at the start of the pass, and which it uses in the block and, where no `break` ends the loop, after it, with the counter as the greater of the two ends"
-  - "not an `invariant` that is not a comparison of whole numbers, joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
+  - "not an `invariant` that is not a comparison of whole numbers or a [`boundary`](text.md#a-piece-of-a-text), joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
   - "a `var` that a loop gives a value that does not depend on it, given the range that holds every value it is given, one that adds to itself or takes from itself given the range its templates over the count of passes bound, and one that gives itself a value in any other way refused when it starts as a number written out, with the range to state"
 ---
 

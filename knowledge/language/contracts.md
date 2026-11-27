@@ -12,6 +12,7 @@ built:
   - "a `requires` on a function of a trait, a call of another function of the trait that gives a `bool` on its parameters, which each call proves and which holds in the body of each `impl` of it; and a `requires` of any function that names a trait's function that gives a `bool`, as `requires Add.valid(x, x)`, which a caller proves for the type it calls with, by what the `impl` that type picks says when its `valid` is one expression of comparisons of whole numbers, and where the type is a type parameter of the caller, by a `requires` of the same call; an `ensures` of a trait's function is not built"
   - "a comment on the line above a `requires`, which is the message of a call that fails it, with the goal that failed on a `goal:` line under it, for a `requires` of a function, of a function of a trait at a call through any `impl`, and of one that calls a function the kernel works out; a `requires` with none is refused as it was"
   - "not an argument that is a name, a call, or an operation, for the kernel to work out, and not a float"
+  - "a `requires` and an `ensures` that say [`boundary(s, i)`](text.md#a-piece-of-a-text) of a text parameter, which a call proves and gives of its arguments"
 ---
 
 # Contracts

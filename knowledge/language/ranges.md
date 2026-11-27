@@ -9,7 +9,8 @@ built:
   - "`a..b` written as a value, which is a `Range` of the prelude with `start` and `end`, both `Nat`, and whose ends `arith` knows as the ends that were written"
   - "`loop i in a..b` written only where `arith` proves `a <= b`, refused with \"cannot prove that `a <= b`, which the range `a..b` needs\" where it does not"
   - "a `Range` that holds the proof `ordered: start <= end`, which `arith` builds where the range is written as a value, so that `3..1` is refused and so is `from..to` where `arith` cannot prove `from <= to`"
-  - "not a range as a type, or a piece of an array, a text, or a list"
+  - "not a range as a type, or a piece of an array or a list"
+  - "`x[a..b]`, `x[..k]`, and `x[k..]` on a `str`, as [A piece of a text](text.md#a-piece-of-a-text) says"
 ---
 
 # Ranges and slices
@@ -114,7 +115,7 @@ fn middle(a: [4]Byte) -> [2]Byte { a[1..3] }
 
 `middle([10, 20, 30, 40])` is `[20, 30]`. Its size is `3 - 1`, which is `2`, so it is a `[2]u8`.
 
-A slice is read through [`Index`](indexing.md), with a range as the index. The slice of a text is a `str`: [Text](text.md) shows `s[a..b]`.
+A slice is read through [`Index`](indexing.md), with a range as the index. The slice of a text is a `str`, which is built in and not read through `Index`, and asks more of its ends, as [A piece of a text](text.md#a-piece-of-a-text) says.
 
 ## A slice must be proven inside
 
