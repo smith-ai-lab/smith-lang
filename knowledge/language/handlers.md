@@ -53,7 +53,7 @@ fn fixture_config() -> Result[Config, FsError] <alloc> {
 
 ## A handler that keeps state
 
-A handler is where state belongs when several functions read it and change it: a place among tokens, a count, a buffer being filled. Each function carries the effect, so its signature says it touches that state, and none of them is given the state or gives it back.
+A handler keeps state when what answers an effect changes as it is asked, as a clock for tests counts the times it was read. The program does not choose that state: a deployment or a test does, by the handler it installs. A value that the program itself changes, as a place among tokens, is passed [`inout`](inout.md), so a contract can say what each function does to it.
 
 A handler is an ordinary function. This one is a clock for tests, which reads one tick later every time it is asked.
 

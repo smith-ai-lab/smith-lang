@@ -66,6 +66,7 @@ The files are a tour. Read them in the order below: each one uses only what the 
 - [ownership.md](ownership.md): the `Copy` and `Discard` traits, which say whether a value may be duplicated and whether it may be dropped unused, and the three kinds of value they make.
 - [without.md](without.md): `without`, which takes away a trait a type would get automatically.
 - [take.md](take.md): lending an argument, `take`, which gives the callee ownership, and a random `Key` that cannot be used twice.
+- [inout.md](inout.md): an `inout` parameter, which a function changes for its caller, means taking the value and giving the new one back, and is marked `inout` at the call.
 - [resources.md](resources.md): a value with neither `Copy` nor `Discard`, which must be taken exactly once on every path.
 
 ## Arrays and their mathematics
