@@ -47,8 +47,16 @@ pub const ONCE: &[Test] = &[
         || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("mul"),
     ),
     (
-        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64",
-        the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64,
+        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_1_of_3",
+        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(0),
+    ),
+    (
+        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_2_of_3",
+        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(1),
+    ),
+    (
+        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_3_of_3",
+        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(2),
     ),
 ];
 
@@ -283,9 +291,10 @@ fn programs(g: &mut Gen) -> Vec<(String, String, String)> {
 
 /// Every function answers what Rust says at the edges, in the evaluator and in
 /// each executable that the machine of the tests runs for arm64.
-fn the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64() {
+fn the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(part: usize) {
     generate::check(4401, 1, programs, |all| {
-        for (name, source, said) in all {
+        // The types are in three parts, one in three of them to each.
+        for (name, source, said) in all.iter().skip(part).step_by(3) {
             let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
             let out = scalar::run(&program);
             let printed = String::from_utf8(out.stdout).expect("text");
