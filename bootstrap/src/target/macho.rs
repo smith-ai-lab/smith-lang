@@ -26,7 +26,7 @@ const SIGNATURE_PAGE: usize = 0x1000;
 /// The symbols a program may import from `libSystem`, in the order of their
 /// slots in `__got`. A program that never asks for memory imports only the
 /// first three.
-const IMPORTS: [&str; 25] = [
+const IMPORTS: [&str; 26] = [
     "_write",
     "___error",
     "__exit",
@@ -47,6 +47,7 @@ const IMPORTS: [&str; 25] = [
     "_nanosleep",
     "_kqueue",
     "_kevent",
+    "_recvmsg",
     "_openat",
     "_pread",
     "_pwrite",
@@ -83,11 +84,12 @@ pub fn slot(call: Raw) -> usize {
         Raw::NanoSleep => 17,
         Raw::Kqueue => 18,
         Raw::Kevent => 19,
-        Raw::OpenAt => 20,
-        Raw::PRead => 21,
-        Raw::PWrite => 22,
-        Raw::LSeek => 23,
-        Raw::FChmod => 24,
+        Raw::RecvMsg => 20,
+        Raw::OpenAt => 21,
+        Raw::PRead => 22,
+        Raw::PWrite => 23,
+        Raw::LSeek => 24,
+        Raw::FChmod => 25,
         Raw::Read => READ,
         Raw::Write => WRITE,
         Raw::Kind | Raw::EpollCreate1 | Raw::EpollCtl | Raw::EpollWait | Raw::GetRandom => {
@@ -103,6 +105,7 @@ pub fn gives_int(call: Raw) -> bool {
         call,
         Raw::SendTo
             | Raw::RecvFrom
+            | Raw::RecvMsg
             | Raw::Read
             | Raw::Write
             | Raw::PRead
@@ -129,7 +132,7 @@ pub fn imports(
     if files {
         &IMPORTS
     } else if kernel {
-        &IMPORTS[..20]
+        &IMPORTS[..21]
     } else if reads {
         &IMPORTS[..6]
     } else if entropy {

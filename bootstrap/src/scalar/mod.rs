@@ -410,6 +410,10 @@ pub enum Raw {
     SendTo,
     /// `recvfrom(socket, bytes, count, flags, address, length)`.
     RecvFrom,
+    /// `recvmsg(socket, message, flags)`, which reads bytes and the
+    /// descriptors that come with them, as the library's `std.net` does when
+    /// `smith --watch` hands it a socket.
+    RecvMsg,
     /// `close(descriptor)`.
     Close,
     /// `clock_gettime(clock, time)`.
@@ -1268,6 +1272,7 @@ impl Program {
                             | Raw::SetSockOpt
                             | Raw::SendTo
                             | Raw::RecvFrom
+                            | Raw::RecvMsg
                             | Raw::Close
                             | Raw::OpenAt
                             | Raw::Read
