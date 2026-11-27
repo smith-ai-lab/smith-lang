@@ -21,20 +21,52 @@ use crate::serialize::{self, Defs, INTS, Parts, Ty, with_import};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_1_of_4",
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_1_of_12",
         || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(0),
     ),
     (
-        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_2_of_4",
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_2_of_12",
         || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(1),
     ),
     (
-        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_3_of_4",
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_3_of_12",
         || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(2),
     ),
     (
-        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_4_of_4",
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_4_of_12",
         || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(3),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_5_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(4),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_6_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(5),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_7_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(6),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_8_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(7),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_9_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(8),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_10_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(9),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_11_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(10),
+    ),
+    (
+        "a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value_part_12_of_12",
+        || a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(11),
     ),
     (
         "a_rawjson_read_from_a_reader_of_another_format_is_the_bytes_of_its_text",
@@ -69,8 +101,20 @@ pub const ONCE: &[Test] = &[
         || a_shape_that_is_not_the_one_asked_for_is_shape(1),
     ),
     (
-        "the_path_of_an_error_is_the_way_to_the_value_that_broke",
-        the_path_of_an_error_is_the_way_to_the_value_that_broke,
+        "the_path_of_an_error_is_the_way_to_the_value_that_broke_part_1_of_4",
+        || the_path_of_an_error_is_the_way_to_the_value_that_broke(0),
+    ),
+    (
+        "the_path_of_an_error_is_the_way_to_the_value_that_broke_part_2_of_4",
+        || the_path_of_an_error_is_the_way_to_the_value_that_broke(1),
+    ),
+    (
+        "the_path_of_an_error_is_the_way_to_the_value_that_broke_part_3_of_4",
+        || the_path_of_an_error_is_the_way_to_the_value_that_broke(2),
+    ),
+    (
+        "the_path_of_an_error_is_the_way_to_the_value_that_broke_part_4_of_4",
+        || the_path_of_an_error_is_the_way_to_the_value_that_broke(3),
     ),
     (
         "a_read_that_succeeds_asks_for_no_memory_of_its_own_part_1_of_2",
@@ -554,7 +598,7 @@ fn a_rawjson_read_from_a_reader_of_another_format_is_the_bytes_of_its_text() {
 fn a_rawjson_is_never_read_from_bytes_a_reader_gives_that_are_not_one_json_value(part: u64) {
     const NOT: &[&str] = &["] not json", "[", "1 2", "", "tru", "[1,]"];
     const WHOLE: &[&str] = &["[1.50, 1e400]", " [true] ", "7", " null"];
-    generate::check_part(3, 12, part, 4,
+    generate::check_part(3, 12, part, 12,
         |g: &mut Gen| (g.one_in(2), g.below(NOT.len().max(WHOLE.len()))),
         |&(whole, at)| {
             let list = if whole { WHOLE } else { NOT };
@@ -1116,7 +1160,7 @@ fn a_shape_that_is_not_the_one_asked_for_is_shape(part: u64) {
     });
 }
 
-fn the_path_of_an_error_is_the_way_to_the_value_that_broke() {
+fn the_path_of_an_error_is_the_way_to_the_value_that_broke(part: u64) {
     let parts = Parts {
         lists: true,
         own: false,
@@ -1127,7 +1171,7 @@ fn the_path_of_an_error_is_the_way_to_the_value_that_broke() {
         let at = g.below(c.made.leaves.len().max(1));
         (c, at)
     };
-    generate::check(4585, 8, generate, |(c, at)| {
+    generate::check_part(4585, 8, part, 4, generate, |(c, at)| {
         let Some(leaf) = c.made.leaves.get(*at) else {
             return;
         };
