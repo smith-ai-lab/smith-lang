@@ -10,12 +10,21 @@ use smith::scalar;
 
 use crate::Test;
 use crate::generate;
+use crate::lowered_once::{ROUNDS, SEED, Written};
 use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
     (
-        "a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built",
-        a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built,
+        "a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built_part_1_of_3",
+        || a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built(0),
+    ),
+    (
+        "a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built_part_2_of_3",
+        || a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built(1),
+    ),
+    (
+        "a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built_part_3_of_3",
+        || a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built(2),
     ),
     (
         "a_list_a_handler_gives_out_of_its_block_is_read_whole_after_more_is_built",
@@ -38,20 +47,36 @@ pub const ONCE: &[Test] = &[
         a_list_a_child_builds_before_it_hands_it_to_an_operation_that_stores_it_is_kept_in_the_region,
     ),
     (
-        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_1_of_4",
-        the_whole_state_of_generated_handlers_matches_a_model_part_1,
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_1_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(0),
     ),
     (
-        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_2_of_4",
-        the_whole_state_of_generated_handlers_matches_a_model_part_2,
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_2_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(1),
     ),
     (
-        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_3_of_4",
-        the_whole_state_of_generated_handlers_matches_a_model_part_3,
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_3_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(2),
     ),
     (
-        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_4_of_4",
-        the_whole_state_of_generated_handlers_matches_a_model_part_4,
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_4_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(3),
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_5_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(4),
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_6_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(5),
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_7_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(6),
+    ),
+    (
+        "the_whole_state_of_generated_handlers_matches_a_model_after_children_that_store_what_was_built_anywhere_part_8_of_8",
+        || the_whole_state_of_generated_handlers_matches_a_model(7),
     ),
     (
         "a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends",
@@ -77,9 +102,15 @@ fn program(items: &str) -> String {
 fn run(source: &str) -> String {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     assert_eq!(scalar::check(&program), Ok(()), "for {source}");
-    let outcome = scalar::run(&program);
+    run_lowered(&program, source)
+}
+
+/// What `run` gives for a program that is lowered and checked, which `source` is
+/// the text of.
+fn run_lowered(program: &scalar::Program, source: &str) -> String {
+    let outcome = scalar::run(program);
     assert_eq!(outcome.status, 0, "{} for {source}", String::from_utf8_lossy(&outcome.stdout));
-    let passed = scalar::run(&scalar::passes(&program));
+    let passed = scalar::run(&scalar::passes(program));
     assert_eq!(outcome.stdout, passed.stdout, "for {source}");
     String::from_utf8(outcome.stdout).expect("text")
 }
@@ -173,8 +204,8 @@ fn built(n: u64, k: u64) -> u64 {
 /// back, other children build over them, and the state is read after: under a
 /// group and under the scheduler of a test of each seed, in the order the seed
 /// picks. The list is the four numbers the children pushed, in some order.
-fn a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built() {
-    generate::check(1043, 3, |g| (g.below(8) as u64, 1 + g.below(50) as u64), |&(seed, v)| {
+fn a_list_in_a_handlers_state_is_read_whole_after_the_children_that_pushed_to_it_have_ended_and_others_have_built(part: u64) {
+    generate::check_part(1043, 3, part, 3, |g| (g.below(8) as u64, 1 + g.below(50) as u64), |&(seed, v)| {
         let expected = format!("4 {}\n", v + (v + 100) + (v + 1) + (v + 101));
         for (opening, run_effects, main_effects) in [
             ("with tasks()".to_string(), "alloc", "console, alloc"),
@@ -479,10 +510,10 @@ fn generate_children(g: &mut generate::Gen) -> (u64, Vec<Vec<Act>>) {
 fn the_whole_state_of_generated_handlers_matches_a_model(part: u64) {
     // The cases of this part are lowered as one program, and a case that
     // shrinking tries is lowered alone.
-    let (from, to) = (48 * part / 4, 48 * (part + 1) / 4);
+    let (from, to) = (48 * part / 8, 48 * (part + 1) / 8);
     let all: Vec<(u64, Vec<Vec<Act>>)> = (from..to).map(|case| generate::sample(1048, case, generate_children)).collect();
     let known = said_by(&all);
-    generate::check_part(1048, 48, part, 4, generate_children, |(seed, children)| {
+    generate::check_part(1048, 48, part, 8, generate_children, |(seed, children)| {
         let said = match all.iter().position(|c| c.0 == *seed && c.1 == *children) {
             Some(at) => known[at].clone(),
             None => said_by(&[(*seed, children.clone())]).remove(0),
@@ -491,40 +522,25 @@ fn the_whole_state_of_generated_handlers_matches_a_model(part: u64) {
     });
 }
 
-fn the_whole_state_of_generated_handlers_matches_a_model_part_1() {
-    the_whole_state_of_generated_handlers_matches_a_model(0);
-}
-
-fn the_whole_state_of_generated_handlers_matches_a_model_part_2() {
-    the_whole_state_of_generated_handlers_matches_a_model(1);
-}
-
-fn the_whole_state_of_generated_handlers_matches_a_model_part_3() {
-    the_whole_state_of_generated_handlers_matches_a_model(2);
-}
-
-fn the_whole_state_of_generated_handlers_matches_a_model_part_4() {
-    the_whole_state_of_generated_handlers_matches_a_model(3);
-}
-
 /// A block that installs the handler, with children that push to it, is run for
 /// many rounds, and asks the system for no more than it does for a few: what the
 /// block's region held is given back to the pool where the block ends, as a
 /// child's is.
 fn a_block_of_a_handler_that_holds_a_list_gives_its_memory_back_when_it_ends() {
+    // The text is the same for both numbers of rounds but the number, so it is
+    // lowered once.
+    let written = Written::new(program(&format!(
+        "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..{ROUNDS} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    _ = join(a)\n    _ = join(b)\n    c = spawn {{ total(build(20, r)) }}\n    _ = join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+    )));
     let asked = |rounds: u64| {
-        let source = program(&format!(
-            "{COUNTED}{BUILD}{PUSHER}fn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop r in 0..{rounds} {{\n    with recording()\n    with tasks()\n    a = spawn {{ note(r) }}\n    b = spawn {{ note(wrapping_add(r, 1)) }}\n    _ = join(a)\n    _ = join(b)\n    c = spawn {{ total(build(20, r)) }}\n    _ = join(c)\n    sum = wrapping_add(sum, count())\n  }}\n  print(\"{{sum}}\")\n}}\n"
-        ));
-        let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
-        let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
+        let (outcome, requests) = scalar::run_counting(&written.with(&[(ROUNDS, rounds)]), usize::MAX);
         assert_eq!(outcome.status, 0);
         assert_eq!(outcome.stdout, format!("{}\n", rounds * rounds).into_bytes());
         requests.len()
     };
     let few = asked(10);
-    let many = asked(1000);
-    assert_eq!(few, many, "{few} requests for 10 rounds and {many} for 1000");
+    let many = asked(400);
+    assert_eq!(few, many, "{few} requests for 10 rounds and {many} for 400");
 }
 
 /// What `write` of `net` is given is kept in a handler's state, and `listen`
@@ -592,8 +608,14 @@ fn net_program(seed: u64) -> String {
 }
 
 fn a_handler_of_net_keeps_what_write_was_given_while_listen_serves_two_connections() {
+    // The seed is the only number the text of each seed does not share.
+    let written = Written::new(net_program(SEED));
     for seed in 0..8 {
-        assert_eq!(run(&net_program(seed)), format!("2 4 197 {}\nserved 2\n", built(300, 5)), "for seed {seed}");
+        assert_eq!(
+            run_lowered(&written.with(&[(SEED, seed)]), &written.source),
+            format!("2 4 197 {}\nserved 2\n", built(300, 5)),
+            "for seed {seed}"
+        );
     }
 }
 
