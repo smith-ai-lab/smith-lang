@@ -66,8 +66,12 @@ pub const ONCE: &[Test] = &[
         a_list_of_people_prints_each_name_and_age,
     ),
     (
-        "a_list_of_any_type_holds_what_was_put_in_in_order",
-        a_list_of_any_type_holds_what_was_put_in_in_order,
+        "a_list_of_any_type_holds_what_was_put_in_in_order_part_1_of_2",
+        || a_list_of_any_type_holds_what_was_put_in_in_order(0),
+    ),
+    (
+        "a_list_of_any_type_holds_what_was_put_in_in_order_part_2_of_2",
+        || a_list_of_any_type_holds_what_was_put_in_in_order(1),
     ),
     (
         "a_list_held_inside_another_value_is_unchanged_by_a_push_to_any_other_name_part_1_of_3",
@@ -1011,8 +1015,8 @@ fn items(ty: &Ty, vs: &[V]) -> String {
 /// built from a literal and a run of pushes, to a `var` or one name after
 /// another, and passed through a function, a struct, a tuple, or an enum,
 /// holds what was put in, in order.
-fn a_list_of_any_type_holds_what_was_put_in_in_order() {
-    generate::check(83, 80, held, |h| {
+fn a_list_of_any_type_holds_what_was_put_in_in_order(part: u64) {
+    generate::check_part(83, 80, part, 2, held, |h| {
         let t = h.ty.name();
         let mut body = String::new();
         let last = if h.var {
