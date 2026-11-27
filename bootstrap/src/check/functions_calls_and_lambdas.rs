@@ -1024,6 +1024,9 @@ impl<'a> Checker<'a> {
 
     pub(super) fn call(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
         let defs = self.defs;
+        if self.passed_inout(body, call) {
+            return self.unknown_call(body, call);
+        }
         let name = call.callee.as_str();
         // A field that holds a function with a name is called as that function.
         // The call that gives the function, as in `chosen()(x)`.
@@ -2102,6 +2105,7 @@ impl<'a> Checker<'a> {
             Expr::Lambda(l) => self
                 .source_between(l.pos, l.end)
                 .unwrap_or_else(|| "{ ... }".to_string()),
+            value if arg.inout.is_some() => format!("inout {}", written_expr(value)),
             value => written_expr(value),
         }
     }
@@ -2141,7 +2145,11 @@ impl<'a> Checker<'a> {
     /// The call as it is written, each argument as it is, with those that the
     /// closure gives a name for written with it, and a block after the call
     /// after it.
-    fn call_written(&self, call: &Call, name_of: &dyn Fn(usize, &Arg) -> Option<String>) -> String {
+    pub(super) fn call_written(
+        &self,
+        call: &Call,
+        name_of: &dyn Fn(usize, &Arg) -> Option<String>,
+    ) -> String {
         let mut args = Vec::new();
         let mut after = String::new();
         for (i, arg) in call.args.iter().enumerate() {
