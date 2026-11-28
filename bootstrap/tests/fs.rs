@@ -362,7 +362,7 @@ fn tell(r: Result[List[Byte], FsError]) <console, alloc> {
 fn refusing[T](body: fn() -> T <fs>) -> T {
   fs(
     open_file: fn(path) { .err(.denied(path)) },
-    create_file: fn(path, executable) { .err(.failed((path, \"disk\"))) },
+    create_file: fn(path, mode) { .err(.failed((path, \"disk\"))) },
     close_file: fn(f) { n = release(take f) },
     size: fn(f) { .err(.missing(f.path)) },
     read: fn(f, range) { .err(.missing(f.path)) },
@@ -557,11 +557,11 @@ fn a_file_written_as_executable_is_one_the_system_runs() {
     .ok(_) {{ print(\"plain\") }}
     .err(e) {{ print(kind(e)) }}
   }}
-  match write_all(\"DIR/{name}\", \"{script}\".bytes, executable: true) {{
+  match write_all(\"DIR/{name}\", \"{script}\".bytes, mode: .executable) {{
     .ok(_) {{ print(\"run\") }}
     .err(e) {{ print(kind(e)) }}
   }}
-  match write_all(\"DIR/plain\", \"{script}\".bytes, executable: true) {{
+  match write_all(\"DIR/plain\", \"{script}\".bytes, mode: .executable) {{
     .ok(_) {{ print(\"again\") }}
     .err(e) {{ print(kind(e)) }}
   }}

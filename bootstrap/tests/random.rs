@@ -124,7 +124,7 @@ fn threefry_gives_the_published_vectors() {
     let mut body = String::from("fn main() <console, alloc> {\n");
     for (i, (counter, key, _)) in VECTORS.iter().enumerate() {
         body += &format!(
-            "  r{i} = threefry(Words(first: {}, second: {}), Words(first: {}, second: {}))\n  print(\"{{hex(r{i}.first, width: 16, upper: false)}} {{hex(r{i}.second, width: 16, upper: false)}}\")\n",
+            "  r{i} = threefry(Words(first: {}, second: {}), Words(first: {}, second: {}))\n  print(\"{{hex(r{i}.first, width: 16, letters: .lower)}} {{hex(r{i}.second, width: 16, letters: .lower)}}\")\n",
             counter[0], counter[1], key[0], key[1]
         );
     }

@@ -48,7 +48,7 @@ The schema is of what the same `Json` writes and reads, so a value that `to_json
 | A struct | `{"type":"object","properties":`each field by its written name`,"required":`the fields that have no default and are not an `Option``}` |
 | An enum | `{"oneOf":`one schema for each case`}` |
 
-A field that has a default or is an `Option` is left out of `required`, which is where `from_json` reads a missing one. With `unknown: .refuse`, each object has `"additionalProperties":false`. With `Names.camel`, a field is named as `to_json_as` writes it.
+A field that has a default or is an `Option` is left out of `required`, which is where `from_json` reads a missing one. With `json_schema(json, unknown: .refuse)`, each object has `"additionalProperties":false`. With `Names.camel`, a field is named as `to_json_as` writes it.
 
 A case with `Cases.key` that holds nothing is `{"const":"name"}`, and one that holds a value is an object with the case's name as its only member. With `Cases.tag`, a case that holds nothing is an object with the tag as its only member, with a `const`, one that holds a struct is the struct's schema with the tag among its properties and required, and any other is an object with the tag and `value`.
 

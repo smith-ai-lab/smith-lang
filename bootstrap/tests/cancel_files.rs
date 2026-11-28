@@ -62,7 +62,7 @@ fn run(seed: u64) -> u64 <fs, diverge, alloc> {{
 fn main(args: List[str]) <console, alloc, diverge> {{
   r = fs(
     open_file: fn(path) {{ .err(.missing(path)) }},
-    create_file: fn(path, executable) {{ .err(.missing(path)) }},
+    create_file: fn(path, mode) {{ .err(.missing(path)) }},
     close_file: fn(f) {{
       print(\"closed {{handle(f)}}\")
       n = release(take f)

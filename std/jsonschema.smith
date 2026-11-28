@@ -1,7 +1,7 @@
 use std.describe (Describer)
 use std.bits (u64)
 use std.int (saturating_add)
-use std.json (Json, json_string, written_member)
+use std.json (Json, Unknown, json_string, written_member)
 use std.list (push)
 use std.text (Text, append, finish, text)
 
@@ -32,6 +32,7 @@ struct Saved {
 
 pub struct JsonSchema {
   settings: Json
+  unknown: Unknown
   buffer: Text
   scope: Scope
   count: Nat
@@ -53,8 +54,8 @@ pub struct JsonSchema {
 // The describer of a JSON Schema for the values that `to_json_as` writes and
 // `from_json_as` reads with the settings, which is told what a type is made
 // of by `Describe[T].describe` and gives the schema with `schema_text`.
-pub fn json_schema(json: Json) -> JsonSchema {
-  JsonSchema(settings: json, buffer: text(), scope: .alts, count: 0, tail: "", required: "", case: "", merge: false, about: "", saved: [], top: 0)
+pub fn json_schema(json: Json; unknown: Unknown = .ignore) -> JsonSchema {
+  JsonSchema(settings: json, unknown: unknown, buffer: text(), scope: .alts, count: 0, tail: "", required: "", case: "", merge: false, about: "", saved: [], top: 0)
 }
 
 pub fn schema_text(to: take JsonSchema) -> str {
@@ -73,8 +74,8 @@ fn emit_json_string(to: take JsonSchema, s: str) -> JsonSchema <alloc> {
   w
 }
 
-fn refuses(json: Json) -> bool {
-  match json.unknown {
+fn refuses(unknown: Unknown) -> bool {
+  match unknown {
     .ignore { false }
     .refuse { true }
   }
@@ -103,7 +104,7 @@ fn leaf(to: take JsonSchema, first: str) -> JsonSchema <alloc> {
 }
 
 fn closed(to: take JsonSchema) -> JsonSchema <alloc> {
-  if refuses(to.settings) { emit(take to, ",\"additionalProperties\":false") } else { to }
+  if refuses(to.unknown) { emit(take to, ",\"additionalProperties\":false") } else { to }
 }
 
 fn enter(to: take JsonSchema, scope: Scope, tail: str) -> JsonSchema <alloc> {

@@ -79,7 +79,8 @@ fn hex_and_binary_give_what_rust_formats_padded_and_never_cut() {
         let mut lines = Vec::new();
         for Call { n, width, upper } in calls {
             let w = *width as usize;
-            source.push_str(&format!("  print(hex({n}, width: {width}, upper: {upper}))\n"));
+            let letters = if *upper { ".upper" } else { ".lower" };
+            source.push_str(&format!("  print(hex({n}, width: {width}, letters: {letters}))\n"));
             source.push_str(&format!("  print(binary({n}, width: {width}))\n"));
             lines.push(if *upper { format!("{n:0w$X}") } else { format!("{n:0w$x}") });
             lines.push(format!("{n:0w$b}"));
@@ -90,7 +91,7 @@ fn hex_and_binary_give_what_rust_formats_padded_and_never_cut() {
 }
 
 fn the_examples_of_the_pages_on_ascii_and_fmt_hold() {
-    let source = "use std.ascii (is_digit)\nuse std.console (console, print)\nuse std.fmt (binary, hex)\nuse std.int (saturating_add)\n\nfn digits(s: str) -> Nat {\n  mut n: Nat = 0\n  loop i in 0..s.size {\n    if is_digit(s[i]) { n = saturating_add(n, 1) }\n  }\n  n\n}\n\nfn byte(b: Byte) -> str <alloc> { hex(b, width: 2) }\n\nfn main() <console, alloc> {\n  print(\"{digits(\"a1b22\")}\")\n  print(\"U+{hex(233, width: 4)}\")\n  print(byte(10))\n  print(hex(255))\n  print(hex(255, upper: false))\n  print(hex(255, width: 1))\n  print(hex(0))\n  print(hex(0, width: 4))\n  print(binary(5))\n  print(binary(5, width: 8))\n  print(binary(5, width: 2))\n  print(binary(0))\n  print(hex(18446744073709551615, width: 20))\n  print(binary(18446744073709551615))\n}\n";
+    let source = "use std.ascii (is_digit)\nuse std.console (console, print)\nuse std.fmt (binary, hex)\nuse std.int (saturating_add)\n\nfn digits(s: str) -> Nat {\n  mut n: Nat = 0\n  loop i in 0..s.size {\n    if is_digit(s[i]) { n = saturating_add(n, 1) }\n  }\n  n\n}\n\nfn byte(b: Byte) -> str <alloc> { hex(b, width: 2) }\n\nfn main() <console, alloc> {\n  print(\"{digits(\"a1b22\")}\")\n  print(\"U+{hex(233, width: 4)}\")\n  print(byte(10))\n  print(hex(255))\n  print(hex(255, letters: .lower))\n  print(hex(255, width: 1))\n  print(hex(0))\n  print(hex(0, width: 4))\n  print(binary(5))\n  print(binary(5, width: 8))\n  print(binary(5, width: 2))\n  print(binary(0))\n  print(hex(18446744073709551615, width: 20))\n  print(binary(18446744073709551615))\n}\n";
     let lines = [
         "3",
         "U+00E9",
