@@ -299,7 +299,7 @@ fn run_of_building(count: usize, width: usize) -> (String, usize) {
     let chosen: Vec<(usize, &str)> = tests.tests.iter().enumerate().map(|(k, t)| (k, t.name.as_str())).collect();
     let module = tests.module(&source, &chosen);
     let file = smith::testing::File { module: "many_test", tests: &tests, chosen: &chosen };
-    let program = smith::testing::program(&[file], width);
+    let program = smith::testing::program(&[file], width, 0);
     let lowered = smith::lower_project(program.as_bytes(), &[("many_test", &module)])
         .unwrap_or_else(|e| panic!("{e:?}\n{program}"));
     let (outcome, requests) = smith::scalar::run_counting(&smith::scalar::passes(&lowered), usize::MAX);

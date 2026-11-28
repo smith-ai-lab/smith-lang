@@ -172,6 +172,11 @@ impl Project<'_> {
     fn library_watched(&self) -> check::Library<'_> {
         check::Library::in_project_watched(self.files, self.entry)
     }
+
+    /// The library of the program of the tests that `smith test` runs.
+    fn library_tested(&self) -> check::Library<'_> {
+        check::Library::in_project_tested(self.files, self.entry)
+    }
 }
 
 /// `check_timed` for a file that imports the modules of a project.
@@ -241,6 +246,19 @@ pub fn compile_project_files_timed(
     };
     let program = checked_in(source, &library, timings)?.program;
     emit(program, target, map, timings)
+}
+
+/// `compile_project_timed` for the program of the tests that `smith test`
+/// runs, which is built with `std.random` as `smith test` builds it, so that a
+/// property's choices are recorded, as `compiler.md` says.
+pub fn compile_tests_timed(
+    source: &[u8],
+    project: &Project,
+    target: Target,
+    timings: &mut Timings,
+) -> Result<Built, Vec<diag::Error>> {
+    let program = checked_in(source, &project.library_tested(), timings)?.program;
+    emit(program, target, false, timings)
 }
 
 /// The program a source file describes, in the scalar form, when the modules

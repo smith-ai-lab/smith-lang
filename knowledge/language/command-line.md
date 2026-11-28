@@ -5,7 +5,7 @@ description: The smith commands, how build, run, and check take a file and a tar
 status: partial
 built:
   - "`smith build`, `smith run`, and `smith check` on `main.smith` or a named file"
-  - "`smith test`, `smith test <file>`, and `smith test --name <text>`, as [Running tests](running-tests.md) says"
+  - "`smith test`, `smith test <file>`, `smith test --name <text>`, and `smith test --seed <n>`, as [Running tests](running-tests.md) says"
   - "`smith build --target wasm`, which writes a module and the file of JavaScript that loads it"
   - "`smith build --map`, which writes `<name>.map` beside the executable with a `fn` line for each function of its code, and after it an `at` line for each run of its instructions that was built from one place in the source"
   - "`smith check` warning of an effect a function lists and nothing in it needs"

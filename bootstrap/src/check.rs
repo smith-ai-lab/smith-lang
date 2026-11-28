@@ -3925,14 +3925,23 @@ impl<'a> Library<'a> {
     /// `in_project`, with `std.net` as `smith --watch` builds it, which keeps the
     /// socket a run listens on, as `watched_net` says.
     pub fn in_project_watched(files: &'a dyn crate::Source, entry: Option<&'a str>) -> Library<'a> {
-        let mut library = Library::in_project(files, entry);
-        let text = watched_net();
-        for module in &mut library.modules {
-            if module.0 == "net" {
+        Library::in_project(files, entry).with_module("net", watched_net())
+    }
+
+    /// `in_project`, with `std.random` as `smith test` builds it, which
+    /// records the choices a property draws, as `tested_random` says.
+    pub fn in_project_tested(files: &'a dyn crate::Source, entry: Option<&'a str>) -> Library<'a> {
+        Library::in_project(files, entry).with_module("random", tested_random())
+    }
+
+    /// The library with the module of the name given the text.
+    fn with_module(mut self, name: &str, text: &'static str) -> Library<'a> {
+        for module in &mut self.modules {
+            if module.0 == name {
                 module.1 = text;
             }
         }
-        library
+        self
     }
 
     /// The source of the module with a name written as in a `use`.
@@ -3985,6 +3994,56 @@ fn watched_net() -> &'static str {
         }
         text.push('\n');
         text.push_str(include_str!("net_watched.smith"));
+        text
+    })
+}
+
+/// `std.random` as `smith test` builds it into the program of the tests, and
+/// into no other. A `Key` there also holds its place in the tree of splits,
+/// 0 for a key that is made and `2p + 1` and `2p + 2` for the two that
+/// `split` gives of the key at `p`, and the address of the table of the run of
+/// a property, which is 0 for a key that is not given to one. `bits` of a key
+/// with a table asks `__choice` for the choice of its place, which reads the
+/// one the table holds or records the one Threefry draws. The functions of
+/// `random_tested.smith` follow the module: what the program of the tests
+/// runs a property with, and shrinks a failure by.
+fn tested_random() -> &'static str {
+    static TEXT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TEXT.get_or_init(|| {
+        let mut text = library_text("random").to_string();
+        let changes = [
+            (
+                "pub struct Key {\n  a: u64\n  b: u64\n}",
+                "pub struct Key {\n  a: u64\n  b: u64\n  place: u64\n  record: u64\n}",
+            ),
+            (
+                "fn key_of(words: Words) -> Key { Key(a: words.first, b: words.second) }",
+                "fn key_of(words: Words) -> Key { Key(a: words.first, b: words.second, place: 0, record: 0) }",
+            ),
+            (
+                "pub fn bits(key: take Key) -> u64 {\n  threefry(Words(first: 0, second: 0), Words(first: key.a, second: key.b)).first\n}",
+                "pub fn bits(key: take Key) -> u64 {\n  drawn = threefry(Words(first: 0, second: 0), Words(first: key.a, second: key.b)).first\n  if key.record == 0 { drawn } else { __choice(key.record, key.place, drawn) }\n}",
+            ),
+            (
+                "  (key_of(threefry(Words(first: 1, second: 0), at)), key_of(threefry(Words(first: 2, second: 0), at)))",
+                "  below = wrapping_mul(key.place, 2)\n  (child(threefry(Words(first: 1, second: 0), at), wrapping_add(below, 1), key.record), child(threefry(Words(first: 2, second: 0), at), wrapping_add(below, 2), key.record))",
+            ),
+            ("use std.list (push)\n", ""),
+            (
+                "use std.int (wrapping_add, wrapping_shift_left)",
+                "use std.int (wrapping_add, wrapping_mul, wrapping_shift_left, wrapping_sub)\nuse std.list (copy, push)",
+            ),
+        ];
+        for (at, made) in changes {
+            assert_eq!(
+                text.matches(at).count(),
+                1,
+                "std.random has changed under smith test: {at}"
+            );
+            text = text.replace(at, made);
+        }
+        text.push('\n');
+        text.push_str(include_str!("random_tested.smith"));
         text
     })
 }
@@ -7269,13 +7328,15 @@ impl<'a> Defs<'a> {
 /// modules that reach the kernel: `__system`, which asks it for a call,
 /// `__reserve`, which makes a list that has room and no elements, `__sized`,
 /// which says how many of the elements the kernel filled, `__address_of`, which
-/// gives the address of a list's bytes as a number, and `__consume`, which
-/// takes a value that cannot be dropped and has nothing to give.
+/// gives the address of a list's bytes as a number, `__consume`, which
+/// takes a value that cannot be dropped and has nothing to give, and
+/// `__choice`, which reads or records the choice of a place in the table of a
+/// run of a property, as `std.random` is built for `smith test`.
 fn is_kernel(call: &Call) -> bool {
     call.qualifier.is_none()
         && matches!(
             call.callee.as_str(),
-            "__system" | "__reserve" | "__sized" | "__consume" | "__address_of"
+            "__system" | "__reserve" | "__sized" | "__consume" | "__address_of" | "__choice"
         )
         && of_std(call.pos)
 }
