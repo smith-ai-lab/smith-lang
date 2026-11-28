@@ -481,12 +481,14 @@ impl<'a> Checker<'a> {
             self.assign(body, at, value);
             return;
         }
-        self.assigning = Some((def, false));
+        // A value can hold a block that assigns another `mut`, which sets and
+        // takes `assigning` for itself, so what is set here is kept for after.
+        let outer = self.assigning.replace((def, false));
         let gives = match literal(value) {
             Some(r) => self.expr(body, value, &Want::Ty(Ty::Int(r))),
             None => self.expr(body, value, &Want::Any),
         };
-        let (_, read_itself) = self.assigning.take().expect("assigning");
+        let (_, read_itself) = std::mem::replace(&mut self.assigning, outer).expect("assigning");
         let looped = body.loops > 0 || body.outer_loops > 0;
         let counted = !matches!(body.numbers, Numbers::Finding(_));
         // What a value that reads the `mut` gives is a bound only where the
