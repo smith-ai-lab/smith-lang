@@ -116,6 +116,10 @@ pub const ONCE: &[Test] = &[
         || cases_in_the_values_of_cases_are_read_to_any_depth(&[32]),
     ),
     (
+        "cases_in_the_values_of_cases_past_the_64_levels_one_word_holds_are_read",
+        || cases_in_the_values_of_cases_are_read_to_any_depth(&[65]),
+    ),
+    (
         "the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is_part_1_of_2",
         || the_members_of_an_object_are_read_in_any_order_with_the_tag_wherever_it_is(0),
     ),
