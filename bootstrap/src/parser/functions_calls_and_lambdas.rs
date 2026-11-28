@@ -375,7 +375,7 @@ impl Parser<'_> {
             function: false,
             range: None,
             statement: Some(Box::new(statement)),
-            length: None,
+            sizes: Vec::new(),
         })
     }
 
@@ -550,7 +550,7 @@ impl Parser<'_> {
                 function: false,
                 range: None,
                 statement: None,
-                length: None,
+                sizes: Vec::new(),
             });
         }
         let open = self.pos();
@@ -567,7 +567,7 @@ impl Parser<'_> {
             function: true,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         };
         Ok((function, takes, effects))
     }

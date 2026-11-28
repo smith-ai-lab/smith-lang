@@ -445,6 +445,11 @@ struct Bound<'a> {
     home: Option<Home>,
 }
 
+/// What a `loop` that builds the array of a `for` keeps of each round: the
+/// bytes it writes the elements to, the type of an element, and each index
+/// with its size.
+type Keep<'k> = (&'k Home, &'k Ty, &'k [(&'k str, u64)]);
+
 /// The bytes of the frame an array is kept in, laid out as the elements of a
 /// list are.
 #[derive(Clone)]
@@ -596,13 +601,13 @@ impl<'a> Out<'a> {
 
     /// Defines a name that stands for values.
     fn define(&mut self, name: &str, ty: Ty, values: Vec<form::Value>) {
-        let kept = matches!(ty, Ty::Array(_, n) if n > 0)
+        let kept = ty.elements().is_some_and(|(_, n)| n > 0)
             && self
                 .homed
                 .get(&self.written)
                 .is_some_and(|s| s.contains(name));
         let (values, home) = if kept {
-            let Ty::Array(_, n) = ty else { unreachable!() };
+            let (_, n) = ty.elements().expect("an array");
             let k = values.len() / n as usize;
             let kinds: Vec<form::Type> = values[..k].iter().map(|v| self.types[v.0]).collect();
             let (places, stride) = form::element(&kinds);
@@ -1216,9 +1221,10 @@ impl<'a> Lowering<'a> {
                     self.scalars_into(t, put);
                 }
             }
-            Ty::Array(items, n) => {
-                for _ in 0..*n {
-                    self.scalars_into(&items[0], put);
+            Ty::Array(..) | Ty::Matrix(..) => {
+                let (item, n) = ty.elements().expect("an array");
+                for _ in 0..n {
+                    self.scalars_into(item, put);
                 }
             }
             Ty::Enum(e, args) => {
@@ -1535,9 +1541,11 @@ impl<'a> Lowering<'a> {
             Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
                 .map(|t| t.subst(args))
                 .collect(),
-            Ty::Tuple(items) | Ty::Array(items, _) | Ty::List(items) | Ty::Slice(items) => {
-                items.clone()
-            }
+            Ty::Tuple(items)
+            | Ty::Array(items, _)
+            | Ty::Matrix(items, _)
+            | Ty::List(items)
+            | Ty::Slice(items) => items.clone(),
             _ => return false,
         };
         // A type that holds itself holds a child where its other parts do.
@@ -1560,9 +1568,11 @@ impl<'a> Lowering<'a> {
             Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
                 .map(|t| t.subst(args))
                 .collect(),
-            Ty::Tuple(items) | Ty::Array(items, _) | Ty::List(items) | Ty::Slice(items) => {
-                items.clone()
-            }
+            Ty::Tuple(items)
+            | Ty::Array(items, _)
+            | Ty::Matrix(items, _)
+            | Ty::List(items)
+            | Ty::Slice(items) => items.clone(),
             _ => return false,
         };
         if seen.contains(ty) {
@@ -1593,7 +1603,10 @@ impl<'a> Lowering<'a> {
             }
             Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
             Ty::Tuple(items) => items.clone(),
-            Ty::Array(items, n) => vec![items[0].clone(); *n as usize],
+            Ty::Array(..) | Ty::Matrix(..) => {
+                let (item, n) = ty.elements().expect("an array");
+                vec![item.clone(); n as usize]
+            }
             Ty::List(of) | Ty::Slice(of) => {
                 self.close_elements(out, &of[0], values);
                 return;
@@ -1795,7 +1808,10 @@ impl<'a> Lowering<'a> {
             }
             Ty::Struct(s, args) => defs.fields[*s].iter().map(|t| t.subst(args)).collect(),
             Ty::Tuple(items) => items.clone(),
-            Ty::Array(items, n) => vec![items[0].clone(); *n as usize],
+            Ty::Array(..) | Ty::Matrix(..) => {
+                let (item, n) = ty.elements().expect("an array");
+                vec![item.clone(); n as usize]
+            }
             Ty::List(of) | Ty::Slice(of) => {
                 self.detach_elements(out, &of[0], values);
                 return;
@@ -2057,13 +2073,14 @@ impl<'a> Lowering<'a> {
                         match element {
                             None => out.store_array(&home, &value),
                             Some(element) => {
-                                let address = match self.constant_index(&element.1, env) {
+                                let array = self.typed.type_of(&element.0, env);
+                                let address = match self.constant_index(&array, &element.1, env) {
                                     Some(at) => out.moved(home.frame, at as u64 * home.stride),
                                     None => self.element_address(
                                         out,
                                         home.frame,
                                         home.stride,
-                                        &element.1,
+                                        (&array, &element.1),
                                         env,
                                     ),
                                 };
@@ -2097,11 +2114,10 @@ impl<'a> Lowering<'a> {
                     let (mut start, mut size) = self.offset(&ty, fields);
                     let mut value = value;
                     if let Some(element) = element {
-                        let Ty::Array(of, n) = self.typed.type_of(&element.0, env) else {
-                            unreachable!("checked")
-                        };
+                        let array = self.typed.type_of(&element.0, env);
+                        let (of, n) = array.elements().expect("checked");
                         let one = size / n as usize;
-                        match self.constant_index(&element.1, env) {
+                        match self.constant_index(&array, &element.1, env) {
                             Some(place) => {
                                 start += place * one;
                                 size = one;
@@ -2111,9 +2127,14 @@ impl<'a> Lowering<'a> {
                                 // is stored in it, and the array is read back.
                                 let held = out.names()[at].values[start..start + size].to_vec();
                                 let (frame, scalars, stride) =
-                                    self.written_to_frame(out, &of[0], n, &held);
-                                let address =
-                                    self.element_address(out, frame, stride, &element.1, env);
+                                    self.written_to_frame(out, of, n, &held);
+                                let address = self.element_address(
+                                    out,
+                                    frame,
+                                    stride,
+                                    (&array, &element.1),
+                                    env,
+                                );
                                 for ((ty, place), value) in scalars.iter().zip(&value) {
                                     let to = match place {
                                         0 => address,
@@ -2590,7 +2611,7 @@ impl<'a> Lowering<'a> {
     /// and the type of its element: the counter runs from 0 to the size, and
     /// what the block gives on each round is written to the element at the
     /// counter.
-    fn round(&mut self, out: &mut Out<'a>, l: &'a Loop, keep: Option<(&Home, &Ty)>, env: &[Ty]) {
+    fn round(&mut self, out: &mut Out<'a>, l: &'a Loop, keep: Option<Keep>, env: &[Ty]) {
         // A name is a `mut` of the frame it is written in, so a name that
         // the body assigns is of this frame, and one that a lambda assigns
         // is of the frame the lambda is written in. A lambda written outside
@@ -2666,7 +2687,7 @@ impl<'a> Lowering<'a> {
                 .collect()
         };
         let range = match (&l.range, keep) {
-            (Some(r), Some((home, _))) => {
+            (Some(r), Some((home, ..))) => {
                 let t = Int::between(0, i128::from(home.size)).expect("a size");
                 let from = out.int(bits_of(t), 0);
                 let to = out.int(bits_of(t), i128::from(home.size));
@@ -2728,19 +2749,14 @@ impl<'a> Lowering<'a> {
             round.leaving.push((out.current, held(out)));
             out.current = inside;
             match keep {
-                // The index of a `for` is below the size.
-                Some((home, _)) => {
-                    let index =
-                        Ty::Int(Int::between(0, i128::from(home.size) - 1).expect("a size"));
-                    let at = self.held_as(out, &Ty::Int(t), &index, vec![params[0]]);
-                    out.define(name, index, at);
-                }
+                // Each index of a `for` is below its size.
+                Some((.., indices)) => self.define_indices(out, indices, (params[0], t)),
                 None => out.define(name, Ty::Int(t), vec![params[0]]),
             }
         }
         out.loops.push(round);
         let gives = self.block(out, &l.body, env);
-        if let Some((home, element)) = keep {
+        if let Some((home, element, _)) = keep {
             self.keep_round(out, l, (home, element), params[0], gives, env);
         }
         let round = out.loops.pop().expect("pushed");

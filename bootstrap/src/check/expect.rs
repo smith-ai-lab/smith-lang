@@ -326,7 +326,7 @@ impl Writer<'_> {
             function: false,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         };
         let body = vec![
             Stmt::Define {

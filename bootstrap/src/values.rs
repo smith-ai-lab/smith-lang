@@ -58,10 +58,11 @@ pub(crate) struct Param {
 #[derive(Clone, Debug)]
 pub(crate) enum Shape {
     Name(String, Vec<Shape>),
-    /// An array of one size: the name of the size when it is a name alone,
-    /// and none when it is a number or arithmetic, which says no number, and
-    /// the type of its elements.
-    Array(Option<String>, Box<Shape>),
+    /// An array, with one size, or a matrix, with a size for each axis: for
+    /// each size, its name when it is a name alone, and none when it is a
+    /// number or arithmetic, which says no number, and the type of its
+    /// elements.
+    Array(Vec<Option<String>>, Box<Shape>),
 }
 
 /// A function or a struct with whole number parameters, as it is written.
@@ -233,22 +234,20 @@ fn shape(tokens: &[&Token]) -> Option<Shape> {
                     Some(*depth)
                 })
                 .position(|depth| depth == 0)?;
-            let size = &tokens[1..close];
-            if split_commas(size).len() != 1 {
-                return None;
-            }
-            let name = match size {
-                [t] => match &t.tok {
-                    Tok::Ident(name) => Some(name.clone()),
+            let names = (split_commas(&tokens[1..close]).iter())
+                .map(|size| match size[..] {
+                    [t] => match &t.tok {
+                        Tok::Ident(name) => Some(name.clone()),
+                        _ => None,
+                    },
                     _ => None,
-                },
-                _ => None,
-            };
+                })
+                .collect();
             // An element of a type that says no number, as a range does, is
             // a name that no parameter has.
             let element =
                 shape(&tokens[close + 1..]).unwrap_or(Shape::Name(String::new(), Vec::new()));
-            Some(Shape::Array(name, Box::new(element)))
+            Some(Shape::Array(names, Box::new(element)))
         }
         [t] => match &t.tok {
             Tok::Ident(name) => Some(Shape::Name(name.clone(), Vec::new())),

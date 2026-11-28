@@ -420,7 +420,7 @@ fn env_struct(cx: &Cx, l: &Lambda, inferred: bool) -> Option<Struct> {
                 function: false,
                 range: None,
                 statement: None,
-                length: None,
+                sizes: Vec::new(),
             },
             function: None,
             default: None,

@@ -38,11 +38,21 @@ fn head<'t>(defs: &Defs, ty: &'t Ty) -> Option<(String, Vec<Part<'t>>)> {
 fn read(defs: &Defs, template: &Template, shape: &Shape, ty: &Ty, found: &mut [Option<u64>]) {
     let (name, args) = match (shape, ty) {
         (Shape::Name(name, args), _) => (name, args),
-        (Shape::Array(size, of), Ty::Array(element, n)) => {
-            if let Some(k) = (size.as_ref())
-                .and_then(|size| template.params.iter().position(|q| q.name == *size))
-            {
-                found[k].get_or_insert(*n);
+        (Shape::Array(names, of), Ty::Array(..) | Ty::Matrix(..)) => {
+            let (element, sizes) = match ty {
+                Ty::Matrix(element, sizes) => (element, sizes.clone()),
+                Ty::Array(element, n) => (element, vec![*n]),
+                _ => unreachable!("matched"),
+            };
+            if names.len() != sizes.len() {
+                return;
+            }
+            for (name, n) in names.iter().zip(sizes) {
+                if let Some(k) = (name.as_ref())
+                    .and_then(|name| template.params.iter().position(|q| q.name == *name))
+                {
+                    found[k].get_or_insert(n);
+                }
             }
             return read(defs, template, of, &element[0], found);
         }

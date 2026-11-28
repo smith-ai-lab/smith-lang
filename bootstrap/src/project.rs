@@ -174,7 +174,7 @@ pub fn read(source: &str) -> Result<Read, Vec<Error>> {
 
 /// The type as it is written, when a flag can have it.
 fn written(t: &Type) -> Option<String> {
-    if t.function || t.statement.is_some() || t.length.is_some() {
+    if t.function || t.statement.is_some() || !t.sizes.is_empty() {
         return None;
     }
     if t.name == parser::RANGE {

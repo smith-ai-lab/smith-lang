@@ -61,12 +61,12 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}(a: @[2, 3]Int) -> Int { 1 }\n",
+        declares: "fn u{i}(a: @[m, 3]Int) -> Int { 1 }\n",
         call: "u{i}([1, 2, 3])",
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}() -> @[2, 3]Int { [1, 2, 3] }\n",
+        declares: "fn u{i}() -> @[2, m]Int { [1, 2, 3] }\n",
         call: "u{i}()",
         parsed: true,
     },

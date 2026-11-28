@@ -311,9 +311,10 @@ pub struct Type {
     /// The statement a proof's type is, written as a boolean expression, whose
     /// name is `STATEMENT`.
     pub statement: Option<Box<Expr>>,
-    /// The number of elements of an array type, written `[3]f32`, whose name is
-    /// `ARRAY` and whose one `args` is the type of its elements.
-    pub length: Option<u64>,
+    /// The sizes of an array type, written `[3]f32`, or of a matrix, written
+    /// `[2, 3]f32`, whose name is `ARRAY` and whose one `args` is the type of
+    /// its elements. It is empty for any other type.
+    pub sizes: Vec<u64>,
 }
 
 /// A bound of a range type: a whole number written out, the name of a
@@ -384,8 +385,9 @@ impl Type {
         let args: Vec<String> = self.args.iter().map(Type::written).collect();
         if let Some((first, end)) = &self.range {
             format!("{}..{}", first.written(), end.written())
-        } else if let Some(length) = self.length {
-            format!("[{length}]{}", args.join(", "))
+        } else if !self.sizes.is_empty() {
+            let sizes: Vec<String> = self.sizes.iter().map(u64::to_string).collect();
+            format!("[{}]{}", sizes.join(", "), args.join(", "))
         } else if self.function {
             let (gives, params) = args.split_last().expect("a result");
             if self
@@ -545,7 +547,8 @@ pub enum Expr {
     },
     /// `loop i in a..b { ... }`, or an open-ended `loop { ... }`.
     Loop(Box<Loop>),
-    /// `for i { e }`, the array whose element at each index is `e`.
+    /// `for i { e }`, the array whose element at each index is `e`, or
+    /// `for i, j { e }`, the matrix.
     For(Box<For>),
     /// `break`, which ends the nearest `loop` around it.
     Break {
@@ -1666,7 +1669,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
-                    length: None,
+                    sizes: Vec::new(),
                 };
             }
             let mut default = None;
@@ -1951,14 +1954,14 @@ impl Parser<'_> {
         Ok((self.ty()?, Vec::new(), Vec::new()))
     }
 
-    /// Reads an array type from its `[`: the size in brackets and the type of
-    /// its elements. A size is a whole number, or `+`, `-` and `*` of whole
-    /// numbers, in brackets or not, as a size that is a name is once the copy
-    /// of the item it belongs to has the number put in; the arithmetic is
-    /// exact. Any other size is not built, and the type it gives then holds
+    /// Reads an array type from its `[`: the size in brackets, or a size for
+    /// each axis of a matrix, and the type of its elements. A size is a whole
+    /// number, or `+`, `-` and `*` of whole numbers, in brackets or not, as a
+    /// size that is a name is once the copy of the item it belongs to has the
+    /// number put in; the arithmetic is exact. Any other size is not built, and the type it gives then holds
     /// the names the sizes write and the type of the elements.
     fn array_type(&mut self, pos: Pos) -> Result<Type, Error> {
-        if let Some((length, read)) = self.array_size(pos)? {
+        if let Some((sizes, read)) = self.array_sizes(pos)? {
             for _ in 0..read {
                 self.bump();
             }
@@ -1970,7 +1973,7 @@ impl Parser<'_> {
                 function: false,
                 range: None,
                 statement: None,
-                length: Some(length),
+                sizes,
             });
         }
         self.unbuilt.push(Error::unsupported(pos, "an array type"));
@@ -1989,7 +1992,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
-                    length: None,
+                    sizes: Vec::new(),
                 }),
                 _ => {}
             }
@@ -2003,36 +2006,54 @@ impl Parser<'_> {
             function: false,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         })
     }
 
-    /// The size of an array type whose `[` is the token at hand, when it is
-    /// whole numbers and `+`, `-`, `*` and brackets alone, with how many tokens
-    /// the size and its `[` and `]` take.
-    fn array_size(&self, pos: Pos) -> Result<Option<(u64, usize)>, Error> {
-        let mut parts: Vec<&Tok> = Vec::new();
-        let mut depth = 0usize;
+    /// The sizes of an array type whose `[` is the token at hand, one for an
+    /// array and one for each axis of a matrix, separated by commas, when each
+    /// is whole numbers and `+`, `-`, `*` and brackets alone, with how many
+    /// tokens the sizes and their `[` and `]` take.
+    fn array_sizes(&self, pos: Pos) -> Result<Option<(Vec<u64>, usize)>, Error> {
+        let mut read = 1;
+        let mut sizes = Vec::new();
         loop {
-            let t = self.peek(parts.len() + 1);
-            match t {
-                Tok::Punct("]") if depth == 0 => break,
-                Tok::Punct("(") => depth += 1,
-                Tok::Punct(")") if depth > 0 => depth -= 1,
-                Tok::Number(_) | Tok::Punct("+" | "-" | "*") => {}
-                _ => return Ok(None),
+            let mut parts: Vec<&Tok> = Vec::new();
+            let mut depth = 0usize;
+            let end = loop {
+                let t = self.peek(read + parts.len());
+                match t {
+                    Tok::Punct(p @ ("]" | ",")) if depth == 0 => break *p,
+                    Tok::Punct("(") => depth += 1,
+                    Tok::Punct(")") if depth > 0 => depth -= 1,
+                    Tok::Number(_) | Tok::Punct("+" | "-" | "*") => {}
+                    _ => return Ok(None),
+                }
+                parts.push(t);
+            };
+            let Some(size) = Self::array_size(&parts, pos)? else {
+                return Ok(None);
+            };
+            sizes.push(size);
+            read += parts.len() + 1;
+            if end == "]" {
+                return Ok(Some((sizes, read)));
             }
-            parts.push(t);
         }
+    }
+
+    /// The size the tokens of one size of an array type write, when they are
+    /// whole numbers and `+`, `-`, `*` and brackets alone.
+    fn array_size(parts: &[&Tok], pos: Pos) -> Result<Option<u64>, Error> {
         let mut at = 0;
-        let value = match size_sum(&parts, &mut at) {
+        let value = match size_sum(parts, &mut at) {
             Ok(value) if at == parts.len() => value,
             Ok(_) | Err(None) => return Ok(None),
             Err(Some(message)) => return Err(Error::new(pos, message)),
         };
-        let written = written_size(&parts);
+        let written = written_size(parts);
         match u64::try_from(value) {
-            Ok(length) => Ok(Some((length, parts.len() + 2))),
+            Ok(length) => Ok(Some(length)),
             Err(_) if value < 0 => Err(Error::new(
                 pos,
                 format!(
@@ -2070,7 +2091,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
-                    length: None,
+                    sizes: Vec::new(),
                 })
             }
             Tok::Number(_) | Tok::Punct("-") => self.range_type(pos, names, None),
@@ -2086,7 +2107,7 @@ impl Parser<'_> {
                         function: false,
                         range: None,
                         statement: None,
-                        length: None,
+                        sizes: Vec::new(),
                     };
                     self.bump();
                     let result = self.ty()?;
@@ -2110,7 +2131,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
-                    length: None,
+                    sizes: Vec::new(),
                 })
             }
             tok => Err(self.expected("a type", tok)),
@@ -2169,7 +2190,7 @@ impl Parser<'_> {
                     function: false,
                     range: None,
                     statement: None,
-                    length: None,
+                    sizes: Vec::new(),
                 });
             }
             _ => {}
@@ -2181,7 +2202,7 @@ impl Parser<'_> {
             function: false,
             range: Some((first, end)),
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         })
     }
 

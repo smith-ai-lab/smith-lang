@@ -187,7 +187,9 @@ impl<'a> Lowering<'a> {
     /// Whether `e`, an index or a field of one, reads inside an array.
     pub(super) fn over_array(&self, e: &Expr, env: &[Ty]) -> bool {
         match e {
-            Expr::Index { of, .. } => matches!(self.typed.type_of(of, env), Ty::Array(..)),
+            Expr::Index { of, .. } => {
+                matches!(self.typed.type_of(of, env), Ty::Array(..) | Ty::Matrix(..))
+            }
             Expr::Field { of, .. } => self.over_array(of, env),
             _ => false,
         }
@@ -210,32 +212,42 @@ impl<'a> Lowering<'a> {
             && let Some(at) = out.find(name)
             && let Some(home) = out.names()[at].home.clone()
         {
-            let Ty::Array(element, _) = out.names()[at].ty.clone() else {
-                unreachable!("checked")
-            };
-            let address = match self.constant_index(index, env) {
+            let array = out.names()[at].ty.clone();
+            let (element, _) = array.elements().expect("checked");
+            let address = match self.constant_index(&array, index, env) {
                 Some(at) => out.moved(home.frame, at as u64 * home.stride),
-                None => self.element_address(out, home.frame, home.stride, index, env),
+                None => self.element_address(out, home.frame, home.stride, (&array, index), env),
             };
-            return (element[0].clone(), self.load(out, address, &home.scalars));
+            return (element.clone(), self.load(out, address, &home.scalars));
         }
         let (array, values) = self.expr(out, of, env);
-        let Ty::Array(element, n) = array else {
-            unreachable!("checked")
-        };
-        let size = self.size(&element[0]);
-        if let Some(at) = self.constant_index(index, env) {
+        let (element, n) = array.elements().expect("checked");
+        let size = self.size(element);
+        if let Some(at) = self.constant_index(&array, index, env) {
             let from = at * size;
-            return (element[0].clone(), values[from..from + size].to_vec());
+            return (element.clone(), values[from..from + size].to_vec());
         }
-        let (frame, scalars, stride) = self.written_to_frame(out, &element[0], n, &values);
-        let address = self.element_address(out, frame, stride, index, env);
-        (element[0].clone(), self.load(out, address, &scalars))
+        let (frame, scalars, stride) = self.written_to_frame(out, element, n, &values);
+        let address = self.element_address(out, frame, stride, (&array, index), env);
+        (element.clone(), self.load(out, address, &scalars))
     }
 
-    /// The number an index of an array is, when it is known where the program
-    /// is built.
-    pub(super) fn constant_index(&self, index: &Expr, env: &[Ty]) -> Option<usize> {
+    /// The place among the elements of the array or the matrix `of` that an
+    /// index reads, when it is known where the program is built. A matrix is
+    /// read with an index for each axis, and its elements are held row after
+    /// row, the last axis the one that changes first.
+    pub(super) fn constant_index(&self, of: &Ty, index: &Expr, env: &[Ty]) -> Option<usize> {
+        match (of, index) {
+            (Ty::Matrix(_, sizes), Expr::Tuple { items, .. }) => (items.iter().zip(sizes))
+                .try_fold(0, |at, (e, n)| {
+                    Some(at * *n as usize + self.constant_one(e, env)?)
+                }),
+            _ => self.constant_one(index, env),
+        }
+    }
+
+    /// The number one index is, when it is known where the program is built.
+    fn constant_one(&self, index: &Expr, env: &[Ty]) -> Option<usize> {
         match (index, self.typed.type_of(index, env)) {
             (
                 Expr::Number {
@@ -290,23 +302,41 @@ impl<'a> Lowering<'a> {
         (frame, scalars.into_iter().zip(places).collect(), stride)
     }
 
-    /// The address of the element at `index`, in bytes laid out as a list's.
+    /// The address of the element of the array or the matrix `of` at `index`,
+    /// in bytes laid out as a list's, the elements of a matrix row after row.
     pub(super) fn element_address(
         &mut self,
         out: &mut Out<'a>,
         frame: form::Value,
         stride: u64,
-        index: &'a Expr,
+        (of, index): (&Ty, &'a Expr),
         env: &[Ty],
     ) -> form::Value {
-        let (at, number) = self.expr(out, index, env);
-        let place = match at {
-            Ty::Int(t) if bits_of(t) == form::Bits::B64 => number[0],
-            _ => out.widen(false, number[0]),
+        let place = match (of, index) {
+            (Ty::Matrix(_, sizes), Expr::Tuple { items, .. }) => {
+                let mut place = self.index_number(out, &items[0], env);
+                for (e, n) in items.iter().zip(sizes).skip(1) {
+                    let size = out.int(form::Bits::B64, i128::from(*n));
+                    let row = out.binary(form::Binary::Mul, place, size);
+                    let at = self.index_number(out, e, env);
+                    place = out.binary(form::Binary::Add, row, at);
+                }
+                place
+            }
+            _ => self.index_number(out, index, env),
         };
         let width = out.int(form::Bits::B64, i128::from(stride));
         let offset = out.binary(form::Binary::Mul, place, width);
         out.binary(form::Binary::Add, frame, offset)
+    }
+
+    /// The number one index is, as a 64-bit integer.
+    fn index_number(&mut self, out: &mut Out<'a>, index: &'a Expr, env: &[Ty]) -> form::Value {
+        let (at, number) = self.expr(out, index, env);
+        match at {
+            Ty::Int(t) if bits_of(t) == form::Bits::B64 => number[0],
+            _ => out.widen(false, number[0]),
+        }
     }
 
     /// Works out where the element or the part of one that `expr` reads is,
