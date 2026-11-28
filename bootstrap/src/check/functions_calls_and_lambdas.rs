@@ -1408,10 +1408,13 @@ impl<'a> Checker<'a> {
             {
                 self.wrapping_division(body, call, sig);
             }
+            let gives = sig.gives.solved(&sol);
+            if gives_back && self.kept_mistake(body, call, &defs.file.functions[f], &gives) {
+                return Ty::Unknown;
+            }
             if let Some(i) = sig.gives_param {
                 return self.argument_function(body, call, sig, i);
             }
-            let gives = sig.gives.solved(&sol);
             if let (false, Ty::Struct(u, mut held)) = (sig.gives_held.is_empty(), gives.clone()) {
                 // The functions of parameters are those of the arguments.
                 let first = held.len() - defs.implicit[u];
