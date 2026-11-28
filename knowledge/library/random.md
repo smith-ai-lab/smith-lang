@@ -5,7 +5,8 @@ description: Random bits from a key, distributions as ordinary structs with the 
 status: partial
 built:
   - "`std.random` with `Key`, `bits`, `split`, `seeded`, and `fresh`, and the generator of [The generator](#the-generator), which a test checks against the vectors Random123 publishes and against a model of it written in Rust"
-  - "not built: `uniform`, `standard_normal`, `Sample`, `LogProb`, and `split_n`, since no float type is built yet"
+  - "`uniform` and `standard_normal`, on every target and in the evaluator, which a test checks against a model written in Rust and for their mean and variance over 10000 keys"
+  - "not built: `Sample`, `LogProb`, and `split_n`"
 ---
 
 # Random
@@ -16,7 +17,14 @@ Randomness comes from a [`Key`](../language/take.md), which is used at most once
 fn bits(key: take Key) -> u64
 ```
 
-`uniform(take key)` gives an `f32` from 0 up to but not including 1, and `standard_normal(take key)` gives one from the normal distribution with mean 0 and deviation 1. Both are arithmetic on `bits`.
+`uniform(take key)` gives an `f32` from 0 up to but not including 1, and `standard_normal(take key)` gives one from the normal distribution with mean 0 and deviation 1. Both are arithmetic on `bits`, each step an `f32` rounded once, with the `ln`, `sqrt`, and `cos` of [Float functions](float.md), so every target gives the same float for a key.
+
+| Function | Is |
+| --- | --- |
+| `uniform(take key)` | `n / 2^24`, where `n` is the top 24 bits of `bits(key)`, bits 63 to 40 |
+| `standard_normal(take key)` | `sqrt(-2 * ln(u)) * cos(2π * v)`, by Box-Muller, where `u` is `(n + 1) / 2^24` for `n` bits 63 to 40 of `bits(key)`, `v` is `m / 2^24` for `m` bits 39 to 16, and `2π` is the `f32` nearest it |
+
+`u` is never 0, so `standard_normal` is never further from 0 than `sqrt(-2 ln 2^-24)`, about 5.77.
 
 ## Where a key comes from
 
