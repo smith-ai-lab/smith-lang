@@ -251,6 +251,36 @@ fn around(h: &Hidden, takes: bool) -> (String, String) {
 }
 ",
         ),
+        "Object" => (
+            "Object, read",
+            "fn main() <alloc> {
+  match read(\"\\{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"m\\\",\\\"params\\\":\\{\\}\\}\") {
+    .ok(.one(.notification(n))) {
+      match n.params {
+        .object(o) { f(o) }
+        _ { }
+      }
+    }
+    _ { }
+  }
+}
+",
+        ),
+        "Array" => (
+            "Array, read",
+            "fn main() <alloc> {
+  match read(\"\\{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"m\\\",\\\"params\\\":[]\\}\") {
+    .ok(.one(.notification(n))) {
+      match n.params {
+        .array(o) { f(o) }
+        _ { }
+      }
+    }
+    _ { }
+  }
+}
+",
+        ),
         other => panic!("the test makes no `{other}`, so it needs a way to"),
     };
     let main = if takes {

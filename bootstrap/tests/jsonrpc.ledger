@@ -24,5 +24,5 @@
 5.1 | When a rpc call encounters an error | test a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names
 5.1 | This MUST be an integer. | test a_text_broken_in_one_way_the_page_lists_is_the_failure_the_page_names
 6 | If the batch rpc call itself fails to be recognized | test every_example_of_section_7_of_the_specification_is_read_as_it_says
-6 | If there are no Response objects contained | reason binds the server that builds the answer to a batch; write_batch writes the messages it is given, and read refuses an array with nothing in it
+6 | If there are no Response objects contained | reason binds the server that builds the answer to a batch; write_batch takes a list proven not empty, and read refuses an array with nothing in it
 8 | Method names that begin with rpc. are reserved | reason binds a sender of a request; read takes any method, as a protocol built on it may use its own
