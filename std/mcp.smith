@@ -18,12 +18,15 @@ pub struct Incoming {
   pub headers: List[(str, str)]
 }
 
-// What `mcp` says of a message: the text of one message, or none for a message
-// that needs no answer, and the status that whoever carries messages over HTTP
-// sends.
-pub struct Reply {
-  pub text: Option[str]
-  pub status: 100..600
+// What `mcp` says of a message: the text of its answer, nothing for a message
+// that needs no answer, or the text of a refusal with its status. Whoever
+// carries messages over HTTP sends an answer as 200, nothing as 202, and a
+// refusal with its status; whoever carries them another way writes the text of
+// an answer and of a refusal, and nothing for nothing.
+pub enum Reply {
+  answer: str
+  nothing
+  refused: (400..500, str)
 }
 
 pub effect messages {
@@ -198,8 +201,14 @@ fn success_text(id: str, result: str) -> str <alloc> {
   texts.finish(texts.append(texts.append(take b, result), "\}"))
 }
 
-fn refusal(id: Option[str], code: Int, message: str, data: Option[str], status: 100..600) -> Reply <alloc> {
-  Reply(text: .some(failure_text(id, code, message, data)), status: status)
+// A failure the message is answered with, as any answer is.
+fn failure(id: Option[str], code: Int, message: str, data: Option[str]) -> Reply <alloc> {
+  Reply.answer(failure_text(id, code, message, data))
+}
+
+// A failure the carrier sends with a status of refusal.
+fn refusal(id: Option[str], code: Int, message: str, data: Option[str], status: 400..500) -> Reply <alloc> {
+  Reply.refused((status, failure_text(id, code, message, data)))
 }
 
 struct Unsupported {
@@ -441,7 +450,7 @@ fn request_route(server: Server, incoming: Incoming, id: str, method: str, param
     .none { }
     .some(p) {
       if kind(p) != 123 {
-        return Routed.done(refusal(.some(id), -32600, "Invalid Request", .none, 200))
+        return Routed.done(failure(.some(id), -32600, "Invalid Request", .none))
       }
     }
   }
@@ -536,30 +545,30 @@ fn call_text(server: Server, failed: bool, value: str) -> str <alloc> {
 // What the server answers to a message of its lines, from what the lines gave:
 // whether any line asked, the entries of the tools, the result of the one tool
 // that was called, and the failure of reading its arguments.
-fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result: Option[str], failure: Option[(Int, str)]) -> Reply <alloc> {
+fn conclude(server: Server, call: Call, asked: bool, entries: List[str], result: Option[str], fault: Option[(Int, str)]) -> Reply <alloc> {
   if call.method == "server/discover" {
-    return Reply(text: .some(success_text(call.id, discovered(server, asked))), status: 200)
+    return Reply.answer(success_text(call.id, discovered(server, asked)))
   }
   if asked == false {
     return refusal(.some(call.id), -32601, "Method not found: {call.method}", .none, 404)
   }
   if call.method == "tools/list" {
-    return Reply(text: .some(success_text(call.id, list_text(server, entries))), status: 200)
+    return Reply.answer(success_text(call.id, list_text(server, entries)))
   }
-  match failure {
+  match fault {
     .some(f) {
       (code, why) = f
-      refusal(.some(call.id), code, why, .none, 200)
+      failure(.some(call.id), code, why, .none)
     }
     .none {
       match result {
-        .some(r) { Reply(text: .some(success_text(call.id, r)), status: 200) }
+        .some(r) { Reply.answer(success_text(call.id, r)) }
         .none {
           label = match call.name {
             .some(n) { n }
             .none { "" }
           }
-          refusal(.some(call.id), -32602, "Unknown tool: {label}", .none, 200)
+          failure(.some(call.id), -32602, "Unknown tool: {label}", .none)
         }
       }
     }
@@ -623,20 +632,20 @@ pub fn mcp(
 // answered by none.
 fn route(server: Server, incoming: Incoming) -> Routed <alloc> {
   if from_another_origin(server.origins, incoming.headers) {
-    return Routed.done(Reply(text: .none, status: 403))
+    return Routed.done(refusal(.none, -32600, "Origin not allowed", .none, 403))
   }
   match jsonrpc.read(incoming.text) {
-    .err(f) { Routed.done(refusal(.none, f.code, f.message, .none, 200)) }
+    .err(f) { Routed.done(failure(.none, f.code, f.message, .none)) }
     .ok(received) {
       match received {
-        .many(ms) { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
+        .many(ms) { Routed.done(failure(.none, -32600, "Invalid Request", .none)) }
         .one(m) {
           match m {
-            .response(r) { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
-            .notification(n) { Routed.done(Reply(text: .none, status: 202)) }
+            .response(r) { Routed.done(failure(.none, -32600, "Invalid Request", .none)) }
+            .notification(n) { Routed.done(Reply.nothing) }
             .request(r) {
               match r.id {
-                .null { Routed.done(refusal(.none, -32600, "Invalid Request", .none, 200)) }
+                .null { Routed.done(failure(.none, -32600, "Invalid Request", .none)) }
                 .number(n) { request_route(server, incoming, to_json(n), r.method, r.params) }
                 .text(t) { request_route(server, incoming, to_json(t), r.method, r.params) }
               }
@@ -734,9 +743,10 @@ pub fn stdio(body: fn() <messages, console, alloc>) <console, alloc> {
         messages(
           message: { Incoming(text: line, headers: []) },
           answer: fn(reply) {
-            match reply.text {
-              .some(t) { print(t) }
-              .none { }
+            match reply {
+              .answer(t) { print(t) }
+              .refused((status, t)) { print(t) }
+              .nothing { }
             }
           },
           body: {

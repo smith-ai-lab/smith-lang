@@ -4,7 +4,7 @@ title: MCP
 description: std.mcp, with which a program is a Model Context Protocol server whose tools, resources, and prompts are plain functions, each described by its own comment and its parameters.
 status: partial
 built:
-  - "`Incoming`, `Reply`, the effect `messages`, `Server` with `name`, `version`, `instructions`, `ttl`, and `origins`, and `reply_to(server, incoming)`, which answers one message of the protocol with one `Reply`: `server/discover`, the checks of the version, of `_meta`, of the headers, and of the origin, and the failures with the statuses the protocol gives them, and -32601 with 404 for every other method"
+  - "`Incoming`, `Reply`, the effect `messages`, `Server` with `name`, `version`, `instructions`, `ttl`, and `origins`, and `reply_to(server, incoming)`, which answers one message of the protocol with one `Reply`, an enum of an answer, nothing, or a refusal with its 4xx status: `server/discover`, the checks of the version, of `_meta`, of the headers, and of the origin, and the failures with the statuses the protocol gives them, and -32601 with 404 for every other method; an origin the server does not list is refused with 403 and a failure with no id"
   - "`mcp(name, version, instructions, ttl, origins)`, written with `with`, which answers the one message `messages` gives with what the lines after it say, `tool(f)` of a function that has `Function`, with `Deserialize` and `Describe` of its `Args`, which lists it with its name, its comment, and the schema of `Args` that `std.jsonschema` gives, and calls it for a `tools/call` of its name with the arguments read from the message, giving a value or a `Result` whose `.err` is a result marked as an error, `-32602` for arguments that do not fit, with the path and the problem of the `ReadError`, and for a tool the server has not, and `server/discover` telling of `tools` when a line offers one, and `stdio()`, which runs the lines once for each line of the standard input, writes each answer as one line, none for a notification, answers `console` so that `print` goes to the standard error, and ends when input does"
   - "the comment of a function given to `tool` and of the types it takes and gives reaches the executable, as `Describe` says of a type that is described, and no other does"
   - "the executable is entered through `local` of `project.smith`, which installs `stdio` and calls `main`, built with `smith build local` and run with `smith local`, as the example says, and the effects of a tool are required of the function that names it"
@@ -136,7 +136,7 @@ One check is `mcp`'s own, because the protocol asks it of every server whatever 
 with mcp(name: "notes", version: "1", origins: ["https://notes.example"])
 ```
 
-`origins` is a list of the origins a browser's page may call from, and it is empty when it is not given. A message with no `Origin` header is answered, as a client that is no browser sends none. A message with one is answered only when the list holds it, exactly as written, and is refused otherwise with status 403. So a server that names no origin is closed to every page in a browser, and one that is to be called from a page names that page's origin. A message that came by the standard input has no headers and is always answered.
+`origins` is a list of the origins a browser's page may call from, and it is empty when it is not given. A message with no `Origin` header is answered, as a client that is no browser sends none. A message with one is answered only when the list holds it, exactly as written, and is refused otherwise with 403. So a server that names no origin is closed to every page in a browser, and one that is to be called from a page names that page's origin. A message that came by the standard input has no headers and is always answered.
 
 ## Where the messages come from
 
@@ -148,9 +148,10 @@ struct Incoming {
   headers: List[(str, str)]
 }
 
-struct Reply {
-  text: Option[str]
-  status: 100..600
+enum Reply {
+  answer: str
+  nothing
+  refused: (400..500, str)
 }
 
 effect messages {
@@ -160,9 +161,9 @@ effect messages {
 ```
 
 - `message` gives the message being answered, with what carried it knows of it: the headers of the request it came in, each name in small letters, and none for a message that came by the standard input.
-- `answer` takes what `mcp` says of it: the text of one message, or none for a message that needs no answer, and a status. Whoever carries messages over HTTP sends that status, and whoever carries them another way has no use for it.
+- `answer` takes what `mcp` says of it, a `Reply`: `.answer(text)`, the text of one message, `.nothing`, for a message that needs no answer, or `.refused((status, text))`, the text of a failure with a status of 400 to 499. Whoever carries messages over HTTP sends an answer as 200, nothing as 202 with no body, and a refusal with its status and its text. Whoever carries them another way writes the text of an answer and of a refusal and nothing for nothing, so `stdio` does. A reply never holds a text beside 202 or no text beside 200, and a refusal is never a 2xx or a 5xx, as the types say: the carrier picks the status of an answer and of nothing, and `mcp` gives one only to a refusal.
 
-The protocol asks a server to hold the headers of a request to the message inside it, and to choose the status by how the message fails, so `mcp` does both and what carries the message knows nothing of the protocol. `mcp` refuses with status 400 a message whose `Mcp-Method` header is not its method, whose `Mcp-Name` header is not the tool, the prompt, or the address it names, or whose `MCP-Protocol-Version` header is not the version it says inside, each only where there are headers. It answers 404 for a method it has not, 202 with no text for a message that needs no answer, 400 for a request that names a version the server does not speak or leaves out the `_meta` the protocol requires, as the protocol gives each of those failures, and 200 for every other answer.
+The protocol asks a server to hold the headers of a request to the message inside it, and to choose the status by how the message fails, so `mcp` does both and what carries the message knows nothing of the protocol. `mcp` refuses with status 400 a message whose `Mcp-Method` header is not its method, whose `Mcp-Name` header is not the tool, the prompt, or the address it names, or whose `MCP-Protocol-Version` header is not the version it says inside, each only where there are headers. It refuses with 404 a method it has not, answers with nothing a message that needs no answer, refuses with 400 a request that names a version the server does not speak or leaves out the `_meta` the protocol requires, as the protocol gives each of those failures, and refuses with 403 a message of an origin it does not list, with a failure that has no id. Every other answer is an `.answer`.
 
 One message is answered by `reply_to(server, incoming)`, which takes a `Server` holding the arguments of `mcp` and gives the `Reply`, with no effect but `alloc`, so that what carries the messages, and a test, need no handler to try it.
 
