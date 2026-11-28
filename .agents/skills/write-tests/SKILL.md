@@ -22,15 +22,14 @@ A test exists to fail when something that must be true stops being true, and for
 - **A test that needs a kind of machine to run and fails elsewhere.** Run what the machine can run and say what was skipped.
 - **A sleep, a retry, or anything that depends on timing.**
 
-## How long a test may take
+## How much work a test may do
 
-- **Well under a second of its own computing.** A run fails, and names the test, when a test spends more than 2 s, a limit that stands until #1270 and #1271 keep the tests fast by their work and their history. Write a test to take a small part of that: the fewest cases and the smallest inputs that hold its property. The harness measures the processor time of the thread that ran the test, so a busy machine does not make a quick test slow, and the verdict is the same alone and beside every other test.
-- **A test that starts a program or a thread has not spent that time.** Call a function where you can, and start a program only to check what starting it does, and then through `output_within` in `tests/support/clock.rs`, which kills it after ten seconds on the wall and fails the test saying that the program never ends.
-- **A program that never ends fails the test that runs it.** The evaluator panics after three million blocks, and a run ends a test, naming it, when nothing has ended for twelve seconds on the wall, neither the test nor a program it started through `output_within`, so a test that starts many programs that each end is never taken for one that hangs. A new way to run a program goes through one of these, so that no test waits for ever.
-- **Aim for under half the limit,** so that a slower machine still passes. Work that every test of a file needs is done once, in a place that `OnceLock` holds, and costs the first test that asks for it.
+- **A test is measured by its steps, compared with main.** The compiler and the evaluator count the steps they take for a test, as the Testing section of `knowledge/compiler.md` says, and a pull request fails when a test takes more than 1.5 times its steps on main and 100,000 more. Steps are the same on every machine and every run, so a slow machine fails nothing. Write a test with the fewest cases and the smallest inputs that hold its property.
+- **A change that is meant to do more work says so.** Its description has a line that starts `Does more work.` and gives the reason. A change to a generator gives the tests other inputs, and may need the line too.
+- **Steps do not see a program the test starts, or a thread.** Call a function where you can, and start a program only to check what starting it does, and then through `output_within` in `tests/support/clock.rs`, which kills it after ten seconds on the wall and fails the test saying that the program never ends. A test starts no thread, as the steps of a thread are not its own.
+- **A program that never ends fails the test that runs it.** The evaluator panics after three million blocks, and a run ends a test, naming it, when nothing has ended for twelve seconds on the wall, neither the test nor a program it started through `output_within`, so a test that starts many programs that each end is never taken for one that hangs. A new way to run a program goes through one of these, so that no test waits for ever. That is the only limit in time a test has.
+- **Work that every test of a file needs is done once,** through `Once` or `Keyed` of `tests/support/shared.rs`, and not a bare `OnceLock`, so that its steps are counted in no test and the steps of each are the same whichever test asks first.
 - **A property runs as few cases as make it fail when what it checks is broken.** Break the code once and watch it fail with the cases you chose.
-- **The limit applies to every test.** A test starts no thread, as the time of a thread is not the time of its own.
-- **A run fails on the kind of machine the `linux` job of `ci` uses,** and elsewhere prints a slow test and passes.
 
 ## Where each kind goes
 
@@ -46,4 +45,4 @@ A test exists to fail when something that must be true stops being true, and for
 - The sweep, `sh sweep/sweep.sh`, in `bootstrap/`, shows what the tests catch. Run it again when you add a test that should catch a break the results say nothing caught.
 - Every line of the issue's "Must be true" has a test.
 - No test you added names a place or a message by hand.
-- The run ends with its slowest tests, by the time they computed. If one of yours is on the list, make its input smaller.
+- The run ends with the tests that took the most steps. If one of yours is on the list, make its input smaller.

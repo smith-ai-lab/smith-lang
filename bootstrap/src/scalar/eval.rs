@@ -70,8 +70,6 @@ struct Machine<'a> {
     copied: Vec<usize>,
     /// How many blocks the program may still enter.
     blocks: u64,
-    /// How many instructions and ends of blocks have run.
-    ran: u64,
     /// How many calls are open.
     depth: usize,
     /// What says whether a wait is over at once, and each wait so far.
@@ -156,7 +154,7 @@ pub fn run_with_limit(program: &Program, limit: usize) -> Outcome {
 /// Runs the program as `run_with_limit` does, and also gives how many bytes
 /// each request to the system for memory asked for, in order.
 pub fn run_counting(program: &Program, limit: usize) -> (Outcome, Vec<usize>) {
-    let (outcome, _, requests, _, _, _) = start(program, limit, Given::Words(&[]));
+    let (outcome, _, requests, _, _) = start(program, limit, Given::Words(&[]));
     (outcome, requests)
 }
 
@@ -165,7 +163,7 @@ pub fn run_counting(program: &Program, limit: usize) -> (Outcome, Vec<usize>) {
 /// they are rounded and taken from a piece. A program that has no handler asks
 /// for none.
 pub fn run_taking(program: &Program, limit: usize) -> (Outcome, Vec<usize>) {
-    let (outcome, _, _, taken, _, _) = start(program, limit, Given::Words(&[]));
+    let (outcome, _, _, taken, _) = start(program, limit, Given::Words(&[]));
     (outcome, taken)
 }
 
@@ -173,15 +171,16 @@ pub fn run_taking(program: &Program, limit: usize) -> (Outcome, Vec<usize>) {
 /// of the runtime's copy moved, in order, which is what a list that grows moves
 /// into its new memory.
 pub fn run_copying(program: &Program, limit: usize) -> (Outcome, Vec<usize>, Vec<usize>) {
-    let (outcome, _, requests, _, _, copied) = start(program, limit, Given::Words(&[]));
+    let (outcome, _, requests, _, copied) = start(program, limit, Given::Words(&[]));
     (outcome, requests, copied)
 }
 
 /// Runs the program as `run` does, and also gives how many instructions ran,
 /// counting the end of each block entered as one.
 pub fn run_measured(program: &Program) -> (Outcome, u64) {
-    let (outcome, _, _, _, ran, _) = start(program, usize::MAX, Given::Words(&[]));
-    (outcome, ran)
+    let before = crate::work::steps();
+    let (outcome, ..) = start(program, usize::MAX, Given::Words(&[]));
+    (outcome, crate::work::steps() - before)
 }
 
 /// Runs the program as `run` does, with the bytes as what standard input holds.
@@ -198,7 +197,7 @@ pub fn run_with_words(program: &Program, words: &[Vec<u8>]) -> Outcome {
 /// Runs a program as `run_with_words` does, and also gives what it wrote to
 /// standard error.
 pub fn run_with_words_and_errors(program: &Program, words: &[Vec<u8>]) -> (Outcome, Vec<u8>) {
-    let (outcome, errors, _, _, _, _) = start(program, usize::MAX, Given::Words(words));
+    let (outcome, errors, _, _, _) = start(program, usize::MAX, Given::Words(words));
     (outcome, errors)
 }
 
@@ -211,14 +210,14 @@ pub fn run_with_command_line(program: &Program, line: &[u16]) -> Outcome {
 /// Runs a program as `run_with_command_line` does, and also gives what it
 /// wrote to standard error.
 pub fn run_with_command_line_and_errors(program: &Program, line: &[u16]) -> (Outcome, Vec<u8>) {
-    let (outcome, errors, _, _, _, _) = start(program, usize::MAX, Given::Line(line));
+    let (outcome, errors, _, _, _) = start(program, usize::MAX, Given::Line(line));
     (outcome, errors)
 }
 
 /// What a run gave: the outcome, what was written to standard error, each
-/// request for memory, each call of `take`, how many instructions and block
-/// ends ran, and each call of the runtime's copy.
-type Run = (Outcome, Vec<u8>, Vec<usize>, Vec<usize>, u64, Vec<usize>);
+/// request for memory, each call of `take`, and each call of the runtime's
+/// copy.
+type Run = (Outcome, Vec<u8>, Vec<usize>, Vec<usize>, Vec<usize>);
 
 fn start(program: &Program, limit: usize, given: Given) -> Run {
     start_with(program, limit, given, &[])
@@ -251,7 +250,6 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         copying: (program.functions.iter()).position(|f| *f == super::runtime::copy()),
         copied: Vec::new(),
         blocks: BLOCKS,
-        ran: 0,
         depth: 0,
         ready: None,
         waited: Vec::new(),
@@ -274,7 +272,6 @@ fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Ru
         machine.stderr,
         machine.requests,
         machine.taken,
-        machine.ran,
         machine.copied,
     )
 }
@@ -334,7 +331,6 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
         copying: None,
         copied: Vec::new(),
         blocks: BLOCKS,
-        ran: 0,
         depth: 0,
         ready: None,
         waited: Vec::new(),
@@ -380,7 +376,6 @@ fn alone<'a>(
         copying: None,
         copied: Vec::new(),
         blocks: BLOCKS,
-        ran: 0,
         depth: 0,
         ready: Some(ready),
         waited: Vec::new(),
@@ -1128,7 +1123,7 @@ impl Machine<'_> {
                 self.blocks = self.blocks.checked_sub(1).expect(
                     "the program never ends: it entered more blocks than any test gives it time for",
                 );
-                self.ran += b.instructions.len() as u64 + 1;
+                crate::work::step(b.instructions.len() as u64 + 1);
                 for (param, word) in b.params.iter().zip(std::mem::take(args)) {
                     values[param.0] = Some(word);
                 }

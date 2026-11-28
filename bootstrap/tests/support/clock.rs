@@ -1,15 +1,8 @@
-//! How long a test spent computing: the processor time of the thread that
-//! ran it. A busy machine makes a test wait for the processor, and the
-//! clock on the wall then runs on while the test does not, so the wall
-//! clock gives a quick test a slow verdict. Processor time does not run
-//! while the thread waits, so the verdict of a test is the same alone and
-//! beside every other test.
+//! When a test hangs, and the processor time of a thread.
 //!
-//! The time of a program a test starts, or of a thread it starts, is not the
-//! time of its own thread. A test that waits on either has not spent that
-//! time computing, so a test starts no thread, and starts a program only
-//! through `output_within`, which gives the program the limit of a test on
-//! the wall and fails the test when the program has not ended by then.
+//! A test starts a program only through `output_within`, which gives the
+//! program the limit on the wall and fails the test when the program has not
+//! ended by then.
 //!
 //! The run takes a test to hang only when nothing has ended for the whole of
 //! the limit: not the test, and not a program it started through
@@ -44,9 +37,9 @@ pub fn progressed() {
     });
 }
 
-/// The processor time the calling thread has used so far. Where the
-/// machine gives none, the time since the first call, which is all the
-/// limit needs there, as it is enforced where this is the processor time.
+/// The processor time the calling thread has used so far, which a busy
+/// machine does not stretch as it does the wall. Where the machine gives none,
+/// the time since the first call.
 #[cfg(unix)]
 pub fn thread_time() -> Duration {
     use std::ffi::{c_int, c_long};
@@ -82,15 +75,15 @@ pub fn thread_time() -> Duration {
 }
 
 /// How long a test may go on the wall without anything ending, and how long a
-/// command a test starts may take, before it is taken to never end. It is far above what one that ends takes, even on a
-/// machine that is busy, as the limit counts only the time a test spends
-/// computing, and a busy machine stretches the wall.
+/// command a test starts may take, before it is taken to never end. It is far
+/// above what one that ends takes, even on a machine that is busy, which
+/// stretches the wall.
 const HANG: Duration = Duration::from_secs(10);
 
 static HANG_MILLISECONDS: AtomicU64 = AtomicU64::new(HANG.as_millis() as u64);
 
-/// How long a step of a test may take before the run says so. A run that
-/// ends over its limit then shows where the time went, which the failure alone
+/// How long a step of a test may take before the run says so. A test that
+/// hangs then shows where the time went, which the failure alone
 /// does not: the start of a program, its run, or the writing of its file.
 const SLOW_STEP: Duration = Duration::from_millis(500);
 

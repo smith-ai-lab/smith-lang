@@ -16,6 +16,7 @@ use crate::Test;
 use crate::generate::{self, Gen};
 use crate::lists::header;
 use crate::lowered_once::{ROUNDS, Written as Lowered};
+use crate::shared;
 
 pub const ONCE: &[Test] = &[
     (
@@ -1901,8 +1902,8 @@ fn asked_by_reading_with(reading: &Lowered, building: &Lowered, changes: &[(u64,
 /// does, whatever it holds.
 fn asked_by_reading_nothing() -> (usize, usize) {
     // The same for every test that reads it, so it is asked once.
-    static NOTHING: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
-    *NOTHING.get_or_init(|| asked_by_reading("", "()", &pushes("null"), "true"))
+    static NOTHING: shared::Once<(usize, usize)> = shared::Once::new();
+    *NOTHING.get(|| asked_by_reading("", "()", &pushes("null"), "true"))
 }
 
 // A list asks for memory in proportion to it. The struct of numbers and the

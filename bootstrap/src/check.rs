@@ -9475,6 +9475,7 @@ impl<'a> Checker<'a> {
     /// Checks an expression against what is wanted of it, and gives its
     /// type, which is recorded.
     fn expr(&mut self, body: &mut Body<'a>, expr: &Expr, want: &Want) -> Ty {
+        crate::work::step(1);
         let ty = self.expr_of(body, expr, want);
         self.types.insert(addr(expr), ty.clone());
         if let Expr::Call(call) = expr {

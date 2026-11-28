@@ -2,8 +2,8 @@ name: ci
 
 # The `ci` job is the one check the repository requires. It passes only when
 # every other job passed or was skipped on purpose, so adding a job changes no
-# rule. The `timings` and `release` workflows are the only ones that run after a
-# merge.
+# rule. The `timings`, `work`, and `release` workflows are among those that run
+# after a merge, never here.
 on:
   pull_request:
   merge_group:
@@ -77,6 +77,32 @@ jobs:
         run: cargo test --locked -- --group=once
       - name: Test what depends on the machine
         run: cargo test --locked -- --group=machine
+      # The steps of every test, counted with the seed the `work` workflow
+      # counts main with, so that a test is given the same input on both and
+      # only a change of the compiler, the evaluator, or the test changes
+      # them. The runs above keep the seed of the commit.
+      - name: Count the steps of every test
+        run: SMITH_SEED=0 cargo test --locked -- --steps="$RUNNER_TEMP/steps"
+      - name: Say which tests take many more steps than on main
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          if ! git fetch --quiet --depth=1 origin work; then
+            echo "main has no steps recorded yet, so none are compared." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git show FETCH_HEAD:steps.csv > "$RUNNER_TEMP/main-steps"
+          echo "The steps of main are those of $(git show FETCH_HEAD:commit)."
+          # The description as it is now, as for the cases that build to other bytes.
+          gh api "repos/${{ github.repository }}/pulls/$PULL_REQUEST" --jq '.body // ""' > "$RUNNER_TEMP/description"
+          if sh ../.github/check-work.sh "$RUNNER_TEMP/main-steps" "$RUNNER_TEMP/steps" \
+            "$RUNNER_TEMP/description" > "$RUNNER_TEMP/work"; then status=0; else status=$?; fi
+          cat "$RUNNER_TEMP/work"
+          cat "$RUNNER_TEMP/work" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Timings
         run: target/debug/smith --timings build tests/cases/hello.smith
       # The harness in `measure/` takes the compiler as a crate. It is built

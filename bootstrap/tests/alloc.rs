@@ -3,8 +3,6 @@
 //! loops that go back, blocks that nothing reaches, calls, and more values
 //! alive at once than any chip has registers.
 
-use std::sync::OnceLock;
-
 use smith::scalar::{self, Bits, Builder, Function, Type, Value};
 use smith::target::alloc::{Allocation, Home, Registers, allocate};
 use smith::target::moves::{Move, Step, sequence};
@@ -12,6 +10,7 @@ use smith::target::moves::{Move, Step, sequence};
 use crate::Test;
 use crate::generate::{self, Gen};
 use crate::scalar::every_function;
+use crate::shared;
 
 pub const ONCE: &[Test] = &[
         (
@@ -319,8 +318,8 @@ fn functions(part: usize) -> Vec<Function> {
 /// The functions of a part, with every set of registers offered, allocated
 /// once for all the tests of the part.
 fn cases(part: usize) -> &'static [Case] {
-    static CASES: [OnceLock<Vec<Case>>; PARTS] = [const { OnceLock::new() }; PARTS];
-    CASES[part].get_or_init(|| {
+    static CASES: [shared::Once<Vec<Case>>; PARTS] = [const { shared::Once::new() }; PARTS];
+    CASES[part].get(|| {
         let mut cases = Vec::new();
         for f in functions(part) {
             let facts = facts(&f);

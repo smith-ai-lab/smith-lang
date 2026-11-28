@@ -6,12 +6,13 @@
 //! what was written after `listen` has returned. A server whose `accept` never
 //! gives `.closed` serves for ever, as it did.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use smith::lower;
 use smith::target::Target;
 
 use crate::Test;
+use crate::shared;
 use crate::targets::{self, fingerprinting, record, run_with_words};
 
 pub const ONCE: &[Test] = &[(
@@ -223,24 +224,16 @@ fn kernel() -> Vec<Target> {
 /// what it costs to build. A fingerprint is made of the executables the compiler it
 /// is given builds, so it builds each time.
 fn executable(target: Target, tested: bool) -> Arc<Vec<u8>> {
-    /// The target, whether it is the program under the scheduler of a test, and its executable.
-    type Built = (String, bool, Arc<Vec<u8>>);
-    static BUILT: Mutex<Vec<Built>> = Mutex::new(Vec::new());
+    /// The executable of each target, and of whether it is the program under
+    /// the scheduler of a test.
+    static BUILT: shared::Keyed<(&str, bool), Arc<Vec<u8>>> = shared::Keyed::new();
     let build = || {
         Arc::new(targets::build(program(tested).as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}")))
     };
     if fingerprinting() {
         return build();
     }
-    let mut built = BUILT.lock().unwrap_or_else(|e| e.into_inner());
-    match built.iter().find(|(name, kind, _)| name == target.name() && *kind == tested) {
-        Some((_, _, bytes)) => bytes.clone(),
-        None => {
-            let bytes = build();
-            built.push((target.name().to_string(), tested, bytes.clone()));
-            bytes
-        }
-    }
+    BUILT.get((target.name(), tested), build)
 }
 
 /// `listen` returns where the listener says it is closed, whatever order the
