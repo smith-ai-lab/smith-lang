@@ -1,5 +1,5 @@
 use std.bits (bit_and, bit_or, i64, shift_left, shift_right, u64)
-use std.int (checked_add, narrow, wrapping_narrow)
+use std.int (narrow, wrapping_narrow)
 use std.list (append, copy, push)
 use std.task (Handle, task)
 
@@ -343,10 +343,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
     if stream {
       got = __system(20, f.handle, chunk, left, 0, 0, 0)
     } else {
-      match checked_add(first, have) {
-        .some(at) { got = __system(23, f.handle, chunk, left, at, 0, 0) }
-        .none { return .err(.failed((f.path, "read: too far into the file"))) }
-      }
+      got = __system(23, f.handle, chunk, left, first + have, 0, 0)
     }
     if got == would_block() {
       if __scheduled() { wait_to_read(f.handle) }
@@ -358,10 +355,9 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
     } else {
       piece = __sized(take chunk, count(got))
       if have == 0 { made = piece } else { made = append(take made, piece) }
-      match checked_add(have, count(got)) {
-        .some(n) { have = n }
-        .none { return .err(.failed((f.path, "read: too many bytes"))) }
-      }
+      n = count(got)
+      if have + n > 18446744073709551615 { return .err(.failed((f.path, "read: too many bytes"))) }
+      have = have + n
       if stream { break }
     }
   }
@@ -389,15 +385,12 @@ fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <all
     if done >= bytes.size { break }
     handed = if whole { bytes.size } else { rest.size }
     mut given: i64 = 0
-    match checked_add(at, done) {
-      .some(place) {
-        if stream {
-          given = if whole { __system(25, f.handle, bytes, handed, 0, 0, 0) } else { __system(25, f.handle, rest, handed, 0, 0, 0) }
-        } else {
-          given = if whole { __system(24, f.handle, bytes, handed, place, 0, 0) } else { __system(24, f.handle, rest, handed, place, 0, 0) }
-        }
-      }
-      .none { return .err(.failed((f.path, "write: too far into the file"))) }
+    if at + done > 18446744073709551615 { return .err(.failed((f.path, "write: too far into the file"))) }
+    place: Nat = at + done
+    if stream {
+      given = if whole { __system(25, f.handle, bytes, handed, 0, 0, 0) } else { __system(25, f.handle, rest, handed, 0, 0, 0) }
+    } else {
+      given = if whole { __system(24, f.handle, bytes, handed, place, 0, 0) } else { __system(24, f.handle, rest, handed, place, 0, 0) }
     }
     if given == no_places() {
       stream = true
@@ -412,10 +405,8 @@ fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <all
         rest = if whole { tail(bytes, n) } else { tail(rest, n) }
         whole = false
       }
-      match checked_add(done, n) {
-        .some(total) { done = total }
-        .none { return .err(.failed((f.path, "write: too many bytes"))) }
-      }
+      if done + n > 18446744073709551615 { return .err(.failed((f.path, "write: too many bytes"))) }
+      done = done + n
     }
   }
   .ok(())
@@ -514,17 +505,15 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
     },
     write: fn(f, at, bytes) {
       place = handle(f)
-      match checked_add(at, bytes.size) {
-        .some(end) {
-          if place < held.size {
-            total = if end > held[place].bytes.size { end } else { held[place].bytes.size }
-            held = holding(held, place, put(held[place].bytes, at, bytes, total))
-            .ok(())
-          } else {
-            .err(.failed((f.path, "write: no such file")))
-          }
-        }
-        .none { .err(.failed((f.path, "write: too far into the file"))) }
+      if at + bytes.size > 18446744073709551615 {
+        .err(.failed((f.path, "write: too far into the file")))
+      } else if place < held.size {
+        end: Nat = at + bytes.size
+        total = if end > held[place].bytes.size { end } else { held[place].bytes.size }
+        held = holding(held, place, put(held[place].bytes, at, bytes, total))
+        .ok(())
+      } else {
+        .err(.failed((f.path, "write: no such file")))
       }
     },
     body: body,

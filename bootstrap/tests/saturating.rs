@@ -1,14 +1,16 @@
-//! What `saturating_add`, `saturating_sub`, `checked_add`, and `checked_sub`
-//! of an unsigned whole number or a `Nat` cost, and that they give what they
-//! gave: the cost is an add or a subtraction and a choice, with no call and no
-//! jump for a `saturating_` function, and a jump for a `checked_` function that
-//! is matched at once. Every function answers what Rust's arithmetic on 128
-//! bits says, at the edges of every type, as a value and matched at once.
+//! `saturating_add`, `saturating_sub`, and `saturating_mul` are functions of
+//! `std.int` that a file imports, and nothing in Smith is a `checked_`
+//! function. What the saturating functions cost, and that they give what they
+//! gave: the cost is the operation and a choice, with no call and no jump.
+//! Every function answers what Rust's arithmetic on 128 bits says, at the
+//! edges of every type.
 //!
 //! What a function costs is counted in the machine code of each kind of chip,
 //! beside the same program with the function a `wrapping_` one, which is
 //! the add or the subtraction alone, and the values are taken from a list, so
 //! that the compiler cannot know them.
+
+use std::path::Path;
 
 use smith::scalar;
 use smith::target::Target;
@@ -23,6 +25,14 @@ use crate::targets::{runnable, scalar_runs_as};
 
 pub const ONCE: &[Test] = &[
     (
+        "a_saturating_function_is_imported_from_std_int_and_refused_where_it_is_called_without_the_import",
+        a_saturating_function_is_imported_from_std_int_and_refused_where_it_is_called_without_the_import,
+    ),
+    (
+        "the_prelude_has_no_saturating_or_checked_function_and_nothing_in_smith_is_a_checked_function",
+        the_prelude_has_no_saturating_or_checked_function_and_nothing_in_smith_is_a_checked_function,
+    ),
+    (
         "a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives_part_1_of_3",
         || a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives("add"),
     ),
@@ -35,35 +45,101 @@ pub const ONCE: &[Test] = &[
         || a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gives("mul"),
     ),
     (
-        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_1_of_3",
-        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("add"),
+        "the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_1_of_3",
+        || the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(0),
     ),
     (
-        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_2_of_3",
-        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("sub"),
+        "the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_2_of_3",
+        || the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(1),
     ),
     (
-        "a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call_part_3_of_3",
-        || a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call("mul"),
-    ),
-    (
-        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_1_of_3",
-        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(0),
-    ),
-    (
-        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_2_of_3",
-        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(1),
-    ),
-    (
-        "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_3_of_3",
-        || the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(2),
+        "the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64_part_3_of_3",
+        || the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(2),
     ),
 ];
 
 pub const MACHINE: &[Test] = &[(
-    "the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_every_executable",
-    the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_every_executable,
+    "the_saturating_functions_answer_at_the_edges_of_every_type_in_every_executable",
+    the_saturating_functions_answer_at_the_edges_of_every_type_in_every_executable,
 )];
+
+/// The program of the issue, with the line that imports the two functions.
+const IMPORTED: &str = "use std.console (console, print)
+use std.bits (u8)
+use std.int (saturating_add, saturating_sub)
+
+fn main() <console, alloc> {
+  a: u8 = 250
+  b: u8 = 3
+  print(\"{saturating_add(a, 10)} {saturating_sub(b, 5)}\")
+}
+";
+
+/// The program prints the nearest values, and without its `use` of `std.int`
+/// it is refused where `saturating_add` is first called, with a fix that
+/// imports it from there.
+fn a_saturating_function_is_imported_from_std_int_and_refused_where_it_is_called_without_the_import() {
+    let program = lower(IMPORTED.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(scalar::run(&program).stdout, b"255 0\n");
+    let without = IMPORTED.replace("use std.int (saturating_add, saturating_sub)\n", "");
+    let errors = lower(without.as_bytes()).expect_err("no import of `saturating_add`");
+    let (line, text) = (without.lines().enumerate())
+        .find(|(_, l)| l.contains("saturating_add("))
+        .expect("a call");
+    let col = text.find("saturating_add(").expect("a call") + 1;
+    let at = (errors.iter())
+        .find(|e| (e.pos.line, e.pos.col) == (line + 1, col))
+        .unwrap_or_else(|| panic!("no error where `saturating_add` is called: {errors:?}"));
+    let fix = at.fix.as_deref().unwrap_or_default();
+    assert!(fix.contains("use std.int (saturating_add"), "{at:?}");
+}
+
+/// The words of a text of Smith: its names, and what is not a name between.
+fn words(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+}
+
+/// The prelude names no `Saturating` or `Checked` trait and no `saturating_`
+/// or `checked_` function, no file of the library or of the compiler written
+/// in Smith names a `checked_` function, and a program that calls one is
+/// refused, whether or not it imports it.
+fn the_prelude_has_no_saturating_or_checked_function_and_nothing_in_smith_is_a_checked_function() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let prelude = std::fs::read_to_string(root.join("std/prelude.smith")).expect("the prelude");
+    for word in words(&prelude) {
+        assert!(
+            !matches!(word, "Saturating" | "Checked")
+                && !word.starts_with("saturating_")
+                && !word.starts_with("checked_"),
+            "the prelude names `{word}`"
+        );
+    }
+    let mut read = 0;
+    for folder in ["std", "compiler"] {
+        for entry in std::fs::read_dir(root.join(folder)).expect("a folder") {
+            let path = entry.expect("a file").path();
+            if path.extension().is_some_and(|e| e == "smith") {
+                read += 1;
+                let text = std::fs::read_to_string(&path).expect("a file");
+                let named = words(&text).find(|w| w.starts_with("checked_"));
+                assert_eq!(named, None, "{}", path.display());
+            }
+        }
+    }
+    assert!(read > 0, "no file of Smith");
+    for f in ["checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem"] {
+        for import in ["", "use std.int (narrow)\n"] {
+            let source = format!(
+                "use std.console (console, print)\n{import}\nfn main() <console, alloc> {{\n  a: Byte = 7\n  print(\"{{{f}(a, 2)}}\")\n}}\n"
+            );
+            let errors = lower(source.as_bytes()).expect_err("a `checked_` function");
+            assert!(errors.iter().any(|e| e.message.contains(f)), "{errors:?}");
+        }
+        let source = format!("use std.int ({f})\n\nfn main() {{}}\n");
+        let errors = lower(source.as_bytes()).expect_err("an import of a `checked_` function");
+        assert!(errors.iter().any(|e| e.message.contains(f)), "{errors:?}");
+    }
+}
 
 /// The types of the whole numbers, and `Nat`, which is lowered to the `u64`
 /// functions.
@@ -154,64 +230,11 @@ fn a_saturating_function_costs_no_call_and_no_jump_and_the_instructions_extra_gi
     assert!(read > 0, "no target is an ELF file");
 }
 
-/// How many instructions a `checked_` function that is matched at once may
-/// cost over an `if` on a comparison of the same operands, which is an
-/// operation and a jump, on every chip: none for an addition or a subtraction
-/// of any type, whose flag says whether it fitted, or for unsigned numbers of
-/// fewer than 64 bits whose comparison does. A product is looked at after the
-/// operation, or its high half is.
-fn checked_extra(ty: &str, op: &str) -> usize {
-    match (ty, op) {
-        ("u64" | "Nat", "mul") => 1,
-        ("Byte" | "u16" | "u32", "mul") => 2,
-        _ => 0,
-    }
-}
-
-/// A `checked_` function that is matched at once is an operation and a jump,
-/// and no call: the calls and the jumps of an `if` on the same operands, and
-/// at most `checked_extra` instructions more, on every chip.
-fn a_checked_function_that_is_matched_at_once_is_an_operation_and_a_jump_and_no_call(op: &str) {
-    let mut read = 0;
-    for ty in TYPES {
-        let matched = with_values(
-            ty,
-            &format!(
-                "  match checked_{op}(x, y) {{\n    .some(v) {{ print(\"{{v}}\") }}\n    .none {{ print(\"none\") }}\n  }}\n"
-            ),
-        );
-        let written = with_values(
-            wrapping_type(ty),
-            &format!(
-                "  r = wrapping_{op}(x, y)\n  if x < y {{ print(\"none\") }} else {{ print(\"{{r}}\") }}\n"
-            ),
-        );
-        for ((target, m), (_, h)) in counted(&matched).iter().zip(&counted(&written)) {
-            read += 1;
-            assert_eq!(
-                (m.1, m.2),
-                (h.1, h.2),
-                "`checked_{op}` of `{ty}` matched at once has other calls or jumps than an `if` on {target:?}"
-            );
-            assert!(
-                m.0 <= h.0 + checked_extra(ty, op),
-                "`checked_{op}` of `{ty}` matched at once is {} instructions, and an `if` is {}, on {target:?}",
-                m.0,
-                h.0
-            );
-        }
-    }
-    assert!(read > 0, "no target is an ELF file");
-}
-
-/// The six functions, as they are written.
-const FUNCTIONS: [(&str, &str, &str); 6] = [
+/// The three functions, as they are written.
+const FUNCTIONS: [(&str, &str, &str); 3] = [
     ("saturating", "add", "saturating_add"),
     ("saturating", "sub", "saturating_sub"),
     ("saturating", "mul", "saturating_mul"),
-    ("checked", "add", "checked_add"),
-    ("checked", "sub", "checked_sub"),
-    ("checked", "mul", "checked_mul"),
 ];
 
 /// The values a type is tried with: its least and greatest, those next to
@@ -231,8 +254,7 @@ fn tried(ty: Int, g: &mut Gen) -> Vec<i128> {
 }
 
 /// A program that prints, for every two of the values, what each function
-/// gives as a value, and what a `match` on each `checked_` function gives, and
-/// what it must print.
+/// gives, and what it must print.
 fn answers(name: &str, ty: Int, g: &mut Gen) -> (String, String) {
     let values = tried(ty, g);
     let list: Vec<String> = values.iter().map(|v| v.to_string()).collect();
@@ -243,13 +265,6 @@ fn answers(name: &str, ty: Int, g: &mut Gen) -> (String, String) {
     for (_, _, f) in FUNCTIONS {
         source += &format!("      print(\"{{{f}(x, y)}}\")\n");
     }
-    for (kind, _, f) in FUNCTIONS {
-        if kind == "checked" {
-            source += &format!(
-                "      match {f}(x, y) {{\n        .some(v) {{ print(\"{{v}}\") }}\n        .none {{ print(\"none\") }}\n      }}\n"
-            );
-        }
-    }
     source += "    }\n  }\n}\n";
     let mut said = String::new();
     for &a in &values {
@@ -257,16 +272,6 @@ fn answers(name: &str, ty: Int, g: &mut Gen) -> (String, String) {
             for (kind, op, _) in FUNCTIONS {
                 said += &arithmetic(kind, op, ty, a, b);
                 said += "\n";
-            }
-            for (kind, op, _) in FUNCTIONS {
-                if kind == "checked" {
-                    let r = arithmetic(kind, op, ty, a, b);
-                    said += &match r.strip_prefix(".some(") {
-                        Some(n) => n.trim_end_matches(')').to_string(),
-                        None => "none".to_string(),
-                    };
-                    said += "\n";
-                }
             }
         }
     }
@@ -291,7 +296,7 @@ fn programs(g: &mut Gen) -> Vec<(String, String, String)> {
 
 /// Every function answers what Rust says at the edges, in the evaluator and in
 /// each executable that the machine of the tests runs for arm64.
-fn the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(part: usize) {
+fn the_saturating_functions_answer_at_the_edges_of_every_type_in_the_evaluator_and_on_arm64(part: usize) {
     generate::check(4401, 1, programs, |all| {
         // The types are in three parts, one in three of them to each.
         for (name, source, said) in all.iter().skip(part).step_by(3) {
@@ -315,7 +320,7 @@ fn the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_the
 }
 
 /// The same, in the executables that this machine runs.
-fn the_saturating_and_checked_functions_answer_at_the_edges_of_every_type_in_every_executable() {
+fn the_saturating_functions_answer_at_the_edges_of_every_type_in_every_executable() {
     let targets = runnable();
     generate::check(4402, 1, programs, |all| {
         for (name, source, said) in all {

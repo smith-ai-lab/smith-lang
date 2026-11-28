@@ -39,8 +39,8 @@ fn a_program_that_names_no_trait_of_numbers_reads_none() {
 fn a_program_reads_the_trait_of_numbers_it_names_or_one_of_its_functions_and_no_other() {
     let wrapping = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  print(\"{Wrapping.wrapping_mul(200, 2)}\")\n}\n";
     assert_eq!(read(wrapping), ["Wrapping"]);
-    let checked = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  a: Byte = 200\n  print(\"{Checked.checked_add(a, 1)}\")\n}\n";
-    assert_eq!(read(checked), ["Checked"]);
+    let bits = "use std.bits (Bits)\nuse std.console (console, print)\n\nfn main() <console, alloc> {\n  a: Byte = 200\n  print(\"{Bits.bit_and(a, 1)}\")\n}\n";
+    assert_eq!(read(bits), ["Bits"]);
 }
 
 fn a_program_reads_the_traits_of_numbers_that_a_module_it_imports_calls_for() {

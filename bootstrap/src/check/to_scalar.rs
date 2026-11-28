@@ -31,7 +31,7 @@ mod for_arrays;
 mod frames;
 mod functions_calls_and_lambdas;
 mod lists_and_text;
-mod numbers_and_operators;
+pub(super) mod numbers_and_operators;
 mod traits;
 
 use super::lists_and_text::as_list;

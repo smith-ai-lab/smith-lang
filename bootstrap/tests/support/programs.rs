@@ -2236,7 +2236,7 @@ const STD_NAMES: &[(&str, &[&str])] = &[
     (
         "std.int",
         &[
-            "checked_add", "checked_mul", "checked_sub", "clamp", "narrow",
+            "clamp", "narrow",
             "saturating_add", "saturating_mul", "saturating_sub",
             "wrapping_add", "wrapping_mul", "wrapping_narrow", "wrapping_shift_left",
             "wrapping_sub",

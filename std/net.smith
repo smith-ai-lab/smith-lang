@@ -1,7 +1,7 @@
 use std.bits (bit_and, bit_xor, i64, shift_right, u16, u64)
 use std.dns (Config, candidates, config, hosts, ipv4, ipv6, query, read_reply)
 use std.instant (ms as span)
-use std.int (checked_add, clamp, narrow, saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
+use std.int (clamp, narrow, saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
 use std.list (append, copy, freeze, push)
 use std.task (Handle, task, wait_to_read_by)
 use std.text (Text, append_ascii, finish, text)
@@ -942,10 +942,9 @@ fn system_write(c: Connection, bytes: Slice[Byte]) -> Result[(), NetError] <allo
     } else if given < 0 {
       return .err(failure(address_text(c.host, c.port), "write", given))
     } else {
-      match checked_add(sent, count(given)) {
-        .some(n) { sent = n }
-        .none { return .err(.failed((address_text(c.host, c.port), "write: too many bytes"))) }
-      }
+      n = count(given)
+      if sent + n > 18446744073709551615 { return .err(.failed((address_text(c.host, c.port), "write: too many bytes"))) }
+      sent = sent + n
     }
   }
   .ok(())

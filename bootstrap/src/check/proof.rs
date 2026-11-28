@@ -2080,12 +2080,11 @@ impl<'a> Checker<'a> {
                 format!("cannot prove that `{by} != 0`, so `{whole}` may divide by zero"),
             )
             .with_fix(format!(
-                "check `{by} != 0` with an `if`, or use `{}`{}",
-                named("checked", op),
+                "check `{by} != 0` with an `if`{}",
                 if whole.contains('(') {
                     String::new()
                 } else {
-                    format!(" or `{}`", named("wrapping", op))
+                    format!(", or use `{}`", named("wrapping", op))
                 }
             )),
         );
@@ -2147,9 +2146,8 @@ impl<'a> Checker<'a> {
             ),
         };
         self.errors.push(Error::new(*op_pos, text).with_fix(format!(
-            "check the operands first, or use `{}` or `{}`",
-            named("wrapping", *op),
-            named("checked", *op)
+            "check the operands first, or use `{}`",
+            named("wrapping", *op)
         )));
     }
 
@@ -2246,10 +2244,9 @@ impl<'a> Checker<'a> {
                     )
                     .with_fix(if Int::ALL.contains(&t) {
                         format!(
-                            "check the operands first, or use `{}`, `{}`, or `{}`",
+                            "check the operands first, or use `{}` or `{}`",
                             named("wrapping", *op),
-                            named("saturating", *op),
-                            named("checked", *op)
+                            named("saturating", *op)
                         )
                     } else {
                         // A range that fills no size has none of those functions.

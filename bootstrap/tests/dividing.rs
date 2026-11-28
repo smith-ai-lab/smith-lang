@@ -166,11 +166,6 @@ fn a_division_compiles_exactly_when_the_divisor_is_proven_not_to_be_zero() {
         },
         |(low, high, remainder)| {
             let op = if *remainder { "%" } else { "/" };
-            let (checked, wrapping) = if *remainder {
-                ("checked_rem", "wrapping_rem")
-            } else {
-                ("checked_div", "wrapping_div")
-            };
             let params = format!("total: i32, n: {low}..{}", high + 1);
             let excludes_zero = *low > 0 || *high < 0;
             let args = format!("7, {}", if excludes_zero { *low } else { 1 });
@@ -178,12 +173,10 @@ fn a_division_compiles_exactly_when_the_divisor_is_proven_not_to_be_zero() {
             if excludes_zero {
                 assert!(outcome.is_ok(), "{low}..{high}: {outcome:?}");
             } else {
-                // Only the divisor is refused, and the error names the goal
-                // and the functions that do not need it.
+                // Only the divisor is refused, and the error names the goal.
                 let error = outcome.expect_err("a divisor that may be zero");
                 assert!(error.contains("cannot prove that `n != 0`"), "{error}");
             }
-            let _ = (checked, wrapping);
         },
     );
     // A check first is a proof, as it is for any range.

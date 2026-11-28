@@ -30,7 +30,7 @@ fn call(id: u32, name: &str, arguments: &str) -> String {
 /// it, which keeps what is printed.
 const SERVER: &str = "use std.bits (u64)
 use std.console (console, print)
-use std.int (checked_div, wrapping_add)
+use std.int (wrapping_add)
 use std.list (push)
 use std.mcp (mcp, messages, stdio, tool)
 
@@ -43,11 +43,10 @@ fn divide(
 ) -> Result[Int, str] {
   if b == 0 {
     .err(\"b is zero\")
+  } else if a == -9223372036854775808 and b == -1 {
+    .err(\"the quotient does not fit\")
   } else {
-    match checked_div(a, b) {
-      .some(q) { .ok(q) }
-      .none { .err(\"the quotient does not fit\") }
-    }
+    .ok(a / b)
   }
 }
 

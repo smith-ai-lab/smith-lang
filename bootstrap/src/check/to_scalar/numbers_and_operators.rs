@@ -1,6 +1,6 @@
 //! Lowers numbers and operators: a number written out, `+`, `-`, and `*`, the
-//! functions the compiler builds for comparing, for `wrapping_`, `saturating_`,
-//! and `checked_` arithmetic, for `Bits`, and for `narrow` and its relatives, and
+//! functions the compiler builds for comparing, for `wrapping_` and
+//! `saturating_` arithmetic, for whether a sum fits, for `Bits`, and for `narrow` and its relatives, and
 //! `Convert` between numbers.
 
 use super::float_bits;
@@ -913,7 +913,7 @@ impl<'a> Lowering<'a> {
 
     /// Lowers a call of a function that only calls the function the compiler
     /// builds for `kind` and `op` on its parameters, in order, at the call: a
-    /// `wrapping_`, `saturating_`, or `checked_` `add`, `sub`, or `mul`. No
+    /// `wrapping_` or `saturating_` `add`, `sub`, or `mul`. No
     /// call, frame, or return is left, whatever the function's size.
     /// `places` says which parameter each argument is for.
     pub(super) fn number_call(
@@ -941,8 +941,8 @@ impl<'a> Lowering<'a> {
 
     /// What the function the compiler builds for an operation on numbers of
     /// type `t` gives for the values `args`: whether they are equal, how
-    /// they are ordered, or the result of `wrapping_`, `saturating_`, or
-    /// `checked_` `add`, `sub`, or `mul`.
+    /// they are ordered, whether the result of `add`, `sub`, or `mul` fits, or
+    /// the result of `wrapping_` or `saturating_` `add`, `sub`, or `mul`.
     pub(super) fn intrinsic(
         &mut self,
         out: &mut Out<'a>,
@@ -1023,7 +1023,7 @@ impl<'a> Lowering<'a> {
     /// operation: `add`, `sub`, or `mul`. `wrapping` gives the result with
     /// the bits that do not fit left off, `saturating` gives the nearest
     /// value that fits, and `checked` gives an `Option` that holds the
-    /// result if it fits.
+    /// result if it fits, which is how `__fits_` says whether it fits.
     ///
     /// The operation says whether its answer fitted, except for an addition or
     /// a subtraction of an unsigned number of fewer than 64 bits, which a
@@ -1277,12 +1277,20 @@ impl<'a> Lowering<'a> {
     }
 }
 
-/// For a function whose whole body, in the prelude or the library, is a call of the function the compiler builds for `wrapping_`,
-/// `saturating_`, or `checked_` `add`, `sub`, or `mul`, which kind it is and
-/// which operation.
+/// For a function whose whole body, in the prelude or the library, is a call
+/// of the function the compiler builds for `wrapping_` or `saturating_` `add`,
+/// `sub`, or `mul`, which kind it is and which operation.
 pub(super) fn number_function(f: &Function) -> Option<(&'static str, &'static str)> {
-    let (kind, op) = f.name.split_once('_')?;
-    let kind = ["wrapping", "saturating", "checked"]
+    let named = number_named(&f.name)?;
+    (f.body.len() == 1 && f.params.len() == 2 && (of_prelude(f.pos) || of_std(f.pos)))
+        .then_some(named)
+}
+
+/// The kind and the operation of a function named as one that `number_function`
+/// finds is.
+pub(in crate::check) fn number_named(name: &str) -> Option<(&'static str, &'static str)> {
+    let (kind, op) = name.split_once('_')?;
+    let kind = ["wrapping", "saturating"]
         .into_iter()
         .find(|k| *k == kind)?;
     let op = ["add", "sub", "mul", "shift_left", "div", "rem"]
@@ -1290,8 +1298,7 @@ pub(super) fn number_function(f: &Function) -> Option<(&'static str, &'static st
         .find(|o| {
             *o == op && (!matches!(*o, "shift_left" | "div" | "rem") || kind == "wrapping")
         })?;
-    (f.body.len() == 1 && f.params.len() == 2 && (of_prelude(f.pos) || of_std(f.pos)))
-        .then_some((kind, op))
+    Some((kind, op))
 }
 
 /// Two ranges that no type of 64 bits holds: one has negative numbers and is
