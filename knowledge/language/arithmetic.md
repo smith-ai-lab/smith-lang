@@ -15,7 +15,8 @@ built:
   - "`/` and `%` of a number of 65 to 128 bits, which give the exact range of the quotient and of what is left over, as a number of 64 bits does, by 2 to some power as the halves of the number moved or kept, and by any other number through one function of the runtime that divides two numbers of 128 bits, which is slow beside every other operator, so `times` below gives a `Nat` and a `Nat` from a product with no division"
   - "the product of two numbers of 64 bits or fewer, both signed or both not, as the one instruction of each chip that gives both halves: `mul` or `imul` of one operand on x86-64, and `mul` with `umulh` or `smulh` on arm64"
   - "`narrow(x)` and `clamp(x)` of a number of 65 to 128 bits, to a range of 64 bits or fewer, compared with the ends of the range as two words"
-  - "not `wrapping_` and `saturating_` of a number of more than 64 bits, or `narrow` and `clamp` of a float"
+  - "`narrow(x)` and `clamp(x)` of an `f32` or an `f64`, to a range of 64 bits or fewer, as one rounding of the float to a whole number, two comparisons of floats with the least float not below the range and the greatest not above it, and the float cut to an integer, which is exact where it is used, so a float that is not a number fails the second comparison and gives the greatest value"
+  - "not `wrapping_` and `saturating_` of a number of more than 64 bits, or `narrow` and `clamp` of a float to a range of more than 64 bits"
   - "a `mut` with no stated type given the range its body infers, where it is a number"
 ---
 
