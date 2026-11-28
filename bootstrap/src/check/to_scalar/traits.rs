@@ -574,6 +574,7 @@ impl<'a> Lowering<'a> {
         w: &Ty,
     ) -> Vec<form::Value> {
         let defs = self.typed.defs;
+        let values = &self.open(out, ty, values)[..];
         match ty {
             Ty::Int(t) => {
                 let signed = t.signed();
@@ -757,6 +758,7 @@ impl<'a> Lowering<'a> {
         b: &[form::Value],
     ) -> form::Value {
         let defs = self.typed.defs;
+        let (a, b) = (&self.open(out, ty, a)[..], &self.open(out, ty, b)[..]);
         let parts: Vec<Ty> = match ty {
             Ty::Text => return self.ordered_text(out, a, b),
             Ty::Enum(e, args) => {
@@ -937,6 +939,7 @@ impl<'a> Lowering<'a> {
         b: &[form::Value],
     ) -> form::Value {
         let defs = self.typed.defs;
+        let (a, b) = (&self.open(out, ty, a)[..], &self.open(out, ty, b)[..]);
         let parts: Vec<Ty> = match ty {
             Ty::Text => {
                 let args = [a, b].concat();
@@ -1088,6 +1091,7 @@ impl<'a> Lowering<'a> {
     /// the implementation it is given writes it.
     fn repr(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) -> Vec<form::Value> {
         let defs = self.typed.defs;
+        let values = &self.open(out, ty, values)[..];
         match ty {
             Ty::Nothing => self.text(out, b"()"),
             Ty::List(of) | Ty::Slice(of) => self.repr_elements(out, &of[0], values),
@@ -1262,6 +1266,7 @@ impl<'a> Lowering<'a> {
     /// holds. Each part is hashed by its own type's `Hash`.
     fn hash(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) -> form::Value {
         let defs = self.typed.defs;
+        let values = &self.open(out, ty, values)[..];
         let parts: Vec<Ty> = match ty {
             Ty::Int(t) => {
                 let word = out.resize(t.signed(), values[0], form::Bits::B64);

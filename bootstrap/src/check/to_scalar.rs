@@ -1112,8 +1112,79 @@ impl<'a> Lowering<'a> {
         all
     }
 
+    /// Whether a value of the type is the address of a node of its scalars,
+    /// as a struct or an enum that holds itself with no `List` between is.
+    fn boxed(&self, ty: &Ty) -> bool {
+        let defs = self.typed.defs;
+        match ty {
+            Ty::Struct(s, _) => defs.boxed[*s],
+            Ty::Enum(e, _) => defs.boxed_enums[*e],
+            _ => false,
+        }
+    }
+
+    /// The scalars a node of the type holds, which are those a value of it
+    /// is lowered to when it is not kept in a node.
+    fn inner_scalars(&self, ty: &Ty) -> Vec<form::Type> {
+        let mut all = Vec::new();
+        self.unboxed_into(ty, &mut |t| all.push(t));
+        all
+    }
+
+    /// The scalars of a value of the type, given its values: those its node
+    /// holds, read from it, when it is kept in one, and its values otherwise.
+    fn open(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) -> Vec<form::Value> {
+        if !self.boxed(ty) {
+            return values.to_vec();
+        }
+        let scalars = self.inner_scalars(ty);
+        let (places, _) = form::element(&scalars);
+        let at: Vec<(form::Type, u64)> = scalars.into_iter().zip(places).collect();
+        self.load(out, values[0], &at)
+    }
+
+    /// The values of a value of the type, given its scalars: the address of
+    /// a node they are stored in, asked of `alloc` as one element of a list
+    /// is, when it is kept in one, and its scalars otherwise.
+    fn close(&mut self, out: &mut Out<'a>, ty: &Ty, scalars: Vec<form::Value>) -> Vec<form::Value> {
+        if !self.boxed(ty) {
+            return scalars;
+        }
+        let (places, stride) = form::element(&self.inner_scalars(ty));
+        let bytes = out.int(form::Bits::B64, i128::from(stride.max(1)));
+        let start = out.emit(
+            form::Op::System {
+                call: form::System::Allocate,
+                args: vec![bytes],
+            },
+            vec![form::Type::Address],
+        )[0];
+        for (value, place) in scalars.into_iter().zip(places) {
+            let address = match place {
+                0 => start,
+                _ => {
+                    let by = out.int(form::Bits::B64, i128::from(place));
+                    out.binary(form::Binary::Add, start, by)
+                }
+            };
+            let ty = out.types[value.0];
+            out.emit(form::Op::Store { ty, address, value }, Vec::new());
+        }
+        vec![start]
+    }
+
     /// Gives each scalar of the type to `put`, in order.
     fn scalars_into(&self, ty: &Ty, put: &mut dyn FnMut(form::Type)) {
+        if self.boxed(ty) {
+            put(form::Type::Address);
+            return;
+        }
+        self.unboxed_into(ty, put);
+    }
+
+    /// Gives each scalar of the type to `put`, in order, as a value of it
+    /// that is not kept in a node is lowered to.
+    fn unboxed_into(&self, ty: &Ty, put: &mut dyn FnMut(form::Type)) {
         let defs = self.typed.defs;
         match ty {
             Ty::Text | Ty::Slice(_) => {
@@ -1277,6 +1348,56 @@ impl<'a> Lowering<'a> {
             ty = found.expect("checked");
         }
         (start, self.size(&ty))
+    }
+
+    /// Whether a field of a field, for each name, of a value of the type is
+    /// reached through a value kept in a node.
+    fn through_node(&self, ty: &Ty, fields: &[(String, Pos)]) -> bool {
+        let mut ty = ty.clone();
+        for (name, _) in fields {
+            if self.boxed(&ty) {
+                return true;
+            }
+            let Ty::Struct(s, args) = ty else {
+                unreachable!("checked")
+            };
+            let defs = self.typed.defs;
+            let at = (defs.file.structs[s].fields.iter())
+                .position(|f| &f.name == name)
+                .expect("checked");
+            ty = defs.fields[s][at].subst(&args);
+        }
+        false
+    }
+
+    /// The values of a value of the type with the field of a field, for each
+    /// name, given `value`, each value on the way that is kept in a node
+    /// built again in a new one.
+    fn replaced(
+        &mut self,
+        out: &mut Out<'a>,
+        ty: &Ty,
+        values: &[form::Value],
+        fields: &[(String, Pos)],
+        value: Vec<form::Value>,
+    ) -> Vec<form::Value> {
+        let Some((first, rest)) = fields.split_first() else {
+            return value;
+        };
+        let mut inner = self.open(out, ty, values);
+        let (start, size) = self.offset(ty, std::slice::from_ref(first));
+        let Ty::Struct(s, args) = ty else {
+            unreachable!("checked")
+        };
+        let defs = self.typed.defs;
+        let at = (defs.file.structs[*s].fields.iter())
+            .position(|f| f.name == first.0)
+            .expect("checked");
+        let part = defs.fields[*s][at].subst(args);
+        let held = inner[start..start + size].to_vec();
+        let changed = self.replaced(out, &part, &held, rest, value);
+        inner.splice(start..start + size, changed);
+        self.close(out, ty, inner)
     }
 
     /// The place of a copy in the program, which it takes if it has none.
@@ -1454,6 +1575,7 @@ impl<'a> Lowering<'a> {
     /// the handler in force, where a task that was asked to end leaves.
     fn close_value(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
         let defs = self.typed.defs;
+        let values = &self.open(out, ty, values)[..];
         if !self.holds_handle(ty, &mut Vec::new()) {
             return;
         }
@@ -1516,10 +1638,10 @@ impl<'a> Lowering<'a> {
             if bound.home.is_some() || (self.holds_none(&bound.ty) && !handles) {
                 continue;
             }
-            let Some((start, size, ty)) = self.part_of(&bound.ty, &item.part) else {
+            let (ty, values) = (bound.ty.clone(), bound.values.clone());
+            let Some((ty, values)) = self.part_values(out, &ty, &values, &item.part) else {
                 continue;
             };
-            let values = bound.values[start..start + size].to_vec();
             self.drop_except(out, &ty, &values, &item.except);
             if handles {
                 self.closing = true;
@@ -1527,6 +1649,26 @@ impl<'a> Lowering<'a> {
                 self.closing = false;
             }
         }
+    }
+
+    /// The type and the values of the part of a value of the type that the
+    /// fields name, read from the node of each part on the way that is kept in
+    /// one.
+    fn part_values(
+        &mut self,
+        out: &mut Out<'a>,
+        ty: &Ty,
+        values: &[form::Value],
+        fields: &[String],
+    ) -> Option<(Ty, Vec<form::Value>)> {
+        let (mut ty, mut values) = (ty.clone(), values.to_vec());
+        for field in fields {
+            let opened = self.open(out, &ty, &values);
+            let (start, size, part) = self.part_of(&ty, std::slice::from_ref(field))?;
+            values = opened[start..start + size].to_vec();
+            ty = part;
+        }
+        Some((ty, values))
     }
 
     /// Where the part of a value of the type that the fields name is among its
@@ -1575,6 +1717,7 @@ impl<'a> Lowering<'a> {
         if except.iter().any(Vec::is_empty) {
             return;
         }
+        let values = &self.open(out, ty, values)[..];
         let defs = self.typed.defs;
         let parts: Vec<(String, Ty)> = match ty {
             Ty::Struct(s, args) => (defs.file.structs[*s].fields.iter())
@@ -1641,6 +1784,7 @@ impl<'a> Lowering<'a> {
 
     fn detach_parts(&mut self, out: &mut Out<'a>, ty: &Ty, values: &[form::Value]) {
         let defs = self.typed.defs;
+        let values = &self.open(out, ty, values)[..];
         let parts: Vec<Ty> = match ty {
             Ty::Struct(s, _) if Some(*s) == defs.task => {
                 self.detach(out, values[0]);
@@ -1937,7 +2081,17 @@ impl<'a> Lowering<'a> {
                         result = Vec::new();
                         continue;
                     }
-                    let (mut start, mut size) = self.offset(&out.names()[at].ty, fields);
+                    // A part of a value kept in a node is changed in new nodes.
+                    let ty = out.names()[at].ty.clone();
+                    if element.is_none() && self.through_node(&ty, fields) {
+                        let held = out.read(at);
+                        let changed = self.replaced(out, &ty, &held, fields, value);
+                        out.assign(at, changed);
+                        out.place = outer;
+                        result = Vec::new();
+                        continue;
+                    }
+                    let (mut start, mut size) = self.offset(&ty, fields);
                     let mut value = value;
                     if let Some(element) = element {
                         let Ty::Array(of, n) = self.typed.type_of(&element.0, env) else {
@@ -2171,7 +2325,9 @@ impl<'a> Lowering<'a> {
                 Callee::Construct(s, args) => {
                     let inner = args.clone();
                     let values = self.construction(out, call, s, env, &inner);
-                    (Ty::Struct(s, args), values)
+                    let ty = Ty::Struct(s, args);
+                    let values = self.close(out, &ty, values);
+                    (ty, values)
                 }
                 Callee::Case(k) => {
                     let ty = typed.type_of(expr, env);
@@ -2304,6 +2460,7 @@ impl<'a> Lowering<'a> {
                 if matches!(of_ty, Ty::List(_) | Ty::Slice(_) | Ty::Text) {
                     return (typed.type_of(expr, env), vec![values[1]]);
                 }
+                let values = self.open(out, &of_ty, &values);
                 let Ty::Struct(s, args) = of_ty else {
                     unreachable!("checked")
                 };
@@ -2780,7 +2937,7 @@ impl<'a> Lowering<'a> {
                 None => out.zero(*ty),
             });
         }
-        values
+        self.close(out, ty, values)
     }
 
     /// Lowers a `match` that gives `ty`: a decision between its blocks,
@@ -3040,6 +3197,7 @@ impl<'a> Lowering<'a> {
                 self.decide(out, arms, leaves, rows, &cols)
             }
             Ty::Enum(e, args) => {
+                let value = self.open(out, &Ty::Enum(*e, args.clone()), value);
                 let layout = self.layout(*e, args);
                 let cases = defs.file.enums[*e].cases.len();
                 let blocks = out.switch(value[0], cases);

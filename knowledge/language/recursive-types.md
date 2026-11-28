@@ -5,9 +5,10 @@ description: A type may contain itself, which is how a tree is written, and a gr
 status: partial
 built:
   - "a struct or an enum that holds itself only through a `List`, directly or through other types, as `struct Node { kids: List[Node] }`, which is accepted where it is declared, and a value of it is built"
-  - "a type that holds itself with no `List` between, directly or through others, refused with one error, at the name that closes the cycle, that says it is not supported yet and that a `List` of it is built"
-  - "`==`, `Repr`, `Fmt`, and `Hash` of a type that holds itself through a `List`, given as to any other struct or enum, by a function that calls itself, so a tree of any depth is compared, written, and hashed"
-  - "not the page's own example, which holds itself with no `List`"
+  - "a struct or an enum that holds itself with no `List` between, directly or through others, as a field, as what a case holds, in a tuple, or in an `Option`, with `List`s mixed in, which is built, matched on, and walked by a function that calls itself to any depth, as the page's example is"
+  - "a type of which no value can be made, as `struct Loop { next: Loop }`, refused at its name with an error that says no value of it can be made"
+  - "a type that holds itself as a parameter of a function it holds refused at the name, directly or through a `List` or another type"
+  - "`==`, `Repr`, `Fmt`, and `Hash` of a type that holds itself, through a `List` or not, given as to any other struct or enum, by a function that calls itself, so a tree of any depth is compared, written, and hashed"
 ---
 
 # Types that contain themselves
@@ -54,6 +55,8 @@ fn twice(x: Expr) -> Expr { .add(Pair(left: x, right: x)) }
 ## Where the nodes live
 
 Nodes are bumped into the [arena](arenas.md) and dropped with it, so there is no per-node allocation, reference count, or collector. No address is observable, so the compiler picks the layout, such as 32-bit offsets within the arena.
+
+A value of a struct or an enum that holds itself with no `List` between is kept as one address, of a node that holds its scalars. The node is asked of `alloc` as a list of one element is, so it is in the arena a list built there would be in. Building the value stores the node, and reading a part of it loads the node. Such a type needs a way out: `struct Loop { next: Loop }` is refused at its name, as no value of it can be made.
 
 ## Changing a tree
 

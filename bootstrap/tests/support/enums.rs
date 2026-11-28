@@ -515,7 +515,7 @@ fn model(g: &mut Gen, kind: Option<Kind>) -> Model {
     }
     m.main = main_body(g, &m, kind);
     if kind == Some(Kind::NotBuilt) {
-        match g.below(4) {
+        match g.below(3) {
             0 => m
                 .main
                 .push(Stmt::Raw("w = (1)".into(), "(2)".into(), NOT_BUILT.into())),
@@ -524,23 +524,11 @@ fn model(g: &mut Gen, kind: Option<Kind>) -> Model {
                 "for i { note }".into(),
                 NOT_BUILT.into(),
             )),
-            2 => m.main.push(Stmt::Raw(
+            _ => m.main.push(Stmt::Raw(
                 "w: ".into(),
                 "f16 = .none".into(),
                 NOT_BUILT.into(),
             )),
-            _ => {
-                m.main.push(Stmt::Raw(
-                    String::new(),
-                    "w: Loop = Loop.end".into(),
-                    String::new(),
-                ));
-                m.item = Some((
-                    "enum Loop {\n  next: ".into(),
-                    "Loop\n  end\n}".into(),
-                    NOT_BUILT.into(),
-                ));
-            }
         }
     }
     m
