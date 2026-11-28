@@ -5,7 +5,7 @@ description: use brings the names of another module into a file, from an explici
 status: partial
 built:
   - "`use m (a, b)` for a module of the standard library, written `std.console`, `std.list`, `std.utf8`, `std.int`, or `std.bits`, listing names that module exports, and a `use` before every other item with one line for a module"
-  - "an error at its place, with a fix where there is one, for a module that does not exist, a name the module lacks, a name listed twice, a name listed from two modules, a name the file defines or the prelude holds, a second `use` of one module, and a `use` below another item"
+  - "an error at its place, with a fix where there is one, for a module that does not exist, a name the module lacks, a name listed twice, a name listed from two modules, a name the file defines, a name the prelude holds that the module does not export, a second `use` of one module, and a `use` below another item"
   - "a warning from `smith check`, at the name, for a name that is imported and never used"
   - "only the modules a `use` names are read, and the same executable is built with and without an import"
   - "`use m (a, b)` for a module of a project, written `db.transaction` for the file `db/transaction.smith` below the folder the command ran in, listing the names the module writes with `pub`, which the module may itself take from others with its own `use`, each file read once and only when a `use` names it"
