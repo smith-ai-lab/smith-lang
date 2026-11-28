@@ -162,7 +162,7 @@ fn both(a: str, b: str) -> (Result[Response[65536], FetchError], Result[Response
   with client()
   ta = spawn { get[65536](a) }
   tb = spawn { get[65536](b) }
-  (join(ta), join(tb))
+  (join(take ta), join(take tb))
 }
 ```
 

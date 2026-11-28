@@ -437,20 +437,20 @@ use std.list (push)
 fn make(n: u64) -> List[u64] <alloc> {
   mut xs: List[u64] = []
   if n > 3 {
-    xs = push(xs, wrapping_add(n, 8888))
-    xs = push(xs, wrapping_add(n, 9999))
+    xs = push(take xs, wrapping_add(n, 8888))
+    xs = push(take xs, wrapping_add(n, 9999))
   }
   xs
 }
 
 fn main() <console, alloc> {
   mut first: List[u64] = []
-  first = push(first, 11)
+  first = push(take first, 11)
   a = make(5)
   b = make(1)
   c = make(9)
   mut last: List[u64] = []
-  last = push(last, 22)
+  last = push(take last, 22)
   loop v in first { print(\"{v}\") }
   loop v in a { print(\"{v}\") }
   print(\"{b.size}\")

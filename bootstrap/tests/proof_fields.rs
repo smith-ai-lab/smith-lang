@@ -301,7 +301,7 @@ fn the_executable_of_a_struct_with_proof_fields_is_that_of_the_struct_without_th
                         format!("  lo: {}\n  hi: {}\n  more: {}\n", a.name, a.name, b.name)
                     };
                     with_header(format!(
-                        "struct Span {{\n{fields}}}\n\nstruct Holder {{\n  span: Span\n  tag: {}\n}}\n\nfn widen(s: Span) -> Span {{\n  Span(lo: s.lo, hi: s.hi, more: s.more)\n}}\n\nfn main() <console, alloc> {{\n  s = Span(lo: {lo}, hi: {hi}, more: 3)\n  mut xs: List[Span] = []\n  xs = push(xs, s)\n  xs = push(xs, widen(s))\n  h = Holder(span: s, tag: 1)\n  print(\"{{xs.size}} {{h.span.hi}} {{s == widen(s)}} {{s < widen(s)}}\")\n  print(\"{{s}}\")\n  print(\"{{repr(h)}}\")\n}}\n",
+                        "struct Span {{\n{fields}}}\n\nstruct Holder {{\n  span: Span\n  tag: {}\n}}\n\nfn widen(s: Span) -> Span {{\n  Span(lo: s.lo, hi: s.hi, more: s.more)\n}}\n\nfn main() <console, alloc> {{\n  s = Span(lo: {lo}, hi: {hi}, more: 3)\n  mut xs: List[Span] = []\n  xs = push(take xs, s)\n  xs = push(take xs, widen(s))\n  h = Holder(span: s, tag: 1)\n  print(\"{{xs.size}} {{h.span.hi}} {{s == widen(s)}} {{s < widen(s)}}\")\n  print(\"{{s}}\")\n  print(\"{{repr(h)}}\")\n}}\n",
                         b.name
                     ))
                 };

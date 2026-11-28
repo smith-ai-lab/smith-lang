@@ -96,7 +96,7 @@ fn a_child_that_runs_out_of_memory_ends_and_its_parent_goes_on() {
 /// The child never made the value a join gives, so the join ends the program, as
 /// a failure of `main` does, and what follows it is not written.
 fn a_join_of_a_child_that_ran_out_of_memory_ends_the_program_with_the_status_1_and_gives_no_value() {
-    let joined = PROGRAM.replace("  sleep(ms(100))\n", "  join(child)\n");
+    let joined = PROGRAM.replace("  sleep(ms(100))\n", "  join(take child)\n");
     assert_ne!(joined, PROGRAM);
     limited(&joined, "fail_joined", |said, status| {
         assert_eq!((said, status), ("", Some(1)));

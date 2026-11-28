@@ -95,7 +95,7 @@ fn a_function_of_another_module_is_given_its_name_and_its_comment_by_function() 
 fn call_runs_a_function_of_another_module_with_the_arguments_read_from_json() {
     let module = "use std.bits (i32)\n\npub fn pick(a: i32, b: i32 = 7) -> i32 { b }\n";
     let source = "use app.m (pick)\nuse std.console (console, print)\nuse std.json (from_json)\nuse std.deserialize (Deserialize, ReadError)\n\n\
-fn run[F, A, R](f: F, text: str) -> str <alloc>\n  requires Function[F, A, R]\n  requires Deserialize[A]\n  requires Discard[A]\n  requires Fmt[R]\n  requires Discard[R]\n{\n  r: Result[A, ReadError] = from_json(text)\n  match r {\n    .ok(args) { \"{Function.call(f, args)}\" }\n    .err(e) { \"err\" }\n  }\n}\n\n\
+fn run[F, A, R](f: F, text: str) -> str <alloc>\n  requires Function[F, A, R]\n  requires Deserialize[A]\n  requires Discard[A]\n  requires Fmt[R]\n  requires Discard[R]\n{\n  r: Result[A, ReadError] = from_json(text)\n  match r {\n    .ok(args) { \"{Function.call(f, take args)}\" }\n    .err(e) { \"err\" }\n  }\n}\n\n\
 fn main() <console, alloc> {\n  print(run(pick, \"\\{\\\"a\\\": 1\\}\"))\n  print(run(pick, \"\\{\\\"a\\\": 1, \\\"b\\\": 3\\}\"))\n  print(run(pick, \"\\{\\}\"))\n}\n";
     assert_eq!(said(source, &[("app.m", module)]), "7\n3\nerr\n");
 }

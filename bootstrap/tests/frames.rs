@@ -163,7 +163,7 @@ impl Value {
             Value::Text => format!("fold_text({name})"),
             Value::Pair => format!("fold_pair({name})"),
             Value::Shape => format!("fold_shape({name})"),
-            Value::List => format!("fold_list({name})"),
+            Value::List => format!("fold_list(take {name})"),
         }
     }
 }
@@ -307,7 +307,7 @@ fn module_of(case: &[Lambda]) -> String {
         }
         s += "    }\n  }\n";
         for k in 0..n {
-            s += &format!("  r{k}: u64 = __result(f{k})\n  print(\"{{r{k}}} {{hash{k}}}\")\n");
+            s += &format!("  r{k}: u64 = __result(take f{k})\n  print(\"{{r{k}}} {{hash{k}}}\")\n");
         }
         s += "}\n\n";
     }
@@ -393,7 +393,7 @@ fn the_calls_only_the_library_makes_are_refused_in_a_program() {
         ("__frame", "fn main() {\n  f = __frame({ 1 })\n}\n"),
         ("__poll", "fn main(f: Frame) {\n  p = __poll(f)\n}\n"),
         ("__wait", "fn main() {\n  __wait(.time(1))\n}\n"),
-        ("__result", "fn main(f: Frame) {\n  r: u64 = __result(f)\n}\n"),
+        ("__result", "fn main(f: Frame) {\n  r: u64 = __result(take f)\n}\n"),
     ] {
         let source = format!("{uses}{body}");
         let errors = smith::lower(source.as_bytes()).expect_err(name);
@@ -405,12 +405,12 @@ fn the_calls_only_the_library_makes_are_refused_in_a_program() {
 }
 
 fn a_frame_read_at_a_type_its_lambda_does_not_give_is_refused() {
-    let module = "use std.bits (u64, u8)\nuse std.task (Frame)\n\nfn seven() -> u64 { 7 }\n\npub fn wrong() -> u8 {\n  f = __frame({ seven() })\n  r: u8 = __result(f)\n  r\n}\n\npub fn right() -> u64 {\n  f = __frame({ seven() })\n  r: u64 = __result(f)\n  r\n}\n";
+    let module = "use std.bits (u64, u8)\nuse std.task (Frame)\n\nfn seven() -> u64 { 7 }\n\npub fn wrong() -> u8 {\n  f = __frame({ seven() })\n  r: u8 = __result(take f)\n  r\n}\n\npub fn right() -> u64 {\n  f = __frame({ seven() })\n  r: u64 = __result(take f)\n  r\n}\n";
     let main = "use std.frames (right, wrong)\n\nfn main() {\n  a = right()\n  b = wrong()\n}\n";
     let error = lowered(main, module).expect_err("a frame read at another type");
     assert!(error.contains("__result") || error.contains("frame"), "{error}");
     assert!(error.contains("u8"), "{error}");
-    let module = "use std.bits (u64)\nuse std.task (Frame)\n\nfn seven() -> u64 { 7 }\n\npub fn right() -> u64 {\n  f = __frame({ seven() })\n  r: u64 = __result(f)\n  r\n}\n";
+    let module = "use std.bits (u64)\nuse std.task (Frame)\n\nfn seven() -> u64 { 7 }\n\npub fn right() -> u64 {\n  f = __frame({ seven() })\n  r: u64 = __result(take f)\n  r\n}\n";
     let main = "use std.frames (right)\n\nfn main() {\n  a = right()\n}\n";
     lowered(main, module).expect("a frame read at the type it gives");
 }
@@ -426,7 +426,7 @@ fn a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused() {
 }
 
 fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
-    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  r: u64 = __result(f)\n  r\n}\n\npub fn twice() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  g = total(xs)\n  r: u64 = __result(f)\n  wrapping_add(r, g)\n}\n";
+    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(take xs) })\n  r: u64 = __result(take f)\n  r\n}\n\npub fn twice() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(take xs) })\n  g = total(take xs)\n  r: u64 = __result(take f)\n  wrapping_add(r, g)\n}\n";
     let main = "use std.frames (once)\n\nfn main() <alloc> {\n  a = once()\n}\n";
     lowered(main, module).expect("a list taken once");
     let main = "use std.frames (twice)\n\nfn main() <alloc> {\n  a = twice()\n}\n";
@@ -435,7 +435,7 @@ fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
 }
 
 /// A handler of `count` that keeps state, and one that does not.
-const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T <sense>) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T <sense>) -> T {\n  mut n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 <sense> {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
+const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T <sense>) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T <sense>) -> T {\n  mut n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 <sense> {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(take f)\n  r\n}\n";
 
 fn a_frame_under_a_handler_that_holds_state_reads_and_changes_it() {
     let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() <console, alloc> {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";

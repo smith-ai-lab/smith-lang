@@ -109,7 +109,7 @@ unary      = [ "-" | "try" ] postfix ;
 postfix    = primary { call | "[" index { "," index } "]" | "." IDENT } ;
 call       = "(" [ args ] ")" [ lambda ] | lambda ;
 args       = arg { "," arg } [ "," ] ;
-arg        = [ IDENT ":" ] [ "mut" ] expr ;   (* `mut` before a place a function changes *)
+arg        = [ IDENT ":" ] [ "mut" | "take" ] expr ;   (* `mut` before a place a function changes, `take` before a name or a place it is given *)
 index      = expr | [ expr ] ".." [ expr ] ;
 primary    = IDENT | LITERAL | string | "(" [ expr { "," expr } ] ")" | array
            | case | if | match | for | loop | lambda ;

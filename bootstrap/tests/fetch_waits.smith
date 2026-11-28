@@ -41,8 +41,8 @@ fn pair(first: 1..65536, second: 1..65536) <console, net, time, alloc> {
       .err(e) { print("early {e}") }
     }
   }
-  join(a)
-  join(b)
+  join(take a)
+  join(take b)
 }
 
 fn main(args: List[str]) <console, net, time, alloc> {

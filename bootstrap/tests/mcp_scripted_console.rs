@@ -61,7 +61,7 @@ fn scripted[T](lines: List[str], body: fn() -> T <console>) -> (T, List[str]) <a
   mut printed: List[str] = []
   result = console(
     print: fn(text, end, to) {
-      printed = push(printed, text)
+      printed = push(take printed, text)
     },
     input: fn(prompt) {
       mut found: Option[str] = .none

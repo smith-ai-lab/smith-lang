@@ -75,7 +75,7 @@ const SMITH_ARM64: usize = 9;
 /// A program that pushes the numbers below `pushes` to a list of `u64`.
 fn program_of(pushes: i64) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  mut xs: List[u64] = []\n  loop i in 0..{pushes} {{ xs = push(xs, i) }}\n  print(\"{{xs.size}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  mut xs: List[u64] = []\n  loop i in 0..{pushes} {{ xs = push(take xs, i) }}\n  print(\"{{xs.size}}\")\n}}\n"
     )
 }
 
@@ -224,7 +224,7 @@ fn pushed(p: &Pushes) -> (String, String) {
         format!("use std.bits ({})\n", sizes.join(", "))
     };
     let source = format!(
-        "{bits}use std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  mut xs: List[{e}] = []\n  mut v: {e} = 0\n{live}  loop i in 0..{n} {{\n{changes}    xs = push(xs, {item})\n    v = wrapping_add(v, {step})\n  }}\n  mut total: {e} = 0\n  loop x in xs {{ total = wrapping_add(total, x) }}\n  print(\"{{xs.size}} {{total}} {{{sum_live}}}\")\n}}\n",
+        "{bits}use std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  mut xs: List[{e}] = []\n  mut v: {e} = 0\n{live}  loop i in 0..{n} {{\n{changes}    xs = push(take xs, {item})\n    v = wrapping_add(v, {step})\n  }}\n  mut total: {e} = 0\n  loop x in xs {{ total = wrapping_add(total, x) }}\n  print(\"{{xs.size}} {{total}} {{{sum_live}}}\")\n}}\n",
         e = ty,
         n = p.pushes,
         step = p.step,

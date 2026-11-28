@@ -63,7 +63,7 @@ fn main(args: List[str]) <console, alloc, diverge> {{
   r = net(
     listen_on: fn(host, port) {{ .err(.refused(host)) }},
     accept: fn(l) {{ .err(.closed(l.host)) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{
@@ -72,12 +72,12 @@ fn main(args: List[str]) <console, alloc, diverge> {{
     }},
     close: fn(c) {{
       print(\"closed {{handle(c)}}\")
-      n = release(c)
+      n = release(take c)
     }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
     receive: fn(s, most) {{ .err(.closed(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: {{ run(args.size) }},
   )
   print(\"{{r}}\")
@@ -120,7 +120,7 @@ fn sorted(mut lines: Vec<String>) -> Vec<String> {
 const HOLD: &str = "fn hold(n: u64) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
-  close(c)
+  close(take c)
   n
 }
 ";
@@ -140,8 +140,8 @@ const PAIR: &str = "struct Pair {
 fn hold_two(n: u64) -> u64 <net, task> {
   p = Pair(a: connection(n), b: connection(wrapping_add(n, 1)))
   test_ready(n)
-  close(p.a)
-  close(p.b)
+  close(take p.a)
+  close(take p.b)
   n
 }
 ";
@@ -155,9 +155,9 @@ fn a_cancelled_task_closes_both_connections_of_a_struct_it_holds() {
 
 const GIVEN: &str = "fn parent(n: u64) -> u64 <net, task> {
   child = spawn { connection(n) }
-  c = join(child)
+  c = join(take child)
   test_ready(n)
-  close(c)
+  close(take c)
   n
 }
 ";
@@ -203,7 +203,7 @@ fn main() <time, net> {
 const FINISH: &str = "fn finish(n: u64) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
-  close(c)
+  close(take c)
   n
 }
 ";
@@ -218,8 +218,8 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
 
 const LIST: &str = "fn hold_list(n: u64) -> List[Connection] <net, task, alloc> {
   mut cs: List[Connection] = []
-  cs = push(cs, connection(n))
-  cs = push(cs, connection(wrapping_add(n, 1)))
+  cs = push(take cs, connection(n))
+  cs = push(take cs, connection(wrapping_add(n, 1)))
   test_ready(n)
   cs
 }
@@ -234,7 +234,7 @@ fn a_cancelled_task_closes_each_connection_of_a_list_it_holds() {
 
 const SERVE: &str = "fn serve(c: take Connection) -> u64 <net, task> {
   test_ready(1)
-  close(c)
+  close(take c)
   3
 }
 ";
@@ -243,7 +243,7 @@ const SERVE: &str = "fn serve(c: take Connection) -> u64 <net, task> {
 /// its lambda was given is closed by the child's first check, once, and the
 /// child does nothing else.
 fn a_task_cancelled_before_it_ran_closes_the_connection_its_lambda_was_given() {
-    let source = program(SERVE, "  c = connection(9)\n  _ = spawn { serve(c) }")
+    let source = program(SERVE, "  c = connection(9)\n  _ = spawn { serve(take c) }")
             .replace("  late = test_ready_by(99, ms(10))\n", "");
     for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
         assert_eq!(sorted(said), ["1", "closed 9"], "seed {seed}");

@@ -111,7 +111,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
         .ok(connection(wrapping_add(accepted, 1)))
       }}
     }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{
       mut seen = false
@@ -119,7 +119,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
       if seen {{
         .ok(.ended)
       }} else {{
-        asked = push(asked, handle(c))
+        asked = push(take asked, handle(c))
         if handle(c) == 2 {{
           .ok(.bytes(Chunk(bytes: {seven})))
         }} else if handle(c) == 3 {{
@@ -131,15 +131,15 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
     }},
     write: fn(c, bytes) {{
       mut copied: List[Byte] = []
-      loop i in 0..bytes.size {{ copied = push(copied, bytes[i]) }}
-      kept = push(kept, copied)
+      loop i in 0..bytes.size {{ copied = push(take copied, bytes[i]) }}
+      kept = push(take kept, take copied)
       .ok(())
     }},
-    close: fn(c) {{ n = release(c) }},
+    close: fn(c) {{ n = release(take c) }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
     receive: fn(s, most) {{ .err(.closed(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: body,
   )
   (result, kept)

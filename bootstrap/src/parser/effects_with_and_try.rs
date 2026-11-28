@@ -68,6 +68,8 @@ pub(super) fn split(pos: Pos, operand: Expr) -> Expr {
                 mutable: None,
                 given_back: false,
                 keeps: false,
+                take: None,
+                written: false,
             }],
             end: pos,
         }),
@@ -130,6 +132,8 @@ impl Block {
                 mutable: None,
                 given_back: false,
                 keeps: false,
+                take: None,
+                written: false,
             });
             before.push(Stmt::Expr(Expr::Call(call)));
             self.inner = before;

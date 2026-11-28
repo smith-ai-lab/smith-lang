@@ -137,10 +137,10 @@ fn digit(d: Byte) -> Byte {
 fn hex(b: Slice[Byte]) -> str <alloc> {
   mut built: List[Byte] = []
   loop i in 0..b.size {
-    built = push(built, digit(shift_right(b[i], 4)))
-    built = push(built, digit(bit_and(b[i], 15)))
+    built = push(take built, digit(shift_right(b[i], 4)))
+    built = push(take built, digit(bit_and(b[i], 15)))
   }
-  match utf8(freeze(built)) {
+  match utf8(freeze(take built)) {
     .ok(t) { t }
     .err(e) { \"\" }
   }
@@ -945,10 +945,10 @@ fn digit(d: Byte) -> Byte {
 fn hex(b: List[Byte]) -> str <alloc> {
   mut built: List[Byte] = []
   loop i in 0..b.size {
-    built = push(built, digit(shift_right(b[i], 4)))
-    built = push(built, digit(bit_and(b[i], 15)))
+    built = push(take built, digit(shift_right(b[i], 4)))
+    built = push(take built, digit(bit_and(b[i], 15)))
   }
-  match utf8(freeze(built)) {
+  match utf8(freeze(take built)) {
     .ok(t) { t }
     .err(e) { \"\" }
   }

@@ -53,7 +53,7 @@ fn module(c: &Case, library: bool) -> String {
     let mut text = format!("pub trait Weight[T] {{\n  fn weight(x: {take}T) -> Nat\n}}\n\n");
     for i in 0..c.weights.len() {
         let (field, given, body) = if library {
-            ("", "without Copy for T{i}\nwithout Discard for T{i}\n\n", "n = x.n\n    __consume(x)\n    n")
+            ("", "without Copy for T{i}\nwithout Discard for T{i}\n\n", "n = x.n\n    __consume(take x)\n    n")
         } else {
             ("pub ", "", "x.n")
         };
@@ -72,14 +72,17 @@ fn module(c: &Case, library: bool) -> String {
 /// The program, which writes no type of the module, and what it prints.
 fn program(c: &Case, home: &str) -> (String, String) {
     let n = c.weights.len();
+    // The types of a module of the library have no `Copy`, so each is given
+    // away where a function takes it.
+    let give = if home.starts_with("std.") { "take " } else { "" };
     let ops = |f: &dyn Fn(usize) -> String| (0..n).map(f).collect::<Vec<_>>().join(", ");
     if c.handled {
-        let handlers = ops(&|i| format!("open_{i}: fn(n) {{ .err(n) }}, drop_{i}: fn(b) {{ h = weight(b) }}"));
+        let handlers = ops(&|i| format!("open_{i}: fn(n) {{ .err(n) }}, drop_{i}: fn(b) {{ h = weight({give}b) }}"));
         // Only the first type is reached by a call, the others only by the
         // handler of the operations that write them.
         let uses = "open_0, drop_0";
         let calls: String = (0..1)
-            .map(|i| format!("    match open_{i}({}) {{\n      .ok(b) {{ drop_{i}(b) }}\n      .err(e) {{ print(\"{{e}}\") }}\n    }}\n", c.weights[i]))
+            .map(|i| format!("    match open_{i}({}) {{\n      .ok(b) {{ drop_{i}({give}b) }}\n      .err(e) {{ print(\"{{e}}\") }}\n    }}\n", c.weights[i]))
             .collect();
         let source = format!(
             "use {home} (scale, weight, {uses})\n\nfn main() <console, alloc> {{\n  scale({handlers}) {{\n{calls}  }}\n}}\n"
@@ -138,15 +141,15 @@ fn main() <console, alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused(host)) },
     accept: fn(l) { .err(.refused(l.host)) },
-    stop: fn(l) { n = release(l) },
+    stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .ok(.bytes(Chunk(bytes: [104, 105]))) },
     write: fn(c, bytes) { .ok(()) },
-    close: fn(c) { n = release(c) },
+    close: fn(c) { n = release(take c) },
     bind_to: fn(host, port) { .err(.refused(host)) },
     send: fn(s, to, bytes) { .ok(()) },
     receive: fn(s, most) { .err(.refused(s.host)) },
-    unbind: fn(s) { n = release(s) }
+    unbind: fn(s) { n = release(take s) }
   ) {
     match ask(\"x\") {
       .ok(bytes) { print(\"answered\") }

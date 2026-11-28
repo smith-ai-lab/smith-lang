@@ -346,7 +346,7 @@ fn main() <console, alloc> {
   with host()
   match get[8]("http://127.0.0.1:PORT/a", headers: []) {
     .ok(r) {
-      text = match utf8(freeze(r.body.bytes)) {
+      text = match utf8(freeze(take r.body.bytes)) {
         .ok(t) { t }
         .err(e) { "not text" }
       }

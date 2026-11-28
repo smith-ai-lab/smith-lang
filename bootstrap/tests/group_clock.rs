@@ -86,7 +86,7 @@ use std.time (sleep, time)
 fn main() <console, alloc, time> {
   with tasks()
   t = spawn { sleep(ms(600)) }
-  join(t)
+  join(take t)
   print(\"slept\")
 }
 ";

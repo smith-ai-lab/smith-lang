@@ -231,7 +231,7 @@ fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> 
     match xs[i].tag {
       .context((n, built)) {
         if n == 2 and not built {
-          found = push(found, try text(Value(tag: .ia5, bytes: xs[i].bytes)))
+          found = push(take found, try text(Value(tag: .ia5, bytes: xs[i].bytes)))
         }
       }
       _ { return .err("a name of a kind that RFC 5280 does not give") }
@@ -302,7 +302,7 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
     (inner, after) = try value(ext[last].bytes)
     if after.size > 0 { return .err("bytes left after the value of an extension") }
     if is_id_ce(id, 17) {
-      names = try dns_names(inner, names)
+      names = try dns_names(inner, take names)
     } else if is_id_ce(id, 19) {
       signing = try basic_constraints(inner)
     } else if is_id_ce(id, 15) {
@@ -313,7 +313,7 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
     } else if critical {
       return .err("an extension marked critical that is not read")
     }
-    seen = push(seen, id)
+    seen = push(take seen, take id)
   }
   .ok(Found(names: names, signing: signing))
 }
@@ -460,9 +460,9 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
     _ { }
   }
   if is_line(input, from, end, "-----END CERTIFICATE-----") {
-    match decode(finish(s.body)) {
+    match decode(finish(take s.body)) {
       .some(bytes) {
-        s.found = push(s.found, bytes)
+        s.found = push(take s.found, take bytes)
         s.at = .outside
         s.body = new_text()
         return .ok(s)
@@ -493,7 +493,7 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
     loop k in begin..end {
       b = input[k]
       if b >= 128 { return .err("a byte that is not base64 in a certificate") }
-      s.body = append_ascii(s.body, b)
+      s.body = append_ascii(take s.body, b)
     }
   }
   .ok(s)
@@ -507,7 +507,7 @@ pub fn pem(input: str) -> Result[List[List[Byte]], str] <alloc> {
   loop n in 0..input.size {
     if i < input.size {
       if input[i] == '\n' or input[i] == 13 {
-        s = try read_line(s, input, from, i)
+        s = try read_line(take s, input, from, i)
         if input[i] == 13 and i + 1 < input.size {
           if input[i + 1] == '\n' { i = i + 1 }
         }
@@ -516,7 +516,7 @@ pub fn pem(input: str) -> Result[List[List[Byte]], str] <alloc> {
       i = i + 1
     }
   }
-  s = try read_line(s, input, from, input.size)
+  s = try read_line(take s, input, from, input.size)
   match s.at {
     .outside { }
     _ { return .err("a certificate with no end") }

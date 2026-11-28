@@ -274,7 +274,7 @@ fn lines(printed: &[u8]) -> Vec<String> {
 /// Source that turns bytes into a text, which a literal cannot do for a byte
 /// below a space other than a line break and a tab.
 const TEXT: &str = "fn s(bytes: take List[Byte]) -> str {
-  match utf8(freeze(bytes)) {
+  match utf8(freeze(take bytes)) {
     .ok(t) { t }
     .err(e) { \"\" }
   }
@@ -1816,13 +1816,13 @@ fn asked_of(program: &scalar::Program) -> (Vec<u8>, usize, usize) {
 /// array, from the bytes of a text that is built with `push`.
 const MAKE: &str = "fn make(n: Nat) -> str <alloc> {
   mut l: List[Byte] = []
-  loop b in \"\\{\\\"head\\\":1,\\\"body\\\":[\" { l = push(l, b) }
+  loop b in \"\\{\\\"head\\\":1,\\\"body\\\":[\" { l = push(take l, b) }
   loop i in 0..n {
-    if i > 0 { l = push(l, ',') }
-    l = push(l, '0')
+    if i > 0 { l = push(take l, ',') }
+    l = push(take l, '0')
   }
-  loop b in \"],\\\"tail\\\":null\\}\" { l = push(l, b) }
-  s(l)
+  loop b in \"],\\\"tail\\\":null\\}\" { l = push(take l, b) }
+  s(take l)
 }
 
 ";
@@ -1858,7 +1858,7 @@ fn a_rawjson_shares_the_memory_of_the_input() {
 
 /// Source that pushes the bytes of `text` on the list `l`.
 fn pushes(text: &str) -> String {
-    text.bytes().map(|b| format!("  l = push(l, {b})\n")).collect()
+    text.bytes().map(|b| format!("  l = push(take l, {b})\n")).collect()
 }
 
 /// What reading `ty` from the text that `build` pushes asks the system for,
@@ -1883,7 +1883,7 @@ fn written_by_reading(decls: &str, ty: &str, build: &str, check: &str) -> (Lower
         };
         with_import(
             &["from_json"],
-            format!("{TEXT}{decls}fn main() <console, alloc> {{\n  mut l: List[Byte] = []\n{build}  t = s(l)\n{tail}}}\n"),
+            format!("{TEXT}{decls}fn main() <console, alloc> {{\n  mut l: List[Byte] = []\n{build}  t = s(take l)\n{tail}}}\n"),
         )
     };
     (Lowered::new(program(true)), Lowered::new(program(false)))
@@ -1913,7 +1913,7 @@ fn reading_asks_for_memory_for_the_lists_of_the_value_and_for_nothing_else() {
     let nothing = asked_by_reading_nothing();
     // Written once with `ROUNDS` for the number of elements, and lowered once.
     let build = format!(
-        "  l = push(l, '[')\n  loop i in 0..{ROUNDS} {{\n    if i > 0 {{ l = push(l, ',') }}\n    l = push(l, '0')\n  }}\n  l = push(l, ']')\n"
+        "  l = push(take l, '[')\n  loop i in 0..{ROUNDS} {{\n    if i > 0 {{ l = push(take l, ',') }}\n    l = push(take l, '0')\n  }}\n  l = push(take l, ']')\n"
     );
     let (reading, building) = written_by_reading("", "List[u64]", &build, &format!("w.size == {ROUNDS}"));
     let list = |n: u64| asked_by_reading_with(&reading, &building, &[(ROUNDS, n)]);
@@ -1946,13 +1946,13 @@ fn reading_asks_for_memory_for_the_texts_of_the_value_and_for_nothing_else() {
     let nothing = asked_by_reading_nothing();
     let text = |escape: &str, n: usize| {
         let build = format!(
-            "  l = push(l, '\"')\n  loop i in 0..{n} {{\n{escape}  }}\n  l = push(l, '\"')\n"
+            "  l = push(take l, '\"')\n  loop i in 0..{n} {{\n{escape}  }}\n  l = push(take l, '\"')\n"
         );
         asked_by_reading("", "str", &build, &format!("w.size == {n}"))
     };
-    let plain = text("    l = push(l, 'a')\n", 250);
+    let plain = text("    l = push(take l, 'a')\n", 250);
     assert_eq!(plain, nothing, "a text with no escape is a piece of the input");
-    let escaped = text("    l = push(l, '\\\\')\n    l = push(l, 'n')\n", 250);
+    let escaped = text("    l = push(take l, '\\\\')\n    l = push(take l, 'n')\n", 250);
     let moved = escaped.1 - nothing.1;
     assert!(moved > 0 && moved <= 8 * 250, "{moved} bytes moved for 250 escapes");
 }

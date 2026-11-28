@@ -27,7 +27,7 @@ fn main() <console, alloc> {
   print("{first_over(xs, 1)} {first_over(xs, 5)}")
   mut ys: List[Byte] = [4, 5]
   loop v in ys {
-    ys = push(ys, v)
+    ys = push(take ys, v)
     print("{v}")
   }
   print("{ys.size}")
@@ -38,8 +38,8 @@ fn main() <console, alloc> {
   empty: List[Byte] = []
   loop v in empty { print("never") }
   mut people: List[Person] = []
-  people = push(people, Person(name: "ada", age: 36))
-  people = push(people, Person(name: "alan", age: 41))
+  people = push(take people, Person(name: "ada", age: 36))
+  people = push(take people, Person(name: "alan", age: 41))
   loop p in people {
     loop q in people { print("{p.name} {q.age}") }
   }

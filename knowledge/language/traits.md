@@ -279,7 +279,7 @@ impl Sink[Total] {
 }
 
 impl Emit[u64] {
-  fn emit[W: Sink](value: u64, to: take W) -> W { put(to, value) }
+  fn emit[W: Sink](value: u64, to: take W) -> W { put(take to, value) }
 }
 
 fn main() <console, alloc> {
@@ -299,7 +299,7 @@ A function that is bound by `Emit` calls `emit` as it calls any function of a bo
 fn all[T: Emit, W: Sink](xs: List[T], to: take W) -> W {
   mut w = to
   loop i in 0..xs.size {
-    w = emit(xs[i], w)
+    w = emit(xs[i], take w)
   }
   w
 }

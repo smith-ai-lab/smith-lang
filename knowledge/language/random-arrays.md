@@ -21,7 +21,7 @@ fn init_linear[i: Nat, o: Nat](key: take Key) -> Linear[i, o] {
 }
 ```
 
-`Linear` is the layer of [Linear algebra](linear-algebra.md). `normal(kw)` fills the `[o, i]f32` that the field `w` expects, and `uniform(kb)` the `[o]f32` of `b`. Each uses one key, and `split` made two from one.
+`Linear` is the layer of [Linear algebra](linear-algebra.md). `normal(take kw)` fills the `[o, i]f32` that the field `w` expects, and `uniform(take kb)` the `[o]f32` of `b`. Each uses one key, and `split` made two from one.
 
 ## A key for each iteration
 
@@ -68,7 +68,7 @@ The compiler does not build either refusal, so the page quotes no words.
 
 | Written | Is |
 | --- | --- |
-| `normal(k)`, `uniform(k)` where an array is expected | The whole array, from one key, shaped by the type |
+| `normal(take k)`, `uniform(take k)` where an array is expected | The whole array, from one key, shaped by the type |
 | `split_n(k)` | An array of keys, one for each index |
 | `keys[i]` in `for i` taken once | Allowed: each iteration has its own key |
 | `keys[i]` taken twice | Refused |

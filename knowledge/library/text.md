@@ -84,7 +84,7 @@ fn main() <console, alloc> {
 
 This prints `depth=3`.
 
-Bytes that are not known to be valid become a text first, through [`utf8`](../language/text.md), and are then added: `append(t, try utf8(bytes))`. There is no function that adds bytes as they are.
+Bytes that are not known to be valid become a text first, through [`utf8`](../language/text.md), and are then added: `append(take t, try utf8(bytes))`. There is no function that adds bytes as they are.
 
 ```
 use std.text (append_ascii, text)
@@ -102,7 +102,7 @@ fn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }
 | --- | --- |
 | `strip_prefix(s, prefix)` | `.some` of the text after `prefix`, or `.none` when `s` does not begin with it |
 | `text()` | An empty `Text` |
-| `append(t, s)` | `t` with the text `s` at its end |
+| `append(take t, s)` | `t` with the text `s` at its end |
 | `append_ascii(t, b)` | `t` with the byte `b`, which is below 128, at its end |
-| `finish(t)` | The `str` of what `t` holds, with nothing read again |
+| `finish(take t)` | The `str` of what `t` holds, with nothing read again |
 | `split_once(s, at)` | `.some` of the text before the first `at` and the text after it, or `.none`; an empty `at` is at the start |

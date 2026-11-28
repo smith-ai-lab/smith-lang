@@ -351,9 +351,9 @@ impl Deep {
                      }} else {{\n      t = .node(Node(value: v, forest: Forest(trees: [t])))\n    }}"
                 ),
             ),
-            false => ("", "mut xs: List[u64] = []", "xs = push(xs, v)".to_string()),
+            false => ("", "mut xs: List[u64] = []", "xs = push(take xs, v)".to_string()),
         };
-        let frozen = if build { "" } else { "s = freeze(xs)\n  " };
+        let frozen = if build { "" } else { "s = freeze(take xs)\n  " };
         format!(
             "{HEADER}use std.list (freeze, push)\n\n{types}{functions}\
              fn main() <console, alloc> {{\n  {made}\n  \

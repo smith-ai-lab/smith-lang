@@ -157,7 +157,7 @@ fn two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_e
     let mut seen = std::collections::BTreeSet::new();
     // The text is the same for every seed but the seed, so it is lowered once.
     let written = Written::new(format!(
-        "{TASKS}{FAKE}fn two_readings() -> (u64, u64) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ now() }}\n  tb = spawn {{ now() }}\n  (join(ta), join(tb))\n}}\n\n\
+        "{TASKS}{FAKE}fn two_readings() -> (u64, u64) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ now() }}\n  tb = spawn {{ now() }}\n  (join(take ta), join(take tb))\n}}\n\n\
          fn main() <console, alloc, diverge> {{\n  print(\"{{two_readings()}}\")\n}}\n"
     ));
     for seed in 1..=12u64 {
@@ -172,7 +172,7 @@ fn two_readings_of_two_children_under_the_clock_that_counts_are_one_and_two_in_e
 /// each once, whatever way the two children's readings interleave.
 fn two_pairs_of_two_children_under_the_clock_that_counts_are_the_four_ticks_each_once_for_every_seed() {
     let written = Written::new(format!(
-        "{TASKS}{FAKE}fn two_pairs() -> ((u64, u64), (u64, u64)) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ (now(), now()) }}\n  tb = spawn {{ (now(), now()) }}\n  (join(ta), join(tb))\n}}\n\n\
+        "{TASKS}{FAKE}fn two_pairs() -> ((u64, u64), (u64, u64)) <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({SEED})\n  ta = spawn {{ (now(), now()) }}\n  tb = spawn {{ (now(), now()) }}\n  (join(take ta), join(take tb))\n}}\n\n\
          fn main() <console, alloc, diverge> {{\n  ((a, b), (c, d)) = two_pairs()\n  print(\"{{wrapping_add(wrapping_mul(a, 1000), wrapping_add(wrapping_mul(b, 100), wrapping_add(wrapping_mul(c, 10), d)))}}\")\n}}\n"
     ));
     for seed in 1..=12u64 {

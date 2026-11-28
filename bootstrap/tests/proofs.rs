@@ -382,9 +382,9 @@ fn a_proof_function_is_in_no_executable() {
 pub const LISTS: &str = "use std.bits (u64)\nuse std.list (push, freeze)\nuse std.console (console, print)\n\n\
 fn push_grows(xs: take List[Byte], x: take Byte) -> push(xs, x).size == xs.size + 1 {\n  arith()\n}\n\n\
 fn slice_size(xs: Slice[Byte], a: u64, b: u64) -> xs[a..b].size == b - a\n  requires a <= b and b <= xs.size\n{\n  arith()\n}\n\n\
-fn grown(xs: take List[Byte], x: take Byte) -> List[Byte] <alloc> { push(xs, x) }\n\n\
+fn grown(xs: take List[Byte], x: take Byte) -> List[Byte] <alloc> { push(take xs, x) }\n\n\
 fn cut(xs: Slice[Byte], a: u64, b: u64) -> u64\n  requires a <= b and b <= xs.size\n{\n  xs[a..b].size\n}\n\n\
-fn main() <console, alloc> {\n  xs: List[Byte] = [1]\n  s: Slice[Byte] = freeze([1, 2, 3])\n  if 3 <= s.size {\n    print(\"{grown(xs, 2).size} {cut(s, 1, 3)}\")\n  }\n}\n";
+fn main() <console, alloc> {\n  xs: List[Byte] = [1]\n  s: Slice[Byte] = freeze([1, 2, 3])\n  if 3 <= s.size {\n    print(\"{grown(take xs, 2).size} {cut(s, 1, 3)}\")\n  }\n}\n";
 
 fn lists_refused(change: impl Fn(&str) -> String) -> Vec<String> {
     match check(change(LISTS).as_bytes()) {

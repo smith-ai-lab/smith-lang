@@ -127,15 +127,15 @@ pub fn tasks[T](body: take fn() -> T <task>) -> T <task> {
       quiet: { quiet() },
       timed_out: { timed_out() },
       limit: fn(ms) { limit(ms) },
-      body: body,
+      body: take body,
     )
   } else {
-    alloc(body: { group(body) })
+    alloc(body: { group(take body) })
   }
 }
 
 pub fn spawn[T](work: take fn() -> T) -> Task[T] <task> {
-  Task(number: start(__frame(work)), gives: [])
+  Task(number: start(__frame(take work)), gives: [])
 }
 
 pub fn join[T](child: take Task[T]) -> T <task> {
@@ -144,10 +144,10 @@ pub fn join[T](child: take Task[T]) -> T <task> {
     // The child that failed made no value, so the task that joins it ends by the
     // same failure, once the frame of the child has gone back.
     kind = __word(child.number, 2)
-    __drop(f)
+    __drop(take f)
     __fail(kind)
   } else {
-    __result(f)
+    __result(take f)
   }
 }
 
@@ -162,10 +162,10 @@ pub fn outcome[T](child: take Task[T]) -> Result[T, Failure] <task> {
   f = finish(child.number)
   if has_failed(child.number) {
     kind = __word(child.number, 2)
-    __drop(f)
+    __drop(take f)
     if kind == 0 { .err(.out_of_memory) } else { .err(.refused_write) }
   } else {
-    .ok(__result(f))
+    .ok(__result(take f))
   }
 }
 
@@ -548,7 +548,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
       // A frame that holds the head of the chain where no failure takes it.
       spare = __frame({ 0 })
       note = __address(spare)
-      root = __frame(body)
+      root = __frame(take body)
       top = enter(__address(root), first)
       first = top
       anchor = note
@@ -609,7 +609,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
                 }
               }
             }
-            __consume(f)
+            __consume(take f)
           }
         }
       }
@@ -636,11 +636,11 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
             __end(1)
           }
         }
-        __consume(f)
+        __consume(take f)
       }
       cancel_rest(first, top)
-      __drop(spare)
-      result: T = __result(root)
+      __drop(take spare)
+      result: T = __result(take root)
       result
     },
   )
@@ -684,7 +684,7 @@ fn le32(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
   b1: Byte = bit_and(shift_right(n, 8), 255)
   b2: Byte = bit_and(shift_right(n, 16), 255)
   b3: Byte = bit_and(shift_right(n, 24), 255)
-  push(push(push(push(list, b0), b1), b2), b3)
+  push(push(push(push(take list, b0), b1), b2), b3)
 }
 
 // Asks `epoll` to say once when the descriptor can be read or written. The event
@@ -694,10 +694,10 @@ fn register(ep: i64, fd: u64, write: bool) -> i64 <alloc> {
   mut events: u64 = 1073741825
   if write { events = 1073741828 }
   mut event: List[Byte] = []
-  event = le32(event, events)
-  event = le32(event, fd)
-  event = le32(event, fd)
-  event = le32(event, fd)
+  event = le32(take event, events)
+  event = le32(take event, fd)
+  event = le32(take event, fd)
+  event = le32(take event, fd)
   descriptor: i64 = wrapping_narrow(fd)
   added = __system(14, ep, 1, descriptor, event, 0, 0)
   if added == -17 { __system(14, ep, 3, descriptor, event, 0, 0) } else { added }
@@ -713,7 +713,7 @@ fn on_macos() -> bool {
 fn le64(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
   low: u64 = bit_and(n, 4294967295)
   high: u64 = shift_right(n, 32)
-  le32(le32(list, low), high)
+  le32(le32(take list, low), high)
 }
 
 // The number that the eight bytes from `at` are, the low one first.
@@ -734,7 +734,7 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
 // monotonic clock, 1 on Linux and 6 on macOS.
 fn read_clock() -> u64 <alloc> {
   mut stamp: List[Byte] = []
-  stamp = le64(le64(stamp, 0), 0)
+  stamp = le64(le64(take stamp, 0), 0)
   mut clock: i64 = 1
   if on_macos() { clock = 6 }
   _ = __system(18, clock, stamp, 0, 0, 0, 0)
@@ -772,14 +772,14 @@ fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 <alloc> {
   mut word: u64 = 1179647
   if write { word = 1179646 }
   mut change: List[Byte] = []
-  change = le32(change, fd)
-  change = le32(change, 0)
-  change = le32(change, word)
-  change = le32(change, 0)
-  change = le32(change, 0)
-  change = le32(change, 0)
-  change = le32(change, 0)
-  change = le32(change, 0)
+  change = le32(take change, fd)
+  change = le32(take change, 0)
+  change = le32(take change, word)
+  change = le32(take change, 0)
+  change = le32(take change, 0)
+  change = le32(take change, 0)
+  change = le32(take change, 0)
+  change = le32(take change, 0)
   __system(17, kq, change, 1, 0, 0, 0)
 }
 
@@ -794,12 +794,12 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
     // The time to wait is a pair of numbers, the seconds and the nanoseconds.
     ms: u64 = wrapping_narrow(time)
     mut limit: List[Byte] = []
-    limit = le64(limit, ms / 1000)
-    limit = le64(limit, (ms % 1000) * 1000000)
+    limit = le64(take limit, ms / 1000)
+    limit = le64(take limit, (ms % 1000) * 1000000)
     got = __system(17, kq, 0, 0, buffer, 1, limit)
   }
   if got != 1 { return .none }
-  event = __sized(buffer, 32)
+  event = __sized(take buffer, 32)
   if event.size < 4 { return .none }
   b0: u64 = event[0]
   b1: u64 = event[1]
@@ -824,7 +824,7 @@ fn ready_descriptor(ep: i64, time: i64) -> Option[u64] <alloc> {
   buffer: List[Byte] = __reserve(16)
   got = __system(15, ep, buffer, 1, time, 0, 0)
   if got != 1 { return .none }
-  event = __sized(buffer, 16)
+  event = __sized(take buffer, 16)
   if event.size < 12 { return .none }
   b0: u64 = event[8]
   b1: u64 = event[9]
@@ -882,7 +882,7 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
       // A frame that holds the head of the chain where no failure takes it.
       spare = __frame({ 0 })
       note = __address(spare)
-      root = __frame(body)
+      root = __frame(take body)
       top = enter(__address(root), first)
       first = top
       anchor = note
@@ -984,7 +984,7 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
                 }
               }
             }
-            __consume(f)
+            __consume(take f)
           }
         }
       }
@@ -1011,12 +1011,12 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
             __end(1)
           }
         }
-        __consume(f)
+        __consume(take f)
       }
       cancel_rest(first, top)
       if ep >= 0 { _ = __system(22, ep, 0, 0, 0, 0, 0) }
-      __drop(spare)
-      result: T = __result(root)
+      __drop(take spare)
+      result: T = __result(take root)
       result
     },
   )

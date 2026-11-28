@@ -13,7 +13,7 @@ fn eat() -> u64 <alloc, console> {
       .some(m) { if m == 0 { print("{r}") } }
       .none { }
     }
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }
   0
 }

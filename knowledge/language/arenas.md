@@ -37,7 +37,7 @@ use std.list (push)
 
 fn squares(n: u64) -> List[u64] <alloc> {
   mut acc: List[u64] = []
-  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }
+  loop i in 0..n { acc = push(take acc, wrapping_mul(i, i)) }
   acc
 }
 

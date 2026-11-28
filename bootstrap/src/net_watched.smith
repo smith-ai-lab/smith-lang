@@ -74,17 +74,17 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   // go. Its fields are laid out as the kernel's header says, which macOS
   // makes shorter.
   mut message: List[Byte] = eight(0)
-  message = append(message, zeros(8))
-  message = append(message, eight(iov_at))
+  message = append(take message, zeros(8))
+  message = append(take message, eight(iov_at))
   if on_macos() {
-    message = append(append(message, number(1)), zeros(4))
-    message = append(message, eight(rights_at))
-    message = append(append(message, number(64)), zeros(4))
+    message = append(append(take message, number(1)), zeros(4))
+    message = append(take message, eight(rights_at))
+    message = append(append(take message, number(64)), zeros(4))
   } else {
-    message = append(message, eight(1))
-    message = append(message, eight(rights_at))
-    message = append(message, eight(64))
-    message = append(message, zeros(8))
+    message = append(take message, eight(1))
+    message = append(take message, eight(rights_at))
+    message = append(take message, eight(64))
+    message = append(take message, zeros(8))
   }
   mut got: i64 = -4
   loop attempt in 0..8 {
@@ -93,7 +93,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   }
   if got < 0 { return .err(failure(address, "listen", got)) }
   if got == 0 { return .err(.failed((address, "listen: smith --watch has ended"))) }
-  reply = __sized(said, count(got))
+  reply = __sized(take said, count(got))
   if reply.size == 0 { return .err(.failed((address, "listen: smith --watch said nothing"))) }
   if reply[0] != 111 {
     mut code: i64 = 0
@@ -103,7 +103,7 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
     }
     return .err(failure(address, "bind", wrapping_sub(0, code)))
   }
-  control_bytes = __sized(rights, 64)
+  control_bytes = __sized(take rights, 64)
   if control_bytes.size < 24 { return .err(.failed((address, "listen: no descriptor came"))) }
   mut fd: i64 = -1
   if on_macos() {

@@ -133,10 +133,10 @@ If `parse_int(a)` is an `.err`, `on_ok` gives that `.err` without calling the la
 A function that takes its function calls it once, so the block it is given may give away a value of the function around it. `run` takes its function, and the block under `with` gives `b` away.
 
 ```
-fn run[T](xs: take List[Byte], body: take fn(take List[Byte]) -> T) -> T { body(xs) }
+fn run[T](xs: take List[Byte], body: take fn(take List[Byte]) -> T) -> T { body(take xs) }
 
 fn both(a: take List[Byte], b: take List[Byte]) -> (List[Byte], List[Byte]) {
-  with xs = run(a)
+  with xs = run(take a)
   (xs, b)
 }
 ```

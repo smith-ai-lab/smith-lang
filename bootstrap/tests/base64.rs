@@ -85,11 +85,11 @@ fn program(calls: &[String]) -> String {
     let mut helpers = String::new();
     if used("enc(") {
         imports.push("encode");
-        helpers += "fn enc(b: take List[Byte]) <console, alloc> {\n  print(encode(freeze(b)))\n}\n\n";
+        helpers += "fn enc(b: take List[Byte]) <console, alloc> {\n  print(encode(freeze(take b)))\n}\n\n";
     }
     if used("enc_url(") {
         imports.push("encode_url");
-        helpers += "fn enc_url(b: take List[Byte]) <console, alloc> {\n  print(encode_url(freeze(b)))\n}\n\n";
+        helpers += "fn enc_url(b: take List[Byte]) <console, alloc> {\n  print(encode_url(freeze(take b)))\n}\n\n";
     }
     if used("dec(") {
         imports.push("decode");

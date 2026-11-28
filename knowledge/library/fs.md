@@ -113,7 +113,7 @@ fn refusing[T](body: fn() -> T <fs>) -> T {
   fs(
     open_file: fn(path) { .err(.denied(path)) },
     create_file: fn(path, executable) { .err(.failed((path, "disk"))) },
-    close_file: fn(f) { n = release(f) },
+    close_file: fn(f) { n = release(take f) },
     size: fn(f) { .err(.missing(f.path)) },
     read: fn(f, range) { .err(.missing(f.path)) },
     write: fn(f, at, bytes) { .err(.denied(f.path)) },

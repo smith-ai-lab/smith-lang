@@ -182,6 +182,8 @@ impl Parser<'_> {
             mutable: None,
             given_back: false,
             keeps: false,
+            take: None,
+            written: false,
         };
         Ok(Expr::Call(Call {
             through: None,
@@ -246,6 +248,8 @@ pub(super) fn compared(left: Expr, op: &str, right: Expr, op_pos: Pos) -> Expr {
                     mutable: None,
                     given_back: false,
                     keeps: false,
+                    take: None,
+                    written: false,
                 })
                 .collect(),
             end: op_pos,

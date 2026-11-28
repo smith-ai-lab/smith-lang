@@ -6,5 +6,5 @@ fn draw(bytes: take List[Byte]) -> List[Byte] {
 
 fn main() <entropy, alloc> {
   bytes: List[Byte] = []
-  draw(bytes)
+  draw(take bytes)
 }

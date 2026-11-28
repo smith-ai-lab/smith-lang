@@ -259,7 +259,7 @@ impl[T, U, E, F] Try[Result[T, E], Result[U, F], T]
   fn split(c: take Result[T, E]) -> Flow[T, Result[U, F]] {
     match c {
       .ok(x) { .go(x) }
-      .err(e) { .stop(.err(convert(e))) }
+      .err(e) { .stop(.err(convert(take e))) }
     }
   }
 }

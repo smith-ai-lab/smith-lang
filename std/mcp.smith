@@ -60,7 +60,7 @@ fn has(named: List[(str, RawJson)], name: str) -> bool {
 
 impl Deserialize[Members] {
   fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) <alloc> {
-    (opened, began) = Reader.structure(from, "Members")
+    (opened, began) = Reader.structure(take from, "Members")
     match began {
       .err(e) { return (opened, Result.err(e)) }
       .ok(u) { }
@@ -68,7 +68,7 @@ impl Deserialize[Members] {
     mut r = opened
     mut named: List[(str, RawJson)] = []
     loop round in 0..4294967296 {
-      (after, got) = Reader.field(r)
+      (after, got) = Reader.field(take r)
       r = after
       match got {
         .err(e) { return (r, Result.err(e)) }
@@ -77,14 +77,14 @@ impl Deserialize[Members] {
             .none { break }
             .some(name) {
               if has(named, name) {
-                (w, e) = fail(r, .twice(name))
+                (w, e) = fail(take r, .twice(name))
                 return (w, Result.err(e))
               }
-              (w, value): (R, Result[RawJson, ReadError]) = Deserialize.read(r)
+              (w, value): (R, Result[RawJson, ReadError]) = Deserialize.read(take r)
               r = w
               match value {
                 .err(e) { return (r, Result.err(e)) }
-                .ok(v) { named = push(named, (name, v)) }
+                .ok(v) { named = push(take named, (name, v)) }
               }
             }
           }
@@ -162,7 +162,7 @@ fn header_text(value: str) -> Option[str] <alloc> {
         match base64.decode(encoded) {
           .none { .none }
           .some(bytes) {
-            match utf8(freeze(bytes)) {
+            match utf8(freeze(take bytes)) {
               .ok(t) { .some(t) }
               .err(e) { .none }
             }
@@ -180,22 +180,22 @@ fn header_text(value: str) -> Option[str] <alloc> {
 fn failure_text(id: Option[str], code: Int, message: str, data: Option[str]) -> str <alloc> {
   a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\"")
   b = match id {
-    .some(i) { texts.append(texts.append(a, ",\"id\":"), i) }
+    .some(i) { texts.append(texts.append(take a, ",\"id\":"), i) }
     .none { a }
   }
-  c = texts.append(texts.append(b, ",\"error\":\{\"code\":"), to_json(code))
-  d = texts.append(texts.append(c, ",\"message\":"), to_json(message))
+  c = texts.append(texts.append(take b, ",\"error\":\{\"code\":"), to_json(code))
+  d = texts.append(texts.append(take c, ",\"message\":"), to_json(message))
   e = match data {
-    .some(x) { texts.append(texts.append(d, ",\"data\":"), x) }
+    .some(x) { texts.append(texts.append(take d, ",\"data\":"), x) }
     .none { d }
   }
-  texts.finish(texts.append(e, "\}\}"))
+  texts.finish(texts.append(take e, "\}\}"))
 }
 
 fn success_text(id: str, result: str) -> str <alloc> {
   a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\",\"id\":")
-  b = texts.append(texts.append(a, id), ",\"result\":")
-  texts.finish(texts.append(texts.append(b, result), "\}"))
+  b = texts.append(texts.append(take a, id), ",\"result\":")
+  texts.finish(texts.append(texts.append(take b, result), "\}"))
 }
 
 fn refusal(id: Option[str], code: Int, message: str, data: Option[str], status: 100..600) -> Reply <alloc> {
@@ -226,10 +226,10 @@ struct ResultMeta {
 
 impl Serialize[ResultMeta] {
   fn write[W: Writer](value: ResultMeta, to: take W) -> W <alloc> {
-    mut w = Writer.structure(to, "ResultMeta", 1)
-    w = Writer.field(w, "io.modelcontextprotocol/serverInfo")
-    w = Serialize.write(value.server_info, w)
-    Writer.end_structure(w)
+    mut w = Writer.structure(take to, "ResultMeta", 1)
+    w = Writer.field(take w, "io.modelcontextprotocol/serverInfo")
+    w = Serialize.write(value.server_info, take w)
+    Writer.end_structure(take w)
   }
 }
 
@@ -243,13 +243,13 @@ impl Serialize[Capabilities] {
   fn write[W: Writer](value: Capabilities, to: take W) -> W <alloc> {
     mut count: Nat = 0
     if value.tools { count = 1 }
-    mut w = Writer.structure(to, "Capabilities", count)
+    mut w = Writer.structure(take to, "Capabilities", count)
     if value.tools {
-      w = Writer.field(w, "tools")
-      w = Writer.structure(w, "Tools", 0)
-      w = Writer.end_structure(w)
+      w = Writer.field(take w, "tools")
+      w = Writer.structure(take w, "Tools", 0)
+      w = Writer.end_structure(take w)
     }
-    Writer.end_structure(w)
+    Writer.end_structure(take w)
   }
 }
 
@@ -270,27 +270,27 @@ impl Serialize[Discovered] {
       .some(s) { count = 6 }
       .none { }
     }
-    mut w = Writer.structure(to, "DiscoverResult", count)
-    w = Writer.field(w, "resultType")
-    w = Writer.text(w, "complete")
-    w = Writer.field(w, "supportedVersions")
-    w = Serialize.write(value.supported_versions, w)
-    w = Writer.field(w, "capabilities")
-    w = Serialize.write(value.capabilities, w)
+    mut w = Writer.structure(take to, "DiscoverResult", count)
+    w = Writer.field(take w, "resultType")
+    w = Writer.text(take w, "complete")
+    w = Writer.field(take w, "supportedVersions")
+    w = Serialize.write(value.supported_versions, take w)
+    w = Writer.field(take w, "capabilities")
+    w = Serialize.write(value.capabilities, take w)
     match value.instructions {
       .some(s) {
-        w = Writer.field(w, "instructions")
-        w = Writer.text(w, s)
+        w = Writer.field(take w, "instructions")
+        w = Writer.text(take w, s)
       }
       .none { }
     }
-    w = Writer.field(w, "ttlMs")
-    w = Serialize.write(value.ttl, w)
-    w = Writer.field(w, "cacheScope")
-    w = Writer.text(w, "private")
-    w = Writer.field(w, "_meta")
-    w = Serialize.write(value.meta, w)
-    Writer.end_structure(w)
+    w = Writer.field(take w, "ttlMs")
+    w = Serialize.write(value.ttl, take w)
+    w = Writer.field(take w, "cacheScope")
+    w = Writer.text(take w, "private")
+    w = Writer.field(take w, "_meta")
+    w = Serialize.write(value.meta, take w)
+    Writer.end_structure(take w)
   }
 }
 
@@ -510,27 +510,27 @@ fn meta_text(server: Server) -> str <alloc> {
 fn list_text(server: Server, entries: List[str]) -> str <alloc> {
   mut b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"tools\":[")
   loop i in 0..entries.size {
-    if i > 0 { b = texts.append(b, ",") }
-    b = texts.append(b, entries[i])
+    if i > 0 { b = texts.append(take b, ",") }
+    b = texts.append(take b, entries[i])
   }
-  b = texts.append(b, "],\"ttlMs\":")
-  b = texts.append(b, to_json(server.ttl))
-  b = texts.append(b, ",\"cacheScope\":\"private\",\"_meta\":")
-  b = texts.append(b, meta_text(server))
-  texts.finish(texts.append(b, "\}"))
+  b = texts.append(take b, "],\"ttlMs\":")
+  b = texts.append(take b, to_json(server.ttl))
+  b = texts.append(take b, ",\"cacheScope\":\"private\",\"_meta\":")
+  b = texts.append(take b, meta_text(server))
+  texts.finish(texts.append(take b, "\}"))
 }
 
 // The result of a call: what the tool gave, as text and as structured content,
 // marked as an error when it failed.
 fn call_text(server: Server, failed: bool, value: str) -> str <alloc> {
   mut b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"content\":[\{\"type\":\"text\",\"text\":")
-  b = texts.append(b, json_string(value))
-  b = texts.append(b, "\}],\"structuredContent\":")
-  b = texts.append(b, value)
-  if failed { b = texts.append(b, ",\"isError\":true") }
-  b = texts.append(b, ",\"_meta\":")
-  b = texts.append(b, meta_text(server))
-  texts.finish(texts.append(b, "\}"))
+  b = texts.append(take b, json_string(value))
+  b = texts.append(take b, "\}],\"structuredContent\":")
+  b = texts.append(take b, value)
+  if failed { b = texts.append(take b, ",\"isError\":true") }
+  b = texts.append(take b, ",\"_meta\":")
+  b = texts.append(take b, meta_text(server))
+  texts.finish(texts.append(take b, "\}"))
 }
 
 // What the server answers to a message of its lines, from what the lines gave:
@@ -607,7 +607,7 @@ pub fn mcp(
           any = true
           call
         },
-        listed: fn(entry) { entries = push(entries, entry) },
+        listed: fn(entry) { entries = push(take entries, entry) },
         answered: fn(failed, value) { result = .some(call_text(server, failed, value)) },
         refused: fn(code, why) { failure = .some((code, why)) },
         body: body,
@@ -683,12 +683,12 @@ fn entry_of[F, A, R](f: F) -> str <alloc>
 {
   schema = schema_text(Describe[A].describe(json_schema(Json(cases: .key, names: .written))))
   mut b = texts.append(texts.text(), "\{\"name\":")
-  b = texts.append(b, json_string(Function.name(f)))
-  b = texts.append(b, ",\"description\":")
-  b = texts.append(b, json_string(Function.about(f)))
-  b = texts.append(b, ",\"inputSchema\":")
-  b = texts.append(b, schema)
-  texts.finish(texts.append(b, "\}"))
+  b = texts.append(take b, json_string(Function.name(f)))
+  b = texts.append(take b, ",\"description\":")
+  b = texts.append(take b, json_string(Function.about(f)))
+  b = texts.append(take b, ",\"inputSchema\":")
+  b = texts.append(take b, schema)
+  texts.finish(texts.append(take b, "\}"))
 }
 
 // The function `f` offered as a tool. It is listed when the message lists the
@@ -714,7 +714,7 @@ pub fn tool[F, A, R](f: F) <lines, alloc>
       match got {
         .err(e) { refused(-32602, describe(e)) }
         .ok(args) {
-          (failed, value) = Gave.gave(Function.call(f, args))
+          (failed, value) = Gave.gave(Function.call(f, take args))
           answered(failed, value)
         }
       }

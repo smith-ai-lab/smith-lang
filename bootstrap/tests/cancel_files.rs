@@ -65,7 +65,7 @@ fn main(args: List[str]) <console, alloc, diverge> {{
     create_file: fn(path, executable) {{ .err(.missing(path)) }},
     close_file: fn(f) {{
       print(\"closed {{handle(f)}}\")
-      n = release(f)
+      n = release(take f)
     }},
     size: fn(f) {{ .err(.missing(f.path)) }},
     read: fn(f, range) {{ .err(.missing(f.path)) }},
@@ -112,7 +112,7 @@ fn sorted(mut lines: Vec<String>) -> Vec<String> {
 const HOLD: &str = "fn hold(n: u64) -> u64 <fs, task> {
   f = file(n)
   test_ready(n)
-  close_file(f)
+  close_file(take f)
   n
 }
 ";
@@ -132,8 +132,8 @@ const PAIR: &str = "struct Pair {
 fn hold_two(n: u64) -> u64 <fs, task> {
   p = Pair(a: file(n), b: file(wrapping_add(n, 1)))
   test_ready(n)
-  close_file(p.a)
-  close_file(p.b)
+  close_file(take p.a)
+  close_file(take p.b)
   n
 }
 ";
@@ -147,8 +147,8 @@ fn a_cancelled_task_closes_both_files_of_a_struct_it_holds() {
 
 const LIST: &str = "fn hold_list(n: u64) -> List[File] <fs, task, alloc> {
   mut fs: List[File] = []
-  fs = push(fs, file(n))
-  fs = push(fs, file(wrapping_add(n, 1)))
+  fs = push(take fs, file(n))
+  fs = push(take fs, file(wrapping_add(n, 1)))
   test_ready(n)
   fs
 }
@@ -163,7 +163,7 @@ fn a_cancelled_task_closes_each_file_of_a_list_it_holds() {
 
 const SERVE: &str = "fn serve(f: take File) -> u64 <fs, task> {
   test_ready(1)
-  close_file(f)
+  close_file(take f)
   3
 }
 ";
@@ -172,7 +172,7 @@ const SERVE: &str = "fn serve(f: take File) -> u64 <fs, task> {
 /// lambda was given is closed by the child's first check, once, and the child
 /// does nothing else.
 fn a_task_cancelled_before_it_ran_closes_the_file_its_lambda_was_given() {
-    let source = program(SERVE, "  f = file(9)\n  _ = spawn { serve(f) }")
+    let source = program(SERVE, "  f = file(9)\n  _ = spawn { serve(take f) }")
             .replace("  late = test_ready_by(99, ms(10))\n", "");
     for (seed, said) in said_for(&source, 8).into_iter().enumerate() {
         assert_eq!(sorted(said), ["1", "closed 9"], "seed {seed}");
@@ -193,7 +193,7 @@ fn a_file_a_task_holds_when_it_fails_is_closed_by_the_handler_once() {
     let functions = "fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }
   0
 }
@@ -201,19 +201,19 @@ fn a_file_a_task_holds_when_it_fails_is_closed_by_the_handler_once() {
 fn inner(n: u64) -> u64 <fs, alloc> {
   f = file(n)
   x = eat()
-  close_file(f)
+  close_file(take f)
   x
 }
 
 fn outer(n: u64) -> u64 <fs, alloc> {
   f = file(n)
   x = inner(wrapping_add(n, 1))
-  close_file(f)
+  close_file(take f)
   x
 }
 ";
     let tasks = "  child = spawn { outer(5) }
-  match outcome(child) {
+  match outcome(take child) {
     .ok(n) { print(\"a value\") }
     .err(.out_of_memory) { print(\"out of memory\") }
     .err(.refused_write) { print(\"refused write\") }
@@ -246,7 +246,7 @@ fn hold() -> u64 <fs, task, alloc> {
   match open_file(\"a\") {
     .ok(f) {
       test_ready(5)
-      close_file(f)
+      close_file(take f)
       1
     }
     .err(e) { 0 }

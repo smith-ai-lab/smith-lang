@@ -281,7 +281,7 @@ fn the_example_of_the_issue_is_read_and_written_as_it_says() {
     let text = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}";
     assert_eq!(reads(&[text.to_string()]), ["request ping number 1", "no params"]);
     let source = format!(
-        "{}fn main() <console, alloc> {{\n  t = jsonrpc.write(texts.text(), .request(jsonrpc.Request(id: .number(1), method: \"ping\", params: .none)))\n  print(texts.finish(t))\n}}\n",
+        "{}fn main() <console, alloc> {{\n  t = jsonrpc.write(texts.text(), .request(jsonrpc.Request(id: .number(1), method: \"ping\", params: .none)))\n  print(texts.finish(take t))\n}}\n",
         header()
     );
     assert_eq!(printed(&source), [text]);
@@ -407,7 +407,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch(part: u64) {
             for (i, m) in singles.iter().enumerate() {
                 let (e, raw) = expression(m, "v");
                 let body = format!(
-                    "t = jsonrpc.write(texts.text(), {e})\ns = texts.finish(t)\nprint(s)\nshow(s)\n"
+                    "t = jsonrpc.write(texts.text(), {e})\ns = texts.finish(take t)\nprint(s)\nshow(s)\n"
                 );
                 functions += &format!("fn single{i}() <console, alloc> {{\n{}}}\n\n", with_raw(&raw, "v", &body));
                 calls += &format!("  single{i}()\n");
@@ -420,7 +420,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch(part: u64) {
                     ms.iter().enumerate().map(|(k, m)| expression(m, &format!("v{k}"))).collect();
                 let items: Vec<&str> = made.iter().map(|(e, _)| e.as_str()).collect();
                 let mut body = format!(
-                    "t = jsonrpc.write_batch(texts.text(), [{}])\ns = texts.finish(t)\nprint(s)\nshow(s)\n",
+                    "t = jsonrpc.write_batch(texts.text(), [{}])\ns = texts.finish(take t)\nprint(s)\nshow(s)\n",
                     items.join(", ")
                 );
                 for (k, (_, raw)) in made.iter().enumerate().rev() {

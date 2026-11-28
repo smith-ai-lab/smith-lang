@@ -28,7 +28,7 @@ use db.transaction (Transaction, begin, commit)
 
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
-  commit(t)
+  commit(take t)
 }
 ```
 
@@ -138,7 +138,7 @@ A name used and not imported is an error, and the error names the module to impo
 ```
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
-  commit(t)
+  commit(take t)
 }
 ```
 
@@ -164,7 +164,7 @@ use model.tokenizer (decode, encode)
 
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
-  commit(t)
+  commit(take t)
 }
 ```
 

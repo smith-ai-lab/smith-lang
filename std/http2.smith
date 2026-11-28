@@ -129,30 +129,30 @@ fn shr(x: Nat, by: Byte) -> Nat { if by < 64 { shift_right(x, by) } else { 0 } }
 fn low(x: Nat) -> Byte { bit_and(x, 255) }
 
 fn put16(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
-  push(push(to, low(shift_right(x, 8))), low(x))
+  push(push(take to, low(shift_right(x, 8))), low(x))
 }
 
 fn put24(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
-  push(put16(to, shift_right(x, 8)), low(x))
+  push(put16(take to, shift_right(x, 8)), low(x))
 }
 
 fn put32(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
-  put16(put16(to, shift_right(x, 16)), x)
+  put16(put16(take to, shift_right(x, 16)), x)
 }
 
 fn put64(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
-  put32(put32(to, shift_right(x, 32)), x)
+  put32(put32(take to, shift_right(x, 32)), x)
 }
 
 fn put_all(to: take List[Byte], s: Slice[Byte]) -> List[Byte] <alloc> {
   mut w = to
-  loop x in s { w = push(w, x) }
+  loop x in s { w = push(take w, x) }
   w
 }
 
 fn put_zeros(to: take List[Byte], n: Nat) -> List[Byte] <alloc> {
   mut w = to
-  loop i in 0..n { w = push(w, 0) }
+  loop i in 0..n { w = push(take w, 0) }
   w
 }
 
@@ -176,7 +176,7 @@ fn has(flags: Byte, bit: Byte) -> bool { bit_and(flags, bit) != 0 }
 
 // The nine bytes that start a frame.
 fn head(to: take List[Byte], length: Nat, kind: Byte, flags: Byte, stream: Nat) -> List[Byte] <alloc> {
-  put32(push(push(put24(to, length), kind), flags), stream)
+  put32(push(push(put24(take to, length), kind), flags), stream)
 }
 
 // The bytes a padding takes: its length and what it says.
@@ -189,14 +189,14 @@ fn padded_by(padding: Option[Byte]) -> Nat {
 
 fn put_pad_length(to: take List[Byte], padding: Option[Byte]) -> List[Byte] <alloc> {
   match padding {
-    .some(p) { push(to, p) }
+    .some(p) { push(take to, p) }
     .none { to }
   }
 }
 
 fn put_padding(to: take List[Byte], padding: Option[Byte]) -> List[Byte] <alloc> {
   match padding {
-    .some(p) { put_zeros(to, nat(p)) }
+    .some(p) { put_zeros(take to, nat(p)) }
     .none { to }
   }
 }
@@ -204,7 +204,7 @@ fn put_padding(to: take List[Byte], padding: Option[Byte]) -> List[Byte] <alloc>
 fn put_dependency(to: take List[Byte], d: Dependency) -> List[Byte] <alloc> {
   s: Nat = d.stream
   x = if d.exclusive { wrapping_add(s, 2147483648) } else { s }
-  push(put32(to, x), d.weight)
+  push(put32(take to, x), d.weight)
 }
 
 pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
@@ -212,7 +212,7 @@ pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
     .data(f) {
       length = wrapping_add(f.data.size, padded_by(f.padding))
       flags = bit_or(flag(f.end_stream, 1), flag(is_padded(f.padding), 8))
-      put_padding(put_all(put_pad_length(head(to, length, 0, flags, f.stream), f.padding), f.data), f.padding)
+      put_padding(put_all(put_pad_length(head(take to, length, 0, flags, f.stream), f.padding), f.data), f.padding)
     }
     .headers(f) {
       fixed = match f.priority {
@@ -221,38 +221,38 @@ pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
       }
       length = wrapping_add(wrapping_add(f.block.size, padded_by(f.padding)), fixed)
       flags = bit_or(bit_or(flag(f.end_stream, 1), flag(f.end_headers, 4)), bit_or(flag(is_padded(f.padding), 8), flag(has_dependency(f.priority), 32)))
-      w = put_pad_length(head(to, length, 1, flags, f.stream), f.padding)
+      w = put_pad_length(head(take to, length, 1, flags, f.stream), f.padding)
       v = match f.priority {
-        .some(d) { put_dependency(w, d) }
+        .some(d) { put_dependency(take w, d) }
         .none { w }
       }
-      put_padding(put_all(v, f.block), f.padding)
+      put_padding(put_all(take v, f.block), f.padding)
     }
-    .priority(s) { push(put32(head(to, 5, 2, 0, s), 0), 0) }
-    .reset(f) { put32(head(to, 4, 3, 0, f.stream), f.code) }
+    .priority(s) { push(put32(head(take to, 5, 2, 0, s), 0), 0) }
+    .reset(f) { put32(head(take to, 4, 3, 0, f.stream), f.code) }
     .settings(pairs) {
-      mut w = head(to, wrapping_mul(pairs.size, 6), 4, 0, 0)
-      loop (id, value) in pairs { w = put32(put16(w, id), value) }
+      mut w = head(take to, wrapping_mul(pairs.size, 6), 4, 0, 0)
+      loop (id, value) in pairs { w = put32(put16(take w, id), value) }
       w
     }
-    .settings_ack { head(to, 0, 4, 1, 0) }
+    .settings_ack { head(take to, 0, 4, 1, 0) }
     .push_promise(f) {
       length = wrapping_add(wrapping_add(f.block.size, padded_by(f.padding)), 4)
       flags = bit_or(flag(f.end_headers, 4), flag(is_padded(f.padding), 8))
-      w = put32(put_pad_length(head(to, length, 5, flags, f.stream), f.padding), f.promised)
-      put_padding(put_all(w, f.block), f.padding)
+      w = put32(put_pad_length(head(take to, length, 5, flags, f.stream), f.padding), f.promised)
+      put_padding(put_all(take w, f.block), f.padding)
     }
-    .ping(f) { put64(head(to, 8, 6, flag(f.ack, 1), 0), f.data) }
-    .go_away(f) { put_all(put32(put32(head(to, wrapping_add(f.debug.size, 8), 7, 0, 0), f.last), f.code), f.debug) }
+    .ping(f) { put64(head(take to, 8, 6, flag(f.ack, 1), 0), f.data) }
+    .go_away(f) { put_all(put32(put32(head(take to, wrapping_add(f.debug.size, 8), 7, 0, 0), f.last), f.code), f.debug) }
     .window_update(f) {
       stream: Nat = match f.target {
         .connection { 0 }
         .stream(s) { s }
       }
-      put32(head(to, 4, 8, 0, stream), f.increment)
+      put32(head(take to, 4, 8, 0, stream), f.increment)
     }
-    .continuation(f) { put_all(head(to, f.block.size, 9, flag(f.end_headers, 4), f.stream), f.block) }
-    .unknown(kind) { head(to, 0, kind, 0, 0) }
+    .continuation(f) { put_all(head(take to, f.block.size, 9, flag(f.end_headers, 4), f.stream), f.block) }
+    .unknown(kind) { head(take to, 0, kind, 0, 0) }
   }
 }
 
@@ -345,7 +345,7 @@ fn on_connection(bytes: Slice[Byte], n: Nat, kind: Byte, flags: Byte) -> Read[Fr
     mut pairs: List[(u16, u32)] = []
     loop i in 0..sixths(n) {
       at_ = wrapping_add(9, wrapping_mul(i, 6))
-      pairs = push(pairs, (half_of(be16(bytes, at_)), word_of(be32(bytes, wrapping_add(at_, 2)))))
+      pairs = push(take pairs, (half_of(be16(bytes, at_)), word_of(be32(bytes, wrapping_add(at_, 2)))))
     }
     return done(.settings(pairs), end)
   }
@@ -429,7 +429,7 @@ fn table_packed(t: take Table) -> Table <alloc> {
     mut kept: List[Entry] = []
     if w.first <= w.entries.size {
       loop i in w.first..w.entries.size {
-        if i < w.entries.size { kept = push(kept, w.entries[i]) }
+        if i < w.entries.size { kept = push(take kept, w.entries[i]) }
       }
     }
     w.entries = kept
@@ -447,13 +447,13 @@ fn table_evict(t: take Table, room: Nat) -> Table <alloc> {
     w.size = wrapping_sub(w.size, entry_size(e))
     w.first = wrapping_add(w.first, 1)
   }
-  table_packed(w)
+  table_packed(take w)
 }
 
 fn table_resize(t: take Table, to: Nat) -> Table <alloc> {
   mut w = t
   w.working = to
-  table_evict(w, to)
+  table_evict(take w, to)
 }
 
 // The table with `e` as its newest entry. An entry that is more than the table
@@ -461,9 +461,9 @@ fn table_resize(t: take Table, to: Nat) -> Table <alloc> {
 fn table_add(t: take Table, e: Entry) -> Table <alloc> {
   size = entry_size(e)
   working = t.working
-  mut w = table_evict(t, saturating_sub(working, size))
+  mut w = table_evict(take t, saturating_sub(working, size))
   if size <= working {
-    w.entries = push(w.entries, e)
+    w.entries = push(take w.entries, e)
     w.size = wrapping_add(w.size, size)
   }
   w
@@ -554,7 +554,7 @@ fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] <alloc> {
         found = wrapping_add(index, wrapping_sub(code, first))
         if found >= order.size { return Result.err("a text in the short code that holds its end") }
         if acc.size >= room { return Result.err("headers of more bytes than are read") }
-        acc = push(acc, order[found])
+        acc = push(take acc, order[found])
         code = 0
         first = 0
         index = 0
@@ -588,7 +588,7 @@ fn read_text(b: Slice[Byte], start: Nat, room: Nat) -> Result[(str, Nat), str] <
         match huffman(bytes, room) {
           .err(why) { Result.err(why) }
           .ok(list) {
-            match utf8(freeze(list)) {
+            match utf8(freeze(take list)) {
               .ok(t) { Result.ok((t, end)) }
               .err(e) { Result.err("a text that is not UTF-8") }
             }
@@ -620,7 +620,7 @@ fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Op
   used = wrapping_add(w.used, wrapping_add(name.size, value.size))
   if used > largest { return (w, .some("headers of more bytes than are read")) }
   w.used = used
-  w.acc = push(w.acc, (name, value))
+  w.acc = push(take w.acc, (name, value))
   w.at = next
   (w, .none)
 }
@@ -636,7 +636,7 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
       .ok(n) {
         match entry_at(w.table, n.value) {
           .none { return (w, .some("an index that names no header")) }
-          .some(e) { return emit(w, e.name, e.value, n.next, largest) }
+          .some(e) { return emit(take w, e.name, e.value, n.next, largest) }
         }
       }
     }
@@ -647,7 +647,7 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
       .err(why) { return (w, .some(why)) }
       .ok(n) {
         if n.value > w.table.limit { return (w, .some("a change of the table's size to more than was agreed")) }
-        w.table = table_resize(w.table, n.value)
+        w.table = table_resize(take w.table, n.value)
         w.at = n.next
         return (w, .none)
       }
@@ -681,8 +681,8 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
         .err(why) { return (w, .some(why)) }
         .ok(t) {
           (value, end) = t
-          if indexed { w.table = table_add(w.table, Entry(name: name, value: value)) }
-          return emit(w, name, value, end, largest)
+          if indexed { w.table = table_add(take w.table, Entry(name: name, value: value)) }
+          return emit(take w, name, value, end, largest)
         }
       }
     }
@@ -693,7 +693,7 @@ pub fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Dec
   mut r = Run(table: d.table, acc: [], used: 0, at: 0, updates: true)
   loop k in 0..block.size {
     if r.at >= block.size { break }
-    (next, bad) = step(r, block, largest)
+    (next, bad) = step(take r, block, largest)
     r = next
     match bad {
       .some(why) { return (Decoder(table: r.table), Result.err(why)) }
@@ -706,12 +706,12 @@ pub fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Dec
 // and has room for `mask`, and more bytes if it is more.
 fn write_num(to: take List[Byte], prefix: Byte, mask: Byte, value: Nat) -> List[Byte] <alloc> {
   m = nat(mask)
-  if value < m { return push(to, bit_or(prefix, low(value))) }
-  mut w = push(to, bit_or(prefix, mask))
+  if value < m { return push(take to, bit_or(prefix, low(value))) }
+  mut w = push(take to, bit_or(prefix, mask))
   mut rest = wrapping_sub(value, m)
   loop k in 0..10 {
-    if rest < 128 { return push(w, low(rest)) }
-    w = push(w, bit_or(128, low(bit_and(rest, 127))))
+    if rest < 128 { return push(take w, low(rest)) }
+    w = push(take w, bit_or(128, low(bit_and(rest, 127))))
     rest = shift_right(rest, 7)
   }
   w
@@ -741,30 +741,30 @@ fn write_huffman(to: take List[Byte], s: str) -> List[Byte] <alloc> {
     loop k in 0..4 {
       if pending < 8 { break }
       pending = wrapping_sub(pending, 8)
-      w = push(w, low(shr(acc, pending)))
+      w = push(take w, low(shr(acc, pending)))
     }
     acc = bit_and(acc, wrapping_sub(shl(1, pending), 1))
   }
   if pending > 0 {
     fill = wrapping_sub(8, pending)
-    w = push(w, low(bit_or(shl(acc, fill), wrapping_sub(shl(1, fill), 1))))
+    w = push(take w, low(bit_or(shl(acc, fill), wrapping_sub(shl(1, fill), 1))))
   }
   w
 }
 
 fn write_text(to: take List[Byte], s: str) -> List[Byte] <alloc> {
   short = huffman_size(s)
-  if short <= s.size { return write_huffman(write_num(to, 128, 127, short), s) }
-  mut w = write_num(to, 0, 127, s.size)
-  loop i in 0..s.size { w = push(w, s[i]) }
+  if short <= s.size { return write_huffman(write_num(take to, 128, 127, short), s) }
+  mut w = write_num(take to, 0, 127, s.size)
+  loop i in 0..s.size { w = push(take w, s[i]) }
   w
 }
 
 // A header written as a literal, with its name by its index when it has one.
 fn write_literal(to: take List[Byte], prefix: Byte, mask: Byte, name_at: Nat, name: str, value: str) -> List[Byte] <alloc> {
-  mut w = write_num(to, prefix, mask, name_at)
-  if name_at == 0 { w = write_text(w, name) }
-  write_text(w, value)
+  mut w = write_num(take to, prefix, mask, name_at)
+  if name_at == 0 { w = write_text(take w, name) }
+  write_text(take w, value)
 }
 
 // Where a header is in the tables: the index of one with its name and value,
@@ -818,18 +818,18 @@ pub fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -
   mut w = to
   if e.update {
     limit = t.limit
-    w = write_num(w, 32, 31, limit)
-    t = table_resize(t, limit)
+    w = write_num(take w, 32, 31, limit)
+    t = table_resize(take t, limit)
   }
   loop (name, value) in headers {
     f = find(t, name, value)
     if is_secret(name) {
-      w = write_literal(w, 16, 15, f.name, name, value)
+      w = write_literal(take w, 16, 15, f.name, name, value)
     } else if f.whole != 0 {
-      w = write_num(w, 128, 127, f.whole)
+      w = write_num(take w, 128, 127, f.whole)
     } else {
-      w = write_literal(w, 64, 63, f.name, name, value)
-      t = table_add(t, Entry(name: name, value: value))
+      w = write_literal(take w, 64, 63, f.name, name, value)
+      t = table_add(take t, Entry(name: name, value: value))
     }
   }
   (Encoder(table: t, update: false), w)

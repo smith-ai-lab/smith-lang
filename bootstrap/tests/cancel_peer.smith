@@ -9,7 +9,7 @@ use std.time (sleep, time)
 // Waits for the peer to say something, which it never does.
 fn hold(c: take Connection) <net, task, alloc> {
   r = read(c, 1)
-  close(c)
+  close(take c)
 }
 
 // Takes one connection and gives it to a child in a group of its own, which
@@ -18,7 +18,7 @@ fn hold(c: take Connection) <net, task, alloc> {
 fn one_round(l: Listener, pause: 0..100000) -> Result[(), NetError] <net, time, alloc> {
   with tasks()
   c = try accept(l)
-  _ = spawn { hold(c) }
+  _ = spawn { hold(take c) }
   if pause > 0 { sleep(ms(pause)) }
   .ok(())
 }

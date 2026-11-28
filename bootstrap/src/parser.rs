@@ -812,6 +812,12 @@ pub struct Arg {
     /// Whether that call was lowered to also keep what its function gives,
     /// as `t = f(mut c)` does.
     pub keeps: bool,
+    /// Where `take` is written before it, if it is: the call gives it away.
+    pub take: Option<Pos>,
+    /// Whether the source writes it inside the parentheses of the call, where
+    /// `take` can be written before it, and not a lambda after the call, the
+    /// value before `|>`, or an argument the parser makes.
+    pub written: bool,
 }
 
 /// Parses a file into its definitions.
@@ -2504,7 +2510,10 @@ impl Parser<'_> {
             .with_fix("write the call that holds it as a step of its own, as `x |> g() |> f(_)`"));
         }
         match whole.first() {
-            Some(&at) => call.args[at].value = left,
+            Some(&at) => {
+                call.args[at].value = left;
+                call.args[at].written = false;
+            }
             None => call.args.insert(
                 0,
                 Arg {
@@ -2514,6 +2523,8 @@ impl Parser<'_> {
                     mutable: None,
                     given_back: false,
                     keeps: false,
+                    take: None,
+                    written: false,
                 },
             ),
         }

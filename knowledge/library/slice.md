@@ -4,7 +4,7 @@ title: Slice
 description: Slice, a run of elements that cannot change and so is shared freely, made from a List by freeze with nothing copied, and how a function that only reads takes either.
 status: partial
 built:
-  - "`Slice[T]`, a type written like `List[T]`, which has `Copy` and `Discard`, so it is bound, stored in a struct, a tuple, or an enum, passed, and returned freely, and `freeze(xs)`, which takes a list and gives its memory as a `Slice` with nothing copied: the address and the size, and no instruction"
+  - "`Slice[T]`, a type written like `List[T]`, which has `Copy` and `Discard`, so it is bound, stored in a struct, a tuple, or an enum, passed, and returned freely, and `freeze(take xs)`, which takes a list and gives its memory as a `Slice` with nothing copied: the address and the size, and no instruction"
   - "`Slice` in every file with no import, as a piece of a list written `x[a..b]` means it, and `freeze`, a function of `std.list` that a file imports, which is refused with no import"
   - "`s[a..b]`, `s[..k]`, and `s[k..]` on a `Slice`, a `Slice` that shares the memory of `s`, which compiles when `arith` proves `a <= b` and `b <= s.size`, and has `b - a` elements, with `size`, an index, and `loop` on a slice as on a list"
   - "a slice given to a parameter of type `List[T]` that is not `take`, as a list and a text are, with no call and no copy, and refused where the parameter takes a list, with the fix `copy`; `copy(s)` gives a new `List`, carrying `alloc`"
@@ -26,8 +26,8 @@ use std.list (freeze, push)
 
 fn evens(n: u64) -> Slice[u64] <alloc> {
   mut built: List[u64] = []
-  loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }
-  freeze(built)
+  loop i in 0..n { built = push(take built, wrapping_mul(i, 2)) }
+  freeze(take built)
 }
 ```
 
@@ -97,7 +97,7 @@ A lent value is not kept, stored, returned, or grown, as [Lending and take](../l
 
 | From | To | Written | Costs |
 | --- | --- | --- | --- |
-| `List[T]` | `Slice[T]` | `freeze(xs)` | Nothing, and `xs` is given up |
+| `List[T]` | `Slice[T]` | `freeze(take xs)` | Nothing, and `xs` is given up |
 | `Slice[T]` | `List[T]` | `copy(s)` | A copy of the elements, and `alloc` |
 | A piece of a `List[T]` | `List[T]` | `copy(xs[a..b])` | A copy of the elements, and `alloc` |
 
@@ -108,7 +108,7 @@ A piece of a `List` is lent like the list itself: it is passed, looped over, and
 | Written | Is |
 | --- | --- |
 | `Slice[T]` | A run of `T` that cannot change, with `Copy` |
-| `freeze(xs)` | The memory of the list `xs` as a `Slice`, with nothing copied |
+| `freeze(take xs)` | The memory of the list `xs` as a `Slice`, with nothing copied |
 | `s: Slice[u8] = [2, 3]` | A slice whose elements are data in the executable, with no `alloc` |
 | `s[a..b]` on a `Slice` | A `Slice` that shares the memory of `s` |
 | `xs[a..b]` on a `List` | A lent piece of `xs`, for a function that reads |

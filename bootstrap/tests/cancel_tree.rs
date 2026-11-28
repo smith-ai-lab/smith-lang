@@ -379,7 +379,7 @@ fn functions(n: &Node, k: &mut usize, out: &mut String, fails: Option<(usize, us
             let at = functions(c, k, out, fails);
             match c.given {
                 Some(id) => {
-                    body += &format!("  g{i} = opened({id})\n  t{i} = spawn {{ n{at}(g{i}) }}\n");
+                    body += &format!("  g{i} = opened({id})\n  t{i} = spawn {{ n{at}(take g{i}) }}\n");
                 }
                 None => body += &format!("  t{i} = spawn {{ n{at}() }}\n"),
             }
@@ -394,14 +394,14 @@ fn functions(n: &Node, k: &mut usize, out: &mut String, fails: Option<(usize, us
     for i in joins {
         // A child that failed gives no value, and its parent goes on.
         body += &format!(
-            "  match outcome(t{i}) {{\n    .ok(v) {{ total = wrapping_add(total, v) }}\n    .err(failure) {{ }}\n  }}\n"
+            "  match outcome(take t{i}) {{\n    .ok(v) {{ total = wrapping_add(total, v) }}\n    .err(failure) {{ }}\n  }}\n"
         );
     }
     for i in (0..n.steps.len()).rev() {
-        body += &format!("  close(a{i})\n");
+        body += &format!("  close(take a{i})\n");
     }
     if n.given.is_some() {
-        body += "  close(c0)\n";
+        body += "  close(take c0)\n";
     }
     body += "  total\n";
     let params = if n.given.is_some() { "c0: take Connection" } else { "" };
@@ -414,7 +414,7 @@ fn program(c: &Case) -> String {
     let mut k = 0;
     let root = functions(&c.tree, &mut k, &mut functions_text, c.fails);
     let start = match c.tree.given {
-        Some(id) => format!("  g = opened({id})\n  _ = spawn {{ n{root}(g) }}"),
+        Some(id) => format!("  g = opened({id})\n  _ = spawn {{ n{root}(take g) }}"),
         None => format!("  _ = spawn {{ n{root}() }}"),
     };
     let wait = if c.waits { "  late = test_ready_by(999999, ms(10))\n" } else { "" };
@@ -432,7 +432,7 @@ use std.task (join, outcome, spawn, task, test_ready, test_ready_by, test_schedu
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }}
   0
 }}
@@ -453,18 +453,18 @@ fn main() <console, alloc, diverge> {{
   r = net(
     listen_on: fn(host, port) {{ .err(.refused(host)) }},
     accept: fn(l) {{ .err(.closed(l.host)) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{ .ok(()) }},
     close: fn(c) {{
       print(\"closed {{handle(c)}}\")
-      n = release(c)
+      n = release(take c)
     }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
     receive: fn(s, most) {{ .err(.closed(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: {{ run() }},
   )
   print(\"{{r}}\")

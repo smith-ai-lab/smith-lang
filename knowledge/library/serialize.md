@@ -134,7 +134,7 @@ struct Celsius {
 }
 
 impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { signed(take to, value.degrees) }
 }
 ```
 

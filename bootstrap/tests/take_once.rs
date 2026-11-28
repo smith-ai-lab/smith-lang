@@ -587,15 +587,15 @@ fn write_items(
                     Form::Look | Form::Part | Form::Eat | Form::Take(_) => {
                         let (call, value) = match (f, c.shape) {
                             (Form::Look, _) => ("look(", "a"),
-                            (Form::Take(0), Shape::Pair) => ("sink(", "a.t"),
-                            (Form::Take(_), Shape::Pair) => ("sink(", "a.u"),
-                            (Form::Take(0), _) => ("sink(", "a.w.t"),
-                            (Form::Take(_), _) => ("sink(", "a.w.u"),
+                            (Form::Take(0), Shape::Pair) => ("sink(take ", "a.t"),
+                            (Form::Take(_), Shape::Pair) => ("sink(take ", "a.u"),
+                            (Form::Take(0), _) => ("sink(take ", "a.w.t"),
+                            (Form::Take(_), _) => ("sink(take ", "a.w.u"),
                             (Form::Part, Shape::Pair) => ("look(", "a.t"),
                             (Form::Part, Shape::Nest) => ("look(", "a.w.t"),
                             (Form::Part, Shape::Struct) => ("look(", "a.item"),
                             (Form::Part, _) => ("look(", "a.size"),
-                            _ => ("sink(", "a"),
+                            _ => ("sink(take ", "a"),
                         };
                         out.push_str(&format!("{indent}n{id} = {call}"));
                         w.reads.push((id, pos_after(out)));
@@ -609,7 +609,7 @@ fn write_items(
                         w.names.push((id, pos_after(out)));
                         out.push_str(&format!("x{id}) {{\n"));
                         if f == Form::Split {
-                            out.push_str(&format!("{indent}    sink(x{id})\n"));
+                            out.push_str(&format!("{indent}    sink(take x{id})\n"));
                         } else {
                             out.push_str(&format!("{indent}    ()\n"));
                         }
@@ -627,7 +627,7 @@ fn write_items(
                         w.lambdas.push((id, pos_after(out)));
                         out.push_str("{ ");
                         w.reads.push((id, pos_after(out)));
-                        out.push_str(&format!("a }}\n{indent}sink(n{id})\n"));
+                        out.push_str(&format!("a }}\n{indent}sink(take n{id})\n"));
                     }
                     Form::Again => {
                         out.push_str(&indent);
@@ -725,7 +725,7 @@ fn write(c: &Case) -> Written {
     }
     out.push_str(&format!("}}\n\nfn main(){effect} {{\n"));
     if c.origin == Origin::Param {
-        out.push_str("  v = mk()\n  r = f(v, true, Dir.north)\n");
+        out.push_str("  v = mk()\n  r = f(take v, true, Dir.north)\n");
     } else {
         out.push_str("  r = f(true, Dir.north)\n");
     }
@@ -830,12 +830,12 @@ fn end[T](x: take T) <diverge> {
 }
 
 fn commit(t: take Transaction) -> Result[(), DbError] <diverge> {
-  end(t)
+  end(take t)
   .ok(())
 }
 
 fn rollback(t: take Transaction) -> Result[(), DbError] <diverge> {
-  end(t)
+  end(take t)
   .ok(())
 }
 
@@ -848,11 +848,11 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
         "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   debit(t, 100)
-  commit(t)
+  commit(take t)
 }",
         "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
-  if ok { commit(t) } else { rollback(t) }
+  if ok { commit(take t) } else { rollback(take t) }
 }",
     ];
     for body in accepted {
@@ -872,16 +872,16 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
         (
             "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
-  try commit(t)
-  commit(t)
+  try commit(take t)
+  commit(take t)
 }",
-            "commit(t)\n}",
+            "commit(take t)\n}",
             "after it was given away",
         ),
         (
             "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
-  if ok { commit(t) } else { .ok(()) }
+  if ok { commit(take t) } else { .ok(()) }
 }",
             "t = begin",
             "nothing takes it",
@@ -890,7 +890,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
             "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
   t = begin(db)
   try prepare(db)
-  commit(t)
+  commit(take t)
 }",
             "t = begin",
             "nothing takes it",
@@ -900,7 +900,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
   mut t = begin(db)
   debit(t, 100)
   t = begin(db)
-  commit(t)
+  commit(take t)
 }",
             "t = begin",
             "nothing takes it",
@@ -913,7 +913,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
         let mut place = source.find(at).unwrap();
         if at.starts_with("commit") {
             // The second use of `t`.
-            place += "commit(".len();
+            place += "commit(take ".len();
         }
         assert_eq!(found[0].pos, pos_after(&source[..place]), "{source}");
         assert!(found[0].message.contains(says), "{}", found[0]);
@@ -987,16 +987,16 @@ fn probe(body: &str) -> (Vec<Error>, String) {
 fn taking_a_part_of_a_value_leaves_each_other_part_to_be_taken() {
     // Each program, and what is left that nothing takes.
     let refused = [
-        ("  w = W(t: begin(), u: begin())\n  commit(w.t)\n", "w.u"),
+        ("  w = W(t: begin(), u: begin())\n  commit(take w.t)\n", "w.u"),
         (
-            "  w = W(t: begin(), u: begin())\n  if c { commit(w.t) } else { commit(w.t)\n    commit(w.u) }\n",
+            "  w = W(t: begin(), u: begin())\n  if c { commit(take w.t) } else { commit(take w.t)\n    commit(take w.u) }\n",
             "w.u",
         ),
         (
-            "  w = W(t: begin(), u: begin())\n  if c { commit(w.t)\n    commit(w.u) } else { commit(w.u) }\n",
+            "  w = W(t: begin(), u: begin())\n  if c { commit(take w.t)\n    commit(take w.u) } else { commit(take w.u) }\n",
             "w.t",
         ),
-        ("  (a, b) = (begin(), begin())\n  commit(a)\n", "`b`"),
+        ("  (a, b) = (begin(), begin())\n  commit(take a)\n", "`b`"),
     ];
     for (body, left) in refused {
         let (found, source) = probe(body);
@@ -1005,9 +1005,9 @@ fn taking_a_part_of_a_value_leaves_each_other_part_to_be_taken() {
         assert!(found[0].message.contains("nothing takes it"), "{}", found[0]);
     }
     let accepted = [
-        "  w = W(t: begin(), u: begin())\n  commit(w.t)\n  commit(w.u)\n",
-        "  w = W(t: begin(), u: begin())\n  commit(w.u)\n  commit(w.t)\n",
-        "  (a, b) = (begin(), begin())\n  commit(a)\n  commit(b)\n",
+        "  w = W(t: begin(), u: begin())\n  commit(take w.t)\n  commit(take w.u)\n",
+        "  w = W(t: begin(), u: begin())\n  commit(take w.u)\n  commit(take w.t)\n",
+        "  (a, b) = (begin(), begin())\n  commit(take a)\n  commit(take b)\n",
     ];
     for body in accepted {
         let (found, source) = probe(body);
@@ -1033,7 +1033,7 @@ fn a_made_value_that_is_only_lent_or_read_is_dropped() {
     // With a type parameter nothing is known of the value, so the function
     // that lends what it made says that it may be dropped.
     let generic = format!(
-        "{PARTS}fn via[T](x: take T) -> bool {{ lend(mk(x)) }}\n\nfn main() {{\n  y = via(1)\n}}\n"
+        "{PARTS}fn via[T](x: take T) -> bool {{ lend(mk(take x)) }}\n\nfn main() {{\n  y = via(1)\n}}\n"
     );
     let found = errors(&generic);
     assert_eq!(found.len(), 1, "{found:?}\n{generic}");
@@ -1065,7 +1065,7 @@ fn a_chain_of_vars_that_a_loop_moves_a_value_along_is_read_until_it_settles() {
             }
             source.push_str(&format!("  loop i in 0..3 {{\n{}  }}\n", body.replace("mk()", "mk2()")));
             for v in &names {
-                source.push_str(&format!("  commit({v})\n"));
+                source.push_str(&format!("  commit(take {v})\n"));
             }
             source.push_str("}\n\nfn main() <diverge> {\n  run(true)\n}\n");
             let found = errors(&source);
@@ -1273,9 +1273,9 @@ fn a_parameter_of_a_lambda_that_is_taken_is_followed_as_one_of_a_function_is() {
         let mut out = format!(
             "{TYPES}fn mk() -> {ty} {{ {} }}
 
-fn feed_take(x: take {ty}, f: take fn(take {ty}) -> {ty}) -> {ty} {{ f(x) }}
+fn feed_take(x: take {ty}, f: take fn(take {ty}) -> {ty}) -> {ty} {{ f(take x) }}
 
-fn feed_lend(x: take {ty}, f: fn(take {ty}) -> {ty}) -> {ty} {{ f(x) }}
+fn feed_lend(x: take {ty}, f: fn(take {ty}) -> {ty}) -> {ty} {{ f(take x) }}
 
 fn run(c: bool, d: Dir) <diverge> {{
   m = {}(mk()) fn(",
@@ -1299,7 +1299,7 @@ fn run(c: bool, d: Dir) <diverge> {{
                 reach.dropped = true;
             }
         }
-        out.push_str("  }\n  sink(m)\n}\n\nfn main() <diverge> {\n  run(true, Dir.north)\n}\n");
+        out.push_str("  }\n  sink(take m)\n}\n\nfn main() <diverge> {\n  run(true, Dir.north)\n}\n");
         let found = errors(&out);
         let wanted = reach.dropped && c.held == Held::Res;
         let got: Vec<Pos> = found.iter().map(|e| e.pos).collect();

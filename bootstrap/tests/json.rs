@@ -1029,7 +1029,7 @@ fn to_json_asks_for_memory_in_proportion_to_the_text_it_gives() {
             "  print(\"{xs.size}\")\n"
         };
         let source = with_import(format!(
-            "struct P {{\n  a: Byte\n  b: bool\n}}\n\nfn main() <console, alloc> {{\n  mut xs: List[P] = []\n  loop i in 0..{n} {{ xs = push(xs, P(a: 7, b: true)) }}\n{tail}}}\n"
+            "struct P {{\n  a: Byte\n  b: bool\n}}\n\nfn main() <console, alloc> {{\n  mut xs: List[P] = []\n  loop i in 0..{n} {{ xs = push(take xs, P(a: 7, b: true)) }}\n{tail}}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{source}"));
         let (outcome, requests) = scalar::run_counting(&program, usize::MAX);

@@ -416,10 +416,15 @@ struct Written {
     names: Vec<Pos>,
     /// Where `main` calls the function.
     main: Pos,
+    /// Whether the value of the parameter has `Copy`.
+    copy: bool,
 }
 
 fn write_items(items: &[Item], out: &mut String, w: &mut Written, depth: usize, loops: &mut usize) {
     let indent = "  ".repeat(depth);
+    // `a` is given away, and written `take`, where it has no `Copy`.
+    let give = if w.copy { "eat(" } else { "eat(take " };
+    let pass = if w.copy { "pass(" } else { "pass(take " };
     for item in items {
         match item {
             Item::Act(a) => {
@@ -427,10 +432,10 @@ fn write_items(items: &[Item], out: &mut String, w: &mut Written, depth: usize, 
                     Form::Look => ("lend(", "a)"),
                     Form::Part if w.shape == Shape::Struct => ("lend(", "a.item)"),
                     Form::Part => ("lend(", "a)"),
-                    Form::Eat => ("eat(", "a)"),
+                    Form::Eat => (give, "a)"),
                     Form::Twin => ("twin(", "a)"),
                     Form::Store => ("size_box(Box(item: ", "a))"),
-                    Form::Pass => ("pass(", "a)"),
+                    Form::Pass => (pass, "a)"),
                 };
                 out.push_str(indent.as_str());
                 w.names[a.id - 1] = pos_after(out);
@@ -497,6 +502,7 @@ fn write(c: &Case) -> Written {
         calls: vec![Pos { line: 0, col: 0 }; n],
         names: vec![Pos { line: 0, col: 0 }; n],
         main: Pos { line: 0, col: 0 },
+        copy: c.asks.copy && c.shape != Shape::List,
     };
     let mut out = format!("{TYPES}{HELPERS}");
     let (generics, lines) = c.asks.written();
@@ -514,7 +520,13 @@ fn write(c: &Case) -> Written {
         c.given.define()
     ));
     w.main = pos_after(&out);
-    out.push_str(&format!("f({value}, true, Dir.north)\n}}\n"));
+    // A name is given away, and written `take`, where it has no `Copy`.
+    let given = match c.shape {
+        Shape::List => "take ",
+        Shape::Plain if !c.given.copy() => "take ",
+        _ => "",
+    };
+    out.push_str(&format!("f({given}{value}, true, Dir.north)\n}}\n"));
     w.source = out;
     w
 }
@@ -659,7 +671,9 @@ fn main() <diverge> {{
             given.define()
         );
         let at = pos_after(&source);
-        source.push_str("use_it(v)\n  m = n\n  end(v)\n}\n");
+        // A value without `Copy` is given away, and written `take`.
+        let give = if given.copy() { "" } else { "take " };
+        source.push_str(&format!("use_it(v)\n  m = n\n  end({give}v)\n}}\n"));
         let found = errors(&source);
         assert_eq!(found.len(), 1, "{found:?}\n{source}");
         assert_eq!(found[0].pos, at, "{source}");
@@ -730,10 +744,12 @@ fn main() <diverge> {{
   b = Box(item: v)
   n = name_of(b)
   m = n
-  end(b)
+  end({}b)
 }}
 ",
-            given.define()
+            given.define(),
+            // A value without `Copy` is given away, and written `take`.
+            if given.copy() { "" } else { "take " }
         )
     };
     for given in Given::ALL {

@@ -88,7 +88,7 @@ use std.net (Chunk, connection, net, release)
 use std.utf8 (utf8)
 
 fn shown(b: take List[Byte]) -> str <alloc> {{
-  match utf8(freeze(b)) {{
+  match utf8(freeze(take b)) {{
     .ok(t) {{ t }}
     .err(e) {{ \"not text\" }}
   }}
@@ -103,12 +103,12 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
   result = net(
     listen_on: fn(host, port) {{ .err(.refused(\"{{host}}:{{port}}\")) }},
     accept: fn(l) {{ .err(.refused(\"{{l.host}}:{{l.port}}\")) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{
       if connections.size > 0 {{
         script = connections[0]
         mut tail: List[List[List[Byte]]] = []
-        loop i in 1..connections.size {{ tail = push(tail, connections[i]) }}
+        loop i in 1..connections.size {{ tail = push(take tail, take connections[i]) }}
         connections = tail
         left = []
         asked = 0
@@ -122,7 +122,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
         if script.size > 0 {{
           left = copy(script[0])
           mut tail: List[List[Byte]] = []
-          loop i in 1..script.size {{ tail = push(tail, script[i]) }}
+          loop i in 1..script.size {{ tail = push(take tail, take script[i]) }}
           script = tail
         }}
       }}
@@ -133,7 +133,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
         mut got: List[Byte] = []
         mut rest: List[Byte] = []
         loop i in 0..left.size {{
-          if i < piece {{ got = push(got, left[i]) }} else {{ rest = push(rest, left[i]) }}
+          if i < piece {{ got = push(take got, left[i]) }} else {{ rest = push(take rest, left[i]) }}
         }}
         left = rest
         asked = saturating_add(asked, got.size)
@@ -142,7 +142,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
     }},
     write: fn(c, data) {{
       mut made: List[Byte] = []
-      loop i in 0..data.size {{ made = push(made, data[i]) }}
+      loop i in 0..data.size {{ made = push(take made, data[i]) }}
       written = made
       print(\"request\")
       print(shown(copy(written)))
@@ -150,16 +150,16 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
     }},
     close: fn(c) {{
       print(\"closed {{asked}}\")
-      n = release(c)
+      n = release(take c)
     }},
     bind_to: fn(host, port) {{ .err(.refused(\"{{host}}:{{port}}\")) }},
     send: fn(s, to, data) {{ .err(.closed(\"{{to.host}}:{{to.port}}\")) }},
     receive: fn(s, most) {{ .err(.closed(\"{{s.host}}:{{s.port}}\")) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: body,
   )
   print(\"wrote\")
-  print(shown(written))
+  print(shown(take written))
   result
 }}
 
@@ -425,7 +425,7 @@ struct Item {
 }
 
 fn shown(b: take List[Byte]) -> str <alloc> {
-  match utf8(freeze(b)) {
+  match utf8(freeze(take b)) {
     .ok(t) { t }
     .err(e) { \"not text\" }
   }
@@ -433,7 +433,7 @@ fn shown(b: take List[Byte]) -> str <alloc> {
 
 fn listed(t: str) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  loop i in 0..t.size { made = push(made, t[i]) }
+  loop i in 0..t.size { made = push(take made, t[i]) }
   made
 }
 
@@ -457,7 +457,7 @@ fn main() <console, alloc> {
     },
     body: {
       match get(\"http://one/\") {
-        .ok(r) { print(\"get {r.status} {shown(r.body.bytes)} {r.headers.size}\") }
+        .ok(r) { print(\"get {r.status} {shown(take r.body.bytes)} {r.headers.size}\") }
         .err(e) { print(\"{e}\") }
       }
       match get[3](\"http://big/\") {
@@ -465,11 +465,11 @@ fn main() <console, alloc> {
         .err(e) { print(\"{e}\") }
       }
       match get[100](\"http://big/\") {
-        .ok(r) { print(\"big {r.status} {shown(r.body.bytes)}\") }
+        .ok(r) { print(\"big {r.status} {shown(take r.body.bytes)}\") }
         .err(e) { print(\"{e}\") }
       }
       match post[64](\"http://p/\", json(Item(id: 4))) {
-        .ok(r) { print(\"post {r.status} {shown(r.body.bytes)}\") }
+        .ok(r) { print(\"post {r.status} {shown(take r.body.bytes)}\") }
         .err(e) { print(\"{e}\") }
       }
       match put[8](\"http://p/\", form([(\"a\", \"b\")])) {

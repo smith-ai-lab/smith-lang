@@ -172,9 +172,9 @@ fn a_name_that_a_bound_lambda_holds_is_not_given_away_before_the_last_call_of_th
     let head = "use std.console (console, print)\n\nfn eat(xs: take List[Nat]) -> Nat { xs.size }\n\n\
                 fn main() <console, alloc> {\n  xs: List[Nat] = [1, 2, 3]\n  \
                 f = fn(i: 0..10) -> Nat { xs.size + i }\n";
-    let early = format!("{head}  n = eat(xs)\n  print(\"{{f(0)}} {{n}}\")\n}}\n");
+    let early = format!("{head}  n = eat(take xs)\n  print(\"{{f(0)}} {{n}}\")\n}}\n");
     let on_a_path =
-        format!("{head}  n = if true {{ eat(xs) }} else {{ 0 }}\n  print(\"{{f(0)}} {{n}}\")\n}}\n");
+        format!("{head}  n = if true {{ eat(take xs) }} else {{ 0 }}\n  print(\"{{f(0)}} {{n}}\")\n}}\n");
     for source in [early, on_a_path] {
         let found = check(source.as_bytes()).expect_err("refused");
         assert!(
@@ -183,16 +183,16 @@ fn a_name_that_a_bound_lambda_holds_is_not_given_away_before_the_last_call_of_th
         );
     }
     // A second name for the lambda holds what it holds.
-    let again = format!("{head}  g = f\n  n = eat(xs)\n  print(\"{{g(0)}} {{n}}\")\n}}\n");
+    let again = format!("{head}  g = f\n  n = eat(take xs)\n  print(\"{{g(0)}} {{n}}\")\n}}\n");
     let found = check(again.as_bytes()).expect_err("refused");
     assert!(
         found.iter().any(|e| e.message.contains("after it was given away") && e.message.contains("`g`")),
         "{found:?} for\n{again}"
     );
-    let second = format!("{head}  g = f\n  m = g(0)\n  n = eat(xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
+    let second = format!("{head}  g = f\n  m = g(0)\n  n = eat(take xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
     let ran = scalar::run(&lower(second.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{second}")));
     assert_eq!(ran.stdout, b"3 3\n");
-    let late = format!("{head}  m = f(0)\n  n = eat(xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
+    let late = format!("{head}  m = f(0)\n  n = eat(take xs)\n  print(\"{{m}} {{n}}\")\n}}\n");
     let ran = scalar::run(&lower(late.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{late}")));
     assert_eq!(ran.stdout, b"3 3\n");
 }

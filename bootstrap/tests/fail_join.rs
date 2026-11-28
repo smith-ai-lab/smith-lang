@@ -44,7 +44,7 @@ use std.task (join, spawn, test_ready_by, test_scheduler)
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }}
   0
 }}
@@ -70,7 +70,7 @@ fn said(source: &str) -> (i32, String) {
 }
 
 fn a_join_of_a_child_that_ran_out_of_memory_gives_no_value_and_ends_the_program_with_the_status_1() {
-    let (status, text) = said(&program("  n = join(child)\n"));
+    let (status, text) = said(&program("  n = join(take child)\n"));
     assert_eq!((status, text.as_str()), (1, ""));
 }
 
@@ -80,7 +80,7 @@ fn a_child_that_ran_out_of_memory_and_is_never_joined_leaves_its_parent_to_go_on
 }
 
 fn the_outcome_of_a_child_that_ran_out_of_memory_says_so_and_its_parent_goes_on() {
-    let source = program("  match outcome(child) {\n    .ok(n) { print(\"a value\") }\n    .err(.out_of_memory) { print(\"out of memory\") }\n    .err(.refused_write) { print(\"refused write\") }\n  }\n")
+    let source = program("  match outcome(take child) {\n    .ok(n) { print(\"a value\") }\n    .err(.out_of_memory) { print(\"out of memory\") }\n    .err(.refused_write) { print(\"refused write\") }\n  }\n")
         .replace("use std.task (join, spawn, test_ready_by, test_scheduler)", "use std.task (join, outcome, spawn, test_ready_by, test_scheduler)");
     let (status, text) = said(&source);
     assert_eq!((status, text.as_str()), (0, "out of memory\nthe parent went on\n"));
@@ -94,7 +94,7 @@ use std.task (outcome, spawn, test_scheduler)
 fn run() <console, alloc, diverge> {
   with test_scheduler(3)
   child = spawn { 41 }
-  match outcome(child) {
+  match outcome(take child) {
     .ok(n) { print(\"{n}\") }
     .err(.out_of_memory) { print(\"out of memory\") }
     .err(.refused_write) { print(\"refused write\") }
@@ -120,14 +120,14 @@ use std.task (join, outcome, spawn, task, test_scheduler)
 fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }
   0
 }
 
 fn middle() -> u64 <alloc, task, console> {
   child = spawn { eat() }
-  n = join(child)
+  n = join(take child)
   print(\"the middle task went on\")
   n
 }
@@ -135,7 +135,7 @@ fn middle() -> u64 <alloc, task, console> {
 fn run() <console, alloc, diverge> {
   with test_scheduler(3)
   child = spawn { middle() }
-  match outcome(child) {
+  match outcome(take child) {
     .ok(n) { print(\"a value\") }
     .err(.out_of_memory) { print(\"out of memory\") }
     .err(.refused_write) { print(\"refused write\") }

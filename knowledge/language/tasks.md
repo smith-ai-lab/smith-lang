@@ -4,7 +4,7 @@ title: Tasks
 description: A task group opened with tasks(), children started with spawn and waited for with join, and the task effect.
 status: partial
 built:
-  - "`with tasks()`, `spawn`, and `join`, imported from `std.task`, with `fetch_one` and `fetch_both` as the page writes them, under a handler of `fetch` that a test writes: `join(t)` is what the child's lambda gave"
+  - "`with tasks()`, `spawn`, and `join`, imported from `std.task`, with `fetch_one` and `fetch_both` as the page writes them, under a handler of `fetch` that a test writes: `join(take t)` is what the child's lambda gave"
   - "a child's lambda runs exactly once if it is joined, a child that is not joined is cancelled when the block ends, and nothing of a child runs after its group's block has ended"
   - "a function that spawns with no group of its own carries `task`, and its caller that opens the group does not; leaving `task` out is refused: \"`spawn` needs the `task` effect, which `start` does not declare\""
   - "`task` is declared by `std.task` and is imported as `net` is, `use std.task (task, join, spawn, tasks)`; a group that no scheduler is in force of is the scheduler of its children, which wait in `epoll` on Linux and in `kqueue` on macOS, as [Task](../library/task.md) says, and a group inside a task that a scheduler runs hands its children to that scheduler, so no child is found still running when the block ends"
@@ -29,11 +29,11 @@ fn fetch(url: str) -> Result[List[Byte], NetError] <net, alloc>
 fn fetch_one(url: str) -> Result[List[Byte], NetError] <net, alloc> {
   with tasks()
   t = spawn { fetch(url) }
-  join(t)
+  join(take t)
 }
 ```
 
-`t` is the child, and `join(t)` is what `fetch(url)` gave. `join` takes the child, and a `Task` has no `Copy`, so a child is joined once: a second `join(t)` is refused as a use of `t` after it was given away. A `Task` has `Discard`, so a child that is never joined is allowed.
+`t` is the child, and `join(take t)` is what `fetch(url)` gave. `join` takes the child, and a `Task` has no `Copy`, so a child is joined once: a second `join(take t)` is refused as a use of `t` after it was given away. A `Task` has `Discard`, so a child that is never joined is allowed.
 
 ## Two children
 
@@ -46,8 +46,8 @@ fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
-  pa = try join(ta)
-  pb = try join(tb)
+  pa = try join(take ta)
+  pb = try join(take tb)
   .ok((pa, pb))
 }
 ```
@@ -122,7 +122,7 @@ Leaving `task` out of `start` is refused, as is any effect left out of a signatu
 | `use std.task (join, spawn, tasks)` | Brings in the three functions, which a group needs; a function that carries the effect imports `task` too |
 | `with tasks()` | A task group for the rest of the block |
 | `spawn { e }` | A child that runs `e`, in the nearest group |
-| `join(t)` | The value of the child `t`, after waiting for it |
+| `join(take t)` | The value of the child `t`, after waiting for it |
 | `first(t, others)` | The value of the first of `t` and the children in `others` to finish, with the children that did not: `(T, List[Task[T]])` |
 | `<task>` | A function that spawns into its caller's group |
 

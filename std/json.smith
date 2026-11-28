@@ -52,22 +52,22 @@ struct Out {
 
 fn put(to: take Out, b: 0..128) -> Out <alloc> {
   mut w = to
-  w.bytes = append_ascii(w.bytes, b)
+  w.bytes = append_ascii(take w.bytes, b)
   w
 }
 
 fn put_text(to: take Out, s: str) -> Out <alloc> {
   mut w = to
-  w.bytes = append(w.bytes, s)
+  w.bytes = append(take w.bytes, s)
   w
 }
 
 // A hexadecimal digit, in lower case, of a number below 16.
 fn put_hex(to: take Out, d: Byte) -> Out <alloc> {
   if d < 10 {
-    put(to, d + 48)
+    put(take to, d + 48)
   } else if d < 16 {
-    put(to, d + 87)
+    put(take to, d + 87)
   } else {
     to
   }
@@ -78,10 +78,10 @@ fn put_hex(to: take Out, d: Byte) -> Out <alloc> {
 fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out <alloc> {
   mut w = to
   if from == 0 and end == s.size {
-    w = put_text(w, s)
+    w = put_text(take w, s)
   } else if from < end and end <= s.size {
     match utf8(s.bytes[from..end]) {
-      .ok(t) { w = put_text(w, t) }
+      .ok(t) { w = put_text(take w, t) }
       .err(e) { }
     }
   }
@@ -91,21 +91,21 @@ fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out <alloc> {
 // How a byte that a string cannot hold as it is is written.
 fn escape(to: take Out, b: Byte) -> Out <alloc> {
   if b == '"' {
-    put_text(to, "\\\"")
+    put_text(take to, "\\\"")
   } else if b == '\\' {
-    put_text(to, "\\\\")
+    put_text(take to, "\\\\")
   } else if b == '\n' {
-    put_text(to, "\\n")
+    put_text(take to, "\\n")
   } else if b == '\t' {
-    put_text(to, "\\t")
+    put_text(take to, "\\t")
   } else if b == 13 {
-    put_text(to, "\\r")
+    put_text(take to, "\\r")
   } else if b == 8 {
-    put_text(to, "\\b")
+    put_text(take to, "\\b")
   } else if b == 12 {
-    put_text(to, "\\f")
+    put_text(take to, "\\f")
   } else {
-    put_hex(put_hex(put_text(to, "\\u00"), shift_right(b, 4)), bit_and(b, 15))
+    put_hex(put_hex(put_text(take to, "\\u00"), shift_right(b, 4)), bit_and(b, 15))
   }
 }
 
@@ -119,15 +119,15 @@ fn body(to: take Out, s: str) -> Out <alloc> {
     b = s[i]
     if b >= 32 and b != '"' and b != '\\' {
     } else {
-      w = escape(run(w, s, from, i), b)
+      w = escape(run(take w, s, from, i), b)
       from = i + 1
     }
   }
-  run(w, s, from, s.size)
+  run(take w, s, from, s.size)
 }
 
 fn quote(to: take Out, s: str) -> Out <alloc> {
-  put_text(body(put_text(to, "\""), s), "\"")
+  put_text(body(put_text(take to, "\""), s), "\"")
 }
 
 // A name with each `_` that is followed by a lower case letter taken out, and
@@ -142,13 +142,13 @@ fn camel_case(to: take Out, name: str) -> Out <alloc> {
   loop i in 0..name.size {
     next: Byte = if i + 1 < name.size { name[i + 1] } else { 0 }
     if i >= after and name[i] == '_' and before != '_' and next >= 'a' and next <= 'z' {
-      w = put(run(w, name, from, i), next - 32)
+      w = put(run(take w, name, from, i), next - 32)
       from = saturating_add(i, 2)
       after = saturating_add(i, 2)
     }
     before = name[i]
   }
-  run(w, name, from, name.size)
+  run(take w, name, from, name.size)
 }
 
 // Starts a value: a `,` where the value follows another, or what a case
@@ -156,12 +156,12 @@ fn camel_case(to: take Out, name: str) -> Out <alloc> {
 fn start(to: take Out) -> Out <alloc> {
   mut w = to
   if w.tagged {
-    w = put_text(w, ",\"value\":")
-    w.opens = push(w.opens, Open(depth: w.depth, below: w.top))
+    w = put_text(take w, ",\"value\":")
+    w.opens = push(take w.opens, Open(depth: w.depth, below: w.top))
     w.top = w.opens.size
     w.tagged = false
   } else if w.comma {
-    w = put(w, ',')
+    w = put(take w, ',')
   }
   w.comma = false
   w
@@ -176,7 +176,7 @@ fn ended(to: take Out) -> Out <alloc> {
     if t > 0 and t <= w.opens.size {
       frame = w.opens[t - 1]
       if frame.depth == w.depth {
-        w = put(w, '}')
+        w = put(take w, '}')
         w.top = frame.below
       } else {
         break
@@ -188,18 +188,18 @@ fn ended(to: take Out) -> Out <alloc> {
   w
 }
 
-fn scalar(to: take Out, s: str) -> Out <alloc> { ended(put_text(start(to), s)) }
+fn scalar(to: take Out, s: str) -> Out <alloc> { ended(put_text(start(take to), s)) }
 
 fn open(to: take Out, b: 0..128) -> Out <alloc> {
-  mut w = put(start(to), b)
+  mut w = put(start(take to), b)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
 fn close(to: take Out, b: 0..128) -> Out <alloc> {
-  mut w = put(to, b)
+  mut w = put(take to, b)
   w.depth = saturating_sub(w.depth, 1)
-  ended(w)
+  ended(take w)
 }
 
 // The bytes as the bytes of a text: each byte that does not begin a character
@@ -211,7 +211,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
     if i >= bytes.size { break }
     c = bytes[i]
     if c < 128 {
-      acc = append_ascii(acc, c)
+      acc = append_ascii(take acc, c)
       i = saturating_add(i, 1)
     } else {
       n: Nat = if c >= 194 and c < 224 { 2 } else if c >= 224 and c < 240 { 3 } else if c >= 240 and c < 245 { 4 } else { 0 }
@@ -220,7 +220,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
       if n > 0 and i <= end and end <= bytes.size {
         match utf8(bytes[i..end]) {
           .ok(t) {
-            acc = append(acc, t)
+            acc = append(take acc, t)
             whole = true
           }
           .err(e) { }
@@ -229,28 +229,28 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
       if whole {
         i = end
       } else {
-        acc = append(acc, "�")
+        acc = append(take acc, "�")
         i = saturating_add(i, 1)
       }
     }
   }
-  finish(acc)
+  finish(take acc)
 }
 
 impl Writer[Out] {
   fn boolean(w: take Out, value: bool) -> Out <alloc> {
-    if value { scalar(w, "true") } else { scalar(w, "false") }
+    if value { scalar(take w, "true") } else { scalar(take w, "false") }
   }
-  fn signed(w: take Out, value: Int) -> Out <alloc> { scalar(w, fmt(value)) }
-  fn unsigned(w: take Out, value: u64) -> Out <alloc> { scalar(w, fmt(value)) }
-  fn text(w: take Out, value: str) -> Out <alloc> { ended(quote(start(w), value)) }
-  fn nothing(w: take Out) -> Out <alloc> { scalar(w, "null") }
-  fn absent(w: take Out) -> Out <alloc> { scalar(w, "null") }
-  fn present(w: take Out) -> Out <alloc> { if w.tagged { start(w) } else { w } }
-  fn sequence(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
-  fn end_sequence(w: take Out) -> Out <alloc> { close(w, ']') }
-  fn tuple(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
-  fn end_tuple(w: take Out) -> Out <alloc> { close(w, ']') }
+  fn signed(w: take Out, value: Int) -> Out <alloc> { scalar(take w, fmt(value)) }
+  fn unsigned(w: take Out, value: u64) -> Out <alloc> { scalar(take w, fmt(value)) }
+  fn text(w: take Out, value: str) -> Out <alloc> { ended(quote(start(take w), value)) }
+  fn nothing(w: take Out) -> Out <alloc> { scalar(take w, "null") }
+  fn absent(w: take Out) -> Out <alloc> { scalar(take w, "null") }
+  fn present(w: take Out) -> Out <alloc> { if w.tagged { start(take w) } else { w } }
+  fn sequence(w: take Out, size: Nat) -> Out <alloc> { open(take w, '[') }
+  fn end_sequence(w: take Out) -> Out <alloc> { close(take w, ']') }
+  fn tuple(w: take Out, size: Nat) -> Out <alloc> { open(take w, '[') }
+  fn end_tuple(w: take Out) -> Out <alloc> { close(take w, ']') }
   fn structure(w: take Out, name: str, fields: Nat) -> Out <alloc> {
     if w.tagged {
       mut v = w
@@ -258,57 +258,57 @@ impl Writer[Out] {
       v.depth = saturating_add(v.depth, 1)
       v
     } else {
-      open(w, '{')
+      open(take w, '{')
     }
   }
   fn field(w: take Out, name: str) -> Out <alloc> {
     mut v = w
     lead = if v.comma { ",\"" } else { "\"" }
     match v.settings.names {
-      .written { v = body(put_text(v, lead), name) }
-      .camel { v = camel_case(put_text(v, lead), name) }
+      .written { v = body(put_text(take v, lead), name) }
+      .camel { v = camel_case(put_text(take v, lead), name) }
     }
     v.comma = false
-    put_text(v, "\":")
+    put_text(take v, "\":")
   }
-  fn end_structure(w: take Out) -> Out <alloc> { close(w, '}') }
+  fn end_structure(w: take Out) -> Out <alloc> { close(take w, '}') }
   fn case(w: take Out, of: str, name: str, holds: bool) -> Out <alloc> {
     match w.settings.cases {
       .key {
         if holds {
-          mut v = put(quote(put(start(w), '{'), name), ':')
-          v.opens = push(v.opens, Open(depth: v.depth, below: v.top))
+          mut v = put(quote(put(start(take w), '{'), name), ':')
+          v.opens = push(take v.opens, Open(depth: v.depth, below: v.top))
           v.top = v.opens.size
           v
         } else {
-          ended(quote(start(w), name))
+          ended(quote(start(take w), name))
         }
       }
       .tag(t) {
-        mut v = quote(put(quote(put(start(w), '{'), t), ':'), name)
+        mut v = quote(put(quote(put(start(take w), '{'), t), ':'), name)
         if holds {
           v.tagged = true
           v.comma = true
           v
         } else {
-          ended(put(v, '}'))
+          ended(put(take v, '}'))
         }
       }
     }
   }
-  fn map(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
-  fn end_map(w: take Out) -> Out <alloc> { close(w, ']') }
+  fn map(w: take Out, size: Nat) -> Out <alloc> { open(take w, '[') }
+  fn end_map(w: take Out) -> Out <alloc> { close(take w, ']') }
   fn raw(w: take Out, of: str, bytes: Slice[Byte]) -> Out <alloc> {
-    mut v = start(w)
+    mut v = start(take w)
     if of == "json" {
       match utf8(bytes) {
-        .ok(t) { v = put_text(v, t) }
+        .ok(t) { v = put_text(take v, t) }
         .err(e) { }
       }
-      ended(v)
+      ended(take v)
     } else {
       // Bytes of another format are a text.
-      ended(quote(v, text_of(bytes)))
+      ended(quote(take v, text_of(bytes)))
     }
   }
 }
@@ -357,14 +357,14 @@ fn begin(to: take Check) -> Check {
     if w.tag == "value" {
       of = w.of
       case = w.case
-      w = note_clash(w, of, case, "value")
+      w = note_clash(take w, of, case, "value")
     }
   }
   w
 }
 
 fn deeper(to: take Check) -> Check {
-  mut w = begin(to)
+  mut w = begin(take to)
   w.depth = saturating_add(w.depth, 1)
   w
 }
@@ -389,38 +389,38 @@ fn same_bytes(bytes: List[Byte], t: str) -> bool {
 fn written_name(name: str, camel: bool) -> str <alloc> {
   mut w = Out(settings: Json(cases: .key, names: .camel), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0)
   if camel {
-    w = camel_case(w, name)
+    w = camel_case(take w, name)
   } else {
-    w = put_text(w, name)
+    w = put_text(take w, name)
   }
-  finish(w.bytes)
+  finish(take w.bytes)
 }
 
 impl Writer[Check] {
-  fn boolean(w: take Check, value: bool) -> Check <alloc> { begin(w) }
-  fn signed(w: take Check, value: Int) -> Check <alloc> { begin(w) }
-  fn unsigned(w: take Check, value: u64) -> Check <alloc> { begin(w) }
-  fn text(w: take Check, value: str) -> Check <alloc> { begin(w) }
-  fn nothing(w: take Check) -> Check <alloc> { begin(w) }
-  fn absent(w: take Check) -> Check <alloc> { begin(w) }
-  fn present(w: take Check) -> Check <alloc> { begin(w) }
-  fn sequence(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
-  fn end_sequence(w: take Check) -> Check <alloc> { shallower(w) }
-  fn tuple(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
-  fn end_tuple(w: take Check) -> Check <alloc> { shallower(w) }
-  fn map(w: take Check, size: Nat) -> Check <alloc> { deeper(w) }
-  fn end_map(w: take Check) -> Check <alloc> { shallower(w) }
-  fn raw(w: take Check, of: str, bytes: Slice[Byte]) -> Check <alloc> { begin(w) }
+  fn boolean(w: take Check, value: bool) -> Check <alloc> { begin(take w) }
+  fn signed(w: take Check, value: Int) -> Check <alloc> { begin(take w) }
+  fn unsigned(w: take Check, value: u64) -> Check <alloc> { begin(take w) }
+  fn text(w: take Check, value: str) -> Check <alloc> { begin(take w) }
+  fn nothing(w: take Check) -> Check <alloc> { begin(take w) }
+  fn absent(w: take Check) -> Check <alloc> { begin(take w) }
+  fn present(w: take Check) -> Check <alloc> { begin(take w) }
+  fn sequence(w: take Check, size: Nat) -> Check <alloc> { deeper(take w) }
+  fn end_sequence(w: take Check) -> Check <alloc> { shallower(take w) }
+  fn tuple(w: take Check, size: Nat) -> Check <alloc> { deeper(take w) }
+  fn end_tuple(w: take Check) -> Check <alloc> { shallower(take w) }
+  fn map(w: take Check, size: Nat) -> Check <alloc> { deeper(take w) }
+  fn end_map(w: take Check) -> Check <alloc> { shallower(take w) }
+  fn raw(w: take Check, of: str, bytes: Slice[Byte]) -> Check <alloc> { begin(take w) }
   fn structure(w: take Check, name: str, fields: Nat) -> Check <alloc> {
     mut v = w
     if v.held {
       v.held = false
-      v.frames = push(v.frames, Beside(depth: saturating_add(v.depth, 1), of: v.of, case: v.case, below: v.top))
+      v.frames = push(take v.frames, Beside(depth: saturating_add(v.depth, 1), of: v.of, case: v.case, below: v.top))
       v.top = v.frames.size
       v.depth = saturating_add(v.depth, 1)
       v
     } else {
-      deeper(v)
+      deeper(take v)
     }
   }
   fn field(w: take Check, name: str) -> Check <alloc> {
@@ -430,7 +430,7 @@ impl Writer[Check] {
       frame = v.frames[m - 1]
       if frame.depth == v.depth and same_bytes(written_name(name, v.camel), v.tag) {
         tag = v.tag
-        v = note_clash(v, frame.of, frame.case, tag)
+        v = note_clash(take v, frame.of, frame.case, tag)
       }
     }
     v
@@ -442,10 +442,10 @@ impl Writer[Check] {
       frame = v.frames[m - 1]
       if frame.depth == v.depth { v.top = frame.below }
     }
-    shallower(v)
+    shallower(take v)
   }
   fn case(w: take Check, of: str, name: str, holds: bool) -> Check <alloc> {
-    mut v = begin(w)
+    mut v = begin(take w)
     if holds {
       v.held = true
       v.of = of
@@ -471,7 +471,7 @@ fn clash_in[T: Serialize](value: T, json: Json) -> Option[Clash] <alloc> {
 
 fn render[T: Serialize](value: T, json: Json) -> str <alloc> {
   w = write(value, Out(settings: json, bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0))
-  finish(w.bytes)
+  finish(take w.bytes)
 }
 
 pub fn to_json_as[T: Serialize](value: T, json: Json) -> Result[str, Clash] <alloc> {
@@ -488,7 +488,7 @@ pub fn to_json[T: Serialize](value: T) -> str <alloc> {
 // A text as a string of JSON, between its quotes.
 pub fn json_string(s: str) -> str <alloc> {
   w = quote(Out(settings: Json(cases: .key, names: .written), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0), s)
-  finish(w.bytes)
+  finish(take w.bytes)
 }
 
 // The name of a field as `to_json_as` writes it with the settings.
@@ -786,16 +786,16 @@ fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
     if wanted {
       at = skip_space(b, at)
       c = byte(b, at)
-      if at >= target { return walked(at, frames, top, key, index, c == ']' or c == '}') }
+      if at >= target { return walked(at, take frames, top, key, index, c == ']' or c == '}') }
       if c == '[' or c == '{' {
-        frames = push(frames, Frame(kind: c, below: top, key: key, index: index))
+        frames = push(take frames, Frame(kind: c, below: top, key: key, index: index))
         top = frames.size
         key = 0
         index = 0
         at = skip_space(b, saturating_add(at, 1))
         close = if c == '[' { ']' } else { '}' }
         if byte(b, at) == close {
-          if at >= target { return walked(at, frames, top, key, index, true) }
+          if at >= target { return walked(at, take frames, top, key, index, true) }
           f = frame_at(frames, top)
           top = f.below
           key = f.key
@@ -803,60 +803,60 @@ fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
           at = saturating_add(at, 1)
           wanted = false
         } else if c == '{' {
-          if at >= target { return walked(at, frames, top, at, index, byte(b, at) != '"') }
+          if at >= target { return walked(at, take frames, top, at, index, byte(b, at) != '"') }
           key = at
           match member(b, at) {
             .ok(next) { at = next }
-            .err(e) { return broke(e, frames, top, key, index) }
+            .err(e) { return broke(e, take frames, top, key, index) }
           }
         }
       } else if c == '"' {
         match quoted(b, at) {
           .ok(q) { at = q.end }
-          .err(e) { return broke(e, frames, top, key, index) }
+          .err(e) { return broke(e, take frames, top, key, index) }
         }
         wanted = false
       } else if c == '-' or is_digit(c) {
         match number(b, at) {
           .ok(n) { at = n.end }
-          .err(e) { return broke(e, frames, top, key, index) }
+          .err(e) { return broke(e, take frames, top, key, index) }
         }
         wanted = false
       } else if c == 't' {
         match word(b, at, "true") {
           .ok(next) { at = next }
-          .err(e) { return broke(e, frames, top, key, index) }
+          .err(e) { return broke(e, take frames, top, key, index) }
         }
         wanted = false
       } else if c == 'f' {
         match word(b, at, "false") {
           .ok(next) { at = next }
-          .err(e) { return broke(e, frames, top, key, index) }
+          .err(e) { return broke(e, take frames, top, key, index) }
         }
         wanted = false
       } else if c == 'n' {
         match word(b, at, "null") {
           .ok(next) { at = next }
-          .err(e) { return broke(e, frames, top, key, index) }
+          .err(e) { return broke(e, take frames, top, key, index) }
         }
         wanted = false
       } else {
-        return broke(malformed(at), frames, top, key, index)
+        return broke(malformed(at), take frames, top, key, index)
       }
     } else {
-      if top == 0 or top > frames.size { return walked(at, frames, top, key, index, true) }
+      if top == 0 or top > frames.size { return walked(at, take frames, top, key, index, true) }
       at = skip_space(b, at)
       c = byte(b, at)
-      if at >= target { return walked(at, frames, top, key, index, true) }
+      if at >= target { return walked(at, take frames, top, key, index, true) }
       f = frame_at(frames, top)
       if c == ',' {
         at = skip_space(b, saturating_add(at, 1))
         if f.kind == '{' {
-          if at >= target { return walked(at, frames, top, at, index, byte(b, at) != '"') }
+          if at >= target { return walked(at, take frames, top, at, index, byte(b, at) != '"') }
           key = at
           match member(b, at) {
             .ok(next) { at = next }
-            .err(e) { return broke(e, frames, top, key, index) }
+            .err(e) { return broke(e, take frames, top, key, index) }
           }
         } else {
           index = saturating_add(index, 1)
@@ -868,11 +868,11 @@ fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
         index = f.index
         at = saturating_add(at, 1)
       } else {
-        return broke(malformed(at), frames, top, key, index)
+        return broke(malformed(at), take frames, top, key, index)
       }
     }
   }
-  broke(malformed(at), frames, top, key, index)
+  broke(malformed(at), take frames, top, key, index)
 }
 
 // The end of the value that starts at `start`, which is checked to be one
@@ -906,19 +906,19 @@ fn member(b: Slice[Byte], at: Nat) -> Result[Nat, Bad] {
 fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
   mut acc = to
   if code < 128 {
-    acc = push(acc, wrapping_narrow(code))
+    acc = push(take acc, wrapping_narrow(code))
   } else if code < 2048 {
-    acc = push(acc, bit_or(192, shift_right(code, 6)))
-    acc = push(acc, bit_or(128, bit_and(code, 63)))
+    acc = push(take acc, bit_or(192, shift_right(code, 6)))
+    acc = push(take acc, bit_or(128, bit_and(code, 63)))
   } else if code < 65536 {
-    acc = push(acc, bit_or(224, shift_right(code, 12)))
-    acc = push(acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
-    acc = push(acc, bit_or(128, bit_and(code, 63)))
+    acc = push(take acc, bit_or(224, shift_right(code, 12)))
+    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
+    acc = push(take acc, bit_or(128, bit_and(code, 63)))
   } else if code < 2097152 {
-    acc = push(acc, bit_or(240, shift_right(code, 18)))
-    acc = push(acc, bit_or(128, bit_and(shift_right(code, 12), 63)))
-    acc = push(acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
-    acc = push(acc, bit_or(128, bit_and(code, 63)))
+    acc = push(take acc, bit_or(240, shift_right(code, 18)))
+    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 12), 63)))
+    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
+    acc = push(take acc, bit_or(128, bit_and(code, 63)))
   }
   acc
 }
@@ -959,9 +959,9 @@ fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] <alloc> {
       is_code = false
     }
     if is_code {
-      acc = put_char(acc, code)
+      acc = put_char(take acc, code)
     } else {
-      acc = push(acc, made)
+      acc = push(take acc, made)
     }
     i = saturating_add(i, step)
   }
@@ -1025,16 +1025,16 @@ fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str <alloc> {
   raw = unescape(b, at, q.end)
   (ok, upper) = written_camel(raw)
   mut acc: List[Byte] = []
-  if not ok { acc = push(acc, ' ') }
+  if not ok { acc = push(take acc, ' ') }
   loop i in 0..raw.size {
     c = raw[i]
     if ok and c >= 'A' and c <= 'Z' {
-      acc = push(push(acc, '_'), saturating_add(c, 32))
+      acc = push(push(take acc, '_'), saturating_add(c, 32))
     } else {
-      acc = push(acc, c)
+      acc = push(take acc, c)
     }
   }
-  match utf8(freeze(acc)) {
+  match utf8(freeze(take acc)) {
     .ok(t) { t }
     .err(e) { "" }
   }
@@ -1054,17 +1054,17 @@ fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: 
   if kind == '{' {
     match quoted(b, key) {
       .ok(q) {
-        if acc.size > 0 { acc = push(acc, '.') }
+        if acc.size > 0 { acc = push(take acc, '.') }
         name = unescape(b, key, q.end)
-        loop i in 0..name.size { acc = push(acc, name[i]) }
+        loop i in 0..name.size { acc = push(take acc, name[i]) }
       }
       .err(e) { }
     }
   } else {
-    acc = push(acc, '[')
+    acc = push(take acc, '[')
     digits = "{index}"
-    loop i in 0..digits.size { acc = push(acc, digits[i]) }
-    acc = push(acc, ']')
+    loop i in 0..digits.size { acc = push(take acc, digits[i]) }
+    acc = push(take acc, ']')
   }
   acc
 }
@@ -1075,20 +1075,20 @@ fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
   mut t = w.top
   loop k in 0..w.frames.size {
     if t == 0 or t > w.frames.size { break }
-    chain = push(chain, t)
+    chain = push(take chain, t)
     t = frame_at(w.frames, t).below
   }
   mut acc: List[Byte] = []
   loop j in 0..chain.size {
     f = frame_at(w.frames, chain[chain.size - 1 - j])
     if f.below != 0 and f.below <= w.frames.size {
-      acc = put_member(b, acc, frame_at(w.frames, f.below).kind, f.key, f.index)
+      acc = put_member(b, take acc, frame_at(w.frames, f.below).kind, f.key, f.index)
     }
   }
   if w.top != 0 and w.top <= w.frames.size and not w.inside {
-    acc = put_member(b, acc, frame_at(w.frames, w.top).kind, w.key, w.index)
+    acc = put_member(b, take acc, frame_at(w.frames, w.top).kind, w.key, w.index)
   }
-  match utf8(freeze(acc)) {
+  match utf8(freeze(take acc)) {
     .ok(text) { text }
     .err(e) { "" }
   }
@@ -1116,14 +1116,14 @@ fn read_error(b: Slice[Byte], bad: Bad) -> ReadError <alloc> {
 
 fn grown_nat(items: Slice[Nat], item: Nat) -> Slice[Nat] <alloc> {
   mut acc: List[Nat] = []
-  loop i in 0..items.size { acc = push(acc, items[i]) }
-  freeze(push(acc, item))
+  loop i in 0..items.size { acc = push(take acc, items[i]) }
+  freeze(push(take acc, item))
 }
 
 fn grown_byte(items: Slice[Byte], item: Byte) -> Slice[Byte] <alloc> {
   mut acc: List[Byte] = []
-  loop i in 0..items.size { acc = push(acc, items[i]) }
-  freeze(push(acc, item))
+  loop i in 0..items.size { acc = push(take acc, items[i]) }
+  freeze(push(take acc, item))
 }
 
 fn without_last_nat(items: Slice[Nat]) -> Slice[Nat] {
@@ -1938,13 +1938,13 @@ pub fn raw_json(text: str) -> Result[RawJson, ReadError] <alloc> {
 
 impl Serialize[RawJson] {
   fn write[W: Writer](value: RawJson, to: take W) -> W <alloc> {
-    Writer.raw(to, "json", value.text.bytes)
+    Writer.raw(take to, "json", value.text.bytes)
   }
 }
 
 impl Deserialize[RawJson] {
   fn read[R: Reader](from: take R) -> (R, Result[RawJson, ReadError]) <alloc> {
-    (r, got) = Reader.raw(from, "json")
+    (r, got) = Reader.raw(take from, "json")
     match got {
       .err(e) { (r, Result.err(e)) }
       .ok(bytes) {
@@ -1952,7 +1952,7 @@ impl Deserialize[RawJson] {
         match whole_value(bytes) {
           .ok(t) { (r, Result.ok(RawJson(text: t))) }
           .err(b) {
-            (w, e) = fail(r, b.problem)
+            (w, e) = fail(take r, b.problem)
             (w, Result.err(e))
           }
         }

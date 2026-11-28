@@ -145,18 +145,18 @@ fn call_holds_the_function_once_and_no_copy_of_it() {
         let mut source = format!(
             "use std.console (console, print)\nuse std.deserialize (ReadError)\nuse std.int (wrapping_mul)\n\
              use std.json (FromJson, from_json)\n\nfn grow(a: Int) -> Int {{ wrapping_mul(a, {MARK}) }}\n\n\
-             fn call0[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  Function.call(f, a)\n}}\n\n"
+             fn call0[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  Function.call(f, take a)\n}}\n\n"
         );
         for level in 1..*through {
             source += &format!(
-                "fn call{level}[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  call{}(f, a)\n}}\n\n",
+                "fn call{level}[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  call{}(f, take a)\n}}\n\n",
                 level - 1
             );
         }
         source += &format!(
             "fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  requires Function[F, A, R]\n  \
              requires FromJson[A]\n  requires Discard[A]\n{{\n  r: Result[A, ReadError] = from_json(text)\n  \
-             match r {{\n    .ok(a) {{ Option.some(call{}(f, a)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
+             match r {{\n    .ok(a) {{ Option.some(call{}(f, take a)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
              fn show(o: Option[Int]) -> str <alloc> {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
              fn main() <console, alloc> {{\n  print(show(run(grow, \"\\{{\\\"a\\\": 3\\}}\")))\n}}\n",
             through - 1

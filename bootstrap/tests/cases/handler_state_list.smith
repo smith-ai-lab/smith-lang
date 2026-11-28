@@ -11,7 +11,7 @@ fn recording[T](body: fn() -> T <log>) -> T <alloc> {
   mut seen: List[u64] = []
   log(
     note: fn(v) {
-      seen = push(seen, v)
+      seen = push(take seen, v)
     },
     all: {
       seen

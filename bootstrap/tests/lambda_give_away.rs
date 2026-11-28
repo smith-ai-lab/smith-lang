@@ -120,11 +120,11 @@ fn a_function_that_is_called_once_takes_the_lambda_that_gives_a_value_away_and_o
         src.push(USES);
         src.push(KEY);
         src.push(&format!(
-            "fn finish(k: take Key, f: {marked}fn(take Key) -> u64) -> u64 {{ f(k) }}\n\n"
+            "fn finish(k: take Key, f: {marked}fn(take Key) -> u64) -> u64 {{ f(take k) }}\n\n"
         ));
-        src.push("fn user(acc: take Key, k: take Key, s: take Key) -> u64 {\n  r = finish(k) ");
+        src.push("fn user(acc: take Key, k: take Key, s: take Key) -> u64 {\n  r = finish(take k) ");
         let lambda = src.mark();
-        src.push("fn(y) { wrapping_add(sink(acc), sink(y)) }\n  wrapping_add(r, sink(s))\n}\n");
+        src.push("fn(y) { wrapping_add(sink(take acc), sink(take y)) }\n  wrapping_add(r, sink(take s))\n}\n");
         src.push(MAIN);
         (src.text, lambda)
     };
@@ -254,7 +254,7 @@ impl Case {
                     gives.push((*k, false));
                 }
                 Op::Give(k) => {
-                    expr = format!("wrapping_add({expr}, sink({}))", NAMES[*k]);
+                    expr = format!("wrapping_add({expr}, sink(take {}))", NAMES[*k]);
                     gives.push((*k, true));
                 }
                 Op::Assign => {}
@@ -269,10 +269,14 @@ fn write_expr(src: &mut Src, expr: &str, uses: &[(usize, bool)], at: &mut Vec<(u
     let mut rest = expr;
     let mut uses = uses.iter();
     while let Some(found) = rest.find("sink(").into_iter().chain(rest.find("lend(")).min() {
-        src.push(&rest[..found + "sink(".len()]);
+        // A key that is given away is written `take`, and its use is at its
+        // name.
+        let open = found + "sink(".len();
+        let name = open + if rest[open..].starts_with("take ") { "take ".len() } else { 0 };
+        src.push(&rest[..name]);
         let (key, give) = *uses.next().expect("a use");
         at.push((key, give, src.mark()));
-        rest = &rest[found + "sink(".len()..];
+        rest = &rest[name..];
     }
     src.push(rest);
 }
@@ -334,6 +338,10 @@ fn program(case: &Case) -> (String, Vec<Pos>) {
                 "into_taken"
             };
             src.push(&format!("  {callee}("));
+            // A function that is called once is given away where it is taken.
+            if kind == Kind::Taken && shape == Shape::ToTaken {
+                src.push("take ");
+            }
             let arg = src.mark();
             src.push("f)\n");
             // A function that is lent is not given to a parameter that takes
@@ -377,7 +385,7 @@ fn program(case: &Case) -> (String, Vec<Pos>) {
     }
     // A key is used after it was given away, in the lambda or after it.
     wanted.extend(after_gives(&uses_at));
-    src.push(&format!("  wrapping_add({sum}, sink(s))\n}}\n"));
+    src.push(&format!("  wrapping_add({sum}, sink(take s))\n}}\n"));
     src.push(MAIN);
     wanted.sort();
     wanted.dedup();
@@ -436,7 +444,7 @@ fn in_place(case: &Case) -> (u64, String) {
         src.push(&format!("  z = lend({})\n", NAMES[k]));
         sum = format!("wrapping_add({sum}, z)");
     }
-    src.push(&format!("  wrapping_add({sum}, sink(s))\n}}\n"));
+    src.push(&format!("  wrapping_add({sum}, sink(take s))\n}}\n"));
     src.push(MAIN);
     (value, src.text)
 }
@@ -512,7 +520,7 @@ fn two_lambdas_of_one_call_that_use_a_name_one_gave_away_are_refused_at_the_seco
                     value += SECRETS[k];
                 }
                 Some(Op::Give(k)) => {
-                    src.push("sink(");
+                    src.push("sink(take ");
                     uses_at.push((k, true, src.mark()));
                     src.push(&format!("{})", NAMES[k]));
                     value += SECRETS[k];
@@ -525,7 +533,7 @@ fn two_lambdas_of_one_call_that_use_a_name_one_gave_away_are_refused_at_the_seco
             src.push(" }");
         }
         wanted.extend(after_gives(&uses_at));
-        src.push("\n  wrapping_add(r, sink(s))\n}\n");
+        src.push("\n  wrapping_add(r, sink(take s))\n}\n");
         src.push(MAIN);
         wanted.sort();
         wanted.dedup();
@@ -547,10 +555,10 @@ fn with_passes_its_block_to_a_parameter_that_takes_it_and_the_block_may_give_a_v
         src.push(USES);
         src.push(KEY);
         src.push(&format!(
-            "fn spend(k: take Key, body: {marked}fn(take Key) -> u64) -> u64 {{ body(k) }}\n\nfn user(a: take Key, b: take Key, s: take Key) -> u64 {{\n  "
+            "fn spend(k: take Key, body: {marked}fn(take Key) -> u64) -> u64 {{ body(take k) }}\n\nfn user(a: take Key, b: take Key, s: take Key) -> u64 {{\n  "
         ));
         let at = src.mark();
-        src.push("with y = spend(a)\n  wrapping_add(sink(b), wrapping_add(sink(y), sink(s)))\n}\n");
+        src.push("with y = spend(take a)\n  wrapping_add(sink(take b), wrapping_add(sink(take y), sink(take s)))\n}\n");
         src.push(MAIN);
         (src.text, at)
     };
@@ -573,9 +581,9 @@ fn a_function_that_may_not_call_its_function_is_given_a_lambda_that_gives_away_o
         src.push("fn run[R](c: bool, other: take R, f: take fn(u64) -> R) -> R {\n  other\n}\n\n");
         src.push("fn keep[T](x: take T) -> T { x }\n\n");
         src.push(&format!("fn user[T{bound}](x: take T, z: take T) -> T {{\n  "));
-        src.push("run(false, z) ");
+        src.push("run(false, take z) ");
         let at = src.mark();
-        src.push("fn(y) { keep(x) }\n}\n\n");
+        src.push("fn(y) { keep(take x) }\n}\n\n");
         src.push("fn main() <console, alloc> {\n  print(\"{sink(user(Key(secret: 3), Key(secret: 4)))}\")\n}\n");
         (src.text, at)
     };

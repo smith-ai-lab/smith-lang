@@ -114,7 +114,7 @@ fn a_function_of_a_trait_settles_its_own_type_parameters_from_the_arguments() {
 }}
 
 impl Emit[u64] {{
-  fn emit[W: Sink](value: u64, to: take W) -> W {{ put(to, value) }}
+  fn emit[W: Sink](value: u64, to: take W) -> W {{ put(take to, value) }}
 }}
 
 fn main() <console, alloc> {{
@@ -238,10 +238,10 @@ impl Shape {
     fn body(self) -> &'static str {
         match self {
             Shape::Plain => "wrapping_add(weigh(value), n)",
-            Shape::Sink => "put(to, weigh(value))",
+            Shape::Sink => "put(take to, weigh(value))",
             Shape::Keep => "keep",
-            Shape::Both => "(put(to, weigh(value)), keep)",
-            Shape::Flipped => "(keep, put(to, weigh(value)))",
+            Shape::Both => "(put(take to, weigh(value)), keep)",
+            Shape::Flipped => "(keep, put(take to, weigh(value)))",
         }
     }
 
@@ -472,13 +472,13 @@ fn a_function_of_a_trait_with_a_type_parameter_is_used_through_a_bound() {
 }}
 
 impl Emit[{ty}] {{
-  fn emit[W: Sink](value: {ty}, to: take W) -> W {{ put(to, weigh(value)) }}
+  fn emit[W: Sink](value: {ty}, to: take W) -> W {{ put(take to, weigh(value)) }}
 }}
 
 fn all[T: Emit, W: Sink](xs: List[T], to: take W) -> W {{
   mut w = to
   loop i in 0..xs.size {{
-    w = emit(xs[i], w)
+    w = emit(xs[i], take w)
   }}
   w
 }}
@@ -625,13 +625,13 @@ fn main() <console, alloc> {{
 "
         )
     };
-    let once = source("    put(to, value)\n");
+    let once = source("    put(take to, value)\n");
     assert!(errors(&once).is_empty(), "{:?}", errors(&once));
-    let twice = source("    mut w = put(to, value)\n    w = put(to, value)\n    w\n");
+    let twice = source("    mut w = put(take to, value)\n    w = put(take to, value)\n    w\n");
     let at = {
-        let first = twice.find("put(to, value)").unwrap();
-        let second = twice[first + 1..].find("put(to, value)").unwrap() + first + 1;
-        pos_after(&twice[..second + "put(".len()])
+        let first = twice.find("put(take to, value)").unwrap();
+        let second = twice[first + 1..].find("put(take to, value)").unwrap() + first + 1;
+        pos_after(&twice[..second + "put(take ".len()])
     };
     let found = errors(&twice);
     assert!(
@@ -679,6 +679,8 @@ fn a_call_with_a_type_that_lacks_copy_or_discard_asked_of_a_type_parameter_of_a_
     let generate = |g: &mut Gen| (*g.pick(&["Copy", "Discard"]), *g.pick(&kinds), g.one_in(2));
     generate::check(4475, 40, generate, |(bound, (ty, copy, discard, make), through)| {
         let has = if *bound == "Copy" { *copy } else { *discard };
+        // A value without `Copy` is given away, and written `take`.
+        let give = if *copy { "" } else { "take " };
         let head = format!(
             "{KINDS}trait Pass[T] {{
   fn pass[W: {bound}](value: T, w: W) -> u64
@@ -707,7 +709,7 @@ fn end[T](x: take T) <diverge> {{
         if *through {
             // Inside `via`, `W` has only what `via` asks of it, which is nothing.
             source.push_str(&format!(
-                "pass(x, w)\n}}\n\nfn main() <diverge> {{\n  n: u64 = 1\n  {make}\n  r = via(n, v)\n  s = r\n  end(v)\n}}\n"
+                "pass(x, w)\n}}\n\nfn main() <diverge> {{\n  n: u64 = 1\n  {make}\n  r = via(n, v)\n  s = r\n  end({give}v)\n}}\n"
             ));
             let found = errors(&source);
             assert_eq!(found.len(), 1, "{found:?}\n{source}");
@@ -716,7 +718,7 @@ fn end[T](x: take T) <diverge> {{
             assert!(found[0].message.contains(bound), "{}", found[0]);
             return;
         }
-        source.push_str(&format!("{callee}(n, v)\n  s = r\n  end(v)\n}}\n"));
+        source.push_str(&format!("{callee}(n, v)\n  s = r\n  end({give}v)\n}}\n"));
         let found = errors(&source);
         if has {
             assert!(found.is_empty(), "{found:?}\n{source}");

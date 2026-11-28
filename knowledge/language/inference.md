@@ -309,7 +309,7 @@ use std.list (push)
 
 fn one() -> List[1..2] <alloc> {
   mut xs = []
-  xs = push(xs, 1)
+  xs = push(take xs, 1)
   xs
 }
 ```

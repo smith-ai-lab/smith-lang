@@ -104,11 +104,11 @@ pub fn segments(path: str) -> List[str] <alloc> {
     mut from: Nat = 1
     loop i in 1..path.size {
       if path[i] == '/' {
-        parts = push(parts, piece(path, from, i))
+        parts = push(take parts, piece(path, from, i))
         from = saturating_add(i, 1)
       }
     }
-    parts = push(parts, piece(path, from, path.size))
+    parts = push(take parts, piece(path, from, path.size))
   }
   parts
 }
@@ -127,7 +127,7 @@ pub fn route_match(pattern: str, path: str) -> Option[List[Part]] <alloc> {
         p = ps[i]
         q = qs[i]
         if p.size > 1 and p[0] == ':' {
-          found = push(found, Part(name: piece(p, 1, p.size), value: q))
+          found = push(take found, Part(name: piece(p, 1, p.size), value: q))
         } else if p != q {
           fits = false
         }
@@ -165,14 +165,14 @@ pub fn query_parts(query: str) -> List[Part] <alloc> {
   loop i in 0..query.size {
     if query[i] == '&' {
       match member(query, from, i) {
-        .some(m) { parts = push(parts, m) }
+        .some(m) { parts = push(take parts, m) }
         .none { }
       }
       from = saturating_add(i, 1)
     }
   }
   match member(query, from, query.size) {
-    .some(m) { parts = push(parts, m) }
+    .some(m) { parts = push(take parts, m) }
     .none { }
   }
   parts
@@ -207,14 +207,14 @@ pub fn params_of(p: take Params) -> List[Param] { p.params }
 fn kind(d: take Params, body: bool) -> Params <alloc> {
   mut w = d
   if w.depth == 1 and w.asked {
-    w.params = push(w.params, Param(name: w.named, body: body))
+    w.params = push(take w.params, Param(name: w.named, body: body))
     w.asked = false
   }
   w
 }
 
 fn opened(d: take Params) -> Params <alloc> {
-  mut w = kind(d, true)
+  mut w = kind(take d, true)
   w.depth = saturating_add(w.depth, 1)
   w
 }
@@ -226,18 +226,18 @@ fn closed(d: take Params) -> Params {
 }
 
 impl Describer[Params] {
-  fn boolean(d: take Params) -> Params <alloc> { kind(d, false) }
-  fn signed(d: take Params, least: Int, greatest: Int) -> Params <alloc> { kind(d, false) }
-  fn unsigned(d: take Params, least: u64, greatest: u64) -> Params <alloc> { kind(d, false) }
-  fn text(d: take Params) -> Params <alloc> { kind(d, false) }
-  fn nothing(d: take Params) -> Params <alloc> { kind(d, false) }
+  fn boolean(d: take Params) -> Params <alloc> { kind(take d, false) }
+  fn signed(d: take Params, least: Int, greatest: Int) -> Params <alloc> { kind(take d, false) }
+  fn unsigned(d: take Params, least: u64, greatest: u64) -> Params <alloc> { kind(take d, false) }
+  fn text(d: take Params) -> Params <alloc> { kind(take d, false) }
+  fn nothing(d: take Params) -> Params <alloc> { kind(take d, false) }
   fn optional(d: take Params) -> Params <alloc> { d }
   fn end_optional(d: take Params) -> Params <alloc> { d }
-  fn sequence(d: take Params) -> Params <alloc> { opened(d) }
-  fn end_sequence(d: take Params) -> Params <alloc> { closed(d) }
-  fn tuple(d: take Params, size: Nat) -> Params <alloc> { opened(d) }
-  fn end_tuple(d: take Params) -> Params <alloc> { closed(d) }
-  fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params <alloc> { opened(d) }
+  fn sequence(d: take Params) -> Params <alloc> { opened(take d) }
+  fn end_sequence(d: take Params) -> Params <alloc> { closed(take d) }
+  fn tuple(d: take Params, size: Nat) -> Params <alloc> { opened(take d) }
+  fn end_tuple(d: take Params) -> Params <alloc> { closed(take d) }
+  fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params <alloc> { opened(take d) }
   fn field(d: take Params, name: str, about: str, optional: bool) -> Params <alloc> {
     mut w = d
     if w.depth == 1 {
@@ -246,12 +246,12 @@ impl Describer[Params] {
     }
     w
   }
-  fn end_structure(d: take Params) -> Params <alloc> { closed(d) }
-  fn enumeration(d: take Params, name: str, about: str, cases: Nat) -> Params <alloc> { opened(d) }
+  fn end_structure(d: take Params) -> Params <alloc> { closed(take d) }
+  fn enumeration(d: take Params, name: str, about: str, cases: Nat) -> Params <alloc> { opened(take d) }
   fn case(d: take Params, name: str, about: str, holds: bool) -> Params <alloc> { d }
   fn end_case(d: take Params) -> Params <alloc> { d }
-  fn end_enumeration(d: take Params) -> Params <alloc> { closed(d) }
-  fn map(d: take Params) -> Params <alloc> { kind(d, true) }
+  fn end_enumeration(d: take Params) -> Params <alloc> { closed(take d) }
+  fn map(d: take Params) -> Params <alloc> { kind(take d, true) }
 }
 
 // The text of the part with the name, which is the empty text where there is
@@ -439,7 +439,7 @@ impl Reader[Reading] {
     }
   }
   fn sequence(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    mut w = deeper(r)
+    mut w = deeper(take r)
     (j, got) = Reader.sequence(w.json)
     w.json = j
     (w, got)
@@ -450,26 +450,26 @@ impl Reader[Reading] {
     w.json = j
     match got {
       .ok(again) {
-        if again { (w, got) } else { (shallower(w), got) }
+        if again { (w, got) } else { (shallower(take w), got) }
       }
       .err(e) { (w, got) }
     }
   }
   fn tuple(r: take Reading, size: Nat) -> (Reading, Result[(), ReadError]) <alloc> {
-    mut w = deeper(r)
+    mut w = deeper(take r)
     (j, got) = Reader.tuple(w.json, size)
     w.json = j
     (w, got)
   }
   fn end_tuple(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    mut w = shallower(r)
+    mut w = shallower(take r)
     (j, got) = Reader.end_tuple(w.json)
     w.json = j
     (w, got)
   }
   fn structure(r: take Reading, name: str) -> (Reading, Result[(), ReadError]) <alloc> {
     if r.top {
-      mut w = deeper(r)
+      mut w = deeper(take r)
       (j, got) = Reader.structure(w.json, name)
       w.json = j
       (w, got)
@@ -488,13 +488,13 @@ impl Reader[Reading] {
         .ok(named) {
           match named {
             .some(n) { (w, got) }
-            .none { (shallower(w), got) }
+            .none { (shallower(take w), got) }
           }
         }
         .err(e) { (w, got) }
       }
     } else {
-      (w, named) = next_param(r)
+      (w, named) = next_param(take r)
       (w, Result.ok(named))
     }
   }
@@ -505,13 +505,13 @@ impl Reader[Reading] {
     (w, got)
   }
   fn case(r: take Reading, of: str) -> (Reading, Result[str, ReadError]) <alloc> {
-    mut w = deeper(r)
+    mut w = deeper(take r)
     (j, got) = Reader.case(w.json, of)
     w.json = j
     (w, got)
   }
   fn end_case(r: take Reading) -> (Reading, Result[(), ReadError]) <alloc> {
-    mut w = shallower(r)
+    mut w = shallower(take r)
     (j, got) = Reader.end_case(w.json)
     w.json = j
     (w, got)
@@ -557,7 +557,7 @@ impl[A] FromRequest[A]
   requires Discard[A]
 {
   fn from_request(r: take Reading) -> Result[A, ReadError] <alloc> {
-    (w, got): (Reading, Result[A, ReadError]) = Deserialize.read(r)
+    (w, got): (Reading, Result[A, ReadError]) = Deserialize.read(take r)
     match got {
       .err(e) { Result.err(e) }
       .ok(v) {
@@ -687,10 +687,10 @@ fn add[F, A, R](method: Method, path: str, f: F) <routing, alloc>
     .some(parts) {
       asked = asked_of()
       params = Describe[A].describe(no_params())
-      r = reading(params_of(params), parts, query_parts(asked.query), asked.body)
-      got: Result[A, ReadError] = FromRequest[A].from_request(r)
+      r = reading(params_of(take params), take parts, query_parts(asked.query), asked.body)
+      got: Result[A, ReadError] = FromRequest[A].from_request(take r)
       match got {
-        .ok(args) { answered(Respond[R].respond(Function.call(f, args))) }
+        .ok(args) { answered(Respond[R].respond(Function.call(f, take args))) }
         .err(e) { answered(answer(400, json(Rejected(path: e.path, problem: e.problem)))) }
       }
     }
@@ -779,7 +779,7 @@ pub fn routes[T](body: fn() -> T <routing>) -> T <http, alloc> {
 fn copy_of(r: Request) -> Request <alloc> {
   mut headers: List[(str, str)] = []
   loop i in 0..r.headers.size {
-    headers = push(headers, r.headers[i])
+    headers = push(take headers, r.headers[i])
   }
   Request(method: r.method, path: r.path, query: r.query, headers: headers, body: r.body)
 }
@@ -861,10 +861,10 @@ fn read_chunks(c: Connection, held: Slice[Byte]) -> Result[(Slice[Byte], Slice[B
       match chunk(bytes) {
         .complete((piece, used)) {
           if piece.size == 0 {
-            return Result.ok((freeze(body), after(bytes, used)))
+            return Result.ok((freeze(take body), after(bytes, used)))
           }
           if body.size + piece.size > most_body() { return Result.err(Fault.refused) }
-          body = append(body, piece)
+          body = append(take body, piece)
           bytes = after(bytes, used)
         }
         .incomplete {
@@ -1030,7 +1030,7 @@ fn copy_response(r: Response) -> Response <alloc> {
 fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
   mut made: List[(HeaderName, HeaderValue)] = []
   loop i in 0..headers.size {
-    made = push(made, headers[i])
+    made = push(take made, headers[i])
   }
   made
 }
@@ -1065,23 +1065,23 @@ fn reason(status: 100..600) -> str {
 
 // The line break that ends a line of a head.
 fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
-  push(push(line, 13), 10)
+  push(push(take line, 13), 10)
 }
 
 // The status line and the headers of a response, each ended by a line break.
 fn head_bytes(status: 100..600, headers: List[(HeaderName, HeaderValue)]) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  made = ended(append(made, "HTTP/1.1 {status} {reason(status)}".bytes))
+  made = ended(append(take made, "HTTP/1.1 {status} {reason(status)}".bytes))
   loop i in 0..headers.size {
     (n, v) = headers[i]
-    made = ended(append(made, "{n}: {v}".bytes))
+    made = ended(append(take made, "{n}: {v}".bytes))
   }
   made
 }
 
 // The end of a head: whether the connection is kept, and the empty line.
 fn head_ended(made: take List[Byte], keep: bool) -> List[Byte] <alloc> {
-  if keep { ended(made) } else { ended(ended(append(made, "connection: close".bytes))) }
+  if keep { ended(take made) } else { ended(ended(append(take made, "connection: close".bytes))) }
 }
 
 // The bytes of a response: its status line, its headers, then the type and the
@@ -1091,13 +1091,13 @@ fn response_bytes(r: Response, keep: bool) -> List[Byte] <alloc> {
   match r {
     .headers_only(h) {
       made = ended(append(head_bytes(h.status, h.headers), "content-length: 0".bytes))
-      head_ended(made, keep)
+      head_ended(take made, keep)
     }
     .with_body(w) {
       mut made = head_bytes(w.status, w.headers)
-      made = ended(append(made, "content-type: {content_type(w.body)}".bytes))
-      made = ended(append(made, "content-length: {size(w.body)}".bytes))
-      append(head_ended(made, keep), content(w.body))
+      made = ended(append(take made, "content-type: {content_type(w.body)}".bytes))
+      made = ended(append(take made, "content-length: {size(w.body)}".bytes))
+      append(head_ended(take made, keep), content(w.body))
     }
   }
 }
@@ -1114,7 +1114,7 @@ fn not_implemented() -> Response {
 
 // Sends the bytes, and whether they all went.
 fn sent(c: Connection, bytes: take List[Byte]) -> bool <net> {
-  match write(c, freeze(bytes)) {
+  match write(c, freeze(take bytes)) {
     .ok(done) { true }
     .err(e) { false }
   }
@@ -1160,7 +1160,7 @@ fn serve_one[T](c: Connection, body: fn() -> T <http>) -> bool <net, alloc>
                 }
                 .some(method) {
                   keep = keeps(head) and after_body.size == 0
-                  response = answer_with(request_of(method, head, text), body)
+                  response = answer_with(request_of(method, take head, text), body)
                   written = sent(c, response_bytes(response, keep))
                   return keep and written
                 }
@@ -1241,7 +1241,7 @@ fn serve_in_tasks[T](l: Listener, body: fn() -> T <http>) <net, alloc, diverge>
       .ok(c) {
         _ = spawn {
           serve_connection(c, body)
-          close(c)
+          close(take c)
         }
       }
       .err(e) {
@@ -1263,7 +1263,7 @@ fn serve_one_at_a_time[T](l: Listener, body: fn() -> T <http>) <net, alloc, dive
     match accept(l) {
       .ok(c) {
         serve_connection(c, body)
-        close(c)
+        close(take c)
       }
       .err(e) {
         if is_closed(e) { break }
@@ -1293,7 +1293,7 @@ pub fn listen[T](body: fn() -> T <http>; port: 1..65536) -> T <net, alloc, diver
   match open(port) {
     .ok(l) {
       serve_listener(l, body)
-      stop(l)
+      stop(take l)
     }
     .err(e) { cannot(why(e)) }
   }

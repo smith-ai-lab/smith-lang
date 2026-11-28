@@ -4,7 +4,7 @@ use std.list (freeze, push)
 use std.utf8 (utf8)
 
 fn text(bytes: take List[Byte]) -> str {
-  match utf8(freeze(bytes)) {
+  match utf8(freeze(take bytes)) {
     .ok(t) { t }
     .err(e) { "" }
   }
@@ -23,29 +23,29 @@ fn hex_digit(d: u64, upper: bool) -> Byte {
 pub fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc> {
   mut digits: List[Byte] = []
   if 16 <= width {
-    loop i in 16..width { digits = push(digits, '0') }
+    loop i in 16..width { digits = push(take digits, '0') }
   }
   mut started: bool = false
   loop j in 0..16 {
     pos = 15 - j
     d = bit_and(shift_right(n, pos * 4), 15)
     if d > 0 { started = true }
-    if started or pos < width or pos == 0 { digits = push(digits, hex_digit(d, upper)) }
+    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, upper)) }
   }
-  text(digits)
+  text(take digits)
 }
 
 pub fn binary(n: u64; width: Byte = 0) -> str <alloc> {
   mut digits: List[Byte] = []
   if 64 <= width {
-    loop i in 64..width { digits = push(digits, '0') }
+    loop i in 64..width { digits = push(take digits, '0') }
   }
   mut started: bool = false
   loop j in 0..64 {
     pos = 63 - j
     d = bit_and(shift_right(n, pos), 1)
     if d > 0 { started = true }
-    if started or pos < width or pos == 0 { digits = push(digits, hex_digit(d, true)) }
+    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, true)) }
   }
-  text(digits)
+  text(take digits)
 }

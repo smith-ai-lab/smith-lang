@@ -471,7 +471,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
     if own_impl {
         out.push_str(
             "impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(take to, value.degrees) }
 }
 
 ",

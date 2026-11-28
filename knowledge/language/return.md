@@ -134,7 +134,7 @@ use std.bits (u64)
 fn peek(path: str) -> Result[u64, FsError] <fs> {
   f = try open_file(path)
   n = try size(f)
-  close_file(f)
+  close_file(take f)
   .ok(n)
 }
 ```

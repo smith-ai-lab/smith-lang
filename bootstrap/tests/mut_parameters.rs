@@ -552,7 +552,7 @@ fn run(f: fn() -> u8) -> u8 { f() }
         ("shelf = Shelf(log: l)", "shelf = Shelf(log: "),
         ("kept = Kept(items: l.items)", "kept = Kept(items: "),
         ("mut other = l", "mut other = "),
-        ("burn(l)", "burn("),
+        ("burn(take l)", "burn(take "),
         ("return l", ""),
         ("n = run() { l.count }", "n = run() { "),
         ("n = run() {\n    l.count = 1\n    1\n  }", "n = run() {\n    "),

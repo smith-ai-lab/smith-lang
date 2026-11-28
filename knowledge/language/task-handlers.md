@@ -23,7 +23,7 @@ fn two_readings() -> (u64, u64) {
   with tasks()
   ta = spawn { now() }
   tb = spawn { now() }
-  (join(ta), join(tb))
+  (join(take ta), join(take tb))
 }
 ```
 
@@ -46,7 +46,7 @@ fn two_pairs() -> ((u64, u64), (u64, u64)) {
   with tasks()
   ta = spawn { (now(), now()) }
   tb = spawn { (now(), now()) }
-  (join(ta), join(tb))
+  (join(take ta), join(take tb))
 }
 ```
 

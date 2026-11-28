@@ -2224,6 +2224,7 @@ impl<'a> Checker<'a> {
                 .source_between(l.pos, l.end)
                 .unwrap_or_else(|| "{ ... }".to_string()),
             value if arg.mutable.is_some() => format!("mut {}", written_expr(value)),
+            value if arg.take.is_some() => format!("take {}", written_expr(value)),
             value => written_expr(value),
         }
     }

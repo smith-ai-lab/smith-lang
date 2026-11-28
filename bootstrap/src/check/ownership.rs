@@ -542,6 +542,11 @@ struct Walk<'a> {
     /// `mut` holds: what the function gives, and what a call that changes a
     /// value is passed.
     given_back: HashSet<usize>,
+    /// The calls that give away an argument not written `take`, each with
+    /// where each such argument is.
+    unmarked: Vec<(Call, Vec<Pos>)>,
+    /// The place of each call in `unmarked`, with where it is in it.
+    marking: HashMap<usize, usize>,
 }
 
 /// The places of the expressions of `f` that give back a value a parameter
@@ -580,14 +585,16 @@ fn given_back(f: &Function) -> HashSet<usize> {
     out
 }
 
-/// Checks the body of `f`. Mistakes go in `errors`.
+/// Checks the body of `f`. Mistakes go in `errors`, but for the calls that
+/// give away an argument not written `take`, which it gives, each with where
+/// each such argument is.
 pub(super) fn check(
     defs: &Defs,
     types: &HashMap<usize, Ty>,
     (f, scope, params): (&Function, &Scope, &[(String, Ty)]),
     errors: &mut Vec<Error>,
     drops: &mut Drops,
-) {
+) -> Vec<(Call, Vec<Pos>)> {
     let mut walk = Walk {
         defs,
         types,
@@ -616,6 +623,8 @@ pub(super) fn check(
             .map(|p| p.name.clone())
             .collect(),
         given_back: given_back(f),
+        unmarked: Vec::new(),
+        marking: HashMap::new(),
     };
     let flow = if f.result.is_some() {
         Flow::Returned
@@ -635,6 +644,7 @@ pub(super) fn check(
         walk.record(Site::After(addr(last)), dying);
     }
     walk.dropped(&st);
+    walk.unmarked
 }
 
 fn written((name, fields): &Path) -> String {
@@ -664,6 +674,16 @@ impl<'a> Walk<'a> {
                 Some((root, fields))
             }
             _ => None,
+        }
+    }
+
+    /// Whether an expression is a name that holds a value, or a field or an
+    /// item of one, which a call gives away and does not make.
+    fn written_place(&self, e: &Expr) -> bool {
+        match e {
+            Expr::Name { .. } => self.types.contains_key(&addr(e)),
+            Expr::Field { of, .. } | Expr::Index { of, .. } => self.written_place(of),
+            _ => false,
         }
     }
 
@@ -2081,6 +2101,7 @@ impl<'a> Walk<'a> {
                 }
                 _ => Flow::Lend,
             };
+            self.marked(call, arg, flow, constructs);
             match &arg.value {
                 // A lambda that holds names, stored in a field, takes the values.
                 Expr::Lambda(l) if defs.env_of(l).is_some() => {
@@ -2159,6 +2180,57 @@ impl<'a> Walk<'a> {
             }
         }
         self.record(Site::Cancel(addr(call)), owned);
+    }
+
+    /// Checks that an argument is written `take` exactly when the call gives
+    /// it away: when it is a name, a field, or an item, its parameter takes
+    /// it, and its type has no `Copy` or it is a function that is called once.
+    /// A call that leaves `take` out is kept in `unmarked`, for the checker
+    /// to write the call as it should be.
+    fn marked(&mut self, call: &Call, arg: &Arg, flow: Flow, constructs: bool) {
+        if !arg.written || arg.mutable.is_some() {
+            return;
+        }
+        let place = self.written_place(&arg.value);
+        let once =
+            (self.place(&arg.value)).is_some_and(|p| self.fn_param(&p).is_some_and(|f| f.take));
+        let copies = !once && self.copies(&arg.value);
+        let taken = matches!(flow, Flow::Taken(_)) && !constructs;
+        let callee = written_name(&call.callee);
+        let Some(at) = arg.take else {
+            if taken && place && !copies {
+                let at = arg.value.pos();
+                let i = *self.marking.entry(addr(call)).or_insert_with(|| {
+                    self.unmarked.push((call.clone(), Vec::new()));
+                    self.unmarked.len() - 1
+                });
+                if !self.unmarked[i].1.contains(&at) {
+                    self.unmarked[i].1.push(at);
+                }
+            }
+            return;
+        };
+        let why = if constructs {
+            format!("`{callee}` is made of it, and `take` marks only what a function takes")
+        } else if !taken {
+            format!("`{callee}` lends it")
+        } else if !place {
+            "it is a new value, which nothing else holds".to_string()
+        } else if copies {
+            // A type that is not known, as after a mistake, says nothing.
+            let Some(ty) = (self.types.get(&addr(&arg.value))).filter(|ty| !ty.unknown()) else {
+                return;
+            };
+            format!("its type, `{}`, has `Copy`", self.defs.text(ty, self.scope))
+        } else {
+            return;
+        };
+        if let Some(error) = self.error(
+            at,
+            format!("`take` is written before an argument that is not given away, as {why}"),
+        ) {
+            error.fix = Some("take away `take`".to_string());
+        }
     }
 
     /// Whether the function a call names carries `net`, `time`, or `task`, which

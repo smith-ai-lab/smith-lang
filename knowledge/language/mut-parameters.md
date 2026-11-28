@@ -52,7 +52,7 @@ fn step(c: take Cursor) -> Cursor {
 }
 ```
 
-The first is called `step(mut c)`, and the second `c = step(c)`. Every value has one owner, so no other name can see `c` while `step` runs, and the change is made where `c` is, with nothing copied. A fact about `c` that the caller knew before the call is not known after it, as for any name that is assigned.
+The first is called `step(mut c)`, and the second `c = step(take c)`. Every value has one owner, so no other name can see `c` while `step` runs, and the change is made where `c` is, with nothing copied. A fact about `c` that the caller knew before the call is not known after it, as for any name that is assigned.
 
 ## Where the change is seen
 

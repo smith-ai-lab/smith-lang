@@ -83,7 +83,7 @@ fn has(named: List[(str, RawJson)], name: str) -> bool {
 
 impl Deserialize[Members] {
   fn read[R: Reader](from: take R) -> (R, Result[Members, ReadError]) <alloc> {
-    (opened, began) = Reader.structure(from, "Members")
+    (opened, began) = Reader.structure(take from, "Members")
     match began {
       .err(e) { return (opened, Result.err(e)) }
       .ok(u) { }
@@ -91,7 +91,7 @@ impl Deserialize[Members] {
     mut r = opened
     mut named: List[(str, RawJson)] = []
     loop round in 0..4294967296 {
-      (after, got) = Reader.field(r)
+      (after, got) = Reader.field(take r)
       r = after
       match got {
         .err(e) { return (r, Result.err(e)) }
@@ -101,17 +101,17 @@ impl Deserialize[Members] {
             .some(name) {
               if is_named(name) {
                 if has(named, name) {
-                  (w, e) = fail(r, .twice(name))
+                  (w, e) = fail(take r, .twice(name))
                   return (w, Result.err(e))
                 }
-                (w, value): (R, Result[RawJson, ReadError]) = Deserialize.read(r)
+                (w, value): (R, Result[RawJson, ReadError]) = Deserialize.read(take r)
                 r = w
                 match value {
                   .err(e) { return (r, Result.err(e)) }
-                  .ok(v) { named = push(named, (name, v)) }
+                  .ok(v) { named = push(take named, (name, v)) }
                 }
               } else {
-                (w, passed) = Reader.unknown(r, name)
+                (w, passed) = Reader.unknown(take r, name)
                 r = w
                 match passed {
                   .err(e) { return (r, Result.err(e)) }
@@ -306,9 +306,9 @@ pub fn read(text: str) -> Result[Received, Failure] <alloc> {
         mut read_all: List[Result[Message, Failure]] = []
         loop one in ms {
           if kind(one) == 123 {
-            read_all = push(read_all, read_object(raw_text(one)))
+            read_all = push(take read_all, read_object(raw_text(one)))
           } else {
-            read_all = push(read_all, .err(invalid_request()))
+            read_all = push(take read_all, .err(invalid_request()))
           }
         }
         .ok(.many(read_all))
@@ -334,35 +334,35 @@ fn id_text(id: Id) -> str <alloc> {
 
 fn params_of(to: take Text, params: Option[RawJson]) -> Text <alloc> {
   match params {
-    .some(p) { append(append(to, ",\"params\":"), raw_text(p)) }
+    .some(p) { append(append(take to, ",\"params\":"), raw_text(p)) }
     .none { to }
   }
 }
 
 pub fn write(to: take Text, message: Message) -> Text <alloc> {
-  start = append(to, "\{\"jsonrpc\":\"2.0\"")
+  start = append(take to, "\{\"jsonrpc\":\"2.0\"")
   match message {
     .request(r) {
-      a = append(append(start, ",\"id\":"), id_text(r.id))
-      b = append(append(a, ",\"method\":"), to_json(r.method))
-      append(params_of(b, r.params), "\}")
+      a = append(append(take start, ",\"id\":"), id_text(r.id))
+      b = append(append(take a, ",\"method\":"), to_json(r.method))
+      append(params_of(take b, r.params), "\}")
     }
     .notification(n) {
-      a = append(append(start, ",\"method\":"), to_json(n.method))
-      append(params_of(a, n.params), "\}")
+      a = append(append(take start, ",\"method\":"), to_json(n.method))
+      append(params_of(take a, n.params), "\}")
     }
     .response(r) {
-      a = append(append(start, ",\"id\":"), id_text(r.id))
+      a = append(append(take start, ",\"id\":"), id_text(r.id))
       match r.outcome {
-        .ok(v) { append(append(append(a, ",\"result\":"), raw_text(v)), "\}") }
+        .ok(v) { append(append(append(take a, ",\"result\":"), raw_text(v)), "\}") }
         .err(f) {
-          b = append(append(a, ",\"error\":\{\"code\":"), to_json(f.code))
-          c = append(append(b, ",\"message\":"), to_json(f.message))
+          b = append(append(take a, ",\"error\":\{\"code\":"), to_json(f.code))
+          c = append(append(take b, ",\"message\":"), to_json(f.message))
           d = match f.data {
-            .some(v) { append(append(c, ",\"data\":"), raw_text(v)) }
+            .some(v) { append(append(take c, ",\"data\":"), raw_text(v)) }
             .none { c }
           }
-          append(d, "\}\}")
+          append(take d, "\}\}")
         }
       }
     }
@@ -370,12 +370,12 @@ pub fn write(to: take Text, message: Message) -> Text <alloc> {
 }
 
 pub fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc> {
-  mut written = append(to, "[")
+  mut written = append(take to, "[")
   mut first = true
   loop m in messages {
-    if not first { written = append(written, ",") }
+    if not first { written = append(take written, ",") }
     first = false
-    written = write(written, m)
+    written = write(take written, m)
   }
-  append(written, "]")
+  append(take written, "]")
 }

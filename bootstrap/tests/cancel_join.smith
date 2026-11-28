@@ -12,7 +12,7 @@ use std.task (outcome, spawn, task, test_ready, test_ready_by, test_scheduler_wi
 fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }
   0
 }
@@ -25,53 +25,53 @@ fn opened(id: u64) -> Connection <console, alloc> {
 fn n3(c: take Connection) -> u64 <net, task, console, alloc> {
   a = opened(8)
   test_ready(9)
-  close(a)
-  close(c)
+  close(take a)
+  close(take c)
   0
 }
 
 fn n2(c: take Connection) -> u64 <net, task, console, alloc> {
   a = opened(6)
   g = opened(7)
-  t = spawn { n3(g) }
+  t = spawn { n3(take g) }
   test_ready(12)
   mut total: u64 = 0
-  match outcome(t) {
+  match outcome(take t) {
     .ok(v) { total = wrapping_add(total, v) }
     .err(failure) { }
   }
-  close(a)
-  close(c)
+  close(take a)
+  close(take c)
   total
 }
 
 fn n1(c: take Connection) -> u64 <net, task, console, alloc> {
   a = opened(4)
   g = opened(5)
-  t = spawn { n2(g) }
+  t = spawn { n2(take g) }
   test_ready(13)
   b = opened(14)
   more = eat()
-  close(b)
-  close(a)
-  close(c)
+  close(take b)
+  close(take a)
+  close(take c)
   0
 }
 
 fn n0(c: take Connection) -> u64 <net, task, console, alloc> {
   a = opened(2)
   g = opened(3)
-  t = spawn { n1(g) }
+  t = spawn { n1(take g) }
   test_ready(18)
-  close(a)
-  close(c)
+  close(take a)
+  close(take c)
   0
 }
 
 fn run() -> u64 <net, diverge, alloc, console> {
   with test_scheduler_with_io(22, [12, 13])
   g = opened(1)
-  _ = spawn { n0(g) }
+  _ = spawn { n0(take g) }
   late = test_ready_by(999999, ms(10))
   print("root done")
   1
@@ -81,18 +81,18 @@ fn main() <console, alloc, diverge> {
   r = net(
     listen_on: fn(host, port) { .err(.refused(host)) },
     accept: fn(l) { .err(.closed(l.host)) },
-    stop: fn(l) { n = release(l) },
+    stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .err(.closed(c.host)) },
     write: fn(c, bytes) { .ok(()) },
     close: fn(c) {
       print("closed {handle(c)}")
-      n = release(c)
+      n = release(take c)
     },
     bind_to: fn(host, port) { .err(.refused(host)) },
     send: fn(s, to, bytes) { .err(.closed(s.host)) },
     receive: fn(s, most) { .err(.closed(s.host)) },
-    unbind: fn(s) { n = release(s) },
+    unbind: fn(s) { n = release(take s) },
     body: { run() },
   )
   print("{r}")

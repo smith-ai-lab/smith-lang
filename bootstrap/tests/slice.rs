@@ -80,7 +80,7 @@ fn expected(lines: &[String]) -> Vec<u8> {
 /// piece of a list, which is the next issue; `out` of the page's `evens` is a
 /// word of the language, so the list is called `built`.
 fn the_slice_examples_of_the_page_give_what_the_page_says() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\n\nfn evens(n: u64) -> Slice[u64] <alloc> {\n  mut built: List[u64] = []\n  loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }\n  freeze(built)\n}\n\nstruct Halves {\n  left: Slice[u64]\n  right: Slice[u64]\n}\n\nfn halves(s: Slice[u64], mid: Nat) -> Halves\n  requires mid <= s.size\n{\n  Halves(left: s[..mid], right: s[mid..])\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut t: u64 = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn demo(building: List[u64], done: Slice[u64]) -> u64 {\n  wrapping_add(total(building), total(done))\n}\n\nfn main() <console, alloc> {\n  e = evens(3)\n  if 3 <= e.size { print(\"{total(e)} {e.size} {e[2]}\") }\n  f = evens(5)\n  if 3 <= f.size {\n    h = halves(f, 3)\n    print(\"{h.left.size} {total(h.left)} {h.right.size} {total(h.right)}\")\n  }\n  building: List[u64] = [10, 20]\n  print(\"{demo(building, f)}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (freeze, push)\n\nfn evens(n: u64) -> Slice[u64] <alloc> {\n  mut built: List[u64] = []\n  loop i in 0..n { built = push(take built, wrapping_mul(i, 2)) }\n  freeze(take built)\n}\n\nstruct Halves {\n  left: Slice[u64]\n  right: Slice[u64]\n}\n\nfn halves(s: Slice[u64], mid: Nat) -> Halves\n  requires mid <= s.size\n{\n  Halves(left: s[..mid], right: s[mid..])\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut t: u64 = 0\n  loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }\n  t\n}\n\nfn demo(building: List[u64], done: Slice[u64]) -> u64 {\n  wrapping_add(total(building), total(done))\n}\n\nfn main() <console, alloc> {\n  e = evens(3)\n  if 3 <= e.size { print(\"{total(e)} {e.size} {e[2]}\") }\n  f = evens(5)\n  if 3 <= f.size {\n    h = halves(f, 3)\n    print(\"{h.left.size} {total(h.left)} {h.right.size} {total(h.right)}\")\n  }\n  building: List[u64] = [10, 20]\n  print(\"{demo(building, f)}\")\n}\n";
     let out = scalar::run(&lowered(source));
     assert_eq!(out.stdout, b"6 3 4\n3 6 2 14\n50\n".to_vec());
 }
@@ -158,9 +158,9 @@ fn frozen_source(f: &Frozen) -> String {
     reads += &format!("  dump(s[..{}])\n  dump(s[{}..])\n", n / 2, n / 2);
     let mut main = format!("  mut a: List[{t}] = []\n");
     for v in &f.items {
-        main += &format!("  a = push(a, {v})\n");
+        main += &format!("  a = push(take a, {v})\n");
     }
-    main += "  s = freeze(a)\n";
+    main += "  s = freeze(take a)\n";
     for (k, size) in f.others.iter().enumerate() {
         main += &format!("  o{k} = build({size}, {})\n", 150 + 10 * k);
     }
@@ -190,7 +190,7 @@ fn frozen_source(f: &Frozen) -> String {
 
 fn build(n: u64, base: {t}) -> List[{t}] <alloc> {{
   mut xs: List[{t}] = []
-  loop i in 0..n {{ xs = push(xs, base) }}
+  loop i in 0..n {{ xs = push(take xs, base) }}
   xs
 }}
 
@@ -329,13 +329,13 @@ fn freeze_asks_for_no_memory_moves_no_byte_and_runs_no_instruction_more() {
 
 fn main() <console, alloc> {{
   mut xs: List[{t}] = []
-  loop i in 0..{n} {{ xs = push(xs, 3) }}
+  loop i in 0..{n} {{ xs = push(take xs, 3) }}
 {read}}}
 "
                 )
             };
             let plain = lowered(&program("  print(\"{total(xs)}\")\n"));
-            let frozen = lowered(&program("  s = freeze(xs)\n  print(\"{total(s)}\")\n"));
+            let frozen = lowered(&program("  s = freeze(take xs)\n  print(\"{total(s)}\")\n"));
             let measured = |p: &scalar::Program| {
                 let (_, taken) = scalar::run_taking(p, usize::MAX);
                 let (_, _, copied) = scalar::run_copying(p, usize::MAX);
@@ -354,7 +354,7 @@ fn main() <console, alloc> {{
 fn a_list_given_to_freeze_is_given_away_and_a_use_of_it_afterwards_is_one_error() {
     let program = |second: &str| {
         format!(
-            "use std.list (freeze)\n\nfn keep(xs: take List[Byte]) -> (Slice[Byte], Nat) {{\n  s = freeze(xs)\n  (s, {second})\n}}\n\nfn main() <alloc> {{\n  xs: List[Byte] = [1, 2]\n  r = keep(xs)\n}}\n"
+            "use std.list (freeze)\n\nfn keep(xs: take List[Byte]) -> (Slice[Byte], Nat) {{\n  s = freeze(take xs)\n  (s, {second})\n}}\n\nfn main() <alloc> {{\n  xs: List[Byte] = [1, 2]\n  r = keep(take xs)\n}}\n"
         )
     };
     assert!(check(program("s.size").as_bytes()).is_ok());
@@ -399,7 +399,7 @@ fn pair(s: Slice[{t}]) -> (Slice[{t}], Slice[{t}]) {{ (s, s) }}
 
 fn main() <console, alloc> {{
   mut a: List[{t}] = []
-{pushes}  s = freeze(a)
+{pushes}  s = freeze(take a)
   t = s
   h = hold(s)
   (x, y) = pair(t)
@@ -410,7 +410,7 @@ fn main() <console, alloc> {{
   dump(y)
 }}
 ",
-                pushes = written.iter().map(|v| format!("  a = push(a, {v})\n")).collect::<String>()
+                pushes = written.iter().map(|v| format!("  a = push(take a, {v})\n")).collect::<String>()
             );
             let mut lines = Vec::new();
             for _ in 0..5 {
@@ -476,7 +476,7 @@ fn main() <console> {{
         assert!(taken.is_empty(), "{taken:?} for {source}");
         assert_eq!(copied.iter().sum::<usize>(), 0, "{copied:?} for {source}");
     }
-    let taking = "use std.list (copy, push)\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> { push(xs, 1) }\n\nfn go(s: Slice[Byte]) -> List[Byte] <alloc> { grow(SLICE) }\n\nfn main() <alloc> {\n  s: Slice[Byte] = [1, 2]\n  r = go(s)\n}\n";
+    let taking = "use std.list (copy, push)\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> { push(take xs, 1) }\n\nfn go(s: Slice[Byte]) -> List[Byte] <alloc> { grow(SLICE) }\n\nfn main() <alloc> {\n  s: Slice[Byte] = [1, 2]\n  r = go(s)\n}\n";
     assert!(check(taking.replace("SLICE", "copy(s)").as_bytes()).is_ok());
     let refused = taking.replace("SLICE", "s");
     let errors = check(refused.as_bytes()).expect_err("a slice where a list is taken");
@@ -514,7 +514,7 @@ fn copy_of_a_slice_gives_a_new_list_and_asks_for_alloc() {
 fn main() <console, alloc> {{
   s: Slice[{t}] = [{}]
   mut xs = copy(s)
-  xs = push(xs, {extra})
+  xs = push(take xs, {extra})
   dump(s)
   dump(xs)
 }}

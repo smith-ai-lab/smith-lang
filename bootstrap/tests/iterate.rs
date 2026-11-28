@@ -479,9 +479,9 @@ fn a_loop_over_a_type_with_no_iterate_is_one_error_that_names_the_type_and_itera
 /// define, or one that it did, where the loop is over `head`.
 fn gives_away(head: &str, defined_inside: bool) -> String {
     let (outside, inside) = if defined_inside {
-        ("", "own = Key(secret: 1)\n    print(\"{spend(own)}\")")
+        ("", "own = Key(secret: 1)\n    print(\"{spend(take own)}\")")
     } else {
-        ("  k = Key(secret: 1)\n", "print(\"{spend(k)}\")")
+        ("  k = Key(secret: 1)\n", "print(\"{spend(take k)}\")")
     };
     format!(
         "use std.bits (u64)\nuse std.console (console, print)\n\nstruct Key {{\n  secret: u64\n}}\n\nwithout Copy for Key\n\n{DOWN}fn spend(k: take Key) -> u64 {{ k.secret }}\n\nfn main() <console, alloc> {{\n{outside}  xs: List[Int] = [1, 2]\n  loop v in {head} {{\n    {inside}\n  }}\n}}\n"

@@ -78,7 +78,7 @@ use std.list (freeze)
 fn main() <console, alloc> {
   loop i in 2..5 { print(\"{i}\") }
   bytes: List[Byte] = [10, 20, 30, 40]
-  xs = freeze(bytes)
+  xs = freeze(take bytes)
   print(\"{xs[1..3].size} {xs[..2].size} {xs[2..].size}\")
   small: 0..10 = 7
   print(\"{small}\")

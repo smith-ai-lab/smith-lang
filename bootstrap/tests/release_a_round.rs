@@ -91,13 +91,13 @@ impl Round {
                 "  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    s = \"{{c{k}}}-{long}\"\n    tsum = wrapping_add(tsum, s.size)\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n"
             ),
             Round::Nested => format!(
-                "  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    mut zs: List[List[u64]] = []\n    zs = push(zs, build({n}, c{k}))\n    zs = push(zs, build({n}, wrapping_add(c{k}, 1)))\n    loop z in zs {{ sum = wrapping_add(sum, total(z)) }}\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n"
+                "  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    mut zs: List[List[u64]] = []\n    zs = push(take zs, build({n}, c{k}))\n    zs = push(take zs, build({n}, wrapping_add(c{k}, 1)))\n    loop z in zs {{ sum = wrapping_add(sum, total(z)) }}\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n"
             ),
             Round::Assigned => format!(
                 "  mut keep{k}: List[u64] = []\n  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    keep{k} = build({n}, c{k})\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n  sum = wrapping_add(sum, total(keep{k}))\n"
             ),
             Round::Pushed => format!(
-                "  mut all{k}: List[List[u64]] = []\n  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    all{k} = push(all{k}, build({n}, c{k}))\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n  loop z in all{k} {{ sum = wrapping_add(sum, total(z)) }}\n"
+                "  mut all{k}: List[List[u64]] = []\n  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    all{k} = push(take all{k}, build({n}, c{k}))\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n  loop z in all{k} {{ sum = wrapping_add(sum, total(z)) }}\n"
             ),
             Round::Field => format!(
                 "  mut h{k} = Holder(items: [])\n  mut c{k}: u64 = 0\n  loop r{k} in 0..{r} {{\n    h{k}.items = build({n}, c{k})\n    c{k} = wrapping_add(c{k}, 1)\n  }}\n  sum = wrapping_add(sum, total(h{k}.items))\n"
@@ -134,7 +134,7 @@ impl Round {
 /// How long the texts that rounds build are, after their number and a dash.
 const LONG: usize = 480;
 
-const ITEMS: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (push)\n\nstruct Holder {\n  items: List[u64]\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  mut ys: List[u64] = []\n  loop i in 0..n { ys = push(ys, wrapping_add(seed, i)) }\n  ys\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  sum\n}\n\nfn returned(n: u64, rounds: u64, at: u64) -> List[u64] <alloc> {\n  loop j in 0..rounds {\n    ys = build(n, j)\n    if j == at { return ys }\n  }\n  []\n}\n\n";
+const ITEMS: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (push)\n\nstruct Holder {\n  items: List[u64]\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  mut ys: List[u64] = []\n  loop i in 0..n { ys = push(take ys, wrapping_add(seed, i)) }\n  ys\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  sum\n}\n\nfn returned(n: u64, rounds: u64, at: u64) -> List[u64] <alloc> {\n  loop j in 0..rounds {\n    ys = build(n, j)\n    if j == at { return ys }\n  }\n  []\n}\n\n";
 
 /// A program of loops, one for each of `rounds` of the kinds, each with `r`
 /// rounds that build lists of `n` elements, and the two numbers it prints.

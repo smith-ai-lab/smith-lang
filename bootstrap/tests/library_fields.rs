@@ -324,7 +324,7 @@ fn library_fields_a_program_that_only_holds_the_struct_is_accepted(part: u64) {
 /// A `Connection` is given by `connect_to` and by nothing else, so a program
 /// neither reads the system's handle it holds nor makes one from a number.
 fn library_fields_the_handle_of_a_connection_is_private_and_no_program_makes_one() {
-    let read = "use std.bits (i64)\nuse std.net (Connection, close, connect_to, net)\n\nfn f(c: take Connection) -> i64 {\n  h = c.handle\n  close(c)\n  h\n}\n\nfn main() <net> {\n  match connect_to(\"127.0.0.1\", 1) {\n    .ok(c) { f(c) }\n    .err(e) { 0 }\n  }\n}\n";
+    let read = "use std.bits (i64)\nuse std.net (Connection, close, connect_to, net)\n\nfn f(c: take Connection) -> i64 {\n  h = c.handle\n  close(take c)\n  h\n}\n\nfn main() <net> {\n  match connect_to(\"127.0.0.1\", 1) {\n    .ok(c) { f(c) }\n    .err(e) { 0 }\n  }\n}\n";
     let make = "use std.net (Connection)\n\nfn f() -> Connection {\n  Connection(handle: 3)\n}\n\nfn main() {\n  c = f()\n}\n";
     for source in [read, make] {
         let Err(errors) = check(source.as_bytes()) else {

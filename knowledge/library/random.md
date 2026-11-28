@@ -16,7 +16,7 @@ Randomness comes from a [`Key`](../language/take.md), which is used at most once
 fn bits(key: take Key) -> u64
 ```
 
-`uniform(key)` gives an `f32` from 0 up to but not including 1, and `standard_normal(key)` gives one from the normal distribution with mean 0 and deviation 1. Both are arithmetic on `bits`.
+`uniform(take key)` gives an `f32` from 0 up to but not including 1, and `standard_normal(take key)` gives one from the normal distribution with mean 0 and deviation 1. Both are arithmetic on `bits`.
 
 ## Where a key comes from
 
@@ -43,8 +43,8 @@ What a key gives is fixed by the counter that is put in, so the numbers a progra
 | Function | Is |
 | --- | --- |
 | `seeded(seed)` | The key `threefry((3, 0), (seed, 0))` |
-| `bits(key)` | The first number of `threefry((0, 0), (k0, k1))`, as a `u64` |
-| `split(key)` | The keys `threefry((1, 0), (k0, k1))` and `threefry((2, 0), (k0, k1))`, in that order |
+| `bits(take key)` | The first number of `threefry((0, 0), (k0, k1))`, as a `u64` |
+| `split(take key)` | The keys `threefry((1, 0), (k0, k1))` and `threefry((2, 0), (k0, k1))`, in that order |
 | `fresh()` | The key whose `k0` is the first 8 bytes `entropy` filled and `k1` the next 8, each read with its first byte the least |
 
 A counter that begins with 0, 1, 2, or 3 never meets another use of the generator, so `bits`, `split`, and `seeded` of one key do not give the same numbers. The numbers of `threefry((0, 0), (0, 0))` are `c2b6e3a8c2c69865` and `6f81ed42f350084d`, as Random123 publishes.

@@ -142,8 +142,8 @@ fn main() {{
     let numbers = |second: &str| {
         format!(
             "{KEY}fn numbers(key: take Key) -> (u64, u64) {{
-  (k1, k2) = split(key)
-  (uniform(k1), uniform({second}))
+  (k1, k2) = split(take key)
+  (uniform(take k1), uniform({second}))
 }}
 
 fn main() {{
@@ -152,12 +152,12 @@ fn main() {{
 "
         )
     };
-    assert!(errors(&numbers("k2")).is_empty());
-    let twice = numbers("k1");
+    assert!(errors(&numbers("take k2")).is_empty());
+    let twice = numbers("take k1");
     let found = errors(&twice);
     assert_eq!(found.len(), 1, "{found:?}");
     let second = pos_after(&twice[..twice.rfind("k1").unwrap()]);
-    let first = pos_after(&twice[..twice.find("uniform(k1)").unwrap() + "uniform(".len()]);
+    let first = pos_after(&twice[..twice.find("uniform(take k1)").unwrap() + "uniform(take ".len()]);
     assert_eq!(found[0].pos, second);
     assert!(found[0].message.contains(&named(first)), "{}", found[0]);
 }
@@ -443,7 +443,7 @@ fn lend_holder(x: Holder) -> u64 { x.count }
 
 fn sink_wrapper(x: take Wrapper) -> u64 {
   match x {
-    .full(k) { sink_key(k) }
+    .full(k) { sink_key(take k) }
     .empty { 0 }
   }
 }
@@ -589,19 +589,21 @@ fn write_act(a: &Act, held: Held, out: &mut String, places: &mut [Pos], indent: 
         Place::Key => "v.key",
         Place::Count => "v.count",
     };
+    // A value without `Copy` given to a `take` parameter is written `take`.
+    let give = if held.lacks_copy() { "take " } else { "" };
     // Where the value is written is marked with `@`.
     let text = match (a.give, a.place, a.form) {
-        (true, Place::Whole, 0) => format!("n{id} = sink_{t}(@)"),
+        (true, Place::Whole, 0) => format!("n{id} = sink_{t}({give}@)"),
         (true, Place::Whole, 1) => format!("n{id} = @"),
         (true, Place::Whole, 2) => format!("n{id} = (@, 1)"),
         (true, Place::Whole, 3) => format!("n{id} = Option.some(@)"),
         (true, Place::Whole, _) if held == Held::Wrapper => {
-            format!("n{id} = match @ {{\n{indent}  .full(k{id}) {{ sink_key(k{id}) }}\n{indent}  .empty {{ 0 }}\n{indent}}}")
+            format!("n{id} = match @ {{\n{indent}  .full(k{id}) {{ sink_key(take k{id}) }}\n{indent}  .empty {{ 0 }}\n{indent}}}")
         }
         (true, Place::Whole, _) => {
             format!("n{id} = match @ {{\n{indent}  .hit(k{id}) {{ k{id} }}\n{indent}  .miss {{ 0 }}\n{indent}}}")
         }
-        (true, ..) => format!("n{id} = sink_key(@)"),
+        (true, ..) => format!("n{id} = sink_key(take @)"),
         (false, Place::Whole, 0) => format!("n{id} = lend_{t}(@)"),
         (false, Place::Whole, _) if held == Held::Key => format!("n{id} = @.secret"),
         (false, Place::Whole, _) => format!("n{id} = @.x"),
@@ -885,12 +887,15 @@ fn a_lent_value_or_part_of_one_is_refused_where_it_is_kept_unless_it_has_copy() 
         let t = l.held.name();
         let w = l.held.word();
         let taking = if l.take { "take " } else { "" };
+        // A value without `Copy` that is given to a `take` parameter is
+        // written `take`, whether or not `g` owns it.
+        let give = if l.held.lacks_copy() { "take " } else { "" };
         let (result, text) = match l.keeps {
             Keeps::Returned => (t.to_string(), "@".to_string()),
             Keeps::PartReturned => ("Key".to_string(), "@.key".to_string()),
             Keeps::Stored => ("Holder".to_string(), "Holder(key: @, count: 1)".to_string()),
-            Keeps::Taken => ("u64".to_string(), format!("sink_{w}(@)")),
-            Keeps::PartTaken => ("u64".to_string(), "sink_key(@.key)".to_string()),
+            Keeps::Taken => ("u64".to_string(), format!("sink_{w}({give}@)")),
+            Keeps::PartTaken => ("u64".to_string(), "sink_key(take @.key)".to_string()),
             Keeps::Aliased => (t.to_string(), "q = v\n  @".to_string()),
             Keeps::Lent => ("u64".to_string(), format!("lend_{w}(@)")),
         };
@@ -943,7 +948,7 @@ fn a_function_type_marks_a_parameter_take_and_its_lambda_is_held_to_it() {
         let marked = if l.marked { "take " } else { "" };
         let (result, lambda) = match l.does {
             0 => ("Key", "x"),
-            1 => ("u64", "sink_key(x)"),
+            1 => ("u64", "sink_key(take x)"),
             _ => ("u64", "lend_key(x)"),
         };
         // A key cannot be added, so a function that gives one calls once.
@@ -952,7 +957,8 @@ fn a_function_type_marks_a_parameter_take_and_its_lambda_is_held_to_it() {
         source.push_str(&format!(
             "fn apply(k: take Key, f: fn({marked}Key) -> {result}) -> {result} {{\n  "
         ));
-        source.push_str(if twice { "n = f(k)\n  f(" } else { "f(" });
+        let given = if l.marked { "take " } else { "" };
+        source.push_str(&if twice { format!("n = f({given}k)\n  f({given}") } else { format!("f({given}") });
         let mut wanted: Vec<Pos> = Vec::new();
         // The function takes its argument, so a second call has none.
         if twice && l.marked {
@@ -995,7 +1001,7 @@ fn end[T](x: take T) <diverge> {
 
 fn main() <diverge> {
   k = Key(secret: 1)
-  end(k)
+  end(take k)
 }
 ";
     assert!(errors(ok).is_empty(), "{:?}", errors(ok));
@@ -1091,13 +1097,13 @@ fn a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_
         // The program a seed found: the path that breaks gives `v` away, and the
         // path that does not gives a field of it, so a look made later reads `v`
         // given away already.
-        "  loop i in 0..3 {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
+        "  loop i in 0..3 {\n    if c {\n      n2 = sink_holder(take $v)\n      break\n    }\n    n3 = sink_key(take v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
         // A `break` in an arm of a `match`, and a field given away in the others.
-        "  loop i in 0..3 {\n    match d {\n      .north {\n        n2 = sink_holder($v)\n        break\n      }\n      .south {\n        n3 = sink_key(v.key)\n        break\n      }\n      .east {\n        n4 = sink_key(v.key)\n        ()\n      }\n    }\n  }\n  n5 = @v.count\n  0\n",
+        "  loop i in 0..3 {\n    match d {\n      .north {\n        n2 = sink_holder(take $v)\n        break\n      }\n      .south {\n        n3 = sink_key(take v.key)\n        break\n      }\n      .east {\n        n4 = sink_key(take v.key)\n        ()\n      }\n    }\n  }\n  n5 = @v.count\n  0\n",
         // A `break` of a loop inside a loop, read in the loop around it.
-        "  loop i in 0..3 {\n    loop j in 0..3 {\n      if c {\n        n2 = sink_holder($v)\n        break\n      }\n      n3 = sink_key(v.key)\n      ()\n    }\n    n4 = @v.count\n    break\n  }\n  0\n",
+        "  loop i in 0..3 {\n    loop j in 0..3 {\n      if c {\n        n2 = sink_holder(take $v)\n        break\n      }\n      n3 = sink_key(take v.key)\n      ()\n    }\n    n4 = @v.count\n    break\n  }\n  0\n",
         // A loop with no range, which only a `break` ends.
-        "  loop {\n    if c {\n      n2 = sink_holder($v)\n      break\n    }\n    n3 = sink_key(v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
+        "  loop {\n    if c {\n      n2 = sink_holder(take $v)\n      break\n    }\n    n3 = sink_key(take v.key)\n    ()\n  }\n  n4 = @v.count\n  0\n",
     ];
     let mut missed = Vec::new();
     for (k, body) in refused.iter().enumerate() {
@@ -1113,7 +1119,7 @@ fn a_value_given_away_on_a_path_that_breaks_out_of_a_loop_is_not_used_after_the_
     assert!(missed.is_empty(), "{}", missed.join("\n"));
     // The path that breaks gives nothing away, and the path that goes on does,
     // on a path that then returns, so what is read after the loop is whole.
-    let accepted = "  loop i in 0..3 {\n    if c {\n      break\n    }\n    return sink_holder($v)\n  }\n  n4 = v.count\n  0\n";
+    let accepted = "  loop i in 0..3 {\n    if c {\n      break\n    }\n    return sink_holder(take $v)\n  }\n  n4 = v.count\n  0\n";
     let (source, ..) = broken_out(accepted);
     assert!(errors(&source).is_empty(), "{:?}\n{source}", errors(&source));
 }

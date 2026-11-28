@@ -116,7 +116,7 @@ fn skip_breaks(c: take Cursor) -> Cursor {
   rounds = c.tokens.size
   mut next = c
   loop round in 0..rounds {
-    if is_newline_tok(tok(next)) { next = step(next) } else { break }
+    if is_newline_tok(tok(next)) { next = step(take next) } else { break }
   }
   next
 }
@@ -145,8 +145,8 @@ struct Got {
 fn ident(c: take Cursor, wanted: u64) -> Result[Got, Failed] {
   here = token_here(c)
   match here.tok {
-    .ident(b) { .ok(Got(at: step(c), name: Name(text: b, pos: here.pos))) }
-    other { .err(fail(c, wanted)) }
+    .ident(b) { .ok(Got(at: step(take c), name: Name(text: b, pos: here.pos))) }
+    other { .err(fail(take c, wanted)) }
   }
 }
 
@@ -164,7 +164,7 @@ fn skip_item(c: take Cursor, from: Nat) -> Cursor {
     if is_eof(t) {
       break
     } else if is_newline_tok(t) and depth == 0 {
-      next = skip_breaks(next)
+      next = skip_breaks(take next)
       if pos(next).col == 1 and not continues_item(tok(next)) { break }
     } else {
       if is_punct(t, .open_paren) or is_punct(t, .open_bracket) or is_punct(t, .open_brace) {
@@ -172,7 +172,7 @@ fn skip_item(c: take Cursor, from: Nat) -> Cursor {
       } else if is_punct(t, .close_paren) or is_punct(t, .close_bracket) or is_punct(t, .close_brace) {
         depth = saturating_sub(depth, 1)
       }
-      next = step(next)
+      next = step(take next)
     }
   }
   next
@@ -199,7 +199,7 @@ struct Aliased {
 
 fn alias_after(c: take Cursor, wanted: u64) -> Result[Aliased, Failed] <alloc> {
   if is_keyword(tok(c), kw_as()) {
-    got = try ident(step(c), wanted)
+    got = try ident(step(take c), wanted)
     .ok(Aliased(at: got.at, alias: .some(got.name)))
   } else {
     .ok(Aliased(at: c, alias: .none))
@@ -214,28 +214,28 @@ struct Names {
 // The names between the parentheses of a `use`, and the `)`.
 fn listed_names(c: take Cursor) -> Result[Names, Failed] <alloc> {
   rounds = c.tokens.size
-  mut at = step(c)
+  mut at = step(take c)
   mut names: List[Listed] = []
   mut done = false
   loop round in 0..rounds {
     if not done {
-      at = skip_breaks(at)
+      at = skip_breaks(take at)
       if is_punct(tok(at), p_rparen()) {
         done = true
       } else {
-        got = try ident(at, 4)
-        renamed = try alias_after(got.at, 5)
-        names = push(names, Listed(name: got.name, alias: renamed.alias))
-        at = skip_breaks(renamed.at)
+        got = try ident(take at, 4)
+        renamed = try alias_after(take got.at, 5)
+        names = push(take names, Listed(name: got.name, alias: renamed.alias))
+        at = skip_breaks(take renamed.at)
         if is_punct(tok(at), p_comma()) {
-          at = step(at)
+          at = step(take at)
         } else if not is_punct(tok(at), p_rparen()) {
-          return .err(fail(at, 6))
+          return .err(fail(take at, 6))
         }
       }
     }
   }
-  .ok(Names(at: step(at), names: names))
+  .ok(Names(at: step(take at), names: names))
 }
 
 struct UseLine {
@@ -248,27 +248,27 @@ struct UseLine {
 fn use_line(c: take Cursor) -> Result[UseLine, Failed] <alloc> {
   start = pos(c)
   rounds = c.tokens.size
-  first = try ident(step(c), 1)
+  first = try ident(step(take c), 1)
   mut at = first.at
   mut module: List[Name] = [first.name]
   loop round in 0..rounds {
     if is_punct(tok(at), p_dot()) {
-      more = try ident(step(at), 2)
-      module = push(module, more.name)
+      more = try ident(step(take at), 2)
+      module = push(take module, more.name)
       at = more.at
     } else {
       break
     }
   }
-  renamed = try alias_after(at, 3)
+  renamed = try alias_after(take at, 3)
   at = renamed.at
   listed = is_punct(tok(at), p_lparen())
   if listed and has_name(renamed.alias) {
-    return .err(fail(at, 8))
+    return .err(fail(take at, 8))
   }
   mut names: List[Listed] = []
   if listed {
-    inside = try listed_names(at)
+    inside = try listed_names(take at)
     names = inside.names
     at = inside.at
   }
@@ -277,7 +277,7 @@ fn use_line(c: take Cursor) -> Result[UseLine, Failed] <alloc> {
     .ok(UseLine(at: at, line: Use(pos: start, module: module, alias: renamed.alias,
                                   listed: listed, names: names)))
   } else {
-    .err(fail(at, 7))
+    .err(fail(take at, 7))
   }
 }
 
@@ -298,7 +298,7 @@ fn parse_uses(tokens: take List[Token]) -> Uses <alloc> {
   mut errors: List[ParseError] = []
   mut items = false
   loop round in 0..rounds {
-    at = skip_breaks(at)
+    at = skip_breaks(take at)
     start = at.at
     t = tok(at)
     if is_eof(t) {
@@ -306,20 +306,20 @@ fn parse_uses(tokens: take List[Token]) -> Uses <alloc> {
     } else if is_keyword(t, kw_use()) {
       late = items
       here = pos(at)
-      match use_line(at) {
+      match use_line(take at) {
         .ok(got) {
-          if late { errors = push(errors, ParseError(pos: here, wanted: 9, found: t)) }
-          uses = push(uses, got.line)
+          if late { errors = push(take errors, ParseError(pos: here, wanted: 9, found: t)) }
+          uses = push(take uses, take got.line)
           at = got.at
         }
         .err(f) {
-          errors = push(errors, f.error)
-          at = skip_item(f.at, start)
+          errors = push(take errors, take f.error)
+          at = skip_item(take f.at, start)
         }
       }
     } else {
       items = true
-      at = skip_item(step(at), start)
+      at = skip_item(step(take at), start)
     }
   }
   Uses(uses: uses, errors: errors)

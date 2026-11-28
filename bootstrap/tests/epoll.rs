@@ -44,12 +44,12 @@ fn turn(c: take Connection) -> u64 <net, alloc> {
   match read(c, 64) {
     .ok(.bytes(chunk)) {
       size = chunk.bytes.size
-      _ = write(c, freeze(chunk.bytes))
+      _ = write(c, freeze(take chunk.bytes))
     }
     .ok(.ended) { }
     .err(e) { }
   }
-  close(c)
+  close(take c)
   size
 }
 
@@ -58,10 +58,10 @@ fn pair(port: 1..65536) -> Result[u64, NetError] <console, net, alloc> {
   with l = listen("127.0.0.1", .at(port))
   print("ready")
   a = try accept(l)
-  ta = spawn { turn(a) }
+  ta = spawn { turn(take a) }
   b = try accept(l)
-  tb = spawn { turn(b) }
-  .ok(wrapping_add(join(ta), join(tb)))
+  tb = spawn { turn(take b) }
+  .ok(wrapping_add(join(take ta), join(take tb)))
 }
 
 fn main(args: List[str]) <console, net, alloc> {
@@ -96,20 +96,20 @@ fn turn(c: take Connection) -> u64 <net, alloc> {
   match read(c, 64) {
     .ok(.bytes(chunk)) {
       size = chunk.bytes.size
-      _ = write(c, freeze(chunk.bytes))
+      _ = write(c, freeze(take chunk.bytes))
     }
     .ok(.ended) { }
     .err(e) { }
   }
-  close(c)
+  close(take c)
   size
 }
 
 fn inner(a: take Connection, b: take Connection) -> u64 <net, alloc, task> {
   with tasks()
-  ta = spawn { turn(a) }
-  tb = spawn { turn(b) }
-  wrapping_add(join(ta), join(tb))
+  ta = spawn { turn(take a) }
+  tb = spawn { turn(take b) }
+  wrapping_add(join(take ta), join(take tb))
 }
 
 fn pair(port: 1..65536) -> Result[u64, NetError] <console, net, alloc> {
@@ -120,21 +120,21 @@ fn pair(port: 1..65536) -> Result[u64, NetError] <console, net, alloc> {
   b = match accept(l) {
     .ok(x) { x }
     .err(e) {
-      close(a)
+      close(take a)
       return .err(e)
     }
   }
   c = match accept(l) {
     .ok(x) { x }
     .err(e) {
-      close(a)
-      close(b)
+      close(take a)
+      close(take b)
       return .err(e)
     }
   }
-  outer = spawn { inner(a, b) }
-  other = spawn { turn(c) }
-  .ok(wrapping_add(join(outer), join(other)))
+  outer = spawn { inner(take a, take b) }
+  other = spawn { turn(take c) }
+  .ok(wrapping_add(join(take outer), join(take other)))
 }
 
 fn main(args: List[str]) <console, net, alloc> {

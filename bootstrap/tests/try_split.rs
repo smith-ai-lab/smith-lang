@@ -291,8 +291,8 @@ fn a_value_the_function_owns_is_used_after_a_try_as_before_it() {
         let source = |again: bool| {
             let sugar = body_of(family, place, false);
             let give = format!(
-                "  n = consume(k)\n{}  {ok}(wrapping_add({last}, n))\n}}",
-                if again { "  m = consume(k)\n" } else { "" },
+                "  n = consume(take k)\n{}  {ok}(wrapping_add({last}, n))\n}}",
+                if again { "  m = consume(take k)\n" } else { "" },
                 ok = family.ok,
                 last = place.last
             );
@@ -318,7 +318,7 @@ fn a_value_the_function_owns_is_used_after_a_try_as_before_it() {
         let found = errors(&refused);
         assert_eq!(found.len(), 1, "{found:?} in {refused}");
         assert!(found[0].message.contains("`k`"), "{}", found[0]);
-        let line = refused.lines().position(|l| l == "  m = consume(k)").expect("a line") + 1;
+        let line = refused.lines().position(|l| l == "  m = consume(take k)").expect("a line") + 1;
         assert_eq!(found[0].pos.line, line, "{}", found[0]);
     }
 }

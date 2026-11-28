@@ -66,7 +66,7 @@ fn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {
   r = console(
     print: fn(text, end, to) {
       match to {
-        .stdout { seen = push(seen, "{text}{end}") }
+        .stdout { seen = push(take seen, "{text}{end}") }
         .stderr { print(text, end: end, to: .stderr) }
       }
     },
