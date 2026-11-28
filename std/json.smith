@@ -30,7 +30,6 @@ pub enum Unknown {
 pub struct Json {
   pub cases: Cases
   pub names: Names
-  pub unknown: Unknown = .ignore
 }
 
 // A case whose value is being written, and which is closed when the value
@@ -1225,6 +1224,7 @@ pub struct In {
   at: Nat
   mark: Nat
   json: Json
+  unknown: Unknown
   forms: u64
   deep: Slice[Byte]
   cases: Nat
@@ -1638,7 +1638,7 @@ impl Reader[In] {
       .ok(q) { text_at(r.bytes, q, r.mark) }
       .err(e) { name }
     }
-    match r.json.unknown {
+    match r.unknown {
       .refuse { failed_unit(r, Bad(at: r.mark, problem: .unknown(given))) }
       .ignore {
         a = skip_space(r.bytes, r.at)
@@ -1843,7 +1843,7 @@ fn again(b: Slice[Byte], from: Nat, name: str) -> Option[Bad] <alloc> {
 // The reader of the text, from its start, for a type that reads a part of
 // what it is given as JSON.
 pub fn json_in(text: str) -> In {
-  In(bytes: text.bytes, at: 0, mark: 0, json: Json(cases: .key, names: .written), forms: 0, deep: [], cases: 0, pending: false, tags: [])
+  In(bytes: text.bytes, at: 0, mark: 0, json: Json(cases: .key, names: .written), unknown: .ignore, forms: 0, deep: [], cases: 0, pending: false, tags: [])
 }
 
 // Whether the reader is at the end of its text, as one value is read from
@@ -1858,7 +1858,7 @@ pub fn json_ended(r: In) -> Result[(), ReadError] <alloc> {
 }
 
 pub trait FromJson[T] {
-  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] <alloc>
+  fn from_json_as(text: str, json: Json; unknown: Unknown = .ignore) -> Result[T, ReadError] <alloc>
   fn from_json(text: str) -> Result[T, ReadError] <alloc>
 }
 
@@ -1866,9 +1866,9 @@ impl[T] FromJson[T]
   requires Deserialize[T]
   requires Discard[T]
 {
-  fn from_json_as(text: str, json: Json) -> Result[T, ReadError] <alloc> {
+  fn from_json_as(text: str, json: Json; unknown: Unknown) -> Result[T, ReadError] <alloc> {
     bytes = text.bytes
-    r = In(bytes: bytes, at: 0, mark: 0, json: json, forms: 0, deep: [], cases: 0, pending: false, tags: [])
+    r = In(bytes: bytes, at: 0, mark: 0, json: json, unknown: unknown, forms: 0, deep: [], cases: 0, pending: false, tags: [])
     (w, result): (In, Result[T, ReadError]) = read(r)
     match result {
       .err(e) { Result.err(e) }

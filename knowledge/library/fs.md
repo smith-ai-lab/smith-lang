@@ -7,10 +7,10 @@ built:
   - "`std.fs` declares `fs`, with the six operations, `FsError`, and `File`, a struct with the system's handle and `path`, the path it was opened with, and neither `Copy` nor `Discard`, so a `File` that is not closed, is closed twice, or is used after it is closed is refused where it is compiled"
   - "`open` and `create`, written for `with`, which lend the file to the rest of the block and close it afterwards on every path, and `read_all` and `write_all`, written with the operations as the page shows them"
   - "on Linux, on x86-64 and arm64, the system answers every operation with the kernel's own calls: `openat`, `pread64`, `pwrite64`, `lseek`, `fchmod`, and `close`, with `read` and `write` for a file that has no places; a file that is not there is `missing`, one the program may not read or write is `denied`, and any other refusal is `failed` with the call and the system's error number, as `read: error 21` for a directory, each holding the path, and no operation ends the program"
-  - "`read` gives the bytes that lie in the range, fewer where the file ends first and none past its end, and reads a range of a file of a million bytes with one call; `write_all` of `executable: true` makes a file that the system runs, also one that existed"
+  - "`read` gives the bytes that lie in the range, fewer where the file ends first and none past its end, and reads a range of a file of a million bytes with one call; `write_all` of `mode: .executable` makes a file that the system runs, also one that existed"
   - "a task in a group that calls `read` or `write` suspends when the file would make it wait, as a pipe does with nothing in it, and the others run meanwhile, as [Files that have no places](#files-that-have-no-places) says; a function that holds a `File` while it may wait and does not carry `fs` is refused where it is compiled"
   - "`memory_fs`, a handler of `fs` over files kept in memory, with `file`, `handle`, and `release`, by which a handler that a test writes makes, reads the number of, and ends a `File`, as [Handlers](#handlers-of-fs) says"
-  - "on macOS, on x86-64 and arm64, the system answers with the wrappers of `libSystem` of the same names, `openat`, `pread`, `pwrite`, `lseek`, `fchmod`, `read`, `write`, and `close`, with the flags and the error numbers of that kernel, and on Windows, on x86-64 and arm64, with `CreateFileW`, which the path is given to in UTF-16, `ReadFile` and `WriteFile`, which a place is given to by an `OVERLAPPED`, `GetFileSizeEx`, and `CloseHandle`, with each refusal read as the same `missing`, `denied`, or `failed` as on Linux; a program that does not carry `fs` imports none of them, and a file written as `executable: true` is one that macOS runs, and one that Windows runs by its name, which has no mode"
+  - "on macOS, on x86-64 and arm64, the system answers with the wrappers of `libSystem` of the same names, `openat`, `pread`, `pwrite`, `lseek`, `fchmod`, `read`, `write`, and `close`, with the flags and the error numbers of that kernel, and on Windows, on x86-64 and arm64, with `CreateFileW`, which the path is given to in UTF-16, `ReadFile` and `WriteFile`, which a place is given to by an `OVERLAPPED`, `GetFileSizeEx`, and `CloseHandle`, with each refusal read as the same `missing`, `denied`, or `failed` as on Linux; a program that does not carry `fs` imports none of them, and a file written as `mode: .executable` is one that macOS runs, and one that Windows runs by its name, which has no mode"
   - "a `File` that a task holds, directly, in a struct, a list, or a lambda that never ran, is closed by the handler in force, once, when the task is cancelled or fails, as a handle of `net` is"
   - "`FsError` has a `Fmt` that writes the message of [Errors of the library](errors.md), so a `main` that returns a `Result` of it and uses `try` writes `photo.jpg: no such file` to standard error and ends with status 1 on each target `fs` is built for"
   - "not built: WebAssembly, where a program that carries `fs` is refused naming the target, and the wait of a task for a file that has no places on Windows"
@@ -34,7 +34,7 @@ fn copy(from: str, to: str) -> Result[(), FsError] <fs, alloc> {
 | Function | Does |
 | --- | --- |
 | `read_all(path)` | Gives every byte of the file |
-| `write_all(path, bytes, executable: false)` | Makes the file, or replaces it, with these bytes. `executable` makes it one the system will run |
+| `write_all(path, bytes, mode: .plain)` | Makes the file, or replaces it, with these bytes. `mode: .executable` makes it one the system will run |
 
 Both are written in Smith with the operations below, and a program that needs less than a whole file uses those. `open` is written for [`with`](../language/with.md): it lends the file to the rest of the block and closes it afterwards, on every path.
 
@@ -56,9 +56,15 @@ enum FsError {
   failed: (str, str)
 }
 
+// What a file that is made is: data, or a program that the system will run.
+enum Mode {
+  plain
+  executable
+}
+
 effect fs {
   fn open_file(path: str) -> Result[File, FsError]
-  fn create_file(path: str; executable: bool = false) -> Result[File, FsError]
+  fn create_file(path: str; mode: Mode = .plain) -> Result[File, FsError]
   fn close_file(f: take File)
   fn size(f: File) -> Result[Nat, FsError]
   fn read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc>
@@ -112,7 +118,7 @@ use std.fs (fs, release)
 fn refusing[T](body: fn() -> T <fs>) -> T {
   fs(
     open_file: fn(path) { .err(.denied(path)) },
-    create_file: fn(path, executable) { .err(.failed((path, "disk"))) },
+    create_file: fn(path, mode) { .err(.failed((path, "disk"))) },
     close_file: fn(f) { n = release(take f) },
     size: fn(f) { .err(.missing(f.path)) },
     read: fn(f, range) { .err(.missing(f.path)) },

@@ -29,9 +29,15 @@ impl Fmt[FsError] {
   }
 }
 
+// What a file that is made is: data, or a program that the system will run.
+pub enum Mode {
+  plain
+  executable
+}
+
 pub effect fs {
   pub fn open_file(path: str) -> Result[File, FsError]
-  pub fn create_file(path: str; executable: bool = false) -> Result[File, FsError]
+  pub fn create_file(path: str; mode: Mode = .plain) -> Result[File, FsError]
   pub fn close_file(f: take File)
   pub fn size(f: File) -> Result[Nat, FsError]
   pub fn read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc>
@@ -45,8 +51,8 @@ pub fn open[T](path: str, body: fn(File) -> Result[T, FsError]) -> Result[T, FsE
   result
 }
 
-pub fn create[T](path: str, body: fn(File) -> Result[T, FsError]; executable: bool = false) -> Result[T, FsError] <fs> {
-  f = try create_file(path, executable: executable)
+pub fn create[T](path: str, body: fn(File) -> Result[T, FsError]; mode: Mode = .plain) -> Result[T, FsError] <fs> {
+  f = try create_file(path, mode: mode)
   result = body(f)
   close_file(take f)
   result
@@ -58,8 +64,8 @@ pub fn read_all(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
   read(f, 0..n)
 }
 
-pub fn write_all(path: str, bytes: List[Byte]; executable: bool = false) -> Result[(), FsError] <fs> {
-  with f = create(path, executable: executable)
+pub fn write_all(path: str, bytes: List[Byte]; mode: Mode = .plain) -> Result[(), FsError] <fs> {
+  with f = create(path, mode: mode)
   write(f, 0, bytes)
 }
 
@@ -246,7 +252,7 @@ fn system_open_file(path: str) -> Result[File, FsError] <alloc, task> {
   .ok(File(handle: fd, opened: true, path: path))
 }
 
-fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <alloc, task> {
+fn system_create_file(path: str, mode: Mode) -> Result[File, FsError] <alloc, task> {
   where = try system_name(path)
   if on_windows() { return opened_on_windows(path, "create", where, 1073741824, 2) }
   mut flags: i64 = 524865
@@ -254,7 +260,7 @@ fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <all
   if __scheduled() { flags = if on_macos() { 16778757 } else { 526913 } }
   fd = __system(19, -100, where, flags, 438, 0, 0)
   if fd < 0 { return .err(failure(path, "create", fd)) }
-  if executable {
+  if mode == .executable {
     made = __system(27, fd, 493, 0, 0, 0, 0)
     if made < 0 {
       _ = __system(28, fd, 0, 0, 0, 0, 0)
@@ -481,7 +487,7 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
         .none { .err(.missing(path)) }
       }
     },
-    create_file: fn(path, executable) {
+    create_file: fn(path, mode) {
       match found(held, path) {
         .some(i) {
           held = holding(held, i, [])

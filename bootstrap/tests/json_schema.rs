@@ -373,12 +373,15 @@ fn printed(source: &str) -> String {
     String::from_utf8(scalar::run(&program).stdout).expect("text")
 }
 
-/// The settings a test writes and reads with, as source.
+/// The settings a test writes and reads with, as source. What follows the
+/// `Json` is the `unknown` of reading, which writing is not given.
+const WRITES: fn(&str) -> &str = |s| s.split(", unknown").next().unwrap();
+
 const SETTINGS: &[&str] = &[
     "Json(cases: .key, names: .written)",
     "Json(cases: .tag(\"type\"), names: .camel)",
-    "Json(cases: .key, names: .camel, unknown: .refuse)",
-    "Json(cases: .tag(\"kind\"), names: .written, unknown: .refuse)",
+    "Json(cases: .key, names: .camel), unknown: .refuse",
+    "Json(cases: .tag(\"kind\"), names: .written), unknown: .refuse",
 ];
 
 // What the comments say, as the text.
@@ -429,10 +432,11 @@ fn case(g: &mut Gen) -> Case {
     let top = ty(g, &mut defs, 3, parts);
     let (value, _) = value(g, &defs, &top);
     let settings = *g.pick(SETTINGS);
+    let writes = WRITES(settings);
     // Fields are written with an underscore, which `Names.camel` takes out.
     let defs_source = rename(&defs.source());
     let rest = format!(
-        "{defs_source}fn main() <console, alloc> {{\n  v: {} = {}\n  print(schema_text(Describe[{}].describe(json_schema({settings}))))\n  match to_json_as(v, {settings}) {{\n    .ok(t) {{ print(t) }}\n    .err(c) {{ print(\"clash\") }}\n  }}\n}}\n",
+        "{defs_source}fn main() <console, alloc> {{\n  v: {} = {}\n  print(schema_text(Describe[{}].describe(json_schema({settings}))))\n  match to_json_as(v, {writes}) {{\n    .ok(t) {{ print(t) }}\n    .err(c) {{ print(\"clash\") }}\n  }}\n}}\n",
         defs.name(&top),
         rename(&value),
         defs.name(&top),

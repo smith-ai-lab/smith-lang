@@ -6,7 +6,7 @@ status: partial
 built:
   - "`std.json`, which a program imports with `use std.json (to_json, to_json_as, Json)`, with `to_json` and `to_json_as` of any value that has `Serialize` and the `Json`, `Cases`, and `Names` of the settings, written in Smith from `Serialize` and `Writer` alone"
   - "every shape of the table below, a case of an enum as a key and as a tag, `Names.camel`, and the refusal of a tag that is also a member, with `Clash`"
-  - "`from_json` and `from_json_as` of any type that has `Deserialize` and `Discard`, which read the text with a `Reader` written in Smith, with `Unknown` in the settings, the errors with their line, column, and path, `describe`, and `RawJson` with its `Deserialize`, and nothing is built between the text and the value"
+  - "`from_json` and `from_json_as` of any type that has `Deserialize` and `Discard`, which read the text with a `Reader` written in Smith, with `unknown`, a parameter of `from_json_as`, the errors with their line, column, and path, `describe`, and `RawJson` with its `Deserialize`, and nothing is built between the text and the value"
   - "`RawJson` written with `to_json` as the bytes it holds, with `raw` of `Writer` and `Reader`, and under `value` where a case that is written with a tag holds it, `raw_json` and `raw_text`, and bytes that are not JSON, or not a text, written as a text"
   - "`json_string(s)` and `written_member(name, json)`, which give a text as a string of JSON and a field's name as `to_json_as` writes it, for a format built on `std.json`, as [JSON Schema](jsonschema.md)"
   - "not a float, which waits for `f64`, not a `Map`, which is not built, and not `JsonValue`"
@@ -75,7 +75,6 @@ JSON that another program defines has its own way to write a case and to name a 
 struct Json {
   cases: Cases
   names: Names
-  unknown: Unknown = .ignore
 }
 
 enum Cases {
@@ -94,7 +93,7 @@ enum Unknown {
 }
 ```
 
-`to_json(x)` is `to_json_as(x, Json(cases: .key, names: .written))`, and `from_json(text)` is `from_json_as(text, Json(cases: .key, names: .written))`. `unknown` is for reading, and says what is done with a member of the input that the type has no field of, as [Reading](#reading) says.
+`to_json(x)` is `to_json_as(x, Json(cases: .key, names: .written))`, and `from_json(text)` is `from_json_as(text, Json(cases: .key, names: .written))`. `unknown` is for reading and is no part of `Json`: `from_json_as` takes it as a parameter of its own, so `to_json_as` cannot be given a setting that only reading has, and one that is given it is refused where it is written. It says what is done with a member of the input that the type has no field of, as [Reading](#reading) says.
 
 **`Cases.tag`** writes the case's name as a member of the object, under the name given. With `.tag("type")`:
 
@@ -163,7 +162,7 @@ fn parse(text: str) -> Result[Tool, ReadError] <alloc> {
 
 ```
 fn from_json[T](text: str) -> Result[T, ReadError] <alloc>
-fn from_json_as[T](text: str, json: Json) -> Result[T, ReadError] <alloc>
+fn from_json_as[T](text: str, json: Json; unknown: Unknown = .ignore) -> Result[T, ReadError] <alloc>
 ```
 
 ### What each shape is read from
@@ -224,10 +223,10 @@ A tuple of two that is an array of three is `shape`, `the end of the list` wante
 use std.deserialize (ReadError, Problem)
 use std.json (from_json_as, Json, describe)
 
-refuse: Json = Json(cases: .key, names: .written, unknown: .refuse)
+json: Json = Json(cases: .key, names: .written)
 ```
 
-With `refuse`, `{"x":1,"y":3,"z":0}` read as a `Point` is ``1:15: z: unknown `z` ``.
+With `from_json_as(text, json, unknown: .refuse)`, `{"x":1,"y":3,"z":0}` read as a `Point` is ``1:15: z: unknown `z` ``.
 
 ## A part of the text that is read later
 
@@ -270,7 +269,7 @@ Reading asks for memory for the texts that hold an escape, for the lists of the 
 | `to_json(x)` | The JSON of `x`, with a case as a key and names as written |
 | `to_json_as(x, Json(cases: .tag("type"), names: .camel))` | `.ok` of the JSON of `x`, with the case under `type` and names in camel case, or `.err` of the first `Clash` |
 | `from_json(text)` | `.ok` of the value of the type the place needs, with a case as a key and names as written, or `.err` of the first `ReadError` |
-| `from_json_as(text, Json(cases: .tag("type"), names: .camel, unknown: .refuse))` | The same, with the case under `type`, names in camel case, and a member the type has no field of refused |
+| `from_json_as(text, Json(cases: .tag("type"), names: .camel), unknown: .refuse)` | The same, with the case under `type`, names in camel case, and a member the type has no field of refused |
 | `describe(e)` | The words of an error, as `1:59: tools[2].timeout: expected a whole number, found a text` |
 | `json_string(s)` | `s` as a string of JSON, between its quotes |
 | `written_member(name, json)` | The name of a field as `to_json_as` writes it with the settings, as `input_schema` is `inputSchema` with `Names.camel` |

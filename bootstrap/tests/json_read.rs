@@ -348,14 +348,13 @@ const SETTINGS: [Settings; 4] = [
 ];
 
 impl Settings {
-    fn source(self, refuse: bool) -> String {
+    fn source(self) -> String {
         let cases = match self.tag {
             None => ".key".to_string(),
             Some(t) => format!(".tag(\"{t}\")"),
         };
         let names = if self.camel { ".camel" } else { ".written" };
-        let unknown = if refuse { ", unknown: .refuse" } else { "" };
-        format!("Json(cases: {cases}, names: {names}{unknown})")
+        format!("Json(cases: {cases}, names: {names})")
     }
 }
 
@@ -895,13 +894,12 @@ fn reading(defs: &Defs, t: &Ty, v: &Val, settings: Settings, cases: &[Case]) -> 
         defs.source()
     );
     out.push_str(&format!(
-        "fn main() <console, alloc> {{\n  v: {name} = {}\n  keep = {}\n  refuse = {}\n",
+        "fn main() <console, alloc> {{\n  v: {name} = {}\n  keep = {}\n",
         v.source(),
-        settings.source(false),
-        settings.source(true)
+        settings.source()
     ));
     for (i, case) in cases.iter().enumerate() {
-        let json = if case.refuse { "refuse" } else { "keep" };
+        let json = if case.refuse { "keep, unknown: .refuse" } else { "keep" };
         out.push_str(&format!(
             "  r{i}: Result[{name}, ReadError] = from_json_as({}, {json})\n  match r{i} {{\n    .ok(w) {{ print(\"ok {{to_json(w) == to_json(v)}}\") }}\n    .err(e) {{ print(say(e)) }}\n  }}\n",
             text_source(&case.text)
@@ -984,7 +982,7 @@ fn every_example_of_the_reading_part_of_the_page_gives_what_the_page_says() {
         expected: described(text, text.find(at).unwrap(), path, what),
     };
     let keep = "Json(cases: .key, names: .written)";
-    let refuse = "Json(cases: .key, names: .written, unknown: .refuse)";
+    let refuse = "Json(cases: .key, names: .written), unknown: .refuse";
     let mcp = "Json(cases: .tag(\"type\"), names: .camel)";
     let tools = r#"{"tools":[{"name":"a"},{"name":"b"},{"name":"c","timeout":"3"}]}"#;
     let examples = [
@@ -1088,7 +1086,7 @@ fn a_value_written_by_to_json_as_is_read_back_as_the_value_for_each_setting(part
         for (k, settings) in SETTINGS.iter().enumerate() {
             source.push_str(&format!(
                 "  j{k} = {}\n  match to_json_as(v, j{k}) {{\n    .ok(t{k}) {{\n      r{k}: Result[{name}, ReadError] = from_json_as(t{k}, j{k})\n      match r{k} {{\n        .ok(w) {{\n          match to_json_as(w, j{k}) {{\n            .ok(u{k}) {{ print(\"ok {{u{k} == t{k}}}\") }}\n            .err(c) {{ print(\"clash\") }}\n          }}\n        }}\n        .err(e) {{ print(say(e)) }}\n      }}\n    }}\n    .err(c) {{ print(\"clash\") }}\n  }}\n",
-                settings.source(false)
+                settings.source()
             ));
         }
         source.push_str("}\n");
@@ -1795,7 +1793,7 @@ fn a_rawjson_holds_the_bytes_of_its_value_and_reads_later_to_the_value_a_direct_
             "{TEXT}{WRAP}{}fn main() <console, alloc> {{\n  v: {name} = {}\n  j = {}\n  r: Result[Wrap, ReadError] = from_json_as({}, j)\n  match r {{\n    .ok(w) {{\n      print(raw_text(w.body))\n      later: Result[{name}, ReadError] = from_json_as(raw_text(w.body), j)\n      match later {{\n        .ok(x) {{ print(\"{{to_json(x) == to_json(v)}}\") }}\n        .err(e) {{ print(say(e)) }}\n      }}\n    }}\n    .err(e) {{ print(say(e)) }}\n  }}\n}}\n",
             defs.source(),
             v.source(),
-            settings.source(false),
+            settings.source(),
             text_source(&text)
         );
         let source = with_import(&["from_json_as", "Json", "raw_text", "RawJson", "to_json"], source);

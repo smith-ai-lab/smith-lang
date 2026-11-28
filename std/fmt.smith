@@ -10,17 +10,24 @@ fn text(bytes: take List[Byte]) -> str {
   }
 }
 
-fn hex_digit(d: u64, upper: bool) -> Byte {
+// The letters of a number in base 16 that are above 9.
+pub enum Letters {
+  upper
+  lower
+}
+
+fn hex_digit(d: u64, letters: Letters) -> Byte {
   if d < 10 {
     wrapping_narrow(wrapping_add(48, d))
-  } else if upper {
-    wrapping_narrow(wrapping_add(55, d))
   } else {
-    wrapping_narrow(wrapping_add(87, d))
+    match letters {
+      .upper { wrapping_narrow(wrapping_add(55, d)) }
+      .lower { wrapping_narrow(wrapping_add(87, d)) }
+    }
   }
 }
 
-pub fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc> {
+pub fn hex(n: u64; width: Byte = 0, letters: Letters = .upper) -> str <alloc> {
   mut digits: List[Byte] = []
   if 16 <= width {
     loop i in 16..width { digits = push(take digits, '0') }
@@ -30,7 +37,7 @@ pub fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc> {
     pos = 15 - j
     d = bit_and(shift_right(n, pos * 4), 15)
     if d > 0 { started = true }
-    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, upper)) }
+    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, letters)) }
   }
   text(take digits)
 }
@@ -45,7 +52,7 @@ pub fn binary(n: u64; width: Byte = 0) -> str <alloc> {
     pos = 63 - j
     d = bit_and(shift_right(n, pos), 1)
     if d > 0 { started = true }
-    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, true)) }
+    if started or pos < width or pos == 0 { digits = push(take digits, hex_digit(d, .upper)) }
   }
   text(take digits)
 }

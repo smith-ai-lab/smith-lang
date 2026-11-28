@@ -671,7 +671,7 @@ fn a_struct_is_built_with_its_fields_named_and_a_function_type_has_no_semicolon(
 }
 
 /// The options of the library are given by name, and the rest by position or by name: the
-/// attributes of `std.html`, `width` and `upper` of `std.fmt`, and `end` and
+/// attributes of `std.html`, `width` and `letters` of `std.fmt`, and `end` and
 /// `to` of `print`.
 fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
     let program = |body: &str| {
@@ -681,8 +681,8 @@ fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
         )
     };
     let built = |body: &str| errors(&program(body)).is_empty();
-    assert!(built("print(hex(233, width: 4, upper: false))"));
-    assert!(built("print(hex(233, upper: false, width: 4))"));
+    assert!(built("print(hex(233, width: 4, letters: .lower))"));
+    assert!(built("print(hex(233, letters: .lower, width: 4))"));
     assert!(built("print(binary(5, width: 8))"));
     assert!(built("print(\"a\", end: \"\", to: .stderr)"));
     for body in [
@@ -697,7 +697,7 @@ fn the_library_gives_its_options_by_name_and_the_rest_by_position() {
         );
     }
     assert!(built("print(hex(n: 233))"));
-    assert!(built("print(hex(upper: false, n: 233))"));
+    assert!(built("print(hex(letters: .lower, n: 233))"));
     assert!(built("print(text: \"a\", end: \"\")"));
     // The attributes of an element are by name, and its block is the one
     // argument it takes by position.

@@ -10,25 +10,30 @@ status: built
 The module `std.fmt` holds `hex` and `binary`, which write a whole number as the text of its digits in another base. They are ordinary functions: a string's braces hold an expression and no format code, as [Strings that hold expressions](../language/interpolation.md) says, so a number in another base is written by calling one inside the braces.
 
 ```
-fn hex(n: u64; width: Byte = 0, upper: bool = true) -> str <alloc>
+enum Letters {
+  upper
+  lower
+}
+
+fn hex(n: u64; width: Byte = 0, letters: Letters = .upper) -> str <alloc>
 fn binary(n: u64; width: Byte = 0) -> str <alloc>
 ```
 
-Both allocate, as the text is new memory. `width` and `upper` are options, so they come after the `;` and a call names them, as [Functions](../language/functions.md#parameters-by-position-and-by-name) says.
+Both allocate, as the text is new memory. `width` and `letters` are options, so they come after the `;` and a call names them, as [Functions](../language/functions.md#parameters-by-position-and-by-name) says.
 
 ## Base 16
 
-`hex` gives the digits of `n` in base 16, with no prefix, in upper case.
+`hex` gives the digits of `n` in base 16, with no prefix, in upper case. `letters` says which: `Letters` has the cases `upper` and `lower`, so a flag that is not one of them is refused where it is written.
 
 ```
 use std.fmt (hex)
 
 fn demo() -> (str, str, str) <alloc> {
-  (hex(255), hex(233, width: 4), hex(255, upper: false))
+  (hex(255), hex(233, width: 4), hex(255, letters: .lower))
 }
 ```
 
-`hex(255)` is `"FF"`, `hex(233, width: 4)` is `"00E9"`, and `hex(255, upper: false)` is `"ff"`. The second is how a lexer error names a character, as in `"U+{hex(233, width: 4)}"`, which is `U+00E9`.
+`hex(255)` is `"FF"`, `hex(233, width: 4)` is `"00E9"`, and `hex(255, letters: .lower)` is `"ff"`. The second is how a lexer error names a character, as in `"U+{hex(233, width: 4)}"`, which is `U+00E9`.
 
 ## Base 2
 
@@ -74,6 +79,6 @@ fn byte(b: Byte) -> str <alloc> { hex(b, width: 2) }
 | --- | --- |
 | `hex(n)` | The digits of `n` in base 16, in upper case, with `alloc` |
 | `hex(n, width: w)` | The same, with zeros before them until there are `w` digits |
-| `hex(n, upper: false)` | The same, in lower case |
+| `hex(n, letters: .lower)` | The same, in lower case |
 | `binary(n)` | The digits of `n` in base 2, with `alloc` |
 | `binary(n, width: w)` | The same, with zeros before them until there are `w` digits |
