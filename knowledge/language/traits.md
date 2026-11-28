@@ -12,6 +12,7 @@ built:
   - "`FromRequest` of `std.http` is found for the struct of a function's parameters only when each parameter has `FromText`, or is an `Option` of a type that has it, except at most one that has `Deserialize`; a call that asks for it for another struct is refused with an error that names the parameter"
   - "a `requires` on a function of a trait, a call of another function of the trait that gives a `bool` on its parameters, which each call proves and which holds in the body of each `impl` of it; and a `requires` of any function that names a trait's function that gives a `bool`, as `requires Add.valid(x, x)`, which a caller proves for the type it calls with, by what the `impl` that type picks says when its `valid` is one expression of comparisons of whole numbers, and where the type is a type parameter of the caller, by a `requires` of the same call; an `ensures` of a trait's function is not built"
   - "`Add`, `Sub`, and `Mul`, declared by the prelude with `impl`s for the whole number types of 64 bits or fewer, as [Operators](operators.md) says"
+  - "an `impl` that marks [`mut`](mut-parameters.md#in-a-trait-a-function-type-and-an-effect) exactly the parameters its trait's function marks, and one that marks another, or leaves one out, refused at the parameter, naming the trait"
   - "of two `impl`s that fit a call, the one for fewer types, chosen at the concrete type and not inside a generic function; two that fit with neither for fewer types, or for the same types, are refused"
 ---
 
@@ -126,7 +127,7 @@ impl Named[Cat] {
 }
 ```
 
-It is refused: "`name_of` differs from its signature in `Named`", and the fix is to write `fn name_of(x: Cat) -> str`.
+It is refused: "`name_of` differs from its signature in `Named`", and the fix is to write `fn name_of(x: Cat) -> str`. A parameter the trait's function marks [`mut`](mut-parameters.md#in-a-trait-a-function-type-and-an-effect) is marked `mut` by the `impl`, and no other is.
 
 A trait has at most one `impl` for a choice of types. A second `impl Named[Cat]` is refused: "`Named` is already implemented for `Cat`".
 

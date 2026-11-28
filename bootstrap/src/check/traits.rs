@@ -3,6 +3,7 @@
 //! given, and the traits the prelude defines.
 
 use super::*;
+use crate::parser::{gives_back, own_result};
 
 /// The traits the language and its prelude define, which the compiler
 /// does not build yet.
@@ -1763,6 +1764,34 @@ impl<'a> Checker<'a> {
         if self.errors.len() > before {
             return;
         }
+        // The implementation changes the parameters the trait's function
+        // changes, and no others.
+        for (p, t) in f.params.iter().zip(&trait_fn.params) {
+            if p.mutable == t.mutable {
+                continue;
+            }
+            let error = if t.mutable {
+                Error::new(
+                    p.pos,
+                    format!(
+                        "`{}` changes `{}` for its caller in `{trait_name}`, so an implementation marks it `mut`",
+                        f.name, t.name
+                    ),
+                )
+                .with_fix(format!("write `{}: mut {}`", p.name, written_type(&p.ty)))
+            } else {
+                Error::new(
+                    p.pos,
+                    format!(
+                        "`{}` is marked `mut`, where `{}` does not change it in `{trait_name}`",
+                        p.name, f.name
+                    ),
+                )
+                .with_fix("take away `mut`")
+            };
+            self.errors.push(error);
+            return;
+        }
         // The trait's types are the implementation's, and the function's own
         // type parameters stand for themselves.
         let n = info.scope.names.len();
@@ -1795,9 +1824,19 @@ impl<'a> Checker<'a> {
         if same {
             return;
         }
-        let params: Vec<String> = (wanted.iter())
-            .map(|(n, t)| format!("{n}: {}", defs.text(t, scope)))
+        // A parameter the trait's function changes is written `mut`, and what
+        // it gives back is not written as its result.
+        let params: Vec<String> = (wanted.iter().zip(&trait_fn.params))
+            .map(|((n, t), p)| {
+                let marked = if p.mutable { "mut " } else { "" };
+                format!("{n}: {marked}{}", defs.text(t, scope))
+            })
             .collect();
+        let gives = match (&gives, gives_back(trait_fn), own_result(trait_fn)) {
+            (_, false, _) => gives,
+            (Ty::Tuple(items), true, Some(_)) => items.last().cloned().unwrap_or(Ty::Nothing),
+            _ => Ty::Nothing,
+        };
         let split = sig.named_from.unwrap_or(params.len()).min(params.len());
         let (before, after) = params.split_at(split);
         let params = if after.is_empty() {
@@ -1847,8 +1886,25 @@ impl<'a> Checker<'a> {
         let outer = std::mem::replace(&mut self.no_impl, false);
         let refused = self.refusals;
         let mistakes = self.errors.len();
+        // A call that changes a value with `mut` gives back what it is
+        // passed, so what it gives is settled by its arguments alone.
+        let gives_back = call.args.iter().any(|a| a.given_back);
+        let want = if gives_back { &Want::Any } else { want };
         let mut sol = self.arguments(body, call, sig, false, Some((k, want)), None);
         let reported = std::mem::replace(&mut self.no_impl, outer);
+        if gives_back && self.errors.len() > mistakes {
+            return Ty::Unknown;
+        }
+        if gives_back
+            && self.kept_mistake(
+                body,
+                call,
+                &defs.file.traits[k].functions[fi],
+                &sig.gives.solved(&sol),
+            )
+        {
+            return Ty::Unknown;
+        }
         self.call_type_args(body, call, k, &mut sol);
         // A type of the trait that nothing names is the one its default says.
         for (i, j) in defs.defaulted(k) {

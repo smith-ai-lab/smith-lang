@@ -6,7 +6,7 @@
 //! back, and the rest of what `mut` means is what that means.
 
 use super::*;
-use crate::parser::{Function, Param, changed_place, own_result};
+use crate::parser::{Function, Param, Type, changed_place, own_result};
 
 /// A place passed `mut`: the name, the fields after it, and the item of the
 /// array or list they name, if it is one.
@@ -61,6 +61,58 @@ pub(super) fn old_name<'e>(defs: &Defs, call: &'e Call) -> Option<&'e str> {
             _ => None,
         },
         _ => None,
+    }
+}
+
+/// The parameter an argument is given to: its name, whether it is marked
+/// `mut`, and, for a parameter a lambda may be passed to, how the lambda
+/// marks its own.
+#[derive(Clone)]
+struct Marked {
+    name: String,
+    mutable: bool,
+    lambda: Option<LambdaMarks>,
+}
+
+/// How a lambda passed where a function is needed marks its parameters:
+/// whether the function changes each, whether it gives a result besides
+/// them, and how the type of each is written.
+#[derive(Clone)]
+struct LambdaMarks {
+    muts: Vec<bool>,
+    own: bool,
+    types: Vec<String>,
+}
+
+/// How a lambda passed to a parameter of a function type marks its own
+/// parameters, when the parameter is of one. The type is lowered, so what it
+/// gives is the parameters it changes, and after them what it gives besides.
+fn lambda_marks(p: &Param) -> Option<LambdaMarks> {
+    let (result, args) = p.ty.args.split_last().filter(|_| p.ty.function)?;
+    let changed: Vec<&Type> = (args.iter().zip(&p.muts))
+        .filter(|(_, m)| **m)
+        .map(|(t, _)| t)
+        .collect();
+    let own = match changed[..] {
+        [] => false,
+        [one] => one != result,
+        _ => result.args.len() > changed.len(),
+    };
+    Some(LambdaMarks {
+        muts: (0..args.len())
+            .map(|i| p.muts.get(i) == Some(&true))
+            .collect(),
+        own,
+        types: args.iter().map(written_type).collect(),
+    })
+}
+
+/// How the lambda a handler gives for an operation marks its parameters.
+fn operation_marks(f: &Function) -> LambdaMarks {
+    LambdaMarks {
+        muts: f.params.iter().map(|p| p.mutable).collect(),
+        own: own_result(f).is_some(),
+        types: f.params.iter().map(|p| written_type(&p.ty)).collect(),
     }
 }
 
@@ -166,38 +218,168 @@ impl<'a> Checker<'a> {
         self.errors.len() > before
     }
 
-    fn mut_mistakes(&mut self, body: &Body<'a>, call: &Call) {
+    /// The parameter each argument of a call is given to, where it is known.
+    /// A parameter of a function type has no name, and is named by the
+    /// argument. `None` when the arguments fit no parameter, which is reported
+    /// where they are matched.
+    fn marked_params(&self, body: &Body<'a>, call: &Call) -> Option<Vec<Option<Marked>>> {
         let defs = self.defs;
-        let local = body.names.iter().any(|(n, _)| *n == call.callee);
-        let f = (call.through.is_none() && call.qualifier.is_none() && !local)
-            .then(|| defs.function(call.name_pos, &call.callee))
-            .flatten();
-        let params: Vec<Option<&Param>> = match f {
-            Some(f) => {
-                let sig = &defs.signatures[f];
-                let written = &defs.file.functions[f].params;
-                // Arguments that fit no parameter are reported where they are
-                // matched to them.
-                let Some(at) = params_of(&sig.params, sig.by_position(), &call.args) else {
-                    return;
-                };
+        let unknown = vec![None; call.args.len()];
+        let by_sig = |sig: &Signature, written: &[Param]| {
+            let at = params_of(&sig.params, sig.by_position(), &call.args)?;
+            Some(
                 (at.iter())
                     .map(|&i| {
                         let (name, _) = sig.params.get(i)?;
-                        written.iter().find(|p| p.name == *name)
+                        let p = written.iter().find(|p| p.name == *name)?;
+                        Some(Marked {
+                            name: p.name.clone(),
+                            mutable: p.mutable,
+                            lambda: lambda_marks(p),
+                        })
                     })
-                    .collect()
-            }
-            None => vec![None; call.args.len()],
+                    .collect(),
+            )
         };
+        if call.through.is_some() {
+            return Some(unknown);
+        }
+        if body.names.iter().any(|(n, _)| *n == call.callee) {
+            // A parameter of a function type is called with its arguments in
+            // the order of its parameters.
+            let muts = (body.f.into_iter().flat_map(|f| &f.params))
+                .find(|p| p.name == call.callee && p.ty.function)
+                .map(|p| &p.muts);
+            return Some(match muts {
+                Some(muts) if call.qualifier.is_none() => (call.args.iter().enumerate())
+                    .map(|(i, a)| {
+                        Some(Marked {
+                            name: written_expr(&a.value),
+                            mutable: *muts.get(i)?,
+                            lambda: None,
+                        })
+                    })
+                    .collect(),
+                _ => unknown,
+            });
+        }
+        // A handler, given a lambda for each operation by its name.
+        if call.qualifier.is_none()
+            && let Some(e) = defs.effect_named(&call.callee)
+        {
+            let def = &defs.file.effects[e];
+            return Some(
+                (call.args.iter())
+                    .map(|a| {
+                        let (op, _) = a.name.as_ref()?;
+                        let f = &defs.file.functions[defs.function(def.pos, op)?];
+                        Some(Marked {
+                            name: op.clone(),
+                            mutable: false,
+                            lambda: Some(operation_marks(f)),
+                        })
+                    })
+                    .collect(),
+            );
+        }
+        if call.qualifier.is_none()
+            && let Some(f) = defs.function(call.name_pos, &call.callee)
+        {
+            return by_sig(&defs.signatures[f], &defs.file.functions[f].params);
+        }
+        // A function of a trait, written plain or with its trait, whose
+        // parameters matter only to a call that passes `mut`.
+        let qualifier_is_trait = (call.qualifier.as_ref())
+            .is_none_or(|(q, at)| matches!(defs.type_at(*at, q), Some(Item::Trait(_))));
+        if !qualifier_is_trait || !call.args.iter().any(|a| a.mutable.is_some()) {
+            return Some(unknown);
+        }
+        let found = (defs
+            .trait_fns_at(call.name_pos, &call.callee)
+            .into_iter()
+            .flatten())
+        .find(|(k, _)| {
+            (call.qualifier.as_ref()).is_none_or(|(q, _)| defs.file.traits[*k].name == *q)
+        });
+        match found {
+            Some(&(k, fi)) => by_sig(
+                &defs.trait_sigs[k][fi],
+                &defs.file.traits[k].functions[fi].params,
+            ),
+            None => Some(unknown),
+        }
+    }
+
+    /// Refuses a lambda passed where a function is needed that marks a
+    /// parameter `mut` differently: the lambda marks `mut` exactly the
+    /// parameters the function type does, as a function does.
+    fn lambda_mistakes(&mut self, call: &Call, params: &[Option<Marked>]) {
+        for (arg, param) in call.args.iter().zip(params) {
+            let (
+                Expr::Lambda(l),
+                Some(Marked {
+                    lambda: Some(marks),
+                    ..
+                }),
+            ) = (&arg.value, param)
+            else {
+                continue;
+            };
+            let LambdaMarks { muts, own, types } = marks;
+            if l.params.len() != muts.len() {
+                continue;
+            }
+            for (i, ((name, pos), &needed)) in l.params.iter().zip(muts).enumerate() {
+                let marked = l.mutable.get(i) == Some(&true);
+                if marked && !needed {
+                    self.errors.push(
+                        Error::new(
+                            *pos,
+                            format!(
+                                "`{name}` is marked `mut`, where the function this lambda is passed as does not change it"
+                            ),
+                        )
+                        .with_fix("take away `mut`"),
+                    );
+                } else if needed && !marked {
+                    self.errors.push(
+                        Error::new(
+                            *pos,
+                            format!(
+                                "the function this lambda is passed as changes `{name}` for its caller, so the lambda marks it `mut`"
+                            ),
+                        )
+                        .with_fix(format!("write `{name}: mut {}`", types[i])),
+                    );
+                }
+            }
+            if *own && l.result.is_none() && l.mutable.contains(&true) {
+                self.errors.push(Error::unsupported(
+                    l.pos,
+                    "a lambda that changes a parameter marked `mut` and gives a result, with its result's type left out",
+                ));
+            }
+        }
+    }
+
+    fn mut_mistakes(&mut self, body: &Body<'a>, call: &Call) {
+        let defs = self.defs;
+        let Some(params) = self.marked_params(body, call) else {
+            return;
+        };
+        self.lambda_mistakes(call, &params);
+        let f = (call.through.is_none() && call.qualifier.is_none())
+            .then(|| defs.function(call.name_pos, &call.callee))
+            .flatten()
+            .filter(|_| !body.names.iter().any(|(n, _)| *n == call.callee));
         let callee = written_name(&call.callee);
         let mut unmarked = None;
         let mut places: Vec<Place> = Vec::new();
         for (arg, param) in call.args.iter().zip(&params) {
-            let changed = param.is_some_and(|p| p.mutable);
+            let changed = param.as_ref().is_some_and(|p| p.mutable);
             match arg.mutable {
                 None if changed => {
-                    unmarked = unmarked.or(Some((arg, param.expect("changed"))));
+                    unmarked = unmarked.or(Some((arg, &param.as_ref().expect("changed").name)));
                 }
                 None => {}
                 Some(at) if !changed => self.errors.push(
@@ -262,7 +444,7 @@ impl<'a> Checker<'a> {
         if let Some((arg, param)) = unmarked {
             let mut fixed = call.clone();
             for (a, p) in fixed.args.iter_mut().zip(&params) {
-                if p.is_some_and(|p| p.mutable) && a.mutable.is_none() {
+                if p.as_ref().is_some_and(|p| p.mutable) && a.mutable.is_none() {
                     a.mutable = Some(a.value.pos());
                 }
             }
@@ -272,8 +454,7 @@ impl<'a> Checker<'a> {
                 Error::new(
                     arg.value.pos(),
                     format!(
-                        "`{callee}` changes `{}` for its caller, so the call marks it `mut`",
-                        param.name
+                        "`{callee}` changes `{param}` for its caller, so the call marks it `mut`"
                     ),
                 )
                 .with_fix(fix),

@@ -11192,6 +11192,7 @@ fn construction_as_call(defs: &Defs, s: usize) -> (Function, Signature) {
             take: false,
             mutable: false,
             takes: Vec::new(),
+            muts: Vec::new(),
             effects: Vec::new(),
             by_name: false,
         });

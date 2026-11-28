@@ -237,6 +237,10 @@ pub struct Function {
 /// The effects in angle brackets, each with where it is written.
 type Effects = Vec<(String, Pos)>;
 
+/// Whether each parameter of a function type is marked `take`, and whether
+/// each is marked `mut`.
+pub(crate) type Marks = (Vec<bool>, Vec<bool>);
+
 /// A function's name and where it is, its type parameters, its
 /// parameters, its result with the name it is given, and its effects.
 type Signature = (
@@ -286,8 +290,12 @@ pub struct Param {
     /// its caller, and is lowered to take it and give it back.
     pub mutable: bool,
     /// For a parameter of a function type, whether each of the function's
-    /// own parameters is marked `take`.
+    /// own parameters is marked `take`, which one marked `mut` is once the
+    /// type is lowered.
     pub takes: Vec<bool>,
+    /// For a parameter of a function type, whether each of the function's
+    /// own parameters is marked `mut`.
+    pub muts: Vec<bool>,
     /// For a parameter of a function type, the effects the function carries.
     pub effects: Effects,
     /// Whether it is written after the `;` of the parameter list, so that a
@@ -614,6 +622,9 @@ pub struct Lambda {
     /// The type written for each parameter, if it is, and the one written for
     /// the result.
     pub types: Vec<Option<Type>>,
+    /// Whether each parameter is marked `mut` before its type, which the
+    /// lambda changes for its caller, as a function does.
+    pub mutable: Vec<bool>,
     pub result: Option<Type>,
     pub body: Vec<Stmt>,
     /// Where the `}` that closes its body is.
@@ -1033,7 +1044,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
     top_values::read_as_calls(&mut functions, &mut p.errors);
     mut_parameters::lower(
         &mut functions,
-        (&impls, &traits),
+        (&mut impls, &mut traits),
         &mut p.errors,
         &mut p.unbuilt,
     );
@@ -1951,12 +1962,12 @@ impl Parser<'_> {
     }
 
     /// Parses a type, and for a function type whether each of its parameters
-    /// is marked `take`.
-    fn ty_taking(&mut self) -> Result<(Type, Vec<bool>, Effects), Error> {
+    /// is marked `take` and `mut`.
+    fn ty_taking(&mut self) -> Result<(Type, Marks, Effects), Error> {
         if self.tok() == &Tok::Keyword("fn") {
             return self.function_type(true);
         }
-        Ok((self.ty()?, Vec::new(), Vec::new()))
+        Ok((self.ty()?, (Vec::new(), Vec::new()), Vec::new()))
     }
 
     /// Reads an array type from its `[`: the size in brackets, or a size for

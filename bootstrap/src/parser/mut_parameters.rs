@@ -14,31 +14,109 @@ use super::*;
 /// item they name, if it is one.
 pub(crate) type Place = (String, Pos, Vec<Named>, Element);
 
-/// Lowers each function of `functions` that has a parameter marked `mut`,
-/// and each call on a line of its own that passes a place `mut`. What is not
-/// built of `mut` goes in `unbuilt`.
+/// Lowers each function of `functions`, of an implementation, of a trait,
+/// and each operation of an effect, that has a parameter marked `mut`, each
+/// lambda that has one, and each call on a line of its own that passes a
+/// place `mut`. A signature with no body, as a trait's or an operation's, is
+/// lowered to take the parameter and give it back. What is not built of `mut`
+/// goes in `unbuilt`.
 pub(super) fn lower(
     functions: &mut [Function],
-    (impls, traits): (&[Impl], &[Trait]),
+    (impls, traits): (&mut [Impl], &mut [Trait]),
     errors: &mut Vec<Error>,
     unbuilt: &mut Vec<Error>,
 ) {
-    let declared =
-        (impls.iter().flat_map(|i| &i.functions)).chain(traits.iter().flat_map(|t| &t.functions));
+    let declared = (impls.iter_mut().flat_map(|i| &mut i.functions))
+        .chain(traits.iter_mut().flat_map(|t| &mut t.functions))
+        .chain(functions.iter_mut());
     for f in declared {
-        if let Some(p) = f.params.iter().find(|p| p.mutable) {
-            unbuilt.push(Error::unsupported(
-                p.pos,
-                "`mut` in a trait or an implementation",
-            ));
-        }
-    }
-    for f in functions.iter_mut() {
         if f.params.iter().any(|p| p.mutable) {
             held_by_lambdas(f, errors);
             give_back(f, errors, unbuilt);
         }
+        for stmt in crate::check::statements(&f.body) {
+            if let Stmt::Define {
+                value: Expr::Lambda(l),
+                ..
+            } = stmt
+                && let Some(at) = (l.params.iter().zip(&l.mutable)).find(|(_, m)| **m)
+            {
+                unbuilt.push(Error::unsupported(
+                    at.0.1,
+                    "a lambda that changes a parameter marked `mut`, bound to a name",
+                ));
+            }
+        }
+        for stmt in &mut f.body {
+            each_expr(stmt, &mut |e| lambdas_given_back(e, errors));
+        }
         statements(&mut f.body);
+    }
+}
+
+/// Makes each lambda in an expression that has a parameter marked `mut`
+/// take it and give it back, as a function does. One that writes no result
+/// gives nothing besides the parameters.
+fn lambdas_given_back(e: &mut Expr, errors: &mut Vec<Error>) {
+    each_child(e, &mut |c| lambdas_given_back(c, errors));
+    each_block(e, &mut |b| {
+        for stmt in b {
+            each_expr(stmt, &mut |c| lambdas_given_back(c, errors));
+        }
+    });
+    let Expr::Lambda(l) = e else {
+        return;
+    };
+    let changed: Vec<(String, Type)> = (l.params.iter().zip(&l.types).zip(&l.mutable))
+        .filter(|(_, m)| **m)
+        .filter_map(|(((name, _), ty), _)| Some((name.clone(), ty.clone()?)))
+        .collect();
+    if changed.is_empty() {
+        return;
+    }
+    let names: Vec<&str> = changed.iter().map(|(n, _)| n.as_str()).collect();
+    let own = l.result.take();
+    let gives = own.is_some();
+    if gives {
+        l.result = Some(given_type(&changed, own));
+    }
+    returns(&mut l.body, &names, ("the lambda", gives, errors));
+    ends_given(&mut l.body, &names, gives, l.end);
+}
+
+/// The type a function that gives back the parameters `changed` gives: the
+/// one parameter, or a tuple of them, and after them what it gives besides,
+/// `own`, if it gives a result.
+fn given_type(changed: &[(String, Type)], own: Option<Type>) -> Type {
+    let mut types: Vec<Type> = changed.iter().map(|(_, t)| t.clone()).collect();
+    types.extend(own);
+    match &types[..] {
+        [ty] => ty.clone(),
+        _ => Type {
+            name: String::new(),
+            pos: changed[0].1.pos,
+            args: types,
+            function: false,
+            range: None,
+            statement: None,
+            sizes: Vec::new(),
+        },
+    }
+}
+
+/// Makes a body give back the parameters `names` where it ends, before what
+/// it ends with when it `gives` a result.
+fn ends_given(body: &mut Vec<Stmt>, names: &[&str], gives: bool, end: Pos) {
+    match body.last_mut() {
+        // A body that ends with `return` gives the parameters back there.
+        Some(Stmt::Expr(Expr::Return { .. })) => {}
+        // What the body ends with comes after the parameters.
+        Some(Stmt::Expr(last)) if gives => {
+            let value = std::mem::replace(last, Expr::Break { pos: end });
+            *last = given(names, Some(value), end);
+        }
+        _ if gives => {}
+        _ => body.push(Stmt::Expr(given(names, None, end))),
     }
 }
 
@@ -143,13 +221,8 @@ pub(crate) fn own_result(f: &Function) -> Option<&Type> {
 }
 
 /// Makes a function with parameters marked `mut` take them and give them
-/// back.
+/// back. A signature with no body is changed and nothing more.
 fn give_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>) {
-    let first = f.params.iter().find(|p| p.mutable).expect("one is mut");
-    if is_operation(f) {
-        unbuilt.push(Error::unsupported(first.pos, "`mut` in an operation"));
-        return;
-    }
     if let Some(r) = f
         .result_name
         .as_ref()
@@ -172,33 +245,14 @@ fn give_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>
         .collect();
     let names: Vec<&str> = changed.iter().map(|(n, _)| n.as_str()).collect();
     let own = f.result.take();
-    let mut types: Vec<Type> = changed.iter().map(|(_, t)| t.clone()).collect();
-    types.extend(own.clone());
-    f.result = Some(match &types[..] {
-        [ty] => ty.clone(),
-        _ => Type {
-            name: String::new(),
-            pos: changed[0].1.pos,
-            args: types,
-            function: false,
-            range: None,
-            statement: None,
-            sizes: Vec::new(),
-        },
-    });
     let gives = own.is_some();
-    returns(&mut f.body, &names, (&f.name, gives, errors));
-    match f.body.last_mut() {
-        // A body that ends with `return` gives the parameters back there.
-        Some(Stmt::Expr(Expr::Return { .. })) => {}
-        // What the body ends with comes after the parameters.
-        Some(Stmt::Expr(last)) if gives => {
-            let value = std::mem::replace(last, Expr::Break { pos: f.end });
-            *last = given(&names, Some(value), f.end);
-        }
-        _ if gives => {}
-        _ => f.body.push(Stmt::Expr(given(&names, None, f.end))),
+    f.result = Some(given_type(&changed, own));
+    if is_operation(f) {
+        return;
     }
+    let name = format!("`{}`", f.name);
+    returns(&mut f.body, &names, (&name, gives, errors));
+    ends_given(&mut f.body, &names, gives, f.end);
 }
 
 /// What a function gives back: the parameter marked `mut`, or a tuple of
@@ -218,7 +272,7 @@ fn given(names: &[&str], value: Option<Expr>, pos: Pos) -> Expr {
     }
 }
 
-/// The function a `return` is in, whether it gives a result, and the
+/// The function a `return` is in, as a message names it, whether it gives a result, and the
 /// mistakes found.
 type Within<'f> = (&'f str, bool, &'f mut Vec<Error>);
 
@@ -239,7 +293,7 @@ fn returns_in(e: &mut Expr, names: &[&str], (f, gives, errors): Within) {
             None if gives => errors.push(
                 Error::new(
                     *pos,
-                    format!("`{f}` gives a result, so `return` is written with a value"),
+                    format!("{f} gives a result, so `return` is written with a value"),
                 )
                 .with_fix("write the value after `return`"),
             ),
@@ -252,7 +306,7 @@ fn returns_in(e: &mut Expr, names: &[&str], (f, gives, errors): Within) {
                     errors.push(
                         Error::new(
                             *pos,
-                            format!("`{f}` returns nothing, so `return` is written alone"),
+                            format!("{f} returns nothing, so `return` is written alone"),
                         )
                         .with_fix("take away the value after `return`"),
                     );
