@@ -189,10 +189,11 @@ const LC_BUILD_VERSION: u32 = 0x32;
 const LC_DYLD_INFO_ONLY: u32 = 0x8000_0022;
 const LC_MAIN: u32 = 0x8000_0028;
 
-/// The size of the load commands, which `commands` writes.
+/// The size of the load commands, which `commands` writes, for an executable
+/// whose `__DATA` holds no data of the program.
 const COMMANDS_SIZE: u32 = SEGMENT_SIZE // __PAGEZERO
     + SEGMENT_SIZE + SECTION_SIZE // __TEXT
-    + SEGMENT_SIZE + SECTION_SIZE // __DATA
+    + SEGMENT_SIZE + SECTION_SIZE // __DATA, with __got
     + SEGMENT_SIZE // __LINKEDIT
     + 48 // LC_DYLD_INFO_ONLY
     + 24 // LC_SYMTAB
@@ -203,6 +204,12 @@ const COMMANDS_SIZE: u32 = SEGMENT_SIZE // __PAGEZERO
     + 24 // LC_BUILD_VERSION
     + 16; // LC_CODE_SIGNATURE
 const COMMANDS: u32 = 12;
+
+/// The size of the load commands of an executable whose `__data` holds
+/// `writable` bytes: those of `COMMANDS_SIZE`, and `__data` when there is one.
+fn commands_size(writable: u64) -> u32 {
+    COMMANDS_SIZE + if writable > 0 { SECTION_SIZE } else { 0 }
+}
 
 const fn padded(size: u32) -> u32 {
     size.next_multiple_of(8)
@@ -216,7 +223,11 @@ struct Layout {
     text_size: u64,
     text_segment_size: u64,
     data_offset: u64,
+    data_segment_size: u64,
+    /// How many bytes of the program's data `__data` holds, after `__got`.
+    writable: u64,
     linkedit_offset: u64,
+    rebase_size: u64,
     bind_size: u64,
     symbols_offset: u64,
     indirect_offset: u64,
@@ -235,30 +246,48 @@ impl Layout {
         BASE + self.data_offset
     }
 
+    /// Where `__data` is, in the file and in memory from the start of
+    /// `__DATA`: just after `__got`.
+    fn writable_offset(&self) -> u64 {
+        8 * u64::from(self.imports)
+    }
+
+    fn commands_size(&self) -> u32 {
+        commands_size(self.writable)
+    }
+
     fn linkedit_size(&self) -> u64 {
         self.signature_offset + self.signature_size - self.linkedit_offset
     }
 }
 
 /// The executable whose `__text` holds `code_size` bytes, which imports
-/// `imports`. `code` gives those bytes, for code placed at its first
-/// argument, where the slot `i` of `__got`, which the loader fills with the
-/// address of import `i`, is at its second argument plus `8 * i`.
+/// `imports`, and whose `__data` holds `writable` bytes of the program's data,
+/// with an address at each place of `moved` among them, which the loader moves
+/// by as far as it moved the executable. `code` gives the bytes of each, for
+/// code placed at its first argument, where the slot `i` of `__got`, which the
+/// loader fills with the address of import `i`, is at its second argument plus
+/// `8 * i`, and `__data` is at its third.
 pub fn executable(
     machine: &Machine,
     code_size: u64,
     imports: &[&str],
-    code: impl FnOnce(u64, u64) -> Vec<u8>,
+    writable: u64,
+    moved: &[u64],
+    code: impl FnOnce(u64, u64, u64) -> (Vec<u8>, Vec<u8>),
 ) -> Vec<u8> {
     let page = machine.page;
+    let writable_offset = 8 * imports.len() as u64;
+    let rebase = rebase_info(writable_offset, moved);
     let bind = bind_info(imports);
     let strings = string_table(imports);
-    let text_offset = MACH_HEADER_SIZE + COMMANDS_SIZE as u64;
+    let text_offset = MACH_HEADER_SIZE + u64::from(commands_size(writable));
     let text_size = code_size;
     let text_segment_size = (text_offset + text_size).next_multiple_of(page);
     let data_offset = text_segment_size;
-    let linkedit_offset = data_offset + page;
-    let symbols_offset = linkedit_offset + bind.len() as u64;
+    let data_segment_size = (writable_offset + writable).next_multiple_of(page);
+    let linkedit_offset = data_offset + data_segment_size;
+    let symbols_offset = linkedit_offset + (rebase.len() + bind.len()) as u64;
     let indirect_offset = symbols_offset + 16 * imports.len() as u64;
     let strings_offset = indirect_offset + 4 * imports.len() as u64;
     let signature_offset = (strings_offset + strings.len() as u64).next_multiple_of(16);
@@ -268,7 +297,10 @@ pub fn executable(
         text_size,
         text_segment_size,
         data_offset,
+        data_segment_size,
+        writable,
         linkedit_offset,
+        rebase_size: rebase.len() as u64,
         bind_size: bind.len() as u64,
         symbols_offset,
         indirect_offset,
@@ -279,14 +311,24 @@ pub fn executable(
     };
 
     let mut out = Vec::with_capacity((signature_offset + layout.signature_size) as usize);
-    header(&mut out, machine);
+    header(&mut out, machine, layout.commands_size());
     commands(&mut out, machine, &layout);
     assert_eq!(out.len() as u64, text_offset);
-    let code = code(layout.code_address(), layout.data_address());
+    let data_address = layout.data_address();
+    let (code, data) = code(
+        layout.code_address(),
+        data_address,
+        data_address + writable_offset,
+    );
     assert_eq!(code.len() as u64, code_size);
+    assert_eq!(data.len() as u64, writable);
     out.extend_from_slice(&code);
-    // The rest of `__TEXT`, and `__DATA`, whose `__got` the loader fills.
+    // The rest of `__TEXT`, and `__DATA`, whose `__got` the loader fills,
+    // and then `__data`.
+    out.resize((data_offset + writable_offset) as usize, 0);
+    out.extend_from_slice(&data);
     out.resize(linkedit_offset as usize, 0);
+    out.extend_from_slice(&rebase);
     out.extend_from_slice(&bind);
     for i in 0..imports.len() {
         symbol(&mut out, string_index(imports, i));
@@ -302,13 +344,13 @@ pub fn executable(
     out
 }
 
-fn header(out: &mut Vec<u8>, machine: &Machine) {
+fn header(out: &mut Vec<u8>, machine: &Machine, commands_size: u32) {
     put32(out, 0xfeed_facf); // 64-bit Mach-O
     put32(out, machine.cpu_type);
     put32(out, machine.cpu_subtype);
     put32(out, 2); // an executable
     put32(out, COMMANDS);
-    put32(out, COMMANDS_SIZE);
+    put32(out, commands_size);
     // No undefined symbols left for a static link, linked by the loader,
     // two-level names, and loaded at a random address.
     put32(out, 0x1 | 0x4 | 0x80 | 0x20_0000);
@@ -341,14 +383,15 @@ fn commands(out: &mut Vec<u8>, machine: &Machine, l: &Layout) {
         0x8000_0400,
         0,
     );
+    let data_sections = if l.writable > 0 { 2 } else { 1 };
     segment(
         out,
         b"__DATA",
-        1,
+        data_sections,
         l.data_address(),
-        page,
+        l.data_segment_size,
         l.data_offset,
-        page,
+        l.data_segment_size,
         3,
     );
     section(
@@ -362,6 +405,19 @@ fn commands(out: &mut Vec<u8>, machine: &Machine, l: &Layout) {
         0x6, // pointers the loader binds before the program starts
         0,   // whose symbols start at the first indirect symbol
     );
+    if l.writable > 0 {
+        section(
+            out,
+            b"__data",
+            b"__DATA",
+            l.data_address() + l.writable_offset(),
+            l.writable,
+            (l.data_offset + l.writable_offset()) as u32,
+            3,
+            0, // plain data
+            0,
+        );
+    }
     let linkedit_size = l.linkedit_size();
     segment(
         out,
@@ -376,9 +432,17 @@ fn commands(out: &mut Vec<u8>, machine: &Machine, l: &Layout) {
 
     put32(out, LC_DYLD_INFO_ONLY);
     put32(out, 48);
-    put32(out, 0); // nothing to rebase
-    put32(out, 0);
-    put32(out, l.linkedit_offset as u32);
+    match l.rebase_size {
+        0 => {
+            put32(out, 0); // nothing to rebase
+            put32(out, 0);
+        }
+        size => {
+            put32(out, l.linkedit_offset as u32);
+            put32(out, size as u32);
+        }
+    }
+    put32(out, (l.linkedit_offset + l.rebase_size) as u32);
     put32(out, l.bind_size as u32);
     for _ in 0..6 {
         put32(out, 0); // no weak or lazy binds, and no exports
@@ -433,7 +497,7 @@ fn commands(out: &mut Vec<u8>, machine: &Machine, l: &Layout) {
     put32(out, l.signature_offset as u32);
     put32(out, l.signature_size as u32);
 
-    assert_eq!(out.len() - start, COMMANDS_SIZE as usize);
+    assert_eq!(out.len() - start, l.commands_size() as usize);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -521,6 +585,29 @@ fn uleb128(out: &mut Vec<u8>, mut n: u64) {
         }
         out.push(low | 0x80);
     }
+}
+
+/// The loader's instructions for moving each address of the program's data in
+/// `__data`, which starts `from` bytes into `__DATA`, by as far as it moved the
+/// executable: none when there is none to move.
+fn rebase_info(from: u64, moved: &[u64]) -> Vec<u8> {
+    const SET_TYPE_POINTER: u8 = 0x11;
+    const SET_SEGMENT_AND_OFFSET: u8 = 0x20;
+    const DO_REBASE_ONCE: u8 = 0x51;
+    /// `__DATA`, after `__PAGEZERO` and `__TEXT`.
+    const DATA_SEGMENT: u8 = 2;
+    if moved.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![SET_TYPE_POINTER];
+    for at in moved {
+        out.push(SET_SEGMENT_AND_OFFSET | DATA_SEGMENT);
+        uleb128(&mut out, from + at);
+        out.push(DO_REBASE_ONCE);
+    }
+    out.push(0); // done
+    out.resize(out.len().next_multiple_of(8), 0);
+    out
 }
 
 fn bind_info(imports: &[&str]) -> Vec<u8> {

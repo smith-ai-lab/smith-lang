@@ -220,14 +220,17 @@ pub fn install_tasks(program: Program, roots: &[(usize, u64)]) -> Program {
     let mut data = program.data;
     // What a stack that has no piece reads at its end: a piece that holds
     // nothing and has none after it.
-    data.push(vec![
-        0;
-        if tasks_program {
-            TRAILER_RECORDS
-        } else {
-            TRAILER
-        } as usize
-    ]);
+    data.push(
+        vec![
+            0;
+            if tasks_program {
+                TRAILER_RECORDS
+            } else {
+                TRAILER
+            } as usize
+        ]
+        .into(),
+    );
     let empty = data.len() - 1;
     let main_at = if tasks_program {
         // Where the runtime functions are, after `take` and `ready`: `claim`,

@@ -317,12 +317,14 @@ struct Image {
 }
 
 fn image(program: &Program, frames: bool) -> Image {
-    let mut bytes = Vec::new();
     let mut starts = Vec::new();
-    for text in &program.data {
-        starts.push(DATA_START + bytes.len() as u32);
-        bytes.extend_from_slice(text);
+    let mut end = DATA_START;
+    for d in &program.data {
+        starts.push(end);
+        end += d.bytes.len() as u32;
     }
+    let at: Vec<u64> = starts.iter().map(|&s| u64::from(s)).collect();
+    let mut bytes = program.placed(&at).concat();
     let mut arguments = None;
     if program.takes_arguments() {
         bytes.resize(bytes.len().next_multiple_of(8), 0);

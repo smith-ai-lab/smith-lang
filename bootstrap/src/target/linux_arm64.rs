@@ -19,7 +19,10 @@ const EINTR: u32 = 4;
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = arm64::code::<Linux>(program);
+    let (asm, mut data, parts) = arm64::code::<Linux>(program);
+    // The executable is loaded where it asks to be, so an address among the
+    // data is written as the build knows it.
+    super::write_addresses(program, &mut data, asm.code_len(), CODE_ADDRESS);
     // Nothing is called through a table of addresses, so there is none.
     let executable = elf::executable(Machine::Aarch64, &asm.finish(&data, CODE_ADDRESS, 0));
     (executable, super::shifted(parts, CODE_ADDRESS))

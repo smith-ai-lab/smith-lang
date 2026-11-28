@@ -8,7 +8,8 @@ built:
   - "a struct that takes a whole number as a parameter, written `[n: Nat]` or `[n: Pos]`, which a type names with the number written out, as `Box[10]`, and whose name is a bound in the type of a field, as `0..n`, and a construction that leaves the number out, which takes it from the type it must give"
   - "a field whose type is a statement, which holds a proof, as [A struct that holds a proof](proof-fields.md) says"
   - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes the type its value has after the name"
-  - "a value at the top level of a file that states its type, worked out when the program is built from literals, structs, enums, tuples, lists, other top-level values, and calls of functions that carry no effect, and read by any function of the file with no call and no memory asked for; one that needs an effect or is defined by itself, an assignment to one, and a second definition of its name are refused at the name; not a list or a slice whose elements hold a text or a list, and not a value read by another module"
+  - "a value at the top level of a file that states its type, worked out when the program is built from literals, structs, enums, tuples, lists, other top-level values, and calls of functions that carry no effect, and read by any function of the file with no call and no memory asked for; one that needs an effect or is defined by itself, an assignment to one, and a second definition of its name are refused at the name; not a value read by another module"
+  - "a list or a slice at the top level whose elements hold a text or a list, as `keywords: List[str]`, on every target, read with no call and no memory asked for, and copied by a `push` to a list read from it"
 ---
 
 # Structs

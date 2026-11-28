@@ -224,12 +224,7 @@ fn start(program: &Program, limit: usize, given: Given) -> Run {
 }
 
 fn start_with(program: &Program, limit: usize, given: Given, input: &[u8]) -> Run {
-    let mut memory = Vec::new();
-    let mut starts = Vec::new();
-    for text in &program.data {
-        starts.push(BASE + memory.len());
-        memory.extend_from_slice(text);
-    }
+    let (mut memory, starts) = loaded(program);
     let args = if program.takes_arguments() {
         arguments(&mut memory, given)
     } else {
@@ -373,12 +368,7 @@ impl Worked {
 /// level is worked out when the program is built, and gives what it gave, or
 /// `None` when it ended the run.
 pub fn work_out(program: &Program, function: usize) -> Option<Worked> {
-    let mut memory = Vec::new();
-    let mut starts = Vec::new();
-    for text in &program.data {
-        starts.push(BASE + memory.len());
-        memory.extend_from_slice(text);
-    }
+    let (memory, starts) = loaded(program);
     let mut machine = Machine {
         program,
         memory,
@@ -417,6 +407,19 @@ pub fn work_out(program: &Program, function: usize) -> Option<Worked> {
         scalars,
         memory: machine.memory,
     })
+}
+
+/// The memory a run starts with, which holds the program's data, one datum
+/// after another from `BASE`, and where each datum starts.
+fn loaded(program: &Program) -> (Vec<u8>, Vec<usize>) {
+    let mut starts = Vec::new();
+    let mut end = BASE;
+    for d in &program.data {
+        starts.push(end);
+        end += d.bytes.len();
+    }
+    let at: Vec<u64> = starts.iter().map(|&s| s as u64).collect();
+    (program.placed(&at).concat(), starts)
 }
 
 fn integers(words: Vec<Word>) -> Vec<u64> {

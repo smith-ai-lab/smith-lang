@@ -4,10 +4,10 @@
 //! The function that gives the value is lowered as a program of its own and
 //! run in the evaluator, once for each program, and a read of it is constants:
 //! its numbers, and for a text and a list, the address of bytes among the
-//! program's data and the size. The room of a list is its size, so `push`
-//! copies its elements before it writes, and nothing writes the data. A list
-//! whose elements hold an address is not built yet, as the data of an
-//! executable holds no address.
+//! program's data and the size. A list has room for none, so `push` copies
+//! its elements before it writes, and nothing writes the data. An
+//! element that holds a text or a list holds the address of a datum of its
+//! own, which the target writes where it puts the data.
 
 use super::*;
 use crate::scalar::{Scalar, Worked};
@@ -94,33 +94,14 @@ impl<'a> Lowering<'a> {
                 if matches!(ty, Ty::List(_)) {
                     word(scalars);
                 }
-                let element = self.element(ty);
-                if element.contains(&form::Type::Address) {
-                    return Err(
-                        "a value at the top level that holds a list or a slice of values that hold a text or a list",
-                    );
-                }
-                let stride = form::element(&element).1;
-                let count = size as usize * stride as usize;
-                let bytes = match count {
-                    0 => Vec::new(),
-                    _ => (worked.bytes(at, count))
-                        .expect("the bytes of a list worked out")
-                        .to_vec(),
-                };
-                let data = match self.data.iter().position(|d| *d == bytes) {
-                    Some(d) => d,
-                    None => {
-                        self.data.push(bytes);
-                        self.data.len() - 1
-                    }
-                };
+                let data = self.stored(ty, at, size as usize, worked)?;
                 let length = form::Type::Int(form::Bits::B64);
                 into.push((form::Constant::Data(data), form::Type::Address));
                 into.push((form::Constant::Int(size), length));
-                // A list's room is its size, so a `push` copies it first.
+                // A list has room for none, so a `push` copies it first, and
+                // leaves the data as they are, which no program may write.
                 if matches!(ty, Ty::List(_)) {
-                    into.push((form::Constant::Int(size), length));
+                    into.push((form::Constant::Int(0), length));
                 }
             }
             Ty::Int(_) | Ty::Float(_) => {
@@ -177,6 +158,74 @@ impl<'a> Lowering<'a> {
             }
         }
         Ok(())
+    }
+}
+
+impl Lowering<'_> {
+    /// The place among the program's data of the `size` elements of the text,
+    /// slice, or list at `at` in the memory the run left. An element that holds
+    /// a text or a list holds the address of a datum of its own, which the
+    /// datum says, as the target writes each address where it puts the data.
+    fn stored(
+        &mut self,
+        ty: &Ty,
+        at: usize,
+        size: usize,
+        worked: &Worked,
+    ) -> Result<usize, &'static str> {
+        let element = self.element(ty);
+        let (places, stride) = form::element(&element);
+        let stride = stride as usize;
+        let bytes = match size * stride {
+            0 => Vec::new(),
+            count => (worked.bytes(at, count))
+                .expect("the bytes of a list worked out")
+                .to_vec(),
+        };
+        let mut datum = form::Datum::from(bytes);
+        if let Ty::List(of) | Ty::Slice(of) = ty
+            && element.contains(&form::Type::Address)
+        {
+            for k in 0..size {
+                let mut held = (element.iter().zip(&places)).map(|(&t, &p)| {
+                    let from = k * stride + p as usize;
+                    read(&datum.bytes[from..from + t.bytes() as usize], t)
+                });
+                let mut fixed = Vec::new();
+                self.fixed(&of[0], &mut held, worked, &mut fixed)?;
+                for ((c, t), &p) in fixed.into_iter().zip(&places) {
+                    let from = k * stride + p as usize;
+                    let place = &mut datum.bytes[from..from + t.bytes() as usize];
+                    match c {
+                        form::Constant::Int(n) | form::Constant::Float(n) => {
+                            place.copy_from_slice(&n.to_le_bytes()[..place.len()]);
+                        }
+                        form::Constant::Vector(low, high) => {
+                            let both = u128::from(low) | (u128::from(high) << 64);
+                            place.copy_from_slice(&both.to_le_bytes());
+                        }
+                        form::Constant::Null => place.fill(0),
+                        form::Constant::Data(d) => {
+                            place.fill(0);
+                            datum.addresses.push((from, d));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(self.datum(datum))
+    }
+}
+
+/// The scalar of the type that the bytes of an element hold.
+fn read(bytes: &[u8], t: form::Type) -> Scalar {
+    let mut all = [0u8; 16];
+    all[..bytes.len()].copy_from_slice(bytes);
+    let n = u128::from_le_bytes(all);
+    match t {
+        form::Type::Address => Scalar::Address(n as usize),
+        form::Type::Vector(_) => Scalar::Vector(n),
+        form::Type::Int(_) | form::Type::Float(_) => Scalar::Int(n as u64),
     }
 }
 

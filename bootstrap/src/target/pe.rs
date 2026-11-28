@@ -18,6 +18,8 @@
 pub const IMAGE_BASE: u64 = 0x1_4000_0000;
 /// Sections start on this boundary in memory.
 const SECTION_ALIGNMENT: u32 = 0x1000;
+/// Where the code is, as an offset from the image's base: the first section.
+pub const CODE_RVA: u32 = SECTION_ALIGNMENT;
 /// Sections start on this boundary in the file.
 const FILE_ALIGNMENT: u32 = 0x200;
 
@@ -26,7 +28,9 @@ const PE_OFFSET: u32 = 0x40;
 const COFF_HEADER_SIZE: u32 = 20;
 const OPTIONAL_HEADER_SIZE: u32 = 240;
 const SECTION_HEADER_SIZE: u32 = 40;
-const SECTIONS: u32 = 2;
+/// The most sections an image has: the code, the imports, and the
+/// relocations of an image that has any.
+const SECTIONS: u32 = 3;
 /// The headers, which fill the start of the file up to the first section.
 const HEADERS_SIZE: u32 =
     (PE_OFFSET + 4 + COFF_HEADER_SIZE + OPTIONAL_HEADER_SIZE + SECTIONS * SECTION_HEADER_SIZE)
@@ -221,14 +225,16 @@ struct Imports {
 /// The executable, whose code and data take `text_size` bytes, which
 /// imports `needs`. `text` is given where the code is and where the import
 /// address table is, each as an offset from the image's base, and gives the
-/// code and its data.
+/// code and its data. The loader moves each address at a place of `moved`,
+/// counted from the start of the code, by as far as it moved the image.
 pub fn executable(
     machine: &Machine,
     text_size: usize,
     needs: &Needs,
+    moved: &[u64],
     text: impl FnOnce(u64, u64) -> Vec<u8>,
 ) -> Vec<u8> {
-    let text_rva = SECTION_ALIGNMENT;
+    let text_rva = CODE_RVA;
     let idata_rva = (text_rva + text_size as u32).next_multiple_of(SECTION_ALIGNMENT);
     let imports = import_tables(idata_rva, needs);
     let iat_rva = idata_rva + imports.iat;
@@ -237,8 +243,11 @@ pub fn executable(
 
     let text_raw = (text.len() as u32).next_multiple_of(FILE_ALIGNMENT);
     let idata_raw = (imports.bytes.len() as u32).next_multiple_of(FILE_ALIGNMENT);
-    let image_size = idata_rva + (imports.bytes.len() as u32).next_multiple_of(SECTION_ALIGNMENT);
-    let sections = [
+    let reloc_rva = idata_rva + (imports.bytes.len() as u32).next_multiple_of(SECTION_ALIGNMENT);
+    let relocations = relocations(text_rva, moved);
+    let reloc_raw = (relocations.len() as u32).next_multiple_of(FILE_ALIGNMENT);
+    let image_size = reloc_rva + (relocations.len() as u32).next_multiple_of(SECTION_ALIGNMENT);
+    let mut sections = vec![
         Section {
             name: *b".text\0\0\0",
             size: text.len() as u32,
@@ -258,18 +267,33 @@ pub fn executable(
             characteristics: 0xc000_0040,
         },
     ];
+    if !relocations.is_empty() {
+        sections.push(Section {
+            name: *b".reloc\0\0",
+            size: relocations.len() as u32,
+            rva: reloc_rva,
+            raw_size: reloc_raw,
+            raw_offset: HEADERS_SIZE + text_raw + idata_raw,
+            // Initialized data, readable, and not needed once it is loaded.
+            characteristics: 0x4200_0040,
+        });
+    }
 
-    let mut out = Vec::with_capacity((HEADERS_SIZE + text_raw + idata_raw) as usize);
+    let mut out = Vec::with_capacity((HEADERS_SIZE + text_raw + idata_raw + reloc_raw) as usize);
     dos_header(&mut out);
     out.extend_from_slice(b"PE\0\0");
-    coff_header(&mut out, machine);
+    coff_header(&mut out, machine, sections.len() as u16);
     let optional = OptionalHeader {
         code_size: text_raw,
-        data_size: idata_raw,
+        data_size: idata_raw + reloc_raw,
         entry: text_rva,
         image_size,
         imports: (idata_rva, imports.directory_size),
         iat: (iat_rva, imports.iat_size),
+        relocations: match relocations.len() {
+            0 => (0, 0),
+            size => (reloc_rva, size as u32),
+        },
     };
     optional_header(&mut out, machine, &optional);
     for section in &sections {
@@ -280,6 +304,37 @@ pub fn executable(
     out.resize((HEADERS_SIZE + text_raw) as usize, 0);
     out.extend_from_slice(&imports.bytes);
     out.resize((HEADERS_SIZE + text_raw + idata_raw) as usize, 0);
+    out.extend_from_slice(&relocations);
+    out.resize(
+        (HEADERS_SIZE + text_raw + idata_raw + reloc_raw) as usize,
+        0,
+    );
+    out
+}
+
+/// The base relocations that move each 8-byte address at a place of `moved`,
+/// counted from `text_rva`: a block for each page that holds one, which names
+/// the page and then each place in it, each block a whole number of 4 bytes.
+fn relocations(text_rva: u32, moved: &[u64]) -> Vec<u8> {
+    /// A relocation that adds the distance to all 64 bits of the place.
+    const DIR64: u16 = 10 << 12;
+    let mut rvas: Vec<u32> = moved.iter().map(|&at| text_rva + at as u32).collect();
+    rvas.sort_unstable();
+    let mut out = Vec::new();
+    let mut rest = &rvas[..];
+    while let Some(&first) = rest.first() {
+        let page = first & !0xfff;
+        let count = rest.partition_point(|&rva| rva & !0xfff == page);
+        let entries = count.next_multiple_of(2);
+        put32(&mut out, page);
+        put32(&mut out, 8 + 2 * entries as u32);
+        for &rva in &rest[..count] {
+            put16(&mut out, DIR64 | (rva & 0xfff) as u16);
+        }
+        // An entry of type 0 does nothing, and pads the block.
+        out.resize(out.len() + 2 * (entries - count), 0);
+        rest = &rest[count..];
+    }
     out
 }
 
@@ -303,9 +358,9 @@ fn dos_header(out: &mut Vec<u8>) {
     put32(out, PE_OFFSET);
 }
 
-fn coff_header(out: &mut Vec<u8>, machine: &Machine) {
+fn coff_header(out: &mut Vec<u8>, machine: &Machine, sections: u16) {
     put16(out, machine.machine);
-    put16(out, SECTIONS as u16);
+    put16(out, sections);
     put32(out, 0); // no time stamp, so the bytes are the same every build
     put32(out, 0); // no symbol table
     put32(out, 0); // no symbols
@@ -320,6 +375,7 @@ struct OptionalHeader {
     image_size: u32,
     imports: (u32, u32),
     iat: (u32, u32),
+    relocations: (u32, u32),
 }
 
 fn optional_header(out: &mut Vec<u8>, machine: &Machine, header: &OptionalHeader) {
@@ -356,6 +412,7 @@ fn optional_header(out: &mut Vec<u8>, machine: &Machine, header: &OptionalHeader
     for i in 0..16 {
         let (rva, size) = match i {
             1 => header.imports,
+            5 => header.relocations,
             12 => header.iat,
             _ => (0, 0),
         };
