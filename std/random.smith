@@ -1,5 +1,6 @@
 use std.bits (bit_and, bit_or, bit_xor, shift_right, u64)
 use std.entropy (entropy, fill)
+use std.float (cos, ln, sqrt)
 use std.int (wrapping_add, wrapping_shift_left)
 use std.list (push)
 
@@ -66,6 +67,17 @@ pub fn seeded(seed: u64) -> Key {
 
 pub fn bits(key: take Key) -> u64 {
   threefry(Words(first: 0, second: 0), Words(first: key.a, second: key.b)).first
+}
+
+pub fn uniform(key: take Key) -> f32 {
+  float(shift_right(bits(take key), 40)) / 16777216.0
+}
+
+pub fn standard_normal(key: take Key) -> f32 {
+  b = bits(take key)
+  first: f32 = float(shift_right(b, 40) + 1) / 16777216.0
+  second: f32 = float(bit_and(shift_right(b, 16), 0xFFFFFF)) / 16777216.0
+  sqrt(-2.0 * ln(first)) * cos(6.2831855 * second)
 }
 
 pub fn split(key: take Key) -> (Key, Key) {
