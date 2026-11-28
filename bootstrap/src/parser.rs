@@ -12,7 +12,7 @@ use crate::lexer::{Piece, Tok, Token};
 mod effects_with_and_try;
 mod functions_calls_and_lambdas;
 mod mut_parameters;
-pub(crate) use mut_parameters::{changed_place, gives_back};
+pub(crate) use mut_parameters::{changed_place, gives_back, own_result};
 mod lift;
 pub(crate) use lift::env_name;
 mod lists_and_text;
@@ -809,6 +809,9 @@ pub struct Arg {
     /// Whether the call it is passed `mut` to was lowered to assign the
     /// value the call gives back to it.
     pub given_back: bool,
+    /// Whether that call was lowered to also keep what its function gives,
+    /// as `t = f(mut c)` does.
+    pub keeps: bool,
 }
 
 /// Parses a file into its definitions.
@@ -2510,6 +2513,7 @@ impl Parser<'_> {
                     after: false,
                     mutable: None,
                     given_back: false,
+                    keeps: false,
                 },
             ),
         }

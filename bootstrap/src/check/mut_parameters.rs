@@ -6,7 +6,7 @@
 //! back, and the rest of what `mut` means is what that means.
 
 use super::*;
-use crate::parser::{Param, changed_place};
+use crate::parser::{Function, Param, changed_place, own_result};
 
 /// A place passed `mut`: the name, the fields after it, and the item of the
 /// array or list they name, if it is one.
@@ -45,6 +45,58 @@ fn written_place(p: &Place) -> String {
 }
 
 impl<'a> Checker<'a> {
+    /// Checks that a call that passes `mut` keeps what its function gives
+    /// exactly when the function gives a result, when `gives` is what the
+    /// lowered call gives. Gives whether it found a mistake, which it reports.
+    pub(super) fn kept_mistake(
+        &mut self,
+        body: &Body<'a>,
+        call: &Call,
+        f: &Function,
+        gives: &Ty,
+    ) -> bool {
+        let keeps = call.args.iter().any(|a| a.keeps);
+        let callee = written_name(&call.callee);
+        match (own_result(f), keeps) {
+            (None, true) => {
+                self.errors.push(
+                    Error::new(
+                        call.pos,
+                        format!("`{callee}` gives nothing, so a call that passes `mut` to it is a line of its own"),
+                    )
+                    .with_fix(format!("take away what `{callee}` is bound or assigned to")),
+                );
+                true
+            }
+            (Some(_), false) => {
+                // What the function gives is the last item of what the lowered
+                // call gives, and nothing uses it.
+                let Ty::Tuple(items) = gives else {
+                    return false;
+                };
+                let result = items.last().cloned().unwrap_or(Ty::Unknown);
+                if result == Ty::Nothing {
+                    return false;
+                }
+                let before = self.errors.len();
+                self.dropped(body, &Expr::Call(call.clone()), &result);
+                // A value that is not dropped is still not used.
+                if self.errors.len() == before && !result.unknown() {
+                    let described = self.defs.text(&result, body.scope);
+                    self.errors.push(
+                        Error::new(
+                            call.pos,
+                            format!("this gives a `{described}`, which nothing uses"),
+                        )
+                        .with_fix("bind it to a name"),
+                    );
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Checks what a call passes `mut`, and that it passes `mut` what its
     /// function changes. Gives whether it found a mistake, which it reports.
     pub(super) fn passed_mut(&mut self, body: &Body<'a>, call: &Call) -> bool {
@@ -112,12 +164,16 @@ impl<'a> Checker<'a> {
                         continue;
                     }
                     if !arg.given_back {
-                        self.errors.push(Error::new(
+                        let mut error = Error::new(
                             call.pos,
-                            format!(
-                                "a call that passes `mut` is a line of its own, as `{callee}` gives nothing"
-                            ),
-                        ));
+                            "a call that passes `mut` is a line of its own, or the whole right-hand side of a binding or an assignment",
+                        );
+                        if f.is_some_and(|f| own_result(&defs.file.functions[f]).is_some()) {
+                            error = error.with_fix(format!(
+                                "bind what `{callee}` gives to a name on a line before"
+                            ));
+                        }
+                        self.errors.push(error);
                         continue;
                     }
                     let place: Place = (

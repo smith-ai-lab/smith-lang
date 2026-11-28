@@ -2259,8 +2259,12 @@ fn written(f: &Function, effects: &[&str]) -> String {
     }
     text.push_str(&format!("({list})"));
     // The result a function that changes its parameters is given when it is
-    // lowered is not written.
-    if let Some(t) = f.result.as_ref().filter(|_| !crate::parser::gives_back(f)) {
+    // lowered is not written, and what it gives besides them is.
+    let result = match crate::parser::gives_back(f) {
+        true => crate::parser::own_result(f),
+        false => f.result.as_ref(),
+    };
+    if let Some(t) = result {
         text.push_str(&format!(" -> {}", written_type(t)));
     }
     if !effects.is_empty() {
