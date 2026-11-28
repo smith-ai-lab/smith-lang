@@ -2,7 +2,8 @@
 //! `Sub.sub`, and `Mul.mul`: a type of a program's own has an operator by an
 //! `impl`, a generic function states what it needs of its operands, and a
 //! whole number's operator in a generic function is the one instruction it
-//! is anywhere.
+//! is anywhere. `/` and `%` are calls of `Div.div` and `Rem.rem` of whole
+//! numbers, in a generic function and by name.
 //!
 //! Every generator works out the answer with the arithmetic of Rust on 128
 //! bits, so it shares nothing with the compiler.
@@ -39,6 +40,22 @@ pub const ONCE: &[Test] = &[
     (
         "an_operator_between_types_with_no_impl_is_one_error_that_names_the_trait_and_both_types",
         an_operator_between_types_with_no_impl_is_one_error_that_names_the_trait_and_both_types,
+    ),
+    (
+        "div_and_rem_called_by_name_divide_an_int_and_a_byte",
+        div_and_rem_called_by_name_divide_an_int_and_a_byte,
+    ),
+    (
+        "a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds_part_1_of_3",
+        || a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(0),
+    ),
+    (
+        "a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds_part_2_of_3",
+        || a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(1),
+    ),
+    (
+        "a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds_part_3_of_3",
+        || a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(2),
     ),
 ];
 
@@ -242,6 +259,110 @@ fn an_operator_between_types_with_no_impl_is_one_error_that_names_the_trait_and_
         let message = &errors[0].message;
         for needed in [OPERATORS[*op].0, names[0], names[1]] {
             assert!(message.contains(needed), "{message} does not name {needed}");
+        }
+    });
+}
+
+/// `Div.div(7, 2)` is 3 and `Rem.rem(7, 2)` is 1, of an `Int` and of a `u8`.
+fn div_and_rem_called_by_name_divide_an_int_and_a_byte() {
+    let source = with_header(
+        "fn main() <console, alloc> {\n  print(\"{Div.div(7, 2)} {Rem.rem(7, 2)}\")\n  a: Byte = 7\n  b: Byte = 2\n  print(\"{Div.div(a, b)} {Rem.rem(a, b)}\")\n}\n"
+            .to_string(),
+    );
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        scalar::run(&program),
+        Outcome {
+            stdout: b"3 1\n3 1\n".to_vec(),
+            status: 0
+        }
+    );
+}
+
+#[derive(Debug)]
+struct Divided {
+    source: String,
+    /// The same program with `+` in the place of the operator, and numbers
+    /// whose sum fits.
+    added: String,
+    /// The instructions the operator takes beyond the one `+` takes.
+    beyond: usize,
+    /// The answer, where `valid` holds.
+    answer: Option<i128>,
+}
+
+/// A function that divides, or takes what is left over, of two numbers of a
+/// type parameter bound by `Div` or `Rem`, with `requires` of its `valid`, and
+/// a `main` that calls it, and the trait's function by name, with two whole
+/// numbers of one type. The divisor is often 0, and often -1 with the least
+/// number of its type as the dividend.
+fn divided(g: &mut Gen) -> Divided {
+    let ty = *g.pick(INTS);
+    let quotient = g.one_in(2);
+    let (a, b) = match g.below(4) {
+        0 => (near(g, ty), 0),
+        1 => (ty.min(), (-1).max(ty.min())),
+        _ => (near(g, ty), near(g, ty)),
+    };
+    // The divisor is not zero, and the least number is not divided by -1
+    // where the quotient is asked for or worked out at 64 bits.
+    let least_by_minus_one = ty.signed && a == ty.min() && b == -1;
+    let valid = b != 0 && !(least_by_minus_one && (quotient || ty.bits == 64));
+    let answer = valid.then(|| if quotient { a / b } else { a % b });
+    let (tr, function, sign) = if quotient {
+        ("Div", "div", "/")
+    } else {
+        ("Rem", "rem", "%")
+    };
+    let t = ty.name;
+    // `apply` is of the trait `of` and its operator, and `main` calls the
+    // function of the operator by name.
+    let program = |of: &str, sign: &str, (a, b): (i128, i128)| {
+        with_header(format!(
+            "fn apply[T: {of}](x: T, y: T) -> T\n  requires {of}.valid(x, y)\n{{\n  x {sign} y\n}}\n\nfn main() <console, alloc> {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{apply(x, y)}}\")\n  print(\"{{{tr}.{function}(x, y)}}\")\n}}\n"
+        ))
+    };
+    Divided {
+        source: program(tr, sign, (a, b)),
+        added: program("Add", "+", (1, 1)),
+        // A signed `%` below 64 bits is taken to twice the size and back.
+        beyond: if !quotient && ty.signed && ty.bits < 64 { 3 } else { 0 },
+        answer,
+    }
+}
+
+/// For every whole number type and every pair the generator draws, a generic
+/// function over `/` or `%` that asks `valid` of its caller, and the trait's
+/// function called by name, are accepted exactly where `valid` holds, and
+/// give what `a / b` and `a % b` give. The operator in the copy for the type
+/// is one instruction, as `+` is, and no call, and a signed `%` of fewer than
+/// 64 bits is taken to twice the size first, as `%` of whole numbers is.
+fn a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(
+    part: u64,
+) {
+    generate::check_part(223, 240, part, 3, divided, |c| match lower(c.source.as_bytes()) {
+        Ok(program) => {
+            let answer = c.answer.expect("accepted, though `valid` does not hold");
+            assert_eq!(
+                scalar::run(&program),
+                Outcome {
+                    stdout: format!("{answer}\n{answer}\n").into_bytes(),
+                    status: 0
+                }
+            );
+            let added = lower(c.added.as_bytes()).expect("lowers");
+            let (functions, instructions) = size(&scalar::inline(added));
+            assert_eq!(
+                size(&scalar::inline(program)),
+                (functions, instructions + c.beyond)
+            );
+        }
+        Err(errors) => {
+            assert!(c.answer.is_none(), "refused, though `valid` holds: {errors:?}");
+            assert!(
+                errors.iter().any(|e| e.message.contains("cannot prove")),
+                "{errors:?} does not say what could not be proven"
+            );
         }
     });
 }
