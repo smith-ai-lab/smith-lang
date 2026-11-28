@@ -265,39 +265,64 @@ pub fn node(g: &mut Gen, depth: usize) -> Node {
 pub fn values_program(inputs: &[Vec<u8>]) -> String {
     let mut source = String::from(
         "use std.console (console, print)
-use std.der (Tag, Value, children, value)
+use std.der (Parts, Value, children, value)
 
-fn name(t: Tag) -> str <alloc> {
-  match t {
-    .boolean { \"boolean\" }
-    .integer { \"integer\" }
-    .bits { \"bits\" }
-    .octets { \"octets\" }
+fn name(v: Value) -> str <alloc> {
+  match v {
+    .boolean(b) { \"boolean\" }
+    .integer(n) { \"integer\" }
+    .bits(b) { \"bits\" }
+    .octets(b) { \"octets\" }
     .null { \"null\" }
-    .object { \"object\" }
-    .utf8 { \"utf8\" }
-    .sequence { \"sequence\" }
-    .set { \"set\" }
-    .printable { \"printable\" }
-    .ia5 { \"ia5\" }
-    .utc_time { \"utc_time\" }
-    .general_time { \"general_time\" }
-    .context((n, built)) { \"context_{n}_{built}\" }
-    .other(id) { \"other_{id}\" }
+    .object(o) { \"object\" }
+    .chars(.utf8(b)) { \"utf8\" }
+    .chars(.printable(b)) { \"printable\" }
+    .chars(.ia5(b)) { \"ia5\" }
+    .sequence(p) { \"sequence\" }
+    .set(p) { \"set\" }
+    .utc_time(b) { \"utc_time\" }
+    .general_time(b) { \"general_time\" }
+    .context((n, p)) { \"context_{n}_true\" }
+    .context_bytes((n, b)) { \"context_{n}_false\" }
+    .other((id, b)) { \"other_{id}\" }
   }
 }
 
-fn holds(t: Tag) -> bool {
-  match t {
-    .sequence { true }
-    .set { true }
-    .context((n, built)) { built }
-    _ { false }
+// How many bytes the contents of a value are: a boolean is one byte and a
+// null none, as DER writes them.
+fn size(v: Value) -> Nat {
+  match v {
+    .boolean(b) { 1 }
+    .integer(n) { n.bytes.size }
+    .bits(b) { b.bytes.size }
+    .octets(b) { b.size }
+    .null { 0 }
+    .object(o) { o.bytes.size }
+    .chars(.utf8(b)) { b.size }
+    .chars(.printable(b)) { b.size }
+    .chars(.ia5(b)) { b.size }
+    .sequence(p) { p.bytes.size }
+    .set(p) { p.bytes.size }
+    .utc_time(b) { b.size }
+    .general_time(b) { b.size }
+    .context((n, p)) { p.bytes.size }
+    .context_bytes((n, b)) { b.size }
+    .other((id, b)) { b.size }
   }
 }
 
-fn count(v: Value) -> str <alloc> {
-  match children(v) {
+// What a value holds, when it is built of parts.
+fn held(v: Value) -> Option[Parts] {
+  match v {
+    .sequence(p) { .some(p) }
+    .set(p) { .some(p) }
+    .context((n, p)) { .some(p) }
+    _ { .none }
+  }
+}
+
+fn count(p: Parts) -> str <alloc> {
+  match children(p) {
     .ok(cs) { \"{cs.size}\" }
     .err(e) { \"x\" }
   }
@@ -307,23 +332,27 @@ fn show(b: Slice[Byte]) <console, alloc> {
   match value(b) {
     .err(e) { print(\"err\") }
     .ok((v, rest)) {
-      head = \"ok {name(v.tag)} {v.bytes.size} {rest.size}\"
-      if holds(v.tag) {
-        match children(v) {
-          .err(e) { print(\"{head} kids-err\") }
-          .ok(cs) {
-            mut items = \"\"
-            loop i in 0..cs.size {
-              c = cs[i]
-              sub = if holds(c.tag) { \"/{count(c)}\" } else { \"\" }
-              sep = if i == 0 { \"\" } else { \" \" }
-              items = \"{items}{sep}{name(c.tag)}:{c.bytes.size}{sub}\"
+      head = \"ok {name(v)} {size(v)} {rest.size}\"
+      match held(v) {
+        .some(p) {
+          match children(p) {
+            .err(e) { print(\"{head} kids-err\") }
+            .ok(cs) {
+              mut items = \"\"
+              loop i in 0..cs.size {
+                c = cs[i]
+                sub = match held(c) {
+                  .some(q) { \"/{count(q)}\" }
+                  .none { \"\" }
+                }
+                sep = if i == 0 { \"\" } else { \" \" }
+                items = \"{items}{sep}{name(c)}:{size(c)}{sub}\"
+              }
+              print(\"{head} [{items}]\")
             }
-            print(\"{head} [{items}]\")
           }
         }
-      } else {
-        print(head)
+        .none { print(head) }
       }
     }
   }

@@ -4,7 +4,7 @@ title: DER and certificates
 description: std.der, which reads the tagged values of DER as pieces of the bytes it is given, and std.x509, which reads a certificate into its names, its time, and its key, and checks nothing.
 status: built
 built:
-  - "`std.der`: `Value` and `Tag`, `value`, `children`, `whole`, `text`, `object`, and `bits`, with every `Slice` of a `Value` a piece of the bytes given and each way DER is not written right that the page lists an `.err`"
+  - "`std.der`: `Value`, `Integer`, `Bits`, `Object`, `Parts`, and `Chars`, `value`, and `children`, `whole`, `text`, `object`, and `bits`, each taking only the type of its kind, with every `Slice` of a `Value` a piece of the bytes given and each way DER is not written right that the page lists an `.err`"
   - "`std.x509`: `Certificate` and `certificate`, which reads a certificate of version 3 to the parts the struct lists, with its times as `Instant`s from 1970 to the year 9999, and gives `.err` for a certificate that is not written as DER writes it, an extension marked critical that is not read, and an extension that is written twice"
   - "`pem`, which reads the text of one certificate or of several to the bytes of each, with the lines between them and blocks of another kind not read"
 ---
@@ -16,41 +16,68 @@ The module `std.der` reads DER, the way of writing tagged values that certificat
 ## A value of DER
 
 ```
-struct Value {
-  tag: Tag
-  bytes: Slice[Byte]
+enum Value {
+  boolean: bool
+  integer: Integer
+  bits: Bits
+  octets: Slice[Byte]
+  null
+  object: Object
+  chars: Chars
+  sequence: Parts
+  set: Parts
+  utc_time: Slice[Byte]
+  general_time: Slice[Byte]
+  context: (0..31, Parts)
+  context_bytes: (0..31, Slice[Byte])
+  other: (Nat, Slice[Byte])
 }
 
-enum Tag {
-  boolean
-  integer
-  bits
-  octets
-  null
-  object
-  utf8
-  sequence
-  set
-  printable
-  ia5
-  utc_time
-  general_time
-  context: (0..31, bool)
-  other: Nat
+struct Integer {
+  pub bytes: Slice[Byte]
+  pub some: bytes.size > 0
+}
+
+struct Bits {
+  pub bytes: Slice[Byte]
+}
+
+struct Object {
+  pub bytes: Slice[Byte]
+}
+
+struct Parts {
+  pub bytes: Slice[Byte]
+}
+
+enum Chars {
+  utf8: Slice[Byte]
+  printable: Slice[Byte]
+  ia5: Slice[Byte]
 }
 
 fn value(bytes: Slice[Byte]) -> Result[(Value, Slice[Byte]), str]
-fn children(of: Value) -> Result[List[Value], str] <alloc>
-fn whole(of: Value) -> Result[Slice[Byte], str]
-fn text(of: Value) -> Result[str, str]
-fn bits(of: Value) -> Result[(Slice[Byte], Nat), str]
-fn object(of: Value) -> Result[List[Nat], str] <alloc>
+fn children(of: Parts) -> Result[List[Value], str] <alloc>
+fn whole(of: Integer) -> Result[Slice[Byte], str]
+fn text(of: Chars) -> Result[str, str]
+fn bits(of: Bits) -> Result[(Slice[Byte], Nat), str]
+fn object(of: Object) -> Result[List[Nat], str] <alloc>
 ```
 
-- `value` reads one value from the front of the bytes and gives it with the bytes after it. The bytes of a `Value` are a piece of what was given, so nothing is copied.
+- `value` reads one value from the front of the bytes and gives it with the bytes after it. A `Value` is the kind its tag says, holding its contents, which are a piece of what was given, so nothing is copied.
+- Each kind that is read further holds a type of its own, and what reads it takes only that type, so a value is read only as the kind a `match` has shown it to be. `children(v)` of a `Value` is refused where it is written: "this gives a `Value`, where a `Parts` is needed".
+
+```
+match value(bytes) {
+  .ok((.sequence(p), rest)) { children(p) }
+  .ok((v, rest)) { .err("a value that is not a sequence") }
+  .err(e) { .err(e) }
+}
+```
+
 - `children` gives the values inside a `sequence`, a `set`, or a `context` value that holds others, and is `.err` for the bytes of one that its parts do not fill.
-- `whole` gives the bytes of an `integer` with no sign, as a number of any size, most significant first, with a zero at the front taken off when more bytes follow it, and is `.err` for a number below zero. `text` gives the text of a `utf8`, `printable`, or `ia5` value, and is `.err` for bytes that are not valid UTF-8, or for a `printable` or `ia5` value with a byte of 128 or above. `object` gives the numbers of an object identifier, the first byte standing for the first two. `bits` gives the bytes of a `bits` value and how many bits at the end of its last byte are left over, which is `.err` above 7, when there is no byte to leave them in, and when a bit left over is not zero, as DER writes it.
-- A tag is `context` for the class of that name, with its number and whether it is built of parts, and `other` holds the byte that began the value for every class and kind that has no case of its own. A tag of more than one byte is `.err`.
+- `whole` gives the bytes of an `integer` with no sign, as a number of any size, most significant first, with a zero at the front taken off when more bytes follow it, and is `.err` for a number below zero. An `Integer` is never of no bytes: one is built only of bytes that are proven to be some, so `Integer(bytes: b)` is refused where `b.size > 0` is not proven. `text` gives the text of a `utf8`, `printable`, or `ia5` value, and is `.err` for bytes that are not valid UTF-8, or for a `printable` or `ia5` value with a byte of 128 or above. `object` gives the numbers of an object identifier, the first byte standing for the first two. `bits` gives the bytes of a `bits` value and how many bits at the end of its last byte are left over, which is `.err` above 7, when there is no byte to leave them in, and when a bit left over is not zero, as DER writes it.
+- A `boolean` is `true` for the byte 255 and `false` for 0. A value of the `context` class is `context` when it is built of parts and `context_bytes` when it is not, with its number, and `other` holds the byte that began the value, with its contents, for every class and kind that has no case of its own. A tag of more than one byte is `.err`.
 - DER has one way to write each value, and what is not written that way is `.err`: a length that could be shorter, a length with no end, an `integer` with bytes at the front it does not need, a `boolean` that is neither 0 nor 255, and bytes left inside a value that its parts do not use.
 
 ## A certificate
@@ -93,6 +120,6 @@ fn pem(text: str) -> Result[List[List[Byte]], str] <alloc>
 | Written | Gives |
 | --- | --- |
 | `value(bytes)` | The first value of the bytes, and the bytes after it |
-| `children(v)`, `whole(v)`, `text(v)`, `object(v)`, `bits(v)` | What a value holds, read as its kind |
+| `children(p)`, `whole(n)`, `text(c)`, `object(o)`, `bits(b)` | What a value holds, read as the kind its type is |
 | `certificate(bytes)` | The parts of one certificate, with nothing checked |
 | `pem(text)` | The bytes of each certificate in the text |
