@@ -303,7 +303,9 @@ fn may_hold(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
         Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
             .map(|t| t.subst(args))
             .collect(),
-        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) | Ty::Matrix(items, _) => {
+            items.clone()
+        }
         _ => return false,
     };
     if seen.contains(ty) {
@@ -336,7 +338,9 @@ fn handle_effects(defs: &Defs, ty: &Ty) -> Vec<&'static str> {
             Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
                 .map(|t| t.subst(args))
                 .collect(),
-            Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+            Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) | Ty::Matrix(items, _) => {
+                items.clone()
+            }
             _ => return,
         };
         if seen.contains(ty) {
@@ -361,7 +365,9 @@ fn holds_handle(defs: &Defs, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
         Ty::Enum(e, args) => (defs.cases[*e].iter().flatten())
             .map(|t| t.subst(args))
             .collect(),
-        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) => items.clone(),
+        Ty::Tuple(items) | Ty::List(items) | Ty::Array(items, _) | Ty::Matrix(items, _) => {
+            items.clone()
+        }
         _ => return false,
     };
     if seen.contains(ty) {

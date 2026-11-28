@@ -549,6 +549,45 @@ impl<'a> Checker<'a> {
     pub(super) fn index(&mut self, body: &mut Body<'a>, of: &Expr, index: &Expr, pos: Pos) -> Ty {
         let defs = self.defs;
         let list = self.expr(body, of, &Want::Any);
+        if let Ty::Matrix(element, sizes) = &list {
+            return self.matrix_index(body, of, index, (&element[0], sizes), pos);
+        }
+        let at = self.index_type(body, index);
+        match list {
+            // An index that holds a mistake already reported is not proven.
+            Ty::List(element) | Ty::Slice(element) | Ty::Array(element, _) if at.unknown() => {
+                element[0].clone()
+            }
+            Ty::List(element) | Ty::Slice(element) => {
+                self.in_range(body, of, None, index, pos);
+                element[0].clone()
+            }
+            Ty::Array(element, n) => {
+                self.in_range(body, of, Some(n), index, pos);
+                element[0].clone()
+            }
+            Ty::Text => {
+                self.in_range(body, of, None, index, pos);
+                Ty::Int(Int::U8)
+            }
+            Ty::Unknown => Ty::Unknown,
+            other => {
+                let given = defs.describe(&other, body.scope);
+                self.errors.push(Error::new(
+                    pos,
+                    format!(
+                        "an index is read from a list, a slice, or a text, and this is {given}"
+                    ),
+                ));
+                Ty::Unknown
+            }
+        }
+    }
+
+    /// Checks an index, which is a `Nat`, or a whole number of a range that
+    /// is not below 0, and gives its type.
+    pub(super) fn index_type(&mut self, body: &mut Body<'a>, index: &Expr) -> Ty {
+        let defs = self.defs;
         let wanted = match flexible(index) {
             true => Want::Ty(Ty::Int(Int::U64)),
             false => Want::Any,
@@ -582,35 +621,7 @@ impl<'a> Checker<'a> {
                 ));
             }
         }
-        match list {
-            // An index that holds a mistake already reported is not proven.
-            Ty::List(element) | Ty::Slice(element) | Ty::Array(element, _) if at.unknown() => {
-                element[0].clone()
-            }
-            Ty::List(element) | Ty::Slice(element) => {
-                self.in_range(body, of, None, index, pos);
-                element[0].clone()
-            }
-            Ty::Array(element, n) => {
-                self.in_range(body, of, Some(n), index, pos);
-                element[0].clone()
-            }
-            Ty::Text => {
-                self.in_range(body, of, None, index, pos);
-                Ty::Int(Int::U8)
-            }
-            Ty::Unknown => Ty::Unknown,
-            other => {
-                let given = defs.describe(&other, body.scope);
-                self.errors.push(Error::new(
-                    pos,
-                    format!(
-                        "an index is read from a list, a slice, or a text, and this is {given}"
-                    ),
-                ));
-                Ty::Unknown
-            }
-        }
+        at
     }
 
     /// Checks a string that holds expressions, which asks the system for

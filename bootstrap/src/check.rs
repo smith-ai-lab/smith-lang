@@ -433,6 +433,10 @@ enum Ty {
     /// An array of a size written as a number, which holds its one element
     /// type and its size, and is held in place.
     Array(Vec<Ty>, u64),
+    /// A matrix, an array with a size for each of two axes or more, which
+    /// holds its one element type and its sizes, and is held in place as an
+    /// array of all its elements, the last axis the one that changes first.
+    Matrix(Vec<Ty>, Vec<u64>),
     /// A function: the types of its parameters, followed by the type it
     /// gives.
     Fn(Vec<Ty>),
@@ -578,6 +582,17 @@ impl Ty {
         }
     }
 
+    /// The element of an array or a matrix and how many elements it holds,
+    /// which for a matrix is the product of its sizes, as it is held as an
+    /// array of all of them.
+    fn elements(&self) -> Option<(&Ty, u64)> {
+        match self {
+            Ty::Array(of, n) => Some((&of[0], *n)),
+            Ty::Matrix(of, sizes) => Some((&of[0], sizes.iter().product())),
+            _ => None,
+        }
+    }
+
     /// The type with each undecided whole number made an `i64`, which is
     /// what it is when nothing decides it.
     fn concrete(&self) -> Ty {
@@ -601,6 +616,7 @@ impl Ty {
             | (Ty::List(x), Ty::List(y))
             | (Ty::Slice(x), Ty::Slice(y)) => x.len() == y.len() && Ty::differ_in_function(x, y),
             (Ty::Array(x, n), Ty::Array(y, m)) => n == m && Ty::differ_in_function(x, y),
+            (Ty::Matrix(x, n), Ty::Matrix(y, m)) => n == m && Ty::differ_in_function(x, y),
             _ => false,
         }
     }
@@ -1331,7 +1347,7 @@ impl<'a> Defs<'a> {
                 }
             };
         }
-        if let Some(length) = t.length {
+        if !t.sizes.is_empty() {
             return match self.resolve(&t.args[0], scope, errors) {
                 Ty::Unknown => Ty::Unknown,
                 Ty::Fn(_) | Ty::Nothing => {
@@ -1341,7 +1357,10 @@ impl<'a> Defs<'a> {
                     ));
                     Ty::Unknown
                 }
-                element => Ty::Array(vec![element], length),
+                element => match t.sizes[..] {
+                    [length] => Ty::Array(vec![element], length),
+                    _ => Ty::Matrix(vec![element], t.sizes.clone()),
+                },
             };
         }
         if name.is_empty() {
@@ -2092,6 +2111,10 @@ impl<'a> Defs<'a> {
             Ty::List(items) => format!("List[{}]", self.text(&items[0], scope)),
             Ty::Slice(items) => format!("Slice[{}]", self.text(&items[0], scope)),
             Ty::Array(items, n) => format!("[{n}]{}", self.text(&items[0], scope)),
+            Ty::Matrix(items, sizes) => {
+                let sizes: Vec<String> = sizes.iter().map(u64::to_string).collect();
+                format!("[{}]{}", sizes.join(", "), self.text(&items[0], scope))
+            }
             Ty::Fn(items) => {
                 let items: Vec<String> = items.iter().map(|t| self.text(t, scope)).collect();
                 function_text(&items)
@@ -2412,8 +2435,16 @@ fn written_with(s: &dyn Fn(&str) -> Option<String>, e: &Expr) -> String {
             let items: Vec<String> = items.iter().map(|i| written_with(s, i)).collect();
             format!("[{}]", items.join(", "))
         }
-        Expr::Index { of, index, .. } => {
-            format!("{}[{}]", written_with(s, of), written_with(s, index))
+        Expr::Index { of, index, pos } => {
+            let at = match &**index {
+                // `m[i, j]`, which reads a matrix, has its indices in its brackets.
+                Expr::Tuple { items, pos: at } if at == pos => {
+                    let items: Vec<String> = items.iter().map(|e| written_with(s, e)).collect();
+                    items.join(", ")
+                }
+                index => written_with(s, index),
+            };
+            format!("{}[{at}]", written_with(s, of))
         }
         Expr::Slice { of, from, to, .. } => {
             let end = |e: &Option<Box<Expr>>| e.as_ref().map(|e| written_with(s, e));
@@ -2444,7 +2475,10 @@ fn written_with(s: &dyn Fn(&str) -> Option<String>, e: &Expr) -> String {
                 None => "loop { ... }".to_string(),
             },
         },
-        Expr::For(f) => format!("for {} {{ ... }}", f.index().0),
+        Expr::For(f) => {
+            let names: Vec<&str> = f.indices.iter().map(|(n, _)| n.as_str()).collect();
+            format!("for {} {{ ... }}", names.join(", "))
+        }
         Expr::Break { .. } => "break".to_string(),
         Expr::Unbuilt { .. } => "what is not built".to_string(),
         Expr::Return { value: None, .. } => "return".to_string(),
@@ -9388,7 +9422,9 @@ impl<'a> Checker<'a> {
                     // as when it is read.
                     if let (Some(at), Some(held)) = (at, &needed) {
                         needed = match held {
-                            Ty::Array(..) => Some(self.index(body, &at.0, &at.1, *pos)),
+                            Ty::Array(..) | Ty::Matrix(..) => {
+                                Some(self.index(body, &at.0, &at.1, *pos))
+                            }
                             Ty::Unknown => None,
                             given => {
                                 let given = self.defs.describe(given, body.scope);

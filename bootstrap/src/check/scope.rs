@@ -59,9 +59,7 @@ pub(super) fn used_names(file: &File) -> Vec<(String, Pos)> {
                     bound.extend(l.range.iter().map(|r| r.name.as_str()));
                     bound.extend(l.over.iter().map(|o| o.name.as_str()));
                 }
-                Expr::For(f) => {
-                    bound.insert(f.index().0);
-                }
+                Expr::For(f) => bound.extend(f.indices.iter().map(|(n, _)| n.as_str())),
                 _ => {}
             }
         }

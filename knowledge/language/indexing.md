@@ -6,6 +6,7 @@ status: partial
 built:
   - "indexing a `List` of whole numbers or `bool`s as `xs[i]`, which compiles when `arith` proves `i < xs.size` from the size of a list written out or given to a name, the range of a `loop`, an `if`, or a `requires` over a list's `size`, where `i` is a whole number of an unsigned type"
   - "an array whose size is in its type, `a[i]` read and `a[i] = e` assigned of a `mut`, which compile when `arith` proves `i` below the size, from the type of the index, an `if`, or a `requires`, and are refused with `cannot prove that `3 < 3`` otherwise"
+  - "a matrix read as `m[r, c]` and assigned as `m[r, c] = e` of a `mut`, with one index for each size, each of which compiles when `arith` proves it below its size, and refused when the number of indices is not the number of sizes"
   - "not `Index` as a trait a program implements, or an element of a list assigned"
 ---
 

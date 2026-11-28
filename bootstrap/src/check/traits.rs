@@ -82,7 +82,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
             function: false,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         }),
         Expr::Index {
             of,
@@ -105,7 +105,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
                 function: false,
                 range: None,
                 statement: None,
-                length: None,
+                sizes: Vec::new(),
             })
         }
         Expr::Tuple { pos, items } => Some(Type {
@@ -115,7 +115,7 @@ pub(super) fn expr_type(e: &Expr) -> Option<Type> {
             function: false,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         }),
         _ => None,
     }

@@ -6,7 +6,8 @@ status: partial
 built:
   - "`for i { e }` with one index whose size is a number, which it takes from each array that is a name read at the index alone, `a[i]`, and from the type the `for` is written for, as a result, an argument, or a binding that states its type; it is refused when two of these differ or none gives a size, the index is the range below the size, so `arith` proves a read at it or at arithmetic on it, `x[i + 1]`, which gives it no size, the block is refused when it needs an effect but `alloc`, and the array is held in the frame, so no memory is asked for"
   - "an index whose size is a whole number parameter, as in `product`, taken from the arrays it reads and the type the `for` is written for in each copy of the function, as for a size written as a number"
-  - "not a size known only when the program runs, several indices, a block that assigns a `mut` outside it, or elements without `Copy`"
+  - "`for i, j { e }` and more indices, the matrix whose element at each pair of indices is what the block gives there, each index taking its size from its own axis of each array or matrix that is a name read at the indices alone, as `a[i, j]`, `t[j, i]` or `v[j]`, and of the type the `for` is written for, which is refused when it has another number of sizes, with sizes written as numbers or as whole number parameters, and held in the frame as for one index"
+  - "not a size known only when the program runs, a block that assigns a `mut` outside it, or elements without `Copy`"
 ---
 
 # `for`

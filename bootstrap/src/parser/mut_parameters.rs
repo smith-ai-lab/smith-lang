@@ -183,7 +183,7 @@ fn give_back(f: &mut Function, errors: &mut Vec<Error>, unbuilt: &mut Vec<Error>
             function: false,
             range: None,
             statement: None,
-            length: None,
+            sizes: Vec::new(),
         },
     });
     let gives = own.is_some();
