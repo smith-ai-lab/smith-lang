@@ -248,11 +248,11 @@ struct ResultMeta {
 }
 
 impl Serialize[ResultMeta] {
-  fn write[W: Writer](value: ResultMeta, to: take W) -> W <alloc> {
-    mut w = Writer.structure(take to, "ResultMeta", 1)
-    w = Writer.field(take w, "io.modelcontextprotocol/serverInfo")
-    w = Serialize.write(value.server_info, take w)
-    Writer.end_structure(take w)
+  fn write[W: Writer](value: ResultMeta, to: mut W) <alloc> {
+    Writer.structure(mut to, "ResultMeta", 1)
+    Writer.field(mut to, "io.modelcontextprotocol/serverInfo")
+    Serialize.write(value.server_info, mut to)
+    Writer.end_structure(mut to)
   }
 }
 
@@ -263,16 +263,16 @@ struct Capabilities {
 // What the lines of the server imply: an object with a member for each kind of
 // offer, which is empty for a server that offers none.
 impl Serialize[Capabilities] {
-  fn write[W: Writer](value: Capabilities, to: take W) -> W <alloc> {
+  fn write[W: Writer](value: Capabilities, to: mut W) <alloc> {
     mut count: Nat = 0
     if value.tools { count = 1 }
-    mut w = Writer.structure(take to, "Capabilities", count)
+    Writer.structure(mut to, "Capabilities", count)
     if value.tools {
-      w = Writer.field(take w, "tools")
-      w = Writer.structure(take w, "Tools", 0)
-      w = Writer.end_structure(take w)
+      Writer.field(mut to, "tools")
+      Writer.structure(mut to, "Tools", 0)
+      Writer.end_structure(mut to)
     }
-    Writer.end_structure(take w)
+    Writer.end_structure(mut to)
   }
 }
 
@@ -287,33 +287,33 @@ struct Discovered {
 // The result of `server/discover`, with the members written as the protocol
 // names them, and `instructions` left out when there are none.
 impl Serialize[Discovered] {
-  fn write[W: Writer](value: Discovered, to: take W) -> W <alloc> {
+  fn write[W: Writer](value: Discovered, to: mut W) <alloc> {
     mut count: Nat = 5
     match value.instructions {
       .some(s) { count = 6 }
       .none { }
     }
-    mut w = Writer.structure(take to, "DiscoverResult", count)
-    w = Writer.field(take w, "resultType")
-    w = Writer.text(take w, "complete")
-    w = Writer.field(take w, "supportedVersions")
-    w = Serialize.write(value.supported_versions, take w)
-    w = Writer.field(take w, "capabilities")
-    w = Serialize.write(value.capabilities, take w)
+    Writer.structure(mut to, "DiscoverResult", count)
+    Writer.field(mut to, "resultType")
+    Writer.text(mut to, "complete")
+    Writer.field(mut to, "supportedVersions")
+    Serialize.write(value.supported_versions, mut to)
+    Writer.field(mut to, "capabilities")
+    Serialize.write(value.capabilities, mut to)
     match value.instructions {
       .some(s) {
-        w = Writer.field(take w, "instructions")
-        w = Writer.text(take w, s)
+        Writer.field(mut to, "instructions")
+        Writer.text(mut to, s)
       }
       .none { }
     }
-    w = Writer.field(take w, "ttlMs")
-    w = Serialize.write(value.ttl, take w)
-    w = Writer.field(take w, "cacheScope")
-    w = Writer.text(take w, "private")
-    w = Writer.field(take w, "_meta")
-    w = Serialize.write(value.meta, take w)
-    Writer.end_structure(take w)
+    Writer.field(mut to, "ttlMs")
+    Serialize.write(value.ttl, mut to)
+    Writer.field(mut to, "cacheScope")
+    Writer.text(mut to, "private")
+    Writer.field(mut to, "_meta")
+    Serialize.write(value.meta, mut to)
+    Writer.end_structure(mut to)
   }
 }
 

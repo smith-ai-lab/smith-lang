@@ -831,7 +831,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
 }
 
 impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(take to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: mut W) <alloc> { Writer.signed(mut to, value.degrees) }
 }
 
 ",
@@ -891,7 +891,8 @@ fn case(g: &mut Gen, parts: Parts, own_impl: bool, log: bool, writes: bool) -> C
 const WRITES: &str = "  print(r.asked)
   match v {
     .ok(x) {
-      l = write(x, Log(lines: \"\"))
+      mut l = Log(lines: \"\")
+      write(x, mut l)
       print(l.lines)
     }
     .err(e) { print(\"{e.path}|{show(e)}\") }
@@ -995,7 +996,8 @@ fn a_field_left_out_is_none_or_its_default_or_an_error_that_names_it() {
             "fn report(v: Result[Wrap, ReadError]) <console, alloc> {
   match v {
     .ok(x) {
-      l = write(x, Log(lines: \"\"))
+      mut l = Log(lines: \"\")
+      write(x, mut l)
       print(l.lines)
     }
     .err(e) { print(\"{e.path}|{show(e)}\") }

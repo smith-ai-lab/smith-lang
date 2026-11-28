@@ -1,26 +1,26 @@
 use std.bits (u64)
 
 pub trait Writer[W] {
-  fn boolean(w: take W, value: bool) -> W <alloc>
-  fn signed(w: take W, value: Int) -> W <alloc>
-  fn unsigned(w: take W, value: u64) -> W <alloc>
-  fn text(w: take W, value: str) -> W <alloc>
-  fn nothing(w: take W) -> W <alloc>
-  fn absent(w: take W) -> W <alloc>
-  fn present(w: take W) -> W <alloc>
-  fn sequence(w: take W, size: Nat) -> W <alloc>
-  fn end_sequence(w: take W) -> W <alloc>
-  fn tuple(w: take W, size: Nat) -> W <alloc>
-  fn end_tuple(w: take W) -> W <alloc>
-  fn structure(w: take W, name: str, fields: Nat) -> W <alloc>
-  fn field(w: take W, name: str) -> W <alloc>
-  fn end_structure(w: take W) -> W <alloc>
-  fn case(w: take W, of: str, name: str, holds: bool) -> W <alloc>
-  fn map(w: take W, size: Nat) -> W <alloc>
-  fn end_map(w: take W) -> W <alloc>
-  fn raw(w: take W, of: str, bytes: Slice[Byte]) -> W <alloc>
+  fn boolean(w: mut W, value: bool) <alloc>
+  fn signed(w: mut W, value: Int) <alloc>
+  fn unsigned(w: mut W, value: u64) <alloc>
+  fn text(w: mut W, value: str) <alloc>
+  fn nothing(w: mut W) <alloc>
+  fn absent(w: mut W) <alloc>
+  fn present(w: mut W) <alloc>
+  fn sequence(w: mut W, size: Nat) <alloc>
+  fn end_sequence(w: mut W) <alloc>
+  fn tuple(w: mut W, size: Nat) <alloc>
+  fn end_tuple(w: mut W) <alloc>
+  fn structure(w: mut W, name: str, fields: Nat) <alloc>
+  fn field(w: mut W, name: str) <alloc>
+  fn end_structure(w: mut W) <alloc>
+  fn case(w: mut W, of: str, name: str, holds: bool) <alloc>
+  fn map(w: mut W, size: Nat) <alloc>
+  fn end_map(w: mut W) <alloc>
+  fn raw(w: mut W, of: str, bytes: Slice[Byte]) <alloc>
 }
 
 pub trait Serialize[T] {
-  fn write[W: Writer](value: T, to: take W) -> W <alloc>
+  fn write[W: Writer](value: T, to: mut W) <alloc>
 }

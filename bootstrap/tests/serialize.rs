@@ -140,7 +140,7 @@ pub fn writer(name: &str, body: impl Fn(&str, &[&str]) -> String) -> String {
             format!(", {params}")
         };
         out.push_str(&format!(
-            "  fn {function}(w: take {name}{params}) -> {name} <alloc> {{ {} }}\n",
+            "  fn {function}(w: mut {name}{params}) <alloc> {{ {} }}\n",
             body(function, &names)
         ));
     }
@@ -155,10 +155,10 @@ pub fn log() -> String {
         if function == "raw" {
             // The log is of a format that is not the one that `of` names, so
             // the bytes are a text.
-            return "match utf8(bytes) {\n      .ok(t) { Log(lines: \"{w.lines}text {t}\\n\") }\n      .err(e) { w }\n    }".to_string();
+            return "match utf8(bytes) {\n      .ok(t) { w = Log(lines: \"{w.lines}text {t}\\n\") }\n      .err(e) { }\n    }".to_string();
         }
         let args: String = names.iter().map(|n| format!(" {{{n}}}")).collect();
-        format!("Log(lines: \"{{w.lines}}{function}{args}\\n\")")
+        format!("w = Log(lines: \"{{w.lines}}{function}{args}\\n\")")
     };
     format!(
         "struct Log {{\n  lines: str\n}}\n\n{}",
@@ -170,7 +170,7 @@ pub fn log() -> String {
 fn count() -> String {
     format!(
         "struct Count {{\n  n: u64\n}}\n\n{}",
-        writer("Count", |_, _| "Count(n: wrapping_add(w.n, 1))".to_string())
+        writer("Count", |_, _| "w = Count(n: wrapping_add(w.n, 1))".to_string())
     )
 }
 
@@ -186,7 +186,8 @@ fn a_struct_writes_its_name_and_each_field_in_order() {
 }}
 
 fn main() <console, alloc> {{
-  l = write(Point(x: 3, y: 4), Log(lines: \"\"))
+  mut l = Log(lines: \"\")
+  write(Point(x: 3, y: 4), mut l)
   print(l.lines)
 }}
 ",
@@ -207,7 +208,7 @@ fn a_rawjson_written_to_a_writer_of_another_format_is_a_text() {
     let source = with_import(
         &[("std.json", &["RawJson", "raw_json"])],
         &format!(
-            "{}struct Call {{\n  args: RawJson\n}}\n\nfn main() <console, alloc> {{\n  match raw_json(\"[1.50, 1e400]\") {{\n    .ok(r) {{\n      l = write(Call(args: r), Log(lines: \"\"))\n      print(l.lines)\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n",
+            "{}struct Call {{\n  args: RawJson\n}}\n\nfn main() <console, alloc> {{\n  match raw_json(\"[1.50, 1e400]\") {{\n    .ok(r) {{\n      mut l = Log(lines: \"\")\n      write(Call(args: r), mut l)\n      print(l.lines)\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n",
             log()
         ),
     );
@@ -471,7 +472,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
     if own_impl {
         out.push_str(
             "impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(take to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: mut W) <alloc> { Writer.signed(mut to, value.degrees) }
 }
 
 ",
@@ -507,13 +508,13 @@ fn case(g: &mut Gen, parts: Parts, own_impl: bool, writer: &str, to: &str) -> Ca
     let head = with_import(
         &[("std.serialize", &["write"])],
         &format!(
-            "{writer}{}fn main() <console, alloc> {{\n  v: {} = {value}\n  l = ",
+            "{writer}{}fn main() <console, alloc> {{\n  v: {} = {value}\n  mut l = {to}\n  ",
             definitions(&defs, own_impl),
             defs.name(&top)
         ),
     );
     let at = pos_after(&head);
-    let source = format!("{head}write(v, {to})\n");
+    let source = format!("{head}write(v, mut l)\n");
     Case { source, at, calls }
 }
 
@@ -626,7 +627,7 @@ fn writing_a_list_asks_for_no_memory_but_the_writers() {
     let program = |n: usize, write: bool| {
         let items: Vec<String> = (0..n).map(|i| i.to_string()).collect();
         let tail = if write {
-            "  c = write(xs, Count(n: 0))\n  if c.n == ".to_string()
+            "  mut c = Count(n: 0)\n  write(xs, mut c)\n  if c.n == ".to_string()
                 + &(n + 2).to_string()
                 + " { print(\"ok\") } else { print(\"no\") }\n"
         } else {
@@ -660,14 +661,14 @@ fn writing_a_list_asks_for_no_memory_but_the_writers() {
 // Where `Serialize` and `Writer` are.
 
 fn serialize_and_writer_are_imported_with_use_and_are_not_in_the_prelude() {
-    let writes = "use std.console (console)\n\nstruct Point {\n  x: Int\n}\n\nfn main() <console, alloc> {\n  l = write(Point(x: 1), 0)\n}\n";
+    let writes = "use std.console (console)\n\nstruct Point {\n  x: Int\n}\n\nfn main() <console, alloc> {\n  mut l = 0\n  write(Point(x: 1), mut l)\n}\n";
     // No name of the module is known to a program that does not import it.
     let found = errors(writes);
     assert!(
         found.iter().any(|e| e.message.contains("`write`")),
         "{found:?}"
     );
-    let body = "struct Count {\n  n: u64\n}\n\nfn show[W: Writer](w: take W) -> W <alloc> { w }\n\nfn main() <alloc> {\n  c = show(Count(n: 0))\n}\n";
+    let body = "struct Count {\n  n: u64\n}\n\nfn show[W: Writer](w: mut W) <alloc> { }\n\nfn main() <alloc> {\n  mut c = Count(n: 0)\n  show(mut c)\n}\n";
     let bound = format!("use std.bits (u64)\n\n{body}");
     let bound = bound.as_str();
     let found = errors(bound);
@@ -695,7 +696,7 @@ fn a_program_that_never_writes_a_value_is_the_program_it_was() {
     let extended = with_import(
         &[],
         &format!(
-            "{}fn unused(p: Point) -> Log <alloc> {{ write(p, Log(lines: \"\")) }}\n\n{items}",
+            "{}fn unused(p: Point) -> Log <alloc> {{\n  mut l = Log(lines: \"\")\n  write(p, mut l)\n  l\n}}\n\n{items}",
             log()
         ),
     );

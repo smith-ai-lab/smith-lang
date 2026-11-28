@@ -264,7 +264,8 @@ fn main() <console, alloc> {{
     .ok(t) {{ print(to_json(t)) }}
     .err(e) {{ print(\"bad\") }}
   }}
-  l = Writer.end_structure(Log(lines: \"\"))
+  mut l = Log(lines: \"\")
+  Writer.end_structure(mut l)
   print(l.lines)
   e = ReadError(path: \"p\", problem: Problem.missing(\"x\"), line: 1, column: 2)
   print(\"{{e.path}} {{e.line}} {{e.column}}\")
