@@ -7,6 +7,7 @@ built:
   - "`pub` before a `fn`, `struct`, `enum`, or `trait` of a module of a project, which is then the name another module lists in a `use`, and the functions of a `pub` trait, which are listed by their own names"
   - "a name that is not `pub` refused in a `use` with its own error, and a name written with no `use` refused as any name that is not there"
   - "`pub` before a field of a struct of a module of a project or of the library, and a field without it refused, at its place, in another module when it is read, assigned, or built by a call of the struct"
+  - "a field, `pub` or not, assigned only in the module that defines its struct, and refused in any other at the assignment, naming the field and that module, whether it is written `v.f = e`, `v.f.g = e`, `v.f[i] = e`, or `g(mut v.f)`"
   - "`pub` before an operation of an effect of a module of a project or of the library, and an operation without it private to its module, which no other module imports, calls, or handles"
   - "`pub` before a `fn` in the file that is built, which `smith build` accepts and which lets `project.smith` list its `main`"
   - "not `pub` before an `effect`, or before anything but a `fn` in the file that is built"
@@ -66,13 +67,21 @@ pub struct Transaction {
 
 ## Building and changing a struct from another module
 
-A struct can be built or taken apart only by code that can see all of its fields, and a field can be assigned only by code that can see it.
+A struct can be built or taken apart only by code that can see all of its fields. A field is assigned only in the module that defines its struct, `pub` or not, so no other module can break what that module keeps true of its values.
 
-Every field of `Rect` is `pub`, so any module can build one and assign its fields.
+Every field of `Rect` is `pub`, so any module can build one and read its fields. Another module that wants a wider `Rect` builds one.
 
 ```
 fn wider(r: Rect) -> Rect {
-  mut wide = Rect(w: 1.0, h: r.h)
+  Rect(w: r.w * 2.0, h: r.h)
+}
+```
+
+Assigning a field of `Rect` in another module is refused, at the assignment, with the name of the field and of the module that defines `Rect`. A field of a field, and a field passed [`mut`](mut-parameters.md), are refused the same way.
+
+```
+fn widened(r: Rect) -> Rect {
+  mut wide = r
   wide.w = r.w * 2.0
   wide
 }
@@ -114,7 +123,7 @@ This is what makes [`without`](without.md) and [proof fields](proof-fields.md) t
 | `fn f` | Private: used only inside its module |
 | `pub fn f` | Public: any module may import it |
 | `pub struct S` | The struct is public, and each field is private unless it has `pub` |
-| `pub w: f32` | A public field: code outside the module can see it |
-| `w: f32` | A private field: code outside the module cannot build, take apart, or assign the struct |
+| `pub w: f32` | A public field: code outside the module can read it, and only its own module assigns it |
+| `w: f32` | A private field: code outside the module cannot read it, or build or take apart the struct |
 
 Next: [Importing with use](use.md)
