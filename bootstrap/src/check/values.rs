@@ -36,7 +36,18 @@ fn head<'t>(defs: &Defs, ty: &'t Ty) -> Option<(String, Vec<Part<'t>>)> {
 /// Reads the numbers the type says off it, where the shape is written with the
 /// parameters of the template, and leaves the others as they are.
 fn read(defs: &Defs, template: &Template, shape: &Shape, ty: &Ty, found: &mut [Option<u64>]) {
-    let Shape::Name(name, args) = shape;
+    let (name, args) = match (shape, ty) {
+        (Shape::Name(name, args), _) => (name, args),
+        (Shape::Array(size, of), Ty::Array(element, n)) => {
+            if let Some(k) = (size.as_ref())
+                .and_then(|size| template.params.iter().position(|q| q.name == *size))
+            {
+                found[k].get_or_insert(*n);
+            }
+            return read(defs, template, of, &element[0], found);
+        }
+        (Shape::Array(..), _) => return,
+    };
     let Some((of, parts)) = head(defs, ty) else {
         return;
     };
@@ -50,7 +61,7 @@ fn read(defs: &Defs, template: &Template, shape: &Shape, ty: &Ty, found: &mut [O
                     found[k].get_or_insert(n);
                 }
             }
-            (Shape::Name(..), Part::Ty(t)) => read(defs, template, arg, t, found),
+            (_, Part::Ty(t)) => read(defs, template, arg, t, found),
             _ => {}
         }
     }
@@ -89,10 +100,12 @@ impl<'a> Checker<'a> {
                 None => template.inputs.get(i),
             }
             .and_then(|(_, shape)| shape.as_ref());
-            let Some(shape @ Shape::Name(_, args)) = shape else {
+            let Some(shape) = shape else {
                 continue;
             };
-            if args.is_empty() {
+            if let Shape::Name(_, args) = shape
+                && args.is_empty()
+            {
                 continue;
             }
             let given = self.expr(body, &arg.value, &Want::Any);

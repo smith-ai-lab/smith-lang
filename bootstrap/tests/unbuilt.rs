@@ -67,9 +67,9 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: true,
     },
     Unbuilt {
-        declares: "fn u{i}[n: Nat](a: @[n]Int) -> Int { 1 }\n",
-        call: "u{i}([1, 2])",
-        parsed: false,
+        declares: "fn u{i}(n: Nat, a: @[n]Int) -> Int { 1 }\n",
+        call: "u{i}(2, [1, 2])",
+        parsed: true,
     },
     Unbuilt {
         declares: "fn u{i}(n: Int) -> Int {\n  mut y = n\n  y @+= 1\n  wrapping_add(y, 1)\n}\n",
