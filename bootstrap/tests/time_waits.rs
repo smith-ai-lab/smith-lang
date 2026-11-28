@@ -460,9 +460,9 @@ use std.console (console, print)
 use std.deserialize (ReadError)
 use std.fromtext (from_text)
 use std.instant (ms)
-use std.task (join, spawn, task, test_ready_by, test_scheduler_with_io)
+use std.task (Descriptor, join, spawn, task, test_ready_by, test_scheduler_with_io)
 
-fn waits(handle: u64) -> bool <task> {
+fn waits(handle: Descriptor) -> bool <task> {
   test_ready_by(handle, ms(20))
 }
 

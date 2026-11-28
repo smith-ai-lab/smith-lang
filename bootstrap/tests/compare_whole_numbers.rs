@@ -243,13 +243,17 @@ fn literal(name: &str, n: i128) -> String {
 
 /// A value of the type that the compiler cannot know, made from the size of
 /// the arguments, which is not known until the program runs: the `n` that
-/// `COUNT` binds, which is their size as a `u64`.
+/// `COUNT` binds, which is their size as a `u64`, and for a narrower type the
+/// bits of it below the greatest value of that type.
 fn unknown(name: &str, plus: u64) -> String {
     let size = format!("wrapping_add(n, {plus})");
     match name {
         "bool" => format!("{size} == 1"),
         "u64" => size,
-        _ => format!("wrapping_narrow({size})"),
+        _ => {
+            let ty = INTS.iter().find(|t| t.name == name).expect("a type");
+            format!("bit_and({size}, {})", ty.max())
+        }
     }
 }
 

@@ -870,7 +870,7 @@ fn the_frame_types_settings_and_error_codes_of_rfc_9113_are_read_and_written_as_
 /// through the module alone.
 const HEADERS: &str = "use std.console (console, print)
 use std.http2 (Decoder, Encoder, decode, decoder, encode, encoder)
-use std.int (wrapping_add, wrapping_narrow)
+use std.int (wrapping_add)
 use std.list (freeze, push)
 
 fn show(r: Result[List[(str, str)], str]) <console, alloc> {
@@ -883,16 +883,16 @@ fn show(r: Result[List[(str, str)], str]) <console, alloc> {
   }
 }
 
-fn reference(i: Nat) -> Slice[Byte] <alloc> {
+fn reference(i: 0..128) -> Slice[Byte] <alloc> {
   mut l: List[Byte] = []
-  l = push(take l, wrapping_narrow(wrapping_add(128, i)))
+  l = push(take l, 128 + i)
   freeze(take l)
 }
 
-fn probe(d: take Decoder, places: Nat) -> Decoder <console, alloc> {
+fn probe(d: take Decoder, places: 0..66) -> Decoder <console, alloc> {
   mut t = d
-  loop i in 0..wrapping_add(places, 1) {
-    (next, r) = decode(take t, reference(wrapping_add(62, i)), largest: 65536)
+  loop i in 0..places + 1 {
+    (next, r) = decode(take t, reference(62 + i), largest: 65536)
     t = next
     show(r)
   }

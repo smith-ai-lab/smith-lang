@@ -98,7 +98,6 @@ const STD: &[(&str, &[&str])] = &[
             "saturating_sub",
             "wrapping_add",
             "wrapping_mul",
-            "wrapping_narrow",
             "wrapping_shift_left",
             "wrapping_sub",
         ],
@@ -469,7 +468,6 @@ pub fn bits(function: &str, ty: Int, a: i128, b: i128) -> i128 {
 pub fn narrowed(kind: &str, to: Int, a: i128) -> String {
     let fits = (to.min()..=to.max()).contains(&a);
     match kind {
-        "wrapping_narrow" => to.wrap(a).to_string(),
         "clamp" => a.clamp(to.min(), to.max()).to_string(),
         _ if fits => format!(".some({a})"),
         _ => ".none".to_string(),
@@ -578,7 +576,7 @@ fn line(g: &mut Gen, vars: &[Var], at: usize) -> Line {
                 .copied()
                 .collect();
             let to = *g.pick(&others);
-            let kind = *g.pick(&["wrapping_narrow", "clamp", "narrow"]);
+            let kind = *g.pick(&["clamp", "narrow"]);
             let given = narrowed(kind, to, first.value);
             let ty = if kind == "narrow" {
                 format!("Option[{}]", to.name)

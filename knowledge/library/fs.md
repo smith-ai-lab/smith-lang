@@ -108,7 +108,7 @@ fn fixture() -> Result[List[Byte], FsError] <alloc> {
 }
 ```
 
-`memory_fs(files, body)` takes `files`, a `Files`, which is a list of `MemoryFile`, each a `path` and its `bytes`. A file is found by its path as a whole, so `a/b` is one name and no directory. `create_file` adds a file or empties the one there is, `write` puts bytes in from the place and fills what the file did not hold with zeros, and nothing in memory is refused. A file that `open_file` of it is not given is `.missing(path)`.
+`memory_fs(files, body)` takes `files`, a `Files`, which is a list of `MemoryFile`, each a `path` and its `bytes`. A file is found by its path as a whole, so `a/b` is one name and no directory. `create_file` adds a file or empties the one there is, `write` puts bytes in from the place and fills what the file did not hold with zeros, and nothing in memory is refused but a file created when the list holds as many files as there are `Descriptor`s, which is `failed`. A file that `open_file` of it is not given is `.missing(path)`.
 
 A handler that refuses builds the case with what it was given: the path for `open_file` and `create_file`, and the path of the `File` it is lent, `f.path`, for the others.
 
@@ -128,4 +128,4 @@ fn refusing[T](body: fn() -> T <fs>) -> T {
 }
 ```
 
-A handler that a test writes makes a `File` from a number of its own choosing with `file`, reads the number of the one it is lent with `handle`, and ends the one it is given with `release`, as the handlers of [`net`](net.md#making-a-value-in-a-handler) do for a connection. The system's handler answers each operation given a `File` it did not open with `failed`, and makes no system call with it.
+A handler that a test writes makes a `File` from a number of its own choosing, a `Descriptor` of [`std.task`](task.md), with `file`, reads the number of the one it is lent with `handle`, and ends the one it is given with `release`, as the handlers of [`net`](net.md#making-a-value-in-a-handler) do for a connection. The system's handler answers each operation given a `File` it did not open with `failed`, and makes no system call with it.

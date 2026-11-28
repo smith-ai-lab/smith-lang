@@ -7,7 +7,7 @@ use std.instant (ms)
 use std.int (wrapping_add)
 use std.list (push)
 use std.net (Connection, close, connection, handle, net, release)
-use std.task (outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+use std.task (Descriptor, outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
@@ -17,7 +17,7 @@ fn eat() -> u64 <alloc> {
   0
 }
 
-fn opened(id: u64) -> Connection <console, alloc> {
+fn opened(id: Descriptor) -> Connection <console, alloc> {
   print("opened {id}")
   connection(id)
 }

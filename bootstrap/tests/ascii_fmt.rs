@@ -47,7 +47,7 @@ fn kinds(b: u8) -> [bool; 4] {
 }
 
 fn the_four_kinds_of_ascii_are_what_a_table_of_every_byte_says() {
-    let source = "use std.ascii (is_digit, is_hex_digit, is_letter, is_space)\nuse std.console (console, print)\nuse std.int (wrapping_narrow)\n\nfn main() <console, alloc> {\n  loop i in 0..256 {\n    b: Byte = wrapping_narrow(i)\n    print(\"{is_digit(b)} {is_hex_digit(b)} {is_letter(b)} {is_space(b)}\")\n  }\n}\n";
+    let source = "use std.ascii (is_digit, is_hex_digit, is_letter, is_space)\nuse std.console (console, print)\n\nfn main() <console, alloc> {\n  loop i in 0..256 {\n    n: Nat = i\n    b: Byte = i\n    print(\"{is_digit(b)} {is_hex_digit(b)} {is_letter(b)} {is_space(b)}\")\n  }\n}\n";
     let lines = (0..=255u8)
         .map(|b| kinds(b).map(|k| k.to_string()).join(" "))
         .collect();

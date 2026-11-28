@@ -140,7 +140,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {
       if accepted > {count} {{
         .err(.closed(l.host))
       }} else {{
-        .ok(connection(wrapping_add(accepted, 1)))
+        .ok(connection(accepted + 1))
       }}
     }},
     stop: fn(l) {{ n = release(take l) }},

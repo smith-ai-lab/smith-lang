@@ -334,7 +334,7 @@ fn a_task_that_may_wait_in_a_loop_and_does_not_gives_what_it_holds_and_the_sched
 /// the order of the three is that, for every seed, and a task that waits for a
 /// handle the test never makes ready is waited for by none that is run.
 fn a_program_with_handles(cases: &[(&str, u64)]) -> String {
-    let mut s = String::from("use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn say(handle: u64) -> u64 <task, console, alloc> {\n  test_ready(handle)\n  print(\"{handle}\")\n  handle\n}\n\n");
+    let mut s = String::from("use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (Descriptor, join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn say(handle: Descriptor) -> u64 <task, console, alloc> {\n  test_ready(handle)\n  print(\"{handle}\")\n  handle\n}\n\n");
     for (i, (ready, seed)) in cases.iter().enumerate() {
         s += &format!("fn run{i}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler_with_io({seed}, {ready})\n  a = spawn {{ say(1) }}\n  b = spawn {{ say(2) }}\n  c = spawn {{ say(3) }}\n  wrapping_add(join(take a), wrapping_add(join(take b), join(take c)))\n}}\n\n");
     }
