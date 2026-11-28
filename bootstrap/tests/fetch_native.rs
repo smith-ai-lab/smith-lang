@@ -10,12 +10,12 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command, Stdio};
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use smith::target::Target;
 
 use crate::Test;
+use crate::shared;
 use crate::cli::{folder, smith, stderr};
 use crate::targets;
 
@@ -76,10 +76,10 @@ fn kernel() -> Vec<Target> {
 
 /// The program, built once for each kind of chip, by the compiler's executable.
 fn program(which: Which, target: Target) -> &'static [u8] {
-    static X64: [OnceLock<Vec<u8>>; 2] = [OnceLock::new(), OnceLock::new()];
-    static ARM64: [OnceLock<Vec<u8>>; 2] = [OnceLock::new(), OnceLock::new()];
+    static X64: [shared::Once<Vec<u8>>; 2] = [shared::Once::new(), shared::Once::new()];
+    static ARM64: [shared::Once<Vec<u8>>; 2] = [shared::Once::new(), shared::Once::new()];
     let cells = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
-    cells[which as usize].get_or_init(|| {
+    cells[which as usize].get(|| {
         if targets::fingerprinting() {
             targets::build(which.source().as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
         } else {

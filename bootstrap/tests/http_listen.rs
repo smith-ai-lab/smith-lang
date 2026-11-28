@@ -9,7 +9,6 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use smith::diag::Error;
@@ -18,6 +17,7 @@ use smith::target::Target;
 use smith::lower;
 
 use crate::Test;
+use crate::shared;
 use crate::cli::{folder, smith, stderr};
 use crate::generate::{self, Gen};
 use crate::ports;
@@ -123,10 +123,10 @@ fn concurrent() -> Vec<Target> {
 
 /// The program, built once for `target`.
 fn program(target: Target) -> &'static [u8] {
-    static X64: OnceLock<Vec<u8>> = OnceLock::new();
-    static ARM64: OnceLock<Vec<u8>> = OnceLock::new();
+    static X64: shared::Once<Vec<u8>> = shared::Once::new();
+    static ARM64: shared::Once<Vec<u8>> = shared::Once::new();
     let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
-    cell.get_or_init(|| {
+    cell.get(|| {
         if targets::fingerprinting() {
             targets::build(PROGRAM.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
         } else {

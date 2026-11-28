@@ -240,6 +240,7 @@ pub fn in_a_machine_test() -> bool {
 fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u64, Duration) {
     CURRENT.set(name);
     let begin = shared::steps();
+    let waited = shared::waited();
     let started = Instant::now();
     MESSAGE.with(|m| *m.borrow_mut() = None);
     let passed = panic::catch_unwind(AssertUnwindSafe(test)).is_ok();
@@ -250,7 +251,10 @@ fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u
             .unwrap()
             .push((name, message.unwrap_or_default()));
     }
-    (passed, shared::steps() - begin, started.elapsed())
+    // The time spent making or waiting for shared work is no test's own, as
+    // `shared` says.
+    let took = started.elapsed().saturating_sub(shared::waited() - waited);
+    (passed, shared::steps() - begin, took)
 }
 
 /// Prints how the run went, and gives whether it passed.
