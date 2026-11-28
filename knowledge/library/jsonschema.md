@@ -28,7 +28,9 @@ struct Note {
 }
 
 fn main() <console, alloc> {
-  print(schema_text(Describe[Note].describe(json_schema(Json(cases: .key, names: .written)))))
+  mut schema = json_schema(Json(cases: .key, names: .written))
+  Describe[Note].describe(mut schema)
+  print(schema_text(take schema))
 }
 ```
 

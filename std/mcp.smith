@@ -708,7 +708,9 @@ fn entry_of[F, A, R](f: F) -> str <alloc>
   requires Function[F, A, R]
   requires Describe[A]
 {
-  schema = schema_text(Describe[A].describe(json_schema(Json(cases: .key, names: .written))))
+  mut described = json_schema(Json(cases: .key, names: .written))
+  Describe[A].describe(mut described)
+  schema = schema_text(take described)
   mut b = texts.text()
   texts.append(mut b, "\{\"name\":")
   texts.append(mut b, json_string(Function.name(f)))

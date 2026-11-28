@@ -306,7 +306,7 @@ fn schema_source(t: &Tool) -> String {
         s += &comment_lines(c, "  ");
         s += &format!("  p{i}: {}\n", ty(k));
     }
-    s += "}\n\nfn main() <console, alloc> {\n  print(schema_text(Describe[Args].describe(json_schema(Json(cases: .key, names: .written)))))\n}\n";
+    s += "}\n\nfn main() <console, alloc> {\n  mut schema = json_schema(Json(cases: .key, names: .written))\n  Describe[Args].describe(mut schema)\n  print(schema_text(take schema))\n}\n";
     s
 }
 

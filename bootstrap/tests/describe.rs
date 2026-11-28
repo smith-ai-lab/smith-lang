@@ -103,7 +103,7 @@ fn log() -> String {
             format!(", {params}")
         };
         out.push_str(&format!(
-            "  fn {function}(d: take Log{params}) -> Log <alloc> {{ Log(lines: \"{{d.lines}}{function}{args}\\n\") }}\n"
+            "  fn {function}(d: mut Log{params}) <alloc> {{ d.lines = \"{{d.lines}}{function}{args}\\n\" }}\n"
         ));
     }
     out.push_str("}\n\n");
@@ -289,7 +289,7 @@ fn case(g: &mut Gen) -> Case {
     let top = ty(g, &mut defs, 3, parts);
     let notes = notes(g, &defs);
     let rest = format!(
-        "{}{}fn main() <console, alloc> {{\n  d = Describe[{}].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+        "{}{}fn main() <console, alloc> {{\n  mut d = Log(lines: \"\")\n  Describe[{}].describe(mut d)\n  print(d.lines)\n}}\n",
         log(),
         source(&defs, &notes),
         defs.name(&top)
@@ -329,7 +329,7 @@ fn a_range_describes_its_least_and_its_greatest_value() {
     ];
     for (range, said) in ranges {
         let rest = format!(
-            "{}struct P {{\n  a: {range}\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[P].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+            "{}struct P {{\n  a: {range}\n}}\n\nfn main() <console, alloc> {{\n  mut d = Log(lines: \"\")\n  Describe[P].describe(mut d)\n  print(d.lines)\n}}\n",
             log()
         );
         let source = with_import(&imports(), &rest);
@@ -345,7 +345,7 @@ fn a_range_describes_its_least_and_its_greatest_value() {
 
 fn a_type_taken_from_without_describe_refuses_every_type_that_holds_it() {
     let rest = format!(
-        "{}struct Session {{\n  token: str\n}}\n\nwithout Describe for Session\n\nstruct Login {{\n  by: Session\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[Login].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+        "{}struct Session {{\n  token: str\n}}\n\nwithout Describe for Session\n\nstruct Login {{\n  by: Session\n}}\n\nfn main() <console, alloc> {{\n  mut d = Log(lines: \"\")\n  Describe[Login].describe(mut d)\n  print(d.lines)\n}}\n",
         log()
     );
     let source = with_import(&imports(), &rest);
@@ -357,7 +357,7 @@ fn a_type_taken_from_without_describe_refuses_every_type_that_holds_it() {
 
 fn a_types_own_impl_is_the_description_used_wherever_it_is_a_part() {
     let rest = format!(
-        "{}struct Celsius {{\n  degrees: Int\n}}\n\nimpl Describe[Celsius] {{\n  fn describe[D: Describer](to: take D) -> D <alloc> {{ Describer.text(take to) }}\n}}\n\nstruct Reading {{\n  at: Celsius\n  past: List[Celsius]\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[Reading].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+        "{}struct Celsius {{\n  degrees: Int\n}}\n\nimpl Describe[Celsius] {{\n  fn describe[D: Describer](to: mut D) <alloc> {{ Describer.text(mut to) }}\n}}\n\nstruct Reading {{\n  at: Celsius\n  past: List[Celsius]\n}}\n\nfn main() <console, alloc> {{\n  mut d = Log(lines: \"\")\n  Describe[Reading].describe(mut d)\n  print(d.lines)\n}}\n",
         log()
     );
     let source = with_import(&imports(), &rest);
@@ -382,7 +382,7 @@ fn a_program_that_describes_nothing_holds_no_comment() {
         };
         let rest = if describes {
             format!(
-                "{}{about}struct Note {{\n{title}  title: str\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[Note].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+                "{}{about}struct Note {{\n{title}  title: str\n}}\n\nfn main() <console, alloc> {{\n  mut d = Log(lines: \"\")\n  Describe[Note].describe(mut d)\n  print(d.lines)\n}}\n",
                 log()
             )
         } else {
@@ -412,7 +412,7 @@ fn every_executable_of_a_description_prints_what_the_evaluator_says() {
 /// default may be left out.
 fn the_arguments_of_a_function_are_described_with_the_comments_on_it_and_on_each_parameter() {
     let rest = format!(
-        "{}// Adds a number.\nfn add(\n  // The first.\n  a: Int,\n  b: Int = 2\n) -> Int {{ a }}\n\nfn tell[F, A, R](f: F) -> str <alloc>\n  requires Function[F, A, R]\n  requires Describe[A]\n{{\n  d = Describe[A].describe(Log(lines: \"\"))\n  d.lines\n}}\n\nfn main() <console, alloc> {{\n  print(tell(add))\n}}\n",
+        "{}// Adds a number.\nfn add(\n  // The first.\n  a: Int,\n  b: Int = 2\n) -> Int {{ a }}\n\nfn tell[F, A, R](f: F) -> str <alloc>\n  requires Function[F, A, R]\n  requires Describe[A]\n{{\n  mut d = Log(lines: \"\")\n  Describe[A].describe(mut d)\n  d.lines\n}}\n\nfn main() <console, alloc> {{\n  print(tell(add))\n}}\n",
         log()
     );
     let source = with_import(&imports(), &rest);

@@ -62,16 +62,12 @@ pub fn schema_text(to: take JsonSchema) -> str {
   finish(take to.buffer)
 }
 
-fn emit(to: take JsonSchema, s: str) -> JsonSchema <alloc> {
-  mut w = to
-  append(mut w.buffer, s)
-  w
+fn emit(to: mut JsonSchema, s: str) <alloc> {
+  append(mut to.buffer, s)
 }
 
-fn emit_json_string(to: take JsonSchema, s: str) -> JsonSchema <alloc> {
-  mut w = to
-  append(mut w.buffer, json_string(s))
-  w
+fn emit_json_string(to: mut JsonSchema, s: str) <alloc> {
+  append(mut to.buffer, json_string(s))
 }
 
 fn refuses(unknown: Unknown) -> bool {
@@ -87,205 +83,213 @@ fn member_name(w: JsonSchema, name: str) -> str <alloc> {
 }
 
 // Begins an object, with the comment that waits for a value, and `first`.
-fn node(to: take JsonSchema, first: str) -> JsonSchema <alloc> {
-  mut w = emit(take to, "\{")
-  if w.about != "" {
-    about = w.about
-    w = emit(take w, "\"description\":")
-    w = emit_json_string(take w, about)
-    w = emit(take w, ",")
-    w.about = ""
+fn node(to: mut JsonSchema, first: str) <alloc> {
+  emit(mut to, "\{")
+  if to.about != "" {
+    about = to.about
+    emit(mut to, "\"description\":")
+    emit_json_string(mut to, about)
+    emit(mut to, ",")
+    to.about = ""
   }
-  emit(take w, first)
+  emit(mut to, first)
 }
 
-fn leaf(to: take JsonSchema, first: str) -> JsonSchema <alloc> {
-  emit(node(value_begins(take to, false), first), "\}")
+fn leaf(to: mut JsonSchema, first: str) <alloc> {
+  value_begins(mut to, false)
+  node(mut to, first)
+  emit(mut to, "\}")
 }
 
-fn closed(to: take JsonSchema) -> JsonSchema <alloc> {
-  if refuses(to.unknown) { emit(take to, ",\"additionalProperties\":false") } else { to }
+fn closed(to: mut JsonSchema) <alloc> {
+  if refuses(to.unknown) { emit(mut to, ",\"additionalProperties\":false") }
 }
 
-fn enter(to: take JsonSchema, scope: Scope, tail: str) -> JsonSchema <alloc> {
-  mut w = to
-  push(mut w.saved, Saved(scope: w.scope, count: w.count, tail: w.tail, required: w.required, case: w.case, below: w.top))
-  w.top = w.saved.size
-  w.scope = scope
-  w.count = 0
-  w.tail = tail
-  w.required = ""
-  w
+fn enter(to: mut JsonSchema, scope: Scope, tail: str) <alloc> {
+  push(mut to.saved, Saved(scope: to.scope, count: to.count, tail: to.tail, required: to.required, case: to.case, below: to.top))
+  to.top = to.saved.size
+  to.scope = scope
+  to.count = 0
+  to.tail = tail
+  to.required = ""
 }
 
-fn leave(to: take JsonSchema) -> JsonSchema {
-  mut w = to
-  t = w.top
-  if t > 0 and t <= w.saved.size {
-    frame = w.saved[t - 1]
-    w.scope = frame.scope
-    w.count = frame.count
-    w.tail = frame.tail
-    w.required = frame.required
-    w.case = frame.case
-    w.top = frame.below
+fn leave(to: mut JsonSchema) {
+  t = to.top
+  if t > 0 and t <= to.saved.size {
+    frame = to.saved[t - 1]
+    to.scope = frame.scope
+    to.count = frame.count
+    to.tail = frame.tail
+    to.required = frame.required
+    to.case = frame.case
+    to.top = frame.below
   }
-  w
 }
 
 // Begins a value: a `,` where it follows another element, and, where it is
 // what a case holds, the object round it. `structure` says whether the value
 // is a struct, whose members then stand beside the tag.
-fn value_begins(to: take JsonSchema, structure: bool) -> JsonSchema <alloc> {
-  mut w = to
-  match w.scope {
+fn value_begins(to: mut JsonSchema, structure: bool) <alloc> {
+  match to.scope {
     .alts {
-      if w.count > 0 { w = emit(take w, ",") }
-      w.count = saturating_add(w.count, 1)
+      if to.count > 0 { emit(mut to, ",") }
+      to.count = saturating_add(to.count, 1)
     }
-    .held { w = held_value(take w, structure) }
+    .held { held_value(mut to, structure) }
     .props { }
     .wrap { }
     .plain { }
     .keyed { }
     .tagged { }
   }
-  w
 }
 
-fn held_value(to: take JsonSchema, structure: bool) -> JsonSchema <alloc> {
-  mut w = to
-  case = w.case
-  match w.settings.cases {
+fn held_value(to: mut JsonSchema, structure: bool) <alloc> {
+  case = to.case
+  match to.settings.cases {
     .key {
-      w = node(take w, "\"type\":\"object\",\"properties\":\{")
-      w = emit(take w, json_string(case))
-      w = emit(take w, ":")
-      w.scope = .keyed
+      node(mut to, "\"type\":\"object\",\"properties\":\{")
+      emit(mut to, json_string(case))
+      emit(mut to, ":")
+      to.scope = .keyed
     }
     .tag(t) {
       if structure {
-        w.merge = true
-        w.scope = .plain
+        to.merge = true
+        to.scope = .plain
       } else {
-        w = node(take w, "\"type\":\"object\",\"properties\":\{")
-        w = emit(take w, "{json_string(t)}:\{\"const\":{json_string(case)}\},\"value\":")
-        w.scope = .tagged
+        node(mut to, "\"type\":\"object\",\"properties\":\{")
+        emit(mut to, "{json_string(t)}:\{\"const\":{json_string(case)}\},\"value\":")
+        to.scope = .tagged
       }
     }
   }
-  w
 }
 
 impl Describer[JsonSchema] {
-  fn boolean(d: take JsonSchema) -> JsonSchema <alloc> { leaf(take d, "\"type\":\"boolean\"") }
-  fn signed(d: take JsonSchema, least: Int, greatest: Int) -> JsonSchema <alloc> {
-    leaf(take d, "\"type\":\"integer\",\"minimum\":{least},\"maximum\":{greatest}")
+  fn boolean(d: mut JsonSchema) <alloc> { leaf(mut d, "\"type\":\"boolean\"") }
+  fn signed(d: mut JsonSchema, least: Int, greatest: Int) <alloc> {
+    leaf(mut d, "\"type\":\"integer\",\"minimum\":{least},\"maximum\":{greatest}")
   }
-  fn unsigned(d: take JsonSchema, least: u64, greatest: u64) -> JsonSchema <alloc> {
-    leaf(take d, "\"type\":\"integer\",\"minimum\":{least},\"maximum\":{greatest}")
+  fn unsigned(d: mut JsonSchema, least: u64, greatest: u64) <alloc> {
+    leaf(mut d, "\"type\":\"integer\",\"minimum\":{least},\"maximum\":{greatest}")
   }
-  fn text(d: take JsonSchema) -> JsonSchema <alloc> { leaf(take d, "\"type\":\"string\"") }
-  fn nothing(d: take JsonSchema) -> JsonSchema <alloc> { leaf(take d, "\"type\":\"null\"") }
-  fn optional(d: take JsonSchema) -> JsonSchema <alloc> {
-    enter(node(value_begins(take d, false), "\"anyOf\":["), .alts, ",\{\"type\":\"null\"\}]\}")
+  fn text(d: mut JsonSchema) <alloc> { leaf(mut d, "\"type\":\"string\"") }
+  fn nothing(d: mut JsonSchema) <alloc> { leaf(mut d, "\"type\":\"null\"") }
+  fn optional(d: mut JsonSchema) <alloc> {
+    value_begins(mut d, false)
+    node(mut d, "\"anyOf\":[")
+    enter(mut d, .alts, ",\{\"type\":\"null\"\}]\}")
   }
-  fn end_optional(d: take JsonSchema) -> JsonSchema <alloc> {
+  fn end_optional(d: mut JsonSchema) <alloc> {
     tail = d.tail
-    leave(emit(take d, tail))
+    emit(mut d, tail)
+    leave(mut d)
   }
-  fn sequence(d: take JsonSchema) -> JsonSchema <alloc> {
-    enter(node(value_begins(take d, false), "\"type\":\"array\",\"items\":"), .wrap, "\}")
+  fn sequence(d: mut JsonSchema) <alloc> {
+    value_begins(mut d, false)
+    node(mut d, "\"type\":\"array\",\"items\":")
+    enter(mut d, .wrap, "\}")
   }
-  fn end_sequence(d: take JsonSchema) -> JsonSchema <alloc> {
+  fn end_sequence(d: mut JsonSchema) <alloc> {
     tail = d.tail
-    leave(emit(take d, tail))
+    emit(mut d, tail)
+    leave(mut d)
   }
-  fn tuple(d: take JsonSchema, size: Nat) -> JsonSchema <alloc> {
-    enter(node(value_begins(take d, false), "\"type\":\"array\",\"prefixItems\":["), .alts, "],\"minItems\":{size},\"maxItems\":{size}\}")
+  fn tuple(d: mut JsonSchema, size: Nat) <alloc> {
+    value_begins(mut d, false)
+    node(mut d, "\"type\":\"array\",\"prefixItems\":[")
+    enter(mut d, .alts, "],\"minItems\":{size},\"maxItems\":{size}\}")
   }
-  fn end_tuple(d: take JsonSchema) -> JsonSchema <alloc> {
+  fn end_tuple(d: mut JsonSchema) <alloc> {
     tail = d.tail
-    leave(emit(take d, tail))
+    emit(mut d, tail)
+    leave(mut d)
   }
-  fn structure(d: take JsonSchema, name: str, about: str, fields: Nat) -> JsonSchema <alloc> {
-    mut w = value_begins(take d, true)
-    merge = w.merge
-    w.merge = false
-    if w.about == "" { w.about = about }
-    w = enter(node(take w, "\"type\":\"object\",\"properties\":\{"), .props, "")
+  fn structure(d: mut JsonSchema, name: str, about: str, fields: Nat) <alloc> {
+    value_begins(mut d, true)
+    merge = d.merge
+    d.merge = false
+    if d.about == "" { d.about = about }
+    node(mut d, "\"type\":\"object\",\"properties\":\{")
+    enter(mut d, .props, "")
     if merge {
-      match w.settings.cases {
+      match d.settings.cases {
         .key { }
         .tag(t) {
-          case = w.case
-          w = emit(take w, "{json_string(t)}:\{\"const\":{json_string(case)}\}")
-          w.count = 1
-          w.required = json_string(t)
+          case = d.case
+          emit(mut d, "{json_string(t)}:\{\"const\":{json_string(case)}\}")
+          d.count = 1
+          d.required = json_string(t)
         }
       }
     }
-    w
   }
-  fn field(d: take JsonSchema, name: str, about: str, optional: bool) -> JsonSchema <alloc> {
-    mut w = d
-    if w.count > 0 { w = emit(take w, ",") }
-    w.count = saturating_add(w.count, 1)
-    written = member_name(w, name)
-    w = emit(take w, "{written}:")
-    w.about = about
+  fn field(d: mut JsonSchema, name: str, about: str, optional: bool) <alloc> {
+    if d.count > 0 { emit(mut d, ",") }
+    d.count = saturating_add(d.count, 1)
+    written = member_name(d, name)
+    emit(mut d, "{written}:")
+    d.about = about
     if not optional {
-      w.required = if w.required == "" { written } else { "{w.required},{written}" }
+      d.required = if d.required == "" { written } else { "{d.required},{written}" }
     }
-    w
   }
-  fn end_structure(d: take JsonSchema) -> JsonSchema <alloc> {
-    mut w = emit(take d, "\}")
-    if w.required != "" {
-      required = w.required
-      w = emit(take w, ",\"required\":[{required}]")
+  fn end_structure(d: mut JsonSchema) <alloc> {
+    emit(mut d, "\}")
+    if d.required != "" {
+      required = d.required
+      emit(mut d, ",\"required\":[{required}]")
     }
-    w = emit(closed(take w), "\}")
-    leave(take w)
+    closed(mut d)
+    emit(mut d, "\}")
+    leave(mut d)
   }
-  fn enumeration(d: take JsonSchema, name: str, about: str, cases: Nat) -> JsonSchema <alloc> {
-    mut w = value_begins(take d, false)
-    if w.about == "" { w.about = about }
-    enter(node(take w, "\"oneOf\":["), .alts, "]\}")
+  fn enumeration(d: mut JsonSchema, name: str, about: str, cases: Nat) <alloc> {
+    value_begins(mut d, false)
+    if d.about == "" { d.about = about }
+    node(mut d, "\"oneOf\":[")
+    enter(mut d, .alts, "]\}")
   }
-  fn case(d: take JsonSchema, name: str, about: str, holds: bool) -> JsonSchema <alloc> {
-    mut w = value_begins(take d, false)
-    w.about = about
+  fn case(d: mut JsonSchema, name: str, about: str, holds: bool) <alloc> {
+    value_begins(mut d, false)
+    d.about = about
     if holds {
-      w = enter(take w, .held, "")
-      w.case = name
-      w
+      enter(mut d, .held, "")
+      d.case = name
     } else {
-      match w.settings.cases {
-        .key { w = emit(node(take w, "\"const\":{json_string(name)}"), "\}") }
+      match d.settings.cases {
+        .key {
+          node(mut d, "\"const\":{json_string(name)}")
+          emit(mut d, "\}")
+        }
         .tag(t) {
-          w = emit(node(take w, "\"type\":\"object\",\"properties\":\{{json_string(t)}:\{\"const\":{json_string(name)}\}\},\"required\":[{json_string(t)}]"), "\}")
+          node(mut d, "\"type\":\"object\",\"properties\":\{{json_string(t)}:\{\"const\":{json_string(name)}\}\},\"required\":[{json_string(t)}]")
+          emit(mut d, "\}")
         }
       }
-      enter(take w, .plain, "")
+      enter(mut d, .plain, "")
     }
   }
-  fn end_enumeration(d: take JsonSchema) -> JsonSchema <alloc> {
+  fn end_enumeration(d: mut JsonSchema) <alloc> {
     tail = d.tail
-    leave(emit(take d, tail))
+    emit(mut d, tail)
+    leave(mut d)
   }
-  fn end_case(d: take JsonSchema) -> JsonSchema <alloc> {
-    mut w = d
-    match w.scope {
+  fn end_case(d: mut JsonSchema) <alloc> {
+    match d.scope {
       .keyed {
-        case = w.case
-        w = emit(take w, "\},\"required\":[{json_string(case)}]")
-        w = emit(closed(take w), "\}")
+        case = d.case
+        emit(mut d, "\},\"required\":[{json_string(case)}]")
+        closed(mut d)
+        emit(mut d, "\}")
       }
       .tagged {
-        tag = tag_of(w.settings)
-        w = emit(take w, "\},\"required\":[{json_string(tag)},\"value\"]")
-        w = emit(closed(take w), "\}")
+        tag = tag_of(d.settings)
+        emit(mut d, "\},\"required\":[{json_string(tag)},\"value\"]")
+        closed(mut d)
+        emit(mut d, "\}")
       }
       .alts { }
       .props { }
@@ -293,9 +297,9 @@ impl Describer[JsonSchema] {
       .held { }
       .plain { }
     }
-    leave(take w)
+    leave(mut d)
   }
-  fn map(d: take JsonSchema) -> JsonSchema <alloc> { leaf(take d, "\"type\":\"object\"") }
+  fn map(d: mut JsonSchema) <alloc> { leaf(mut d, "\"type\":\"object\"") }
 }
 
 fn tag_of(json: Json) -> str {

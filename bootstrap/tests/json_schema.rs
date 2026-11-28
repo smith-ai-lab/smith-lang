@@ -389,7 +389,7 @@ const SETTINGS: &[&str] = &[
 fn a_schema_names_every_field_and_case_with_its_comment() {
     let rest = |settings: &str| {
         format!(
-            "// What the note is.\nstruct Note {{\n  // What the note is called.\n  title: str\n  // How much it matters.\n  weight: 1..6 = 3\n  tags: List[str]\n  kind: Kind\n  extra_note: Option[bool]\n}}\n\n// A thing.\nenum Kind {{\n  // Plain.\n  plain\n  fancy: str\n}}\n\nfn main() <console, alloc> {{\n  print(schema_text(Describe[Note].describe(json_schema({settings}))))\n}}\n"
+            "// What the note is.\nstruct Note {{\n  // What the note is called.\n  title: str\n  // How much it matters.\n  weight: 1..6 = 3\n  tags: List[str]\n  kind: Kind\n  extra_note: Option[bool]\n}}\n\n// A thing.\nenum Kind {{\n  // Plain.\n  plain\n  fancy: str\n}}\n\nfn main() <console, alloc> {{\n  mut schema = json_schema({settings})\n  Describe[Note].describe(mut schema)\n  print(schema_text(take schema))\n}}\n"
         )
     };
     let said = |settings: &str| printed(&with_import(&imports(), &rest(settings)));
@@ -436,7 +436,7 @@ fn case(g: &mut Gen) -> Case {
     // Fields are written with an underscore, which `Names.camel` takes out.
     let defs_source = rename(&defs.source());
     let rest = format!(
-        "{defs_source}fn main() <console, alloc> {{\n  v: {} = {}\n  print(schema_text(Describe[{}].describe(json_schema({settings}))))\n  match to_json_as(v, {writes}) {{\n    .ok(t) {{ print(t) }}\n    .err(c) {{ print(\"clash\") }}\n  }}\n}}\n",
+        "{defs_source}fn main() <console, alloc> {{\n  v: {} = {}\n  mut schema = json_schema({settings})\n  Describe[{}].describe(mut schema)\n  print(schema_text(take schema))\n  match to_json_as(v, {writes}) {{\n    .ok(t) {{ print(t) }}\n    .err(c) {{ print(\"clash\") }}\n  }}\n}}\n",
         defs.name(&top),
         rename(&value),
         defs.name(&top),
@@ -545,7 +545,7 @@ fn a_field_is_left_out_of_required_exactly_where_from_json_reads_it_missing(part
         main += f.settings;
         main += ")\n  match r {\n    .ok(v) { \"ok\" }\n    .err(e) { \"err\" }\n  }\n}\n\nfn main() <console, alloc> {\n";
         main += &format!(
-            "  print(schema_text(Describe[S].describe(json_schema({}))))\n",
+            "  mut schema = json_schema({})\n  Describe[S].describe(mut schema)\n  print(schema_text(take schema))\n",
             f.settings
         );
         for d in &docs {

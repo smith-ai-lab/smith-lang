@@ -204,54 +204,47 @@ pub fn no_params() -> Params {
 
 pub fn params_of(p: take Params) -> List[Param] { p.params }
 
-fn kind(d: take Params, body: bool) -> Params <alloc> {
-  mut w = d
-  if w.depth == 1 and w.asked {
-    push(mut w.params, Param(name: w.named, body: body))
-    w.asked = false
+fn kind(d: mut Params, body: bool) <alloc> {
+  if d.depth == 1 and d.asked {
+    push(mut d.params, Param(name: d.named, body: body))
+    d.asked = false
   }
-  w
 }
 
-fn opened(d: take Params) -> Params <alloc> {
-  mut w = kind(take d, true)
-  w.depth = saturating_add(w.depth, 1)
-  w
+fn opened(d: mut Params) <alloc> {
+  kind(mut d, true)
+  d.depth = saturating_add(d.depth, 1)
 }
 
-fn closed(d: take Params) -> Params {
-  mut w = d
-  w.depth = saturating_sub(w.depth, 1)
-  w
+fn closed(d: mut Params) {
+  d.depth = saturating_sub(d.depth, 1)
 }
 
 impl Describer[Params] {
-  fn boolean(d: take Params) -> Params <alloc> { kind(take d, false) }
-  fn signed(d: take Params, least: Int, greatest: Int) -> Params <alloc> { kind(take d, false) }
-  fn unsigned(d: take Params, least: u64, greatest: u64) -> Params <alloc> { kind(take d, false) }
-  fn text(d: take Params) -> Params <alloc> { kind(take d, false) }
-  fn nothing(d: take Params) -> Params <alloc> { kind(take d, false) }
-  fn optional(d: take Params) -> Params <alloc> { d }
-  fn end_optional(d: take Params) -> Params <alloc> { d }
-  fn sequence(d: take Params) -> Params <alloc> { opened(take d) }
-  fn end_sequence(d: take Params) -> Params <alloc> { closed(take d) }
-  fn tuple(d: take Params, size: Nat) -> Params <alloc> { opened(take d) }
-  fn end_tuple(d: take Params) -> Params <alloc> { closed(take d) }
-  fn structure(d: take Params, name: str, about: str, fields: Nat) -> Params <alloc> { opened(take d) }
-  fn field(d: take Params, name: str, about: str, optional: bool) -> Params <alloc> {
-    mut w = d
-    if w.depth == 1 {
-      w.asked = true
-      w.named = name
+  fn boolean(d: mut Params) <alloc> { kind(mut d, false) }
+  fn signed(d: mut Params, least: Int, greatest: Int) <alloc> { kind(mut d, false) }
+  fn unsigned(d: mut Params, least: u64, greatest: u64) <alloc> { kind(mut d, false) }
+  fn text(d: mut Params) <alloc> { kind(mut d, false) }
+  fn nothing(d: mut Params) <alloc> { kind(mut d, false) }
+  fn optional(d: mut Params) <alloc> { }
+  fn end_optional(d: mut Params) <alloc> { }
+  fn sequence(d: mut Params) <alloc> { opened(mut d) }
+  fn end_sequence(d: mut Params) <alloc> { closed(mut d) }
+  fn tuple(d: mut Params, size: Nat) <alloc> { opened(mut d) }
+  fn end_tuple(d: mut Params) <alloc> { closed(mut d) }
+  fn structure(d: mut Params, name: str, about: str, fields: Nat) <alloc> { opened(mut d) }
+  fn field(d: mut Params, name: str, about: str, optional: bool) <alloc> {
+    if d.depth == 1 {
+      d.asked = true
+      d.named = name
     }
-    w
   }
-  fn end_structure(d: take Params) -> Params <alloc> { closed(take d) }
-  fn enumeration(d: take Params, name: str, about: str, cases: Nat) -> Params <alloc> { opened(take d) }
-  fn case(d: take Params, name: str, about: str, holds: bool) -> Params <alloc> { d }
-  fn end_case(d: take Params) -> Params <alloc> { d }
-  fn end_enumeration(d: take Params) -> Params <alloc> { closed(take d) }
-  fn map(d: take Params) -> Params <alloc> { kind(take d, true) }
+  fn end_structure(d: mut Params) <alloc> { closed(mut d) }
+  fn enumeration(d: mut Params, name: str, about: str, cases: Nat) <alloc> { opened(mut d) }
+  fn case(d: mut Params, name: str, about: str, holds: bool) <alloc> { }
+  fn end_case(d: mut Params) <alloc> { }
+  fn end_enumeration(d: mut Params) <alloc> { closed(mut d) }
+  fn map(d: mut Params) <alloc> { kind(mut d, true) }
 }
 
 // The text of the part with the name, which is the empty text where there is
@@ -686,7 +679,8 @@ fn add[F, A, R](method: Method, path: str, f: F) <routing, alloc>
   match fits(method, path) {
     .some(parts) {
       asked = asked_of()
-      params = Describe[A].describe(no_params())
+      mut params = no_params()
+      Describe[A].describe(mut params)
       r = reading(params_of(take params), take parts, query_parts(asked.query), asked.body)
       got: Result[A, ReadError] = FromRequest[A].from_request(take r)
       match got {

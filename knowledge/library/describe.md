@@ -5,7 +5,7 @@ description: The Describe trait, by which a type says what it is made of with no
 status: partial
 built:
   - "`std.describe`, with `Describe` and `Describer`, which a program imports with `use` and which the prelude does not hold"
-  - "`Describe`, which a whole number, `bool`, `str`, `()`, and every struct, enum, tuple, list, or `Option` is given unless a part lacks it, which `without Describe for T` takes away, and which a type's own `impl` replaces, told part by part to a `Describer` with no value in hand, as `Describe[T].describe(d)`"
+  - "`Describe`, which a whole number, `bool`, `str`, `()`, and every struct, enum, tuple, list, or `Option` is given unless a part lacks it, which `without Describe for T` takes away, and which a type's own `impl` replaces, told part by part to a `Describer` with no value in hand, as `Describe[T].describe(mut d)`"
   - "the comment of a struct, a field, an enum, and a case, for the types of the file that is built and only where that file writes `Describe` or imports `std.describe`; a type of another module is described with the empty text"
   - "not a map, which `Describe` is not given to as `Serialize` is not, so `map` of `Describer` is never called; not a float, `Slice`, or an array; not what reads a description"
 ---
@@ -30,37 +30,37 @@ Described to the `Describer` of JSON Schema, `Note` is an object with a `title` 
 
 ```
 trait Describe[T] {
-  fn describe[D: Describer](to: take D) -> D <alloc>
+  fn describe[D: Describer](to: mut D) <alloc>
 }
 ```
 
-`describe` takes no value. Which type is described is the one named where it is called, as `Describe[Note].describe(d)`.
+`describe` takes no value. Which type is described is the one named where it is called, as `Describe[Note].describe(mut d)`, which passes the describer [`mut`](../language/mut-parameters.md).
 
 ## The describer
 
-A format for descriptions is a type that has `Describer`, which has a function for each shape. Each takes the describer and gives it back, and has the effect `alloc` and no other, as `Writer`'s do.
+A format for descriptions is a type that has `Describer`, which has a function for each shape. Each is passed the describer `mut`, and has the effect `alloc` and no other, as `Writer`'s do.
 
 ```
 trait Describer[D] {
-  fn boolean(d: take D) -> D <alloc>
-  fn signed(d: take D, least: Int, greatest: Int) -> D <alloc>
-  fn unsigned(d: take D, least: u64, greatest: u64) -> D <alloc>
-  fn text(d: take D) -> D <alloc>
-  fn nothing(d: take D) -> D <alloc>
-  fn optional(d: take D) -> D <alloc>
-  fn end_optional(d: take D) -> D <alloc>
-  fn sequence(d: take D) -> D <alloc>
-  fn end_sequence(d: take D) -> D <alloc>
-  fn tuple(d: take D, size: Nat) -> D <alloc>
-  fn end_tuple(d: take D) -> D <alloc>
-  fn structure(d: take D, name: str, about: str, fields: Nat) -> D <alloc>
-  fn field(d: take D, name: str, about: str, optional: bool) -> D <alloc>
-  fn end_structure(d: take D) -> D <alloc>
-  fn enumeration(d: take D, name: str, about: str, cases: Nat) -> D <alloc>
-  fn case(d: take D, name: str, about: str, holds: bool) -> D <alloc>
-  fn end_case(d: take D) -> D <alloc>
-  fn end_enumeration(d: take D) -> D <alloc>
-  fn map(d: take D) -> D <alloc>
+  fn boolean(d: mut D) <alloc>
+  fn signed(d: mut D, least: Int, greatest: Int) <alloc>
+  fn unsigned(d: mut D, least: u64, greatest: u64) <alloc>
+  fn text(d: mut D) <alloc>
+  fn nothing(d: mut D) <alloc>
+  fn optional(d: mut D) <alloc>
+  fn end_optional(d: mut D) <alloc>
+  fn sequence(d: mut D) <alloc>
+  fn end_sequence(d: mut D) <alloc>
+  fn tuple(d: mut D, size: Nat) <alloc>
+  fn end_tuple(d: mut D) <alloc>
+  fn structure(d: mut D, name: str, about: str, fields: Nat) <alloc>
+  fn field(d: mut D, name: str, about: str, optional: bool) <alloc>
+  fn end_structure(d: mut D) <alloc>
+  fn enumeration(d: mut D, name: str, about: str, cases: Nat) <alloc>
+  fn case(d: mut D, name: str, about: str, holds: bool) <alloc>
+  fn end_case(d: mut D) <alloc>
+  fn end_enumeration(d: mut D) <alloc>
+  fn map(d: mut D) <alloc>
 }
 ```
 
@@ -99,7 +99,7 @@ A comment reaches the executable only for a type that is described, so a program
 
 | Written | Is |
 | --- | --- |
-| `Describe[T].describe(d)` | `T` described to the describer `d` |
+| `Describe[T].describe(mut d)` | `T` described to the describer `d` |
 | `impl Describer[D]` | A format for descriptions |
 | `without Describe for T` | `T` with no description |
 | `impl Describe[T]` | A description of `T` written by hand |

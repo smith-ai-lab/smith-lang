@@ -45,7 +45,7 @@ struct Note {\n  text: str\n}\n\n\
 struct Args {\n  id: u64\n  limit: Option[u8]\n  size: u8 = 20\n  note: Option[Note]\n}\n\n\
 fn kind(p: Problem) -> str {\n  match p {\n    .missing(m) { \"missing\" }\n    .malformed { \"malformed\" }\n    .shape(s) { \"shape\" }\n    .range(n) { \"range\" }\n    .case(c) { \"case\" }\n    .unknown(u) { \"unknown\" }\n    .twice(t) { \"twice\" }\n    .proof(w) { \"proof\" }\n  }\n}\n\n\
 fn shown(n: Option[u8]) -> str <alloc> {\n  match n {\n    .some(v) { \"{v}\" }\n    .none { \"-\" }\n  }\n}\n\n\
-fn run(path: take List[Part], query: take List[Part], body: str) <console, alloc> {\n  p = Describe[Args].describe(no_params())\n  r = reading(params_of(take p), take path, take query, body)\n  got: Result[Args, ReadError] = FromRequest[Args].from_request(take r)\n  match got {\n    .ok(a) {\n      text = match a.note {\n        .some(n) { n.text }\n        .none { \"-\" }\n      }\n      print(\"ok {a.id} {shown(a.limit)} {a.size} {text}\")\n    }\n    .err(e) { print(\"err {e.path} {kind(e.problem)}\") }\n  }\n}\n\n";
+fn run(path: take List[Part], query: take List[Part], body: str) <console, alloc> {\n  mut p = no_params()\n  Describe[Args].describe(mut p)\n  r = reading(params_of(take p), take path, take query, body)\n  got: Result[Args, ReadError] = FromRequest[Args].from_request(take r)\n  match got {\n    .ok(a) {\n      text = match a.note {\n        .some(n) { n.text }\n        .none { \"-\" }\n      }\n      print(\"ok {a.id} {shown(a.limit)} {a.size} {text}\")\n    }\n    .err(e) { print(\"err {e.path} {kind(e.problem)}\") }\n  }\n}\n\n";
 
 /// How a generated request spells each part, and what the rule says of it.
 #[derive(Clone, Debug)]
@@ -173,7 +173,7 @@ fn the_names_of_the_parameters_are_told_in_order_with_the_ones_of_the_body_marke
     let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.describe (Describe)\nuse std.http (no_params, params_of)\n\n\
 struct Note {\n  text: str\n}\n\n\
 struct Args {\n  id: u64\n  words: Option[str]\n  flag: bool\n  note: Note\n  tags: List[str]\n}\n\n\
-fn main() <console, alloc> {\n  p = Describe[Args].describe(no_params())\n  loop each in params_of(take p) {\n    print(\"{each.name} {each.body}\")\n  }\n}\n";
+fn main() <console, alloc> {\n  mut p = no_params()\n  Describe[Args].describe(mut p)\n  loop each in params_of(take p) {\n    print(\"{each.name} {each.body}\")\n  }\n}\n";
     assert!(check(source.as_bytes()).is_ok(), "{:?}", check(source.as_bytes()).err());
     assert_eq!(
         printed(source),

@@ -1,27 +1,27 @@
 use std.bits (u64)
 
 pub trait Describer[D] {
-  fn boolean(d: take D) -> D <alloc>
-  fn signed(d: take D, least: Int, greatest: Int) -> D <alloc>
-  fn unsigned(d: take D, least: u64, greatest: u64) -> D <alloc>
-  fn text(d: take D) -> D <alloc>
-  fn nothing(d: take D) -> D <alloc>
-  fn optional(d: take D) -> D <alloc>
-  fn end_optional(d: take D) -> D <alloc>
-  fn sequence(d: take D) -> D <alloc>
-  fn end_sequence(d: take D) -> D <alloc>
-  fn tuple(d: take D, size: Nat) -> D <alloc>
-  fn end_tuple(d: take D) -> D <alloc>
-  fn structure(d: take D, name: str, about: str, fields: Nat) -> D <alloc>
-  fn field(d: take D, name: str, about: str, optional: bool) -> D <alloc>
-  fn end_structure(d: take D) -> D <alloc>
-  fn enumeration(d: take D, name: str, about: str, cases: Nat) -> D <alloc>
-  fn case(d: take D, name: str, about: str, holds: bool) -> D <alloc>
-  fn end_case(d: take D) -> D <alloc>
-  fn end_enumeration(d: take D) -> D <alloc>
-  fn map(d: take D) -> D <alloc>
+  fn boolean(d: mut D) <alloc>
+  fn signed(d: mut D, least: Int, greatest: Int) <alloc>
+  fn unsigned(d: mut D, least: u64, greatest: u64) <alloc>
+  fn text(d: mut D) <alloc>
+  fn nothing(d: mut D) <alloc>
+  fn optional(d: mut D) <alloc>
+  fn end_optional(d: mut D) <alloc>
+  fn sequence(d: mut D) <alloc>
+  fn end_sequence(d: mut D) <alloc>
+  fn tuple(d: mut D, size: Nat) <alloc>
+  fn end_tuple(d: mut D) <alloc>
+  fn structure(d: mut D, name: str, about: str, fields: Nat) <alloc>
+  fn field(d: mut D, name: str, about: str, optional: bool) <alloc>
+  fn end_structure(d: mut D) <alloc>
+  fn enumeration(d: mut D, name: str, about: str, cases: Nat) <alloc>
+  fn case(d: mut D, name: str, about: str, holds: bool) <alloc>
+  fn end_case(d: mut D) <alloc>
+  fn end_enumeration(d: mut D) <alloc>
+  fn map(d: mut D) <alloc>
 }
 
 pub trait Describe[T] {
-  fn describe[D: Describer](to: take D) -> D <alloc>
+  fn describe[D: Describer](to: mut D) <alloc>
 }
