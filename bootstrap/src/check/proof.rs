@@ -1428,6 +1428,10 @@ impl<'a> Checker<'a> {
         {
             let at = |p: usize| sums.iter().find(|(q, _)| *q == p).map(|(_, l)| l.clone());
             let (a, b) = (at(0)?, at(1)?);
+            if op >= 3 {
+                let fits = Self::division_fits(op == 3, *t, ends.0, (a, b))?;
+                return if holds { Some(fits) } else { fits.not() };
+            }
             let mut builder = self.builder(body, facts, false);
             let answer = match op {
                 0 => builder.combine(&a, 1, &b),
@@ -2088,6 +2092,33 @@ impl<'a> Checker<'a> {
                 }
             )),
         );
+    }
+
+    /// What `valid` of `Div`, when `quotient`, or of `Rem` says of the whole
+    /// numbers `a` and `b` of type `t`, whose least number is `least`: that
+    /// `b` is not zero and, where `a / b` or `a % b` asks it, that `a` is not
+    /// the least number divided by -1. A quotient asks it for a signed type,
+    /// and what is left over for a signed type of 64 bits, as nothing larger
+    /// holds the quotient the processor works out with it.
+    fn division_fits(quotient: bool, t: Int, least: i128, (a, b): (Lin, Lin)) -> Option<Formula> {
+        let mut above = b.clone();
+        above.constant = above.constant.checked_sub(1)?;
+        let mut below = b.negated()?;
+        below.constant = below.constant.checked_sub(1)?;
+        let not_zero = Formula::Or(vec![at_least_zero(above), at_least_zero(below)]);
+        if !t.signed() || (!quotient && t.bits() < 64) {
+            return Some(not_zero);
+        }
+        let mut more = a;
+        more.constant = more.constant.checked_sub(least.checked_add(1)?)?;
+        let mut under = b.negated()?;
+        under.constant = under.constant.checked_sub(2)?;
+        let not_minus_one = Formula::Or(vec![
+            at_least_zero(more),
+            at_least_zero(b),
+            at_least_zero(under),
+        ]);
+        Some(Formula::And(vec![not_zero, not_minus_one]))
     }
 
     /// Whether `arith` proves that the quotient `e` fits `t`: that the least

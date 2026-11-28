@@ -9,7 +9,6 @@ use super::*;
 pub(super) const TRAITS_NOT_BUILT: &[&str] = &[
     "Copy",
     "Discard",
-    "Div",
     "Pow",
     "MatMul",
     "FromInt",
@@ -20,8 +19,8 @@ pub(super) const TRAITS_NOT_BUILT: &[&str] = &[
 
 /// The names of the traits `PRELUDE` defines.
 pub(super) const PRELUDE_TRAITS: &[&str] = &[
-    "Fmt", "Repr", "Exit", "Try", "Iterate", "Eq", "Ord", "Add", "Sub", "Mul", "Hash", "Wrapping",
-    "Bits", "Float", "Convert", "Function",
+    "Fmt", "Repr", "Exit", "Try", "Iterate", "Eq", "Ord", "Add", "Sub", "Mul", "Div", "Rem",
+    "Hash", "Wrapping", "Bits", "Float", "Convert", "Function",
 ];
 
 /// Moves the `requires` lines that name a trait from the contracts of each

@@ -1892,7 +1892,7 @@ fn main_statement(b: &mut Builder, m: &Model, sites: &Sites) {
             b.push("  wrong = Rock(a: \"a\")\n");
             b.last = Some(*b.g.pick(&[
                 ("", "derive Named for Rock"),
-                ("", "without Div for Rock"),
+                ("", "without Pow for Rock"),
                 ("", "foreign \"c\" fn kind()"),
                 (
                     "trait Spare[T] {\n  fn spare_of(x: T, note: str = (1)",
