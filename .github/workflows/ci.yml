@@ -111,7 +111,11 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           SMITH_SEED: 0
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: |
+          gh api "repos/${{ github.repository }}/pulls/$PULL_REQUEST" --jq '.body // ""' > "$RUNNER_TEMP/description"
+          export DESCRIPTION="$RUNNER_TEMP/description"
           sh ../.github/slow-tests.sh ubuntu-latest "$RUNNER_TEMP/times" > "$RUNNER_TEMP/slow" || status=$?
           cat "$RUNNER_TEMP/slow"
           cat "$RUNNER_TEMP/slow" >> "$GITHUB_STEP_SUMMARY"

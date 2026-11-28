@@ -6,7 +6,9 @@
 # Usage: slow-tests.sh <runner> <times> <cargo test arguments>...
 # The arguments are those of the run that made <times>, so that the tests run
 # again are given what they were given the first time, with the names of the
-# slow tests added.
+# slow tests added. When $DESCRIPTION names the file holding the description of
+# the pull request and it has a line that starts `Takes more time.` and goes on
+# with the reason, the tests slow in both runs are named and the check passes.
 set -eu
 
 runner=$1
@@ -38,4 +40,14 @@ cargo test --locked -- "$@" --times="$temp/again" $names >&2 || true
 if [ ! -f "$temp/again" ]; then
   : > "$temp/again"
 fi
-sh "$here/check-times.sh" "$temp/history" "$times" "$temp/again"
+if sh "$here/check-times.sh" "$temp/history" "$times" "$temp/again"; then
+  exit 0
+fi
+echo
+if [ -n "${DESCRIPTION:-}" ] && [ -f "$DESCRIPTION" ] \
+  && tr -d '\r' < "$DESCRIPTION" | grep -Eq '^Takes more time\. +[^ ]'; then
+  echo "The description says why the change takes more time."
+  exit 0
+fi
+echo "If the time is meant, the description says why with a line that starts \`Takes more time.\` and goes on with the reason."
+exit 1

@@ -63,11 +63,15 @@ jobs:
         shell: bash
         env:
           SMITH_SEED: 0
+          GH_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: |
           if [ "$RUNNER_OS" = macOS ]; then
             ulimit -n 10240 || true
             sudo sysctl -w kern.ipc.somaxconn=4096 || true
           fi
+          gh api "repos/${{ github.repository }}/pulls/$PULL_REQUEST" --jq '.body // ""' > "$RUNNER_TEMP/description"
+          export DESCRIPTION="$RUNNER_TEMP/description"
           cargo test --locked -- --group=machine --times="$RUNNER_TEMP/times"
           sh ../.github/slow-tests.sh "${{ inputs.os }}" "$RUNNER_TEMP/times" --group=machine > "$RUNNER_TEMP/slow" || status=$?
           cat "$RUNNER_TEMP/slow"
