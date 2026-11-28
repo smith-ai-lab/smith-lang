@@ -82,7 +82,7 @@ jobs:
       # only a change of the compiler, the evaluator, or the test changes
       # them. The runs above keep the seed of the commit.
       - name: Count the steps of every test
-        run: SMITH_SEED=0 cargo test --locked -- --steps="$RUNNER_TEMP/steps"
+        run: SMITH_SEED=0 cargo test --locked -- --steps="$RUNNER_TEMP/steps" --times="$RUNNER_TEMP/times"
       - name: Say which tests take many more steps than on main
         if: github.event_name == 'pull_request'
         env:
@@ -103,6 +103,19 @@ jobs:
           cat "$RUNNER_TEMP/work"
           cat "$RUNNER_TEMP/work" >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
+      # The time of a test that runs executables, sockets, and processes is
+      # what the steps do not see. A test that took more than twice the median
+      # of its own last times on this kind of runner, and 100 ms more, is run
+      # again, and fails only when it is slow both times.
+      - name: Say which tests became much slower than their own history
+        if: github.event_name == 'pull_request'
+        env:
+          SMITH_SEED: 0
+        run: |
+          sh ../.github/slow-tests.sh ubuntu-latest "$RUNNER_TEMP/times" > "$RUNNER_TEMP/slow" || status=$?
+          cat "$RUNNER_TEMP/slow"
+          cat "$RUNNER_TEMP/slow" >> "$GITHUB_STEP_SUMMARY"
+          exit "${status:-0}"
       - name: Timings
         run: target/debug/smith --timings build tests/cases/hello.smith
       # The harness in `measure/` takes the compiler as a crate. It is built

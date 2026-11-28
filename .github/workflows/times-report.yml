@@ -1,0 +1,66 @@
+name: times-report
+
+# Once a week, says which tests are the slowest on each kind of runner and how
+# the time of the whole suite went, and keeps one issue for the tests that take
+# more than a second on the reference runner.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: times-report
+  cancel-in-progress: false
+
+env:
+  # The kind of runner that the whole suite runs on, and what a test must not
+  # take on it, in milliseconds.
+  REFERENCE: ubuntu-latest
+  LIMIT: 1000
+  TITLE: Tests that take more than 1 s on the reference runner
+
+jobs:
+  report:
+    name: report the times of the tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Read the times branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          git fetch --quiet --depth=1 origin times || { echo "No times are recorded yet." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
+          mkdir "$RUNNER_TEMP/times"
+          for file in $(git ls-tree --name-only FETCH_HEAD); do
+            git show "FETCH_HEAD:$file" > "$RUNNER_TEMP/times/$file"
+          done
+          sh .github/report-times.sh report "$RUNNER_TEMP/times" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ -f "$RUNNER_TEMP/times/$REFERENCE.csv" ] || exit 0
+          sh .github/report-times.sh over "$RUNNER_TEMP/times" "$REFERENCE" "$LIMIT" > "$RUNNER_TEMP/over"
+          {
+            echo "These tests have a median above $LIMIT ms over their last 20 times on \`$REFERENCE\`. This issue is updated every week, and what is no longer slow leaves it."
+            echo
+            sed 's/^/- /' "$RUNNER_TEMP/over"
+            echo
+            echo "The report of the week is in the summary of [the run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+          } > "$RUNNER_TEMP/body"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"$TITLE\")][0].number // empty")
+          if [ -s "$RUNNER_TEMP/over" ]; then
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/body"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$RUNNER_TEMP/body"
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "No test has a median above $LIMIT ms on \`$REFERENCE\` now."
+          fi

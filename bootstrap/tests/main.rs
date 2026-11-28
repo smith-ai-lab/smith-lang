@@ -9,7 +9,9 @@
 //! it, which `smith::work` counts on the thread that ran it and which are the
 //! same on every machine and every run. `--steps=<file>` writes, for each test
 //! that passed, a line `name,steps`, in the order of the names, which
-//! `.github/check-work.sh` compares with what main wrote. A test starts no
+//! `.github/check-work.sh` compares with what main wrote. `--times=<file>` writes
+//! `name,milliseconds` for each test that passed, the time it took on the wall,
+//! which `.github/check-times.sh` compares with the test's own history. A test starts no
 //! thread, as the steps of a thread it starts are not its own. A test that has made no
 //! progress for `clock::hang` and a little more on the wall fails the run, and
 //! the run names it, so that a program that never ends is a failing test and
@@ -61,6 +63,13 @@ thread_local! {
 /// printed at the end of the run, where a log of a long run shows them.
 type Failed = Vec<(&'static str, String)>;
 
+/// The files a run writes, when it is asked to.
+#[derive(Clone, Copy)]
+struct Files<'a> {
+    steps: Option<&'a str>,
+    times: Option<&'a str>,
+}
+
 /// How many of the tests that did the most work a run ends with.
 const LARGEST: usize = 70;
 
@@ -81,6 +90,7 @@ fn main() -> ExitCode {
         clock::set_hang(Duration::from_millis(limit.parse().unwrap()));
     }
     let steps_file = args.iter().find_map(|a| a.strip_prefix("--steps="));
+    let times_file = args.iter().find_map(|a| a.strip_prefix("--times="));
     if args.iter().any(|a| a == "--fingerprint") {
         // The executables are the same for every commit, so that a change
         // that leaves them as they were needs no machine.
@@ -145,13 +155,13 @@ fn main() -> ExitCode {
                     let progress = clock::Progress::new(Mutex::new(Instant::now()));
                     clock::watch(Some(progress.clone()));
                     *slot.lock().unwrap() = Some((name, progress));
-                    let (passed, steps) = measure(name, *test, &failures);
+                    let (passed, steps, time) = measure(name, *test, &failures);
                     // A test the run gave up on has its result already.
                     if slot.lock().unwrap().take().is_none() {
                         return;
                     }
                     println!("test {name} ... {}", if passed { "ok" } else { "FAILED" });
-                    results.lock().unwrap().push((*name, passed, steps));
+                    results.lock().unwrap().push((*name, passed, steps, time));
                 }
             });
         }
@@ -176,7 +186,10 @@ fn main() -> ExitCode {
                     );
                     println!("{message}");
                     failures.lock().unwrap().push((name, message));
-                    results.lock().unwrap().push((name, false, 0));
+                    results
+                        .lock()
+                        .unwrap()
+                        .push((name, false, 0, Duration::ZERO));
                 }
             }
         }
@@ -187,7 +200,10 @@ fn main() -> ExitCode {
                 results.lock().unwrap().clone(),
                 &failures.lock().unwrap(),
                 on_machine,
-                steps_file,
+                Files {
+                    steps: steps_file,
+                    times: times_file,
+                },
             );
             scratch::remove();
             std::process::exit(if ok { 0 } else { 1 });
@@ -197,7 +213,10 @@ fn main() -> ExitCode {
         results.into_inner().unwrap(),
         &failures.into_inner().unwrap(),
         on_machine,
-        steps_file,
+        Files {
+            steps: steps_file,
+            times: times_file,
+        },
     );
     scratch::remove();
     if passed {
@@ -216,11 +235,12 @@ pub fn in_a_machine_test() -> bool {
     names.contains(CURRENT.get())
 }
 
-/// Runs the test on this thread and gives whether it passed and the steps it
-/// took, keeping what a failing test said.
-fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u64) {
+/// Runs the test on this thread and gives whether it passed, the steps it
+/// took, and the time it took on the wall, keeping what a failing test said.
+fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u64, Duration) {
     CURRENT.set(name);
     let begin = shared::steps();
+    let started = Instant::now();
     MESSAGE.with(|m| *m.borrow_mut() = None);
     let passed = panic::catch_unwind(AssertUnwindSafe(test)).is_ok();
     if !passed {
@@ -230,20 +250,20 @@ fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u
             .unwrap()
             .push((name, message.unwrap_or_default()));
     }
-    (passed, shared::steps() - begin)
+    (passed, shared::steps() - begin, started.elapsed())
 }
 
 /// Prints how the run went, and gives whether it passed.
 fn report(
-    mut results: Vec<(&'static str, bool, u64)>,
+    mut results: Vec<(&'static str, bool, u64, Duration)>,
     failures: &Failed,
     on_machine: bool,
-    steps_file: Option<&str>,
+    files: Files,
 ) -> bool {
     let failed: Vec<&str> = results
         .iter()
-        .filter(|(_, passed, _)| !passed)
-        .map(|(name, _, _)| *name)
+        .filter(|(_, passed, _, _)| !passed)
+        .map(|(name, _, _, _)| *name)
         .collect();
     println!();
     for name in &failed {
@@ -265,17 +285,24 @@ fn report(
             println!("{line}");
         }
     }
-    if let Some(path) = steps_file {
-        results.sort_by_key(|(name, _, _)| *name);
+    results.sort_by_key(|(name, ..)| *name);
+    if let Some(path) = files.steps {
         let lines: String = (results.iter())
-            .filter(|(_, passed, _)| *passed)
-            .map(|(name, _, steps)| format!("{name},{steps}\n"))
+            .filter(|(_, passed, _, _)| *passed)
+            .map(|(name, _, steps, _)| format!("{name},{steps}\n"))
             .collect();
         std::fs::write(path, lines).unwrap_or_else(|e| panic!("{path}: {e}"));
     }
-    results.sort_by_key(|(_, _, steps)| std::cmp::Reverse(*steps));
+    if let Some(path) = files.times {
+        let lines: String = (results.iter())
+            .filter(|(_, passed, _, _)| *passed)
+            .map(|(name, _, _, time)| format!("{name},{}\n", time.as_millis()))
+            .collect();
+        std::fs::write(path, lines).unwrap_or_else(|e| panic!("{path}: {e}"));
+    }
+    results.sort_by_key(|(_, _, steps, _)| std::cmp::Reverse(*steps));
     println!("\nthe tests that did the most work, in the steps they took:");
-    for (name, _, steps) in results.iter().take(LARGEST) {
+    for (name, _, steps, _) in results.iter().take(LARGEST) {
         println!("{steps:>12}  {name}");
     }
     failed.is_empty()
