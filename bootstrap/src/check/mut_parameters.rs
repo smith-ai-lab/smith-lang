@@ -214,7 +214,21 @@ impl<'a> Checker<'a> {
     /// function changes. Gives whether it found a mistake, which it reports.
     pub(super) fn passed_mut(&mut self, body: &Body<'a>, call: &Call) -> bool {
         let before = self.errors.len();
-        self.mut_mistakes(body, call);
+        self.mut_mistakes(body, call, None);
+        self.errors.len() > before
+    }
+
+    /// Checks a call of the function `fi` of the trait `k` as `passed_mut`
+    /// checks the call of a function, once the call is found to be one.
+    pub(super) fn passed_mut_to_trait(
+        &mut self,
+        body: &Body<'a>,
+        call: &Call,
+        k: usize,
+        fi: usize,
+    ) -> bool {
+        let before = self.errors.len();
+        self.mut_mistakes(body, call, Some((k, fi)));
         self.errors.len() > before
     }
 
@@ -222,7 +236,12 @@ impl<'a> Checker<'a> {
     /// A parameter of a function type has no name, and is named by the
     /// argument. `None` when the arguments fit no parameter, which is reported
     /// where they are matched.
-    fn marked_params(&self, body: &Body<'a>, call: &Call) -> Option<Vec<Option<Marked>>> {
+    fn marked_params(
+        &self,
+        body: &Body<'a>,
+        call: &Call,
+        trait_fn: Option<(usize, usize)>,
+    ) -> Option<Vec<Option<Marked>>> {
         let defs = self.defs;
         let unknown = vec![None; call.args.len()];
         let by_sig = |sig: &Signature, written: &[Param]| {
@@ -241,6 +260,12 @@ impl<'a> Checker<'a> {
                     .collect(),
             )
         };
+        if let Some((k, fi)) = trait_fn {
+            return by_sig(
+                &defs.trait_sigs[k][fi],
+                &defs.file.traits[k].functions[fi].params,
+            );
+        }
         if call.through.is_some() {
             return Some(unknown);
         }
@@ -287,27 +312,8 @@ impl<'a> Checker<'a> {
         {
             return by_sig(&defs.signatures[f], &defs.file.functions[f].params);
         }
-        // A function of a trait, written plain or with its trait, whose
-        // parameters matter only to a call that passes `mut`.
-        let qualifier_is_trait = (call.qualifier.as_ref())
-            .is_none_or(|(q, at)| matches!(defs.type_at(*at, q), Some(Item::Trait(_))));
-        if !qualifier_is_trait || !call.args.iter().any(|a| a.mutable.is_some()) {
-            return Some(unknown);
-        }
-        let found = (defs
-            .trait_fns_at(call.name_pos, &call.callee)
-            .into_iter()
-            .flatten())
-        .find(|(k, _)| {
-            (call.qualifier.as_ref()).is_none_or(|(q, _)| defs.file.traits[*k].name == *q)
-        });
-        match found {
-            Some(&(k, fi)) => by_sig(
-                &defs.trait_sigs[k][fi],
-                &defs.file.traits[k].functions[fi].params,
-            ),
-            None => Some(unknown),
-        }
+        // A function of a trait is checked where the call is found to be one.
+        None
     }
 
     /// Refuses a lambda passed where a function is needed that marks a
@@ -362,9 +368,9 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn mut_mistakes(&mut self, body: &Body<'a>, call: &Call) {
+    fn mut_mistakes(&mut self, body: &Body<'a>, call: &Call, trait_fn: Option<(usize, usize)>) {
         let defs = self.defs;
-        let Some(params) = self.marked_params(body, call) else {
+        let Some(params) = self.marked_params(body, call, trait_fn) else {
             return;
         };
         self.lambda_mistakes(call, &params);

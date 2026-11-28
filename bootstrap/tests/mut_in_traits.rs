@@ -35,6 +35,10 @@ pub const ONCE: &[Test] = &[
         "a_lambda_marks_mut_exactly_the_parameters_its_function_type_or_operation_marks",
         a_lambda_marks_mut_exactly_the_parameters_its_function_type_or_operation_marks,
     ),
+    (
+        "a_call_that_leaves_out_the_mut_or_the_take_its_parameter_has_is_refused_at_the_argument",
+        a_call_that_leaves_out_the_mut_or_the_take_its_parameter_has_is_refused_at_the_argument,
+    ),
 ];
 
 /// The errors a program gives, which are none when it is accepted.
@@ -462,6 +466,107 @@ fn main() <console, alloc> {{
                 errors.iter().any(|e| e.pos == at),
                 "not refused at {at:?} among {errors:?} for {source}"
             );
+        },
+    );
+}
+
+/// Where a call is of something whose parameter is marked `mut` or `take`.
+#[derive(Clone, Copy, Debug)]
+enum Callee {
+    /// A trait's function, called at the type it is implemented for.
+    Trait,
+    /// A trait's function, called in a function the trait bounds.
+    Bound,
+    FunctionType,
+    Operation,
+}
+
+/// A call that leaves out the mark of its parameter: on a line of its own,
+/// or bound to a name, of a parameter marked `mut`, or else `take`.
+#[derive(Debug)]
+struct Unmarked {
+    callee: Callee,
+    bound: bool,
+    take: bool,
+}
+
+/// The program with the call `line` of `g`, whose parameter is `marked` a
+/// `Bag`, as `u.callee` says, and what is written before the call's
+/// argument.
+fn unmarked_program(u: &Unmarked, line: &str) -> (String, String) {
+    let marked = if u.take { "take" } else { "mut" };
+    let gives = if u.take { " -> u8" } else { "" };
+    let body = if u.take { " 1 " } else { "" };
+    // What the call is given, which has no `Copy`.
+    let made = if u.take { "b" } else { "mut b" };
+    let made = format!("  {made} = Bag(items: [1])\n");
+    let types = "use std.bits (u8)\n\nstruct Bag {\n  items: List[u8]\n}\n";
+    let (before, after) = match u.callee {
+        Callee::Trait | Callee::Bound => {
+            let declared = format!(
+                "{types}\ntrait G[T] {{\n  fn g(t: {marked} T){gives}\n}}\n\nimpl G[Bag] {{\n  fn g(t: {marked} Bag){gives} {{{body}}}\n}}\n"
+            );
+            match u.callee {
+                Callee::Trait => (format!("{declared}\nfn main() <alloc> {{\n{made}"), "}\n".to_string()),
+                _ => (
+                    format!("{declared}\nfn through[T: G](b: {marked} T) {{\n"),
+                    format!("}}\n\nfn main() <alloc> {{\n{made}  through({marked} b)\n}}\n"),
+                ),
+            }
+        }
+        Callee::FunctionType => (
+            format!("{types}\nfn calling(g: fn({marked} Bag){gives}) <alloc> {{\n{made}"),
+            format!("}}\n\nfn main() <alloc> {{\n  calling(fn(t: {marked} Bag){gives} {{{body}}})\n}}\n"),
+        ),
+        Callee::Operation => (
+            format!(
+                "{types}\neffect gs {{\n  fn g(t: {marked} Bag){gives}\n}}\n\nfn handled[T](body: fn() -> T <gs>) -> T {{\n  gs(g: fn(t: {marked} Bag){gives} {{{body}}}, body: body)\n}}\n\nfn run() <alloc> {{\n  with handled()\n{made}"
+            ),
+            "}\n\nfn main() <alloc> {\n  run()\n}\n".to_string(),
+        ),
+    };
+    let source = format!("{before}  {line}\n{after}");
+    let at = format!("{before}  {}", &line[..line.find('(').expect("the call") + 1]);
+    (source, at)
+}
+
+fn a_call_that_leaves_out_the_mut_or_the_take_its_parameter_has_is_refused_at_the_argument() {
+    generate::check(
+        12394,
+        16,
+        |g: &mut Gen| {
+            let callee = *g.pick(&[Callee::Trait, Callee::Bound, Callee::FunctionType, Callee::Operation]);
+            // `take` is checked here for a trait's function, which a call
+            // finds by the types of its arguments.
+            let take = matches!(callee, Callee::Trait | Callee::Bound) && g.one_in(3);
+            Unmarked {
+                callee,
+                bound: take || g.one_in(2),
+                take,
+            }
+        },
+        |u| {
+            let line = if u.bound { "x = g(b)" } else { "g(b)" };
+            let (source, before) = unmarked_program(u, line);
+            let at = pos_after(&before);
+            let marked = if u.take { "take" } else { "mut" };
+            let fix = format!("write `g({marked} b)`");
+            let found = errors(&source);
+            assert!(
+                found.iter().any(|e| e.pos == at && e.fix.as_deref() == Some(fix.as_str())),
+                "not refused at {at:?} with the fix {fix} among {found:?} for {source}"
+            );
+            // With the mark written, the call is accepted.
+            let written = line.replace("(b)", &format!("({marked} b)"));
+            let (fixed, _) = unmarked_program(u, &written);
+            let fixed = match (u.take, u.bound) {
+                // What a call that changes a value and gives nothing else
+                // gives is not bound.
+                (false, true) => unmarked_program(u, &format!("g({marked} b)")).0,
+                _ => fixed,
+            };
+            let refused = errors(&fixed);
+            assert!(refused.is_empty(), "{refused:?} for {fixed}");
         },
     );
 }
