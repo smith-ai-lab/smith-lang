@@ -943,8 +943,9 @@ impl<'a> Checker<'a> {
             ),
         )
         .with_fix(format!(
-            "write `checked_{op}`, which gives an `Option` and costs one comparison, where it is \
-             seen; or `wrapping_{op}`; or a `requires` that bounds the size",
+            "state the type of `{name}` and check with an `if` that what it is given fits it, \
+             which costs one comparison; or write `wrapping_{op}`; or a `requires` that bounds \
+             the size",
             op = if add.takes { "sub" } else { "add" }
         ))
     }

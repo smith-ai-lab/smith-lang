@@ -159,7 +159,7 @@ fn a_sum_of_nats_is_refused_with_the_range_why_and_the_choices() {
         "{said:?}"
     );
     let fix = said.fix.as_deref().expect("a fix");
-    for choice in ["checked_add", "wrapping_add", "requires"] {
+    for choice in ["with an `if`", "wrapping_add", "requires"] {
         assert!(fix.contains(choice), "{fix}");
     }
 }

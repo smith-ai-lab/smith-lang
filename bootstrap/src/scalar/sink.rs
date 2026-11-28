@@ -10,8 +10,7 @@
 //! gives the choice gives that value too. When nothing else reads the choice,
 //! it is read by nothing, and `remove` takes it away, and the comparison that
 //! made the value is read by the end of its block alone, so a target makes it
-//! one compare and one jump. A `match` on what `checked_add` gives is that: an
-//! addition, a comparison, and a jump.
+//! one compare and one jump.
 
 use std::collections::HashMap;
 

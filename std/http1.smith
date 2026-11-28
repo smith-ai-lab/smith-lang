@@ -1,5 +1,5 @@
 use std.bits (bit_and, shift_right)
-use std.int (checked_add, checked_mul, narrow, saturating_add, wrapping_shift_left)
+use std.int (narrow, saturating_add, wrapping_shift_left)
 use std.list (freeze, push)
 use std.text (append_ascii, finish, text)
 use std.utf8 (utf8)
@@ -68,7 +68,8 @@ fn number(bytes: Slice[Byte], base: Nat) -> Option[Nat] {
     d = try digit(b)
     wide: Nat = d
     if wide >= base { return .none }
-    n = try checked_add(try checked_mul(n, base), wide)
+    next: Option[Nat] = narrow(n * base + wide)
+    n = try next
   }
   .some(n)
 }
@@ -564,10 +565,8 @@ pub fn chunk(bytes: Slice[Byte]; limit: Nat = 16384) -> Read[Slice[Byte]] {
     }
   }
   if size > limit { return .refused("a chunk longer than the limit") }
-  last = match checked_add(from, size) {
-    .some(n) { n }
-    .none { return .refused("a chunk longer than the limit") }
-  }
+  if from + size > 18446744073709551615 { return .refused("a chunk longer than the limit") }
+  last: Nat = from + size
   if last < from { return .refused("a chunk longer than the limit") }
   if last > bytes.size { return .incomplete }
   if bytes.size - last < 2 { return .incomplete }

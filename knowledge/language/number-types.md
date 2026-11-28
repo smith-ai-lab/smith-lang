@@ -35,7 +35,7 @@ fn main() <console, alloc> {
 
 This prints `200 -3`. `0..256` holds 0 to 255, and `-5..6` holds -5 to 5. A type is written after a colon, as a parameter's is.
 
-Say what a number holds in its type, as narrowly as the function means it. A parameter that is an index is a `0..xs.size`, not a `Nat` with a `requires`, and a sum is left as the range arithmetic gives it. `saturating_`, `checked_`, and `wrapping_` are for arithmetic that is meant to saturate, to fail, or to wrap, and never a way to make a sum fit a type it would have fitted with a narrower one.
+Say what a number holds in its type, as narrowly as the function means it. A parameter that is an index is a `0..xs.size`, not a `Nat` with a `requires`, and a sum is left as the range arithmetic gives it. A sum that may not fit is checked with an `if`, as [Integer arithmetic](arithmetic.md#checking-first) shows, and `saturating_` and `wrapping_` are for arithmetic that is meant to saturate or to wrap. None of these is a way to make a sum fit a type it would have fitted with a narrower one.
 
 A name with no stated type has the range that its body gives it: the smallest that holds every value it is given, as [Inference](inference.md) says. `n = 5` is a `5..6`, and a `mut` given `0` and then `9` is a `0..10`.
 

@@ -65,7 +65,7 @@ const META: &str = "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"202
 
 /// The server of the page, with the entry that installs `stdio`, and `divide`
 /// written so that the quotient is proven to fit.
-const DIVIDE: &str = "use std.console (console)\nuse std.int (checked_div)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Divides one whole number by another.\nfn divide(\n  // The number that is divided.\n  a: Int,\n  // The number it is divided by.\n  b: Int,\n) -> Result[Int, str] {\n  if b == 0 {\n    .err(\"b is zero\")\n  } else {\n    match checked_div(a, b) {\n      .some(q) { .ok(q) }\n      .none { .err(\"the quotient does not fit\") }\n    }\n  }\n}\n\nfn serve() <messages, alloc> {\n  with mcp(name: \"calc\", version: \"1\")\n  tool(divide)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
+const DIVIDE: &str = "use std.console (console)\nuse std.mcp (mcp, messages, stdio, tool)\n\n// Divides one whole number by another.\nfn divide(\n  // The number that is divided.\n  a: Int,\n  // The number it is divided by.\n  b: Int,\n) -> Result[Int, str] {\n  if b == 0 {\n    .err(\"b is zero\")\n  } else if a == -9223372036854775808 and b == -1 {\n    .err(\"the quotient does not fit\")\n  } else {\n    .ok(a / b)\n  }\n}\n\nfn serve() <messages, alloc> {\n  with mcp(name: \"calc\", version: \"1\")\n  tool(divide)\n}\n\nfn main() <console, alloc> {\n  with stdio()\n  serve()\n}\n";
 
 fn request(id: u32, method: &str, params: &str) -> String {
     let sep = if params.is_empty() { "" } else { "," };

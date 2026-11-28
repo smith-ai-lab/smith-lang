@@ -6,7 +6,8 @@ status: partial
 built:
   - "a plain `+`, `-`, or `*` of two whole numbers, a literal included, which gives the exact range of the result with nothing proven, in two words when it needs 65 to 128 bits, so the product of two `Nat`s is the whole product, printed and compared exactly, which is the type of its operands where `arith` shows that it fits, and which is refused where more than 128 bits are needed, until it is narrowed"
   - "a value of a range of 65 to 128 bits that enters a range of 64 bits where a condition or a `requires` shows that it fits"
-  - "`wrapping_`, `saturating_`, and `checked_` of `add`, `sub`, and `mul`, and `wrapping_div`, `wrapping_rem`, `checked_div`, and `checked_rem` of the traits `Wrapping` and `Checked`, and `checked_div`, `checked_rem`, `wrapping_div`, and `wrapping_rem` of `std.int`, the last two compiling only where `arith` proves the divisor is not zero"
+  - "`wrapping_` of `add`, `sub`, and `mul`, and `wrapping_div` and `wrapping_rem`, of the trait `Wrapping` and of `std.int`, the last two compiling only where `arith` proves the divisor is not zero, and `saturating_add`, `saturating_sub`, and `saturating_mul` of `std.int`, each lowered at the call"
+  - "a sum or a difference that may not fit its type, checked with an `if` on the exact result, and a product by a number written out, checked with an `if` on its operands"
   - "`/` and `%` of two whole numbers, which round toward zero, give the exact range of the quotient and of what is left over, bind as `*` does, and compile when `arith` proves that the divisor is not zero and, for a signed number, that the least number is not divided by -1 where the result would not fit"
   - "a value that enters a narrower range, at a binding, a `mut`, an argument, and a result, which compiles when a condition or a `requires` shows that it fits, and an error that says what could not be proven"
   - "a unary `-`, which gives the negated range and groups tighter than `*`"
@@ -14,7 +15,7 @@ built:
   - "`/` and `%` of a number of 65 to 128 bits, which give the exact range of the quotient and of what is left over, as a number of 64 bits does, by 2 to some power as the halves of the number moved or kept, and by any other number through one function of the runtime that divides two numbers of 128 bits, which is slow beside every other operator, so `times` below gives a `Nat` and a `Nat` from a product with no division"
   - "the product of two numbers of 64 bits or fewer, both signed or both not, as the one instruction of each chip that gives both halves: `mul` or `imul` of one operand on x86-64, and `mul` with `umulh` or `smulh` on arm64"
   - "`narrow(x)` and `clamp(x)` of a number of 65 to 128 bits, to a range of 64 bits or fewer, compared with the ends of the range as two words"
-  - "not `wrapping_`, `saturating_`, and `checked_` of a number of more than 64 bits, or `narrow` and `clamp` of a float"
+  - "not `wrapping_` and `saturating_` of a number of more than 64 bits, or `narrow` and `clamp` of a float"
   - "a `mut` with no stated type given the range its body infers, where it is a number"
 ---
 
@@ -101,11 +102,25 @@ fn main() <console, alloc> {
 
 This prints `8 255 2 0`. In the first block of `gap`, `a >= b` holds, so `a - b` is at least 0, and in the `else` the subtraction is not written. The same holds for a condition with `and`, `or`, and `not`. What the compiler can prove appears under [What arith proves](arith.md), and how to state a fact once for a whole function under [Contracts](contracts.md).
 
+A result that may not fit its type is checked the same way. The `if` compares the exact result with the greatest value of the type, and the block where it fits uses it.
+
+```
+fn total(have: Nat, more: Nat) -> Option[Nat] {
+  if have + more <= 18446744073709551615 { .some(have + more) } else { .none }
+}
+
+fn tens(n: Nat, digit: Nat) -> Option[Nat] {
+  if n <= (18446744073709551615 - digit) / 10 { .some(n * 10 + digit) } else { .none }
+}
+```
+
+`total(2, 3)` is `.some(5)` and `total(18446744073709551615, 1)` is `.none`. `tens(12, 3)` is `.some(123)`. A product is checked on its operands, as `tens` checks `n`: the greatest `n` whose product fits is the greatest value less `digit`, divided by 10. The check costs one comparison, and nothing else is checked when the program runs.
+
 ## Entering a range with no proof
 
 Where nothing proves that a value fits the range it enters, as a number read from outside, two functions of [`std.int`](../library/int.md) take it in. Each takes a value of any range and gives the range that is expected where it is written. They serve every operator and any expression, and each costs the comparisons it says when the program runs.
 
-`narrow(x)` gives an `Option` of the range expected: `.some(x)` when `x` is in that range, and `.none` when it is not. `checked_add(a, b)` is `narrow(a + b)`.
+`narrow(x)` gives an `Option` of the range expected: `.some(x)` when `x` is in that range, and `.none` when it is not.
 
 ```
 use std.int (narrow)
@@ -117,7 +132,7 @@ fn next_checked(i: Byte) -> Option[Byte] { narrow(i + 1) }
 
 `to_byte(200)` is `.some(200)` and `to_byte(300)` is `.none`. `next_checked(7)` is `.some(8)` and `next_checked(255)` is `.none`.
 
-`clamp(x)` gives the value of the range expected that is nearest `x`: `x` when it is in the range, the least value when `x` is below it, and the greatest when it is above. `saturating_add(a, b)` is `clamp(a + b)`.
+`clamp(x)` gives the value of the range expected that is nearest `x`: `x` when it is in the range, the least value when `x` is below it, and the greatest when it is above.
 
 ```
 use std.console (console, print)
@@ -280,6 +295,24 @@ fn bump(a: Byte, b: 0..65536) -> 0..65536 { wrapping_add(a, b) }
 
 This is refused, as `a` and `b` are of two ranges. The fix is to bind the narrower with the type of the other, as `wide: 0..65536 = a`.
 
+## Saturating
+
+`saturating_add`, `saturating_sub`, and `saturating_mul` of [`std.int`](../library/int.md) give the value of the type nearest the exact result: the result when it fits, the greatest value when it is above, and the least when it is below. They are functions of the same ranges as the functions that wrap, and a file imports them as it imports any other.
+
+```
+use std.console (console, print)
+use std.bits (u8)
+use std.int (saturating_add, saturating_sub)
+
+fn main() <console, alloc> {
+  a: u8 = 250
+  b: u8 = 3
+  print("{saturating_add(a, 10)} {saturating_sub(b, 5)}")
+}
+```
+
+This prints `255 0`. Without the `use` line it is refused where `saturating_add` is called, with the fix "add `use std.int (saturating_add)`". `saturating_add(a, b)` is `clamp(a + b)`, for a range that fills a size.
+
 ## The forms
 
 | Written | Is |
@@ -291,8 +324,9 @@ This is refused, as `a` and `b` are of two ranges. The fix is to bind the narrow
 | A result of more than 128 bits | Refused until it is narrowed |
 | `narrow(x)` | `.some(x)` when `x` is in the range expected, `.none` when it is not |
 | `clamp(x)` | The value of the range expected that is nearest `x` |
+| `if a + b <= 18446744073709551615` | A proof, in its block, that the sum fits a `Nat` |
 | `wrapping_add(a, b)`, `wrapping_sub(a, b)`, `wrapping_mul(a, b)` | The low bits, for a range that fills a size |
-| `checked_div(a, b)`, `checked_rem(a, b)` | `.none` for a zero divisor and for the quotient that does not fit, `.some` otherwise |
+| `saturating_add(a, b)`, `saturating_sub(a, b)`, `saturating_mul(a, b)` | The nearest value, for a range that fills a size |
 | `Wrapping.wrapping_div(a, b)`, `Wrapping.wrapping_rem(a, b)` | The low bits, with the divisor proven not to be zero: the least number divided by -1 is itself, and leaves 0 |
 
 Next: [Bit operations](bits.md)

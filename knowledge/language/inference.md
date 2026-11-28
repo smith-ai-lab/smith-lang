@@ -165,7 +165,7 @@ fn total(xs: List[Nat]) -> Nat {
 }
 ```
 
-This is refused: "`acc` is changed by itself in this loop, and its range is not finite within 64 bits: `acc = acc + x` adds a `Nat`, at most 281474976710655 times", with the fix "write `checked_add`, which gives an `Option` and costs one comparison, where it is seen; or `wrapping_add`; or a `requires` that bounds the size". The compiler adds no check that the program did not write. A loop over a type of a program's own that implements [`Iterate`](iterate.md), or an open-ended loop, has no count of passes, and a `mut` it adds to is refused the same way.
+This is refused: "`acc` is changed by itself in this loop, and its range is not finite within 64 bits: `acc = acc + x` adds a `Nat`, at most 281474976710655 times", with the fix "state the type of `acc` and check with an `if` that what it is given fits it, which costs one comparison; or write `wrapping_add`; or a `requires` that bounds the size". The compiler adds no check that the program did not write. A loop over a type of a program's own that implements [`Iterate`](iterate.md), or an open-ended loop, has no count of passes, and a `mut` it adds to is refused the same way.
 
 A change the templates do not cover, as a product or a value that depends on the `mut` in any other way, is refused: "`n` is changed by itself in this loop, so its range is not inferred", with the range of the first use as the range to state.
 

@@ -1,7 +1,6 @@
-//! `checked_div` and `checked_rem` give `.none` for a zero divisor and for the
-//! quotient that does not fit, `wrapping_div` and `wrapping_rem` keep the low
-//! bits of it and need the divisor proven not to be zero, and `arith` knows
-//! what a quotient and what is left over cannot be.
+//! `wrapping_div` and `wrapping_rem` keep the low bits of the quotient and
+//! need the divisor proven not to be zero, and `arith` knows what a quotient
+//! and what is left over cannot be.
 
 use smith::lower;
 use smith::scalar;
@@ -12,10 +11,6 @@ use crate::targets::{runnable, runs_as};
 use crate::Test;
 
 pub const ONCE: &[Test] = &[
-    (
-        "checked_div_and_checked_rem_give_none_for_a_zero_divisor_and_for_a_quotient_that_does_not_fit",
-        checked_div_and_checked_rem_give_none_for_a_zero_divisor_and_for_a_quotient_that_does_not_fit,
-    ),
     (
         "wrapping_div_and_wrapping_rem_keep_the_low_bits_of_the_quotient",
         wrapping_div_and_wrapping_rem_keep_the_low_bits_of_the_quotient,
@@ -35,20 +30,6 @@ pub const MACHINE: &[Test] = &[(
     every_executable_of_the_functions_that_divide_gives_what_the_evaluator_gives,
 )];
 
-/// What 128 bits of arithmetic gives for `a` and `b` of `ty`, as `.none` or
-/// `.some(n)`, as text.
-fn checked(ty: Int, a: i128, b: i128, rem: bool) -> String {
-    if b == 0 {
-        return ".none".to_string();
-    }
-    let n = if rem { a % b } else { a / b };
-    if n > ty.max() || n < ty.min() {
-        ".none".to_string()
-    } else {
-        format!(".some({n})")
-    }
-}
-
 /// The low bits of the answer: what the type holds that it is congruent to.
 fn wrapped(ty: Int, a: i128, b: i128, rem: bool) -> i128 {
     let n = if rem { a % b } else { a / b };
@@ -61,16 +42,13 @@ fn wrapped(ty: Int, a: i128, b: i128, rem: bool) -> i128 {
     }
 }
 
-/// A program that prints each of the functions of each pair, where the
-/// divisor of `wrapping_` is a constant that is not zero.
+/// A program that prints each of the functions of each pair whose divisor is
+/// not zero, a constant.
 fn program(ty: Int, pairs: &[(i128, i128)]) -> String {
     let t = ty.name;
-    let mut text = "use std.console (console, print)\nuse std.int (checked_div, checked_rem, wrapping_div, wrapping_rem)\n\nfn main() <console, alloc> {\n".to_string();
+    let mut text = "use std.console (console, print)\nuse std.int (wrapping_div, wrapping_rem)\n\nfn main() <console, alloc> {\n".to_string();
     for (i, (a, b)) in pairs.iter().enumerate() {
-        text.push_str(&format!("  a{i}: {t} = {a}\n  b{i}: {t} = {b}\n"));
-        text.push_str(&format!(
-            "  print(\"{{checked_div(a{i}, b{i})}} {{checked_rem(a{i}, b{i})}}\")\n"
-        ));
+        text.push_str(&format!("  a{i}: {t} = {a}\n"));
         if *b != 0 {
             text.push_str(&format!(
                 "  print(\"{{wrapping_div(a{i}, {b})}} {{wrapping_rem(a{i}, {b})}}\")\n"
@@ -100,11 +78,6 @@ fn pairs(g: &mut Gen, ty: Int) -> Vec<(i128, i128)> {
 fn expected(ty: Int, pairs: &[(i128, i128)]) -> String {
     let mut out = String::new();
     for (a, b) in pairs {
-        out.push_str(&format!(
-            "{} {}\n",
-            checked(ty, *a, *b, false),
-            checked(ty, *a, *b, true)
-        ));
         if *b != 0 {
             out.push_str(&format!(
                 "{} {}\n",
@@ -116,26 +89,6 @@ fn expected(ty: Int, pairs: &[(i128, i128)]) -> String {
     out
 }
 
-fn checked_div_and_checked_rem_give_none_for_a_zero_divisor_and_for_a_quotient_that_does_not_fit() {
-    generate::check(
-        5201,
-        20,
-        |g| {
-            let ty = *g.pick(INTS);
-            (ty, pairs(g, ty))
-        },
-        |(ty, pairs)| {
-            let source = program(*ty, pairs);
-            let lowered = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
-            assert_eq!(
-                String::from_utf8(scalar::run(&lowered).stdout).unwrap(),
-                expected(*ty, pairs),
-                "for\n{source}"
-            );
-        },
-    );
-}
-
 fn wrapping_div_and_wrapping_rem_keep_the_low_bits_of_the_quotient() {
     for ty in INTS.iter().filter(|t| t.signed) {
         let pairs = [(ty.min(), -1), (ty.min(), 1), (ty.max(), -1), (-7i128.max(ty.min()), 2)];
@@ -144,7 +97,7 @@ fn wrapping_div_and_wrapping_rem_keep_the_low_bits_of_the_quotient() {
         let said = String::from_utf8(scalar::run(&lowered).stdout).unwrap();
         assert_eq!(said, expected(*ty, &pairs), "{}", ty.name);
         // The least number divided by -1 is itself, and leaves nothing.
-        assert!(said.contains(&format!("\n{} 0\n", ty.min())), "{said}");
+        assert!(said.lines().any(|l| l == format!("{} 0", ty.min())), "{said}");
     }
 }
 
@@ -172,7 +125,6 @@ fn wrapping_div_and_wrapping_rem_are_refused_where_the_divisor_may_be_zero() {
             let error = write("a, b", "", false).unwrap_err();
             assert!(error.contains("cannot prove that `b != 0`"), "{error}");
             assert!(error.contains(&format!("`{f}(a, b)` may divide by zero")), "{error}");
-            assert!(error.contains("or use `checked_"), "{error}");
             let error = write("a, 0", "", false).unwrap_err();
             assert!(error.contains("divides by zero"), "{error}");
             assert_eq!(write("a, b", "requires b != 0 ", false), Ok(()));

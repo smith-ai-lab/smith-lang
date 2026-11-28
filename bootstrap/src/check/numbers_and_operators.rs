@@ -1,6 +1,6 @@
 //! Checks numbers and operators: the whole number types, a number written out,
-//! `+`, `-`, and `*`, the `wrapping_`, `saturating_`, `checked_`, and `narrow`
-//! functions, the functions of `Bits`, and `Convert` between numbers.
+//! `+`, `-`, and `*`, the `wrapping_`, `saturating_`, and `narrow` functions,
+//! the functions of `Bits`, and `Convert` between numbers.
 
 use super::*;
 
@@ -1532,7 +1532,6 @@ impl<'a> Checker<'a> {
                 self.needs(body, "alloc", call.pos, &format!("`{}`", call.callee));
                 Ty::Text
             }
-            name if name.starts_with("__checked_") => Ty::Enum(defs.option, vec![ty]),
             _ => ty,
         }
     }

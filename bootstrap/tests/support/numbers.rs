@@ -3,8 +3,8 @@
 //!
 //! A program binds names of whole number types to literals, each written in
 //! a form the lexical rules allow, and its `main` prints lines whose strings
-//! hold those names, their `repr`, comparisons of them, `wrapping_`,
-//! `saturating_`, and `checked_` arithmetic on them, the functions of `Bits`
+//! hold those names, their `repr`, comparisons of them, `wrapping_` and
+//! `saturating_` arithmetic on them, the functions of `Bits`
 //! on them, them taken to another type with `narrow` and its relatives, and
 //! tuples and a struct that hold them. The generator draws a value from the least and greatest
 //! of its type, and from just inside them, as often as from anywhere else.
@@ -91,9 +91,6 @@ const STD: &[(&str, &[&str])] = &[
     (
         "std.int",
         &[
-            "checked_add",
-            "checked_mul",
-            "checked_sub",
             "clamp",
             "narrow",
             "saturating_add",
@@ -413,8 +410,8 @@ pub fn compare(op: &str, a: i128, b: i128) -> bool {
     }
 }
 
-/// What `wrapping_`, `saturating_`, or `checked_` of the operation gives
-/// for the values, as text.
+/// What `wrapping_` or `saturating_` of the operation gives for the values,
+/// as text.
 pub fn arithmetic(kind: &str, op: &str, ty: Int, a: i128, b: i128) -> String {
     // A product of two values of a type of 64 bits may not fit even 128
     // bits, and then it fits no type, and the bits that stay are the same.
@@ -442,8 +439,7 @@ pub fn arithmetic(kind: &str, op: &str, ty: Int, a: i128, b: i128) -> String {
             // A subtraction below the least value of an unsigned type.
             if op == "sub" && !ty.signed { 0 } else { limit }.to_string()
         }
-        (_, Some(e)) => format!(".some({e})"),
-        _ => ".none".to_string(),
+        _ => unreachable!("an operation that wraps or saturates"),
     }
 }
 
@@ -519,7 +515,7 @@ fn line(g: &mut Gen, vars: &[Var], at: usize) -> Line {
             );
         }
         3 | 4 => {
-            let kind = *g.pick(&["wrapping", "saturating", "checked"]);
+            let kind = *g.pick(&["wrapping", "saturating"]);
             let op = *g.pick(&["add", "sub", "mul"]);
             let (other, b) = operand(g, vars, first.ty);
             line.braced(
@@ -903,7 +899,7 @@ fn quiet_line(g: &mut Gen, vars: &[Var]) -> (String, &'static str) {
             let test = format!("{} {op} {other}", first.name);
             choose(&test, compare(op, first.value, b))
         }
-        2 => {
+        2 | 3 => {
             let kind = *g.pick(&["wrapping", "saturating"]);
             let op = *g.pick(&["add", "sub", "mul"]);
             let (other, b) = operand(g, vars, first.ty);
@@ -911,21 +907,6 @@ fn quiet_line(g: &mut Gen, vars: &[Var]) -> (String, &'static str) {
             let test = format!("{kind}_{op}({}, {other}) == {expected}", first.name);
             let result = arithmetic(kind, op, first.ty, first.value, b);
             choose(&test, result == c.to_string())
-        }
-        3 => {
-            let op = *g.pick(&["add", "sub", "mul"]);
-            let (other, b) = operand(g, vars, first.ty);
-            let (expected, c) = operand(g, vars, first.ty);
-            let source = format!(
-                "match checked_{op}({}, {other}) {{\n    .some(x) {{ if x == {expected} {{ {yes} }} else {{ {no} }} }}\n    .none {{ print(\"none\") }}\n  }}",
-                first.name
-            );
-            let printed = match arithmetic("checked", op, first.ty, first.value, b) {
-                r if r == ".none" => "none",
-                r if r == format!(".some({c})") => "yes",
-                _ => "no",
-            };
-            (source, printed)
         }
         _ => {
             let same: Vec<&Var> = vars.iter().filter(|v| v.ty == vars[0].ty).collect();
