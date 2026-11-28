@@ -12,6 +12,7 @@ built:
   - "and `/` and `%`, whose divisor `arith` must prove is not zero, and, for a signed number, that the least number is not divided by -1 where the result would not fit, and which it treats as one unknown quantity of the range of the result, or as the number itself when both sides are literals, with what is true of every pair said of it: for a divisor that is a literal above zero, the quotient times it is within less than the divisor of the dividend, and the remainder is the dividend less that; for an unsigned dividend, neither is above it, and the remainder is below the divisor"
   - "and, from the `invariant` of a `loop`, what it says, in the block and, where no `break` ends the loop, after it, the invariant itself being proven before the first pass and at the end of each pass, with the counter one more, from the facts of the start of the pass"
   - "and `+`, `-`, and `*` on a `Nat`, proven as on any whole number, with the fix \"check the operands first\", as a `Nat` has no wrapping, saturating, or checked function"
+  - "and the `size` of a text written out, and of its `bytes`, which is how many bytes it is, an escape and a character of several bytes counted by their bytes, known through a binding and an argument as the size of a list written out is"
   - "not the facts of a `match` block, or a proof held in a value"
 ---
 
@@ -139,6 +140,8 @@ fn at(xs: List[Byte], i: u64) -> Byte {
 ```
 
 `plus([1, 2, 3])` is `103`, and `at([1, 2, 3], 1)` is `2` while `at([1, 2, 3], 5)` is `0`. In `plus`, `xs.size < 100` makes `xs.size + 100` fit, and in `at`, the `ys` that `xs` was given has the size of `xs`, so `i < ys.size` proves `ys[i]`.
+
+A text written out has the size of its bytes, and so do its `bytes`: after `s = "héllo"`, `s.size` is 6, as `é` is two bytes, and `s.bytes[5]` needs no check.
 
 **A `mut` of a list, a struct, or a tuple.** What is known of it, and of each of its fields, is known as of any value, until it or a field of it is assigned. Then a fact about it is forgotten.
 

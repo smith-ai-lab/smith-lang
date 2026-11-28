@@ -128,6 +128,38 @@ fn literal_value(e: &Expr) -> Option<crate::kernel::Value> {
     }
 }
 
+/// The size of a list or a text written out, or of the bytes of a text
+/// written out: what is written, a text counted in its bytes.
+fn written_size(e: &Expr) -> Option<i128> {
+    match e {
+        Expr::List { items, .. } => Some(items.len() as i128),
+        Expr::Text { text, .. } => Some(text.len() as i128),
+        Expr::Field { of, name, .. } if name == "bytes" => match &**of {
+            Expr::Text { text, .. } => Some(text.len() as i128),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The places that fall between two characters of the valid UTF-8 `text`,
+/// as runs from the least to the greatest of each: every place but the one
+/// before a byte that continues a character.
+fn literal_boundaries(text: &[u8]) -> Vec<(i128, i128)> {
+    let mut runs: Vec<(i128, i128)> = Vec::new();
+    for at in 0..=text.len() {
+        if text.get(at).is_some_and(|b| b & 0xC0 == 0x80) {
+            continue;
+        }
+        let at = at as i128;
+        match runs.last_mut() {
+            Some(run) if run.1 + 1 == at => run.1 = at,
+            _ => runs.push((at, at)),
+        }
+    }
+    runs
+}
+
 /// What `arith` has been told in a body, and the variables it has.
 #[derive(Default)]
 pub(super) struct Facts {
@@ -181,6 +213,9 @@ pub(super) struct Facts {
     /// While a function's contract is read at a call, the path of the text
     /// each of its parameters that is a text stands for there.
     paths: Option<HashMap<String, String>>,
+    /// The bytes of each text written out, by the path of the name it was
+    /// given to, or of the text itself. The newest entry for a path counts.
+    literals: Vec<(String, Vec<u8>)>,
 }
 
 /// A `boundary(s, i)` that was read: the variable that is the place `i`, the
@@ -213,6 +248,7 @@ pub(super) struct Mark {
     constants: usize,
     held: usize,
     steps: usize,
+    literals: usize,
     versions: HashMap<usize, usize>,
 }
 
@@ -224,6 +260,7 @@ impl Facts {
             constants: self.constants.len(),
             held: self.held.len(),
             steps: self.steps.len(),
+            literals: self.literals.len(),
             versions: self.versions.clone(),
         }
     }
@@ -234,7 +271,15 @@ impl Facts {
         self.constants.truncate(mark.constants);
         self.held.truncate(mark.held);
         self.steps.truncate(mark.steps);
+        self.literals.truncate(mark.literals);
         self.versions.clone_from(&mark.versions);
+    }
+
+    /// The bytes a text was written with, by its path, when it was written out.
+    fn literal(&self, path: &str) -> Option<&[u8]> {
+        (self.literals.iter().rev())
+            .find(|(p, _)| p == path)
+            .map(|(_, text)| text.as_slice())
     }
 
     /// The `mut` at `at` may hold another value: nothing known of its
@@ -564,14 +609,30 @@ impl Builder<'_, '_> {
                 Some(self.variable(Key::Name(at, t.min(), t.max())))
             }
             Expr::Field { of, name, .. } if name == "size" && self.facts.subst.is_some() => {
-                let Expr::Name { name: list, .. } = &**of else {
-                    return None;
+                let list = match &**of {
+                    Expr::Name { name, .. } => name,
+                    // The bytes of a text parameter are as many as the text.
+                    Expr::Field { of, name, .. } if name == "bytes" => match &**of {
+                        Expr::Name { name, .. }
+                            if (self.facts.args.as_ref())
+                                .and_then(|args| args.get(name))
+                                .is_some_and(|(_, ty)| matches!(ty, Ty::Text)) =>
+                        {
+                            name
+                        }
+                        _ => return None,
+                    },
+                    _ => return None,
                 };
                 self.facts
                     .subst
                     .as_ref()?
                     .get(&format!("{list}.size"))
                     .cloned()
+            }
+            // A list or a text written out has the size of what is written.
+            Expr::Field { of, name, .. } if name == "size" && written_size(of).is_some() => {
+                self.list_size(of)
             }
             Expr::Field { of, name, .. } => {
                 let (lo, mut hi) = self.range_of(e);
@@ -895,9 +956,9 @@ impl Builder<'_, '_> {
 
     /// The sum the size of the list `of` stands for.
     pub(super) fn list_size(&mut self, of: &Expr) -> Option<Lin> {
-        // A list written out has the size of what is written.
-        if let Expr::List { items, .. } = of {
-            return Some(constant(items.len() as i128));
+        // A list or a text written out has the size of what is written.
+        if let Some(size) = written_size(of) {
+            return Some(constant(size));
         }
         let range = (0, self.size_most(of));
         if self.facts.subst.is_some() {
@@ -1162,7 +1223,13 @@ impl<'a> Checker<'a> {
         // A text that no path names, as one written out, is a text of its
         // own, which only its two ends are known of.
         facts.fresh += 1;
-        let path = path.unwrap_or_else(|| format!("#{}", facts.fresh));
+        let path = path.unwrap_or_else(|| {
+            let path = format!("#{}", facts.fresh);
+            if let Expr::Text { text, .. } = text {
+                facts.literals.push((path.clone(), text.clone()));
+            }
+            path
+        });
         facts.fresh += 1;
         let at = facts.id(Key::Fresh(facts.fresh, i128::MIN / 4, i128::MAX / 4));
         facts.fresh += 1;
@@ -1514,7 +1581,7 @@ impl<'a> Checker<'a> {
     /// Notes what the name defined last was given, when it is a whole number
     /// and not a `mut`.
     pub(super) fn assume_binding(&mut self, body: &mut Body<'a>, value: &Expr) {
-        if let Some((_, Ty::List(_) | Ty::Slice(_))) = body.names.last() {
+        if let Some((_, Ty::List(_) | Ty::Slice(_) | Ty::Text)) = body.names.last() {
             if Self::decided(body) {
                 self.give_list(body, body.names.len() - 1, value);
             }
@@ -1592,7 +1659,7 @@ impl<'a> Checker<'a> {
         let range = (0, if sized { MAX_SIZE } else { u64::MAX as i128 });
         let mut builder = self.builder(body, &mut facts, false);
         let given = match value {
-            Expr::List { items, .. } => Some(constant(items.len() as i128)),
+            Expr::List { .. } | Expr::Text { .. } => builder.list_size(value),
             Expr::Name { .. } => builder.list_size(value),
             // The bytes of a text are as many as the text.
             Expr::Field { of, name, .. } if name == "bytes" && builder.is_text(of) => {
@@ -1625,11 +1692,20 @@ impl<'a> Checker<'a> {
         if body.vars.contains(&body.names[at].0) {
             facts.bump(at);
         }
-        let id = facts.id(Key::Field(
-            format!("{}.size", root(body, &facts, at)),
-            range.0,
-            range.1,
-        ));
+        let path = root(body, &facts, at);
+        // A text keeps the bytes it was written with, to know its boundaries.
+        let written = match value {
+            Expr::Text { text, .. } => Some(text.clone()),
+            Expr::Name { .. } => {
+                let from = self.builder(body, &mut facts, false).path(value);
+                from.and_then(|from| facts.literal(&from).map(<[u8]>::to_vec))
+            }
+            _ => None,
+        };
+        if let (Some(text), Ty::Text) = (written, &body.names[at].1) {
+            facts.literals.push((path.clone(), text));
+        }
+        let id = facts.id(Key::Field(format!("{path}.size"), range.0, range.1));
         if let (Some(given), false) = (given, overflow)
             && let Some(same) = self.equal(body, &mut facts, id, &given)
         {
@@ -2477,6 +2553,13 @@ fn plainly(facts: &Facts, bound: &Bound, place: &Lin, known: &[usize], used: &[F
     if *place == constant(0) || bound.size.as_ref() == Some(place) {
         return true;
     }
+    // A place of a text written out is plainly one where its bytes say so.
+    if let Some(text) = facts.literal(&bound.text)
+        && place.terms.is_empty()
+        && (literal_boundaries(text).iter()).any(|(lo, hi)| (*lo..=*hi).contains(&place.constant))
+    {
+        return true;
+    }
     let holds = |f: Formula| proves(&connected(used, std::slice::from_ref(&f)), &f);
     let said = (facts.bounds.iter()).any(|other| {
         other.text == bound.text
@@ -2624,6 +2707,17 @@ fn boundary_ways(facts: &Facts, bound: &Bound, known: &[usize]) -> Option<Vec<Fo
     let mut ways = vec![equal_sums(place, &constant(0))?];
     if let Some(size) = &bound.size {
         ways.push(equal_sums(place, size)?);
+    }
+    // A place of a text written out falls in a run of places its bytes say.
+    for (lo, hi) in facts
+        .literal(&bound.text)
+        .map_or_else(Vec::new, literal_boundaries)
+    {
+        let mut over = place.clone();
+        over.constant = over.constant.checked_sub(lo)?;
+        let mut under = place.negated()?;
+        under.constant = under.constant.checked_add(hi)?;
+        ways.push(Formula::And(vec![Formula::Ge(over), Formula::Ge(under)]));
     }
     for other in &facts.bounds {
         if other.text == bound.text && other.holds != bound.holds && known.contains(&other.holds) {
@@ -2916,6 +3010,12 @@ impl<'a> Checker<'a> {
                     sums.insert(format!("{name}.size"), size);
                 }
                 if let Some(path) = builder.path(arg) {
+                    paths.insert(name.clone(), path);
+                } else if let Expr::Text { text, .. } = arg {
+                    // A text written out is a text of its own, with its bytes.
+                    facts.fresh += 1;
+                    let path = format!("#{}", facts.fresh);
+                    facts.literals.push((path.clone(), text.clone()));
                     paths.insert(name.clone(), path);
                 }
                 texts.insert(name.clone(), written_expr(arg));
@@ -3677,7 +3777,7 @@ impl<'a> Checker<'a> {
                 body.facts.held.push((at, sum));
             }
             Ty::Int(_) => {}
-            Ty::List(_) | Ty::Slice(_) => self.give_list(body, at, value),
+            Ty::List(_) | Ty::Slice(_) | Ty::Text => self.give_list(body, at, value),
             _ => body.facts.bump(at),
         }
     }
@@ -3715,7 +3815,7 @@ impl<'a> Checker<'a> {
         let at = body.names.len() - 1;
         match body.names[at].1 {
             Ty::Int(_) => {}
-            Ty::List(_) | Ty::Slice(_) => return self.give_list(body, at, value),
+            Ty::List(_) | Ty::Slice(_) | Ty::Text => return self.give_list(body, at, value),
             _ => return body.facts.bump(at),
         }
         let sum = self.value_of(body, value);

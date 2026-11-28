@@ -12,6 +12,7 @@ built:
   - "building a `str` by hand is refused"
   - "`s[a..b]`, `s[..k]`, and `s[k..]` of a `str`, a `str` that shares the memory of `s` and has the instructions of `s.bytes[a..b]`, which compiles when `arith` proves `a <= b`, `b <= s.size`, `boundary(s, a)`, and `boundary(s, b)`, and is refused naming the fact it cannot prove"
   - "`boundary(s, i)` in a `requires`, an `ensures`, and an `invariant`, and refused anywhere else, a `check` among them, which `arith` knows at `0` and at `s.size`, at `i` and `i + 1` where `s[i]` or `s.bytes[i]` is known to be below 128, and where a `requires` or an `ensures` says it, of a place it proves equal"
+  - "`boundary(s, i)` of a text written out, at each place between its characters and at no other"
 ---
 
 # Text and bytes
@@ -68,6 +69,7 @@ fn before_space(s: str, i: Nat) -> str
 - At `0` and at `s.size`.
 - On both sides of a byte below 128: where `s[i] < 128` is known, from an `if`, a `check`, or a `requires`, so are `boundary(s, i)` and `boundary(s, i + 1)`, as such a byte is a character of its own in UTF-8. This is the one way that looks at a byte.
 - Where a `requires` asks it, or the `ensures` of a function that was called promises it.
+- Of a text written out, at each place between its characters: after `s = "héllo"`, at 1 and at 3, but not at 2, which is inside `é`.
 
 ```
 fn word(s: str, from: Nat, to: Nat) -> str
