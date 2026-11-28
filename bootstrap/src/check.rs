@@ -1038,8 +1038,8 @@ struct Defs<'a> {
     /// The prelude's `Ord`, `Hash`, `Convert`, and `Bits`, by their places in
     /// the file's traits.
     ord: usize,
-    /// The traits of `+`, `-`, and `*`.
-    operators: [usize; 3],
+    /// The traits of `+`, `-`, `*`, `/`, and `%`.
+    operators: [usize; 5],
     hash: usize,
     convert: usize,
     bits: usize,
@@ -3086,7 +3086,7 @@ fn check_file(
         exit: prelude_item(&file, Kind::Trait, "Exit"),
         iterate: prelude_item(&file, Kind::Trait, "Iterate"),
         ord: prelude_item(&file, Kind::Trait, "Ord"),
-        operators: ["Add", "Sub", "Mul"].map(|n| prelude_item(&file, Kind::Trait, n)),
+        operators: ["Add", "Sub", "Mul", "Div", "Rem"].map(|n| prelude_item(&file, Kind::Trait, n)),
         hash: prelude_item(&file, Kind::Trait, "Hash"),
         convert: prelude_item(&file, Kind::Trait, "Convert"),
         bits: try_prelude_trait(&file, "Bits").unwrap_or(usize::MAX),
@@ -7327,8 +7327,9 @@ impl<'a> Typed<'a> {
         self.types[&addr(e)].subst(env)
     }
 
-    /// The function that `left + right`, `left - right`, or `left * right`
-    /// runs when the two sides are not both whole numbers, or both floats, in
+    /// The function that `left + right`, `left - right`, `left * right`,
+    /// `left / right`, or `left % right` runs when the two sides are not both
+    /// whole numbers, or both floats, in
     /// the copy of the definition with the type parameters `env`, and the type
     /// it gives. Nothing when the operation is one instruction.
     fn operator(
@@ -7347,7 +7348,8 @@ impl<'a> Typed<'a> {
             ArithOp::Add => (defs.operators[0], "add"),
             ArithOp::Sub => (defs.operators[1], "sub"),
             ArithOp::Mul => (defs.operators[2], "mul"),
-            _ => return None,
+            ArithOp::Div => (defs.operators[3], "div"),
+            ArithOp::Rem => (defs.operators[4], "rem"),
         };
         let fi = traits::trait_function(&defs.file.traits[k], name)?;
         let types = vec![

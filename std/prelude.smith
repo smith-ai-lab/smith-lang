@@ -60,6 +60,18 @@ trait Mul[A, B = A, out C = A] {
     requires valid(a, b)
 }
 
+trait Div[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn div(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
+trait Rem[A, B = A, out C = A] {
+  fn valid(a: A, b: B) -> bool
+  fn rem(a: A, b: B) -> C
+    requires valid(a, b)
+}
+
 trait Hash[T] {
   fn hash(value: T) -> u64
 }
@@ -538,6 +550,16 @@ impl Mul[i8] {
   fn mul(a: i8, b: i8) -> i8 { __wrapping_mul(a, b) }
 }
 
+impl Div[i8] {
+  fn valid(a: i8, b: i8) -> bool { __fits_div(a, b) }
+  fn div(a: i8, b: i8) -> i8 { __wrapping_div(a, b) }
+}
+
+impl Rem[i8] {
+  fn valid(a: i8, b: i8) -> bool { __fits_rem(a, b) }
+  fn rem(a: i8, b: i8) -> i8 { __wrapping_rem(a, b) }
+}
+
 impl Add[i16] {
   fn valid(a: i16, b: i16) -> bool { __fits_add(a, b) }
   fn add(a: i16, b: i16) -> i16 { __wrapping_add(a, b) }
@@ -551,6 +573,16 @@ impl Sub[i16] {
 impl Mul[i16] {
   fn valid(a: i16, b: i16) -> bool { __fits_mul(a, b) }
   fn mul(a: i16, b: i16) -> i16 { __wrapping_mul(a, b) }
+}
+
+impl Div[i16] {
+  fn valid(a: i16, b: i16) -> bool { __fits_div(a, b) }
+  fn div(a: i16, b: i16) -> i16 { __wrapping_div(a, b) }
+}
+
+impl Rem[i16] {
+  fn valid(a: i16, b: i16) -> bool { __fits_rem(a, b) }
+  fn rem(a: i16, b: i16) -> i16 { __wrapping_rem(a, b) }
 }
 
 impl Add[i32] {
@@ -568,6 +600,16 @@ impl Mul[i32] {
   fn mul(a: i32, b: i32) -> i32 { __wrapping_mul(a, b) }
 }
 
+impl Div[i32] {
+  fn valid(a: i32, b: i32) -> bool { __fits_div(a, b) }
+  fn div(a: i32, b: i32) -> i32 { __wrapping_div(a, b) }
+}
+
+impl Rem[i32] {
+  fn valid(a: i32, b: i32) -> bool { __fits_rem(a, b) }
+  fn rem(a: i32, b: i32) -> i32 { __wrapping_rem(a, b) }
+}
+
 impl Add[i64] {
   fn valid(a: i64, b: i64) -> bool { __fits_add(a, b) }
   fn add(a: i64, b: i64) -> i64 { __wrapping_add(a, b) }
@@ -581,6 +623,16 @@ impl Sub[i64] {
 impl Mul[i64] {
   fn valid(a: i64, b: i64) -> bool { __fits_mul(a, b) }
   fn mul(a: i64, b: i64) -> i64 { __wrapping_mul(a, b) }
+}
+
+impl Div[i64] {
+  fn valid(a: i64, b: i64) -> bool { __fits_div(a, b) }
+  fn div(a: i64, b: i64) -> i64 { __wrapping_div(a, b) }
+}
+
+impl Rem[i64] {
+  fn valid(a: i64, b: i64) -> bool { __fits_rem(a, b) }
+  fn rem(a: i64, b: i64) -> i64 { __wrapping_rem(a, b) }
 }
 
 impl Add[u8] {
@@ -598,6 +650,16 @@ impl Mul[u8] {
   fn mul(a: u8, b: u8) -> u8 { __wrapping_mul(a, b) }
 }
 
+impl Div[u8] {
+  fn valid(a: u8, b: u8) -> bool { __fits_div(a, b) }
+  fn div(a: u8, b: u8) -> u8 { __wrapping_div(a, b) }
+}
+
+impl Rem[u8] {
+  fn valid(a: u8, b: u8) -> bool { __fits_rem(a, b) }
+  fn rem(a: u8, b: u8) -> u8 { __wrapping_rem(a, b) }
+}
+
 impl Add[u16] {
   fn valid(a: u16, b: u16) -> bool { __fits_add(a, b) }
   fn add(a: u16, b: u16) -> u16 { __wrapping_add(a, b) }
@@ -611,6 +673,16 @@ impl Sub[u16] {
 impl Mul[u16] {
   fn valid(a: u16, b: u16) -> bool { __fits_mul(a, b) }
   fn mul(a: u16, b: u16) -> u16 { __wrapping_mul(a, b) }
+}
+
+impl Div[u16] {
+  fn valid(a: u16, b: u16) -> bool { __fits_div(a, b) }
+  fn div(a: u16, b: u16) -> u16 { __wrapping_div(a, b) }
+}
+
+impl Rem[u16] {
+  fn valid(a: u16, b: u16) -> bool { __fits_rem(a, b) }
+  fn rem(a: u16, b: u16) -> u16 { __wrapping_rem(a, b) }
 }
 
 impl Add[u32] {
@@ -628,6 +700,16 @@ impl Mul[u32] {
   fn mul(a: u32, b: u32) -> u32 { __wrapping_mul(a, b) }
 }
 
+impl Div[u32] {
+  fn valid(a: u32, b: u32) -> bool { __fits_div(a, b) }
+  fn div(a: u32, b: u32) -> u32 { __wrapping_div(a, b) }
+}
+
+impl Rem[u32] {
+  fn valid(a: u32, b: u32) -> bool { __fits_rem(a, b) }
+  fn rem(a: u32, b: u32) -> u32 { __wrapping_rem(a, b) }
+}
+
 impl Add[u64] {
   fn valid(a: u64, b: u64) -> bool { __fits_add(a, b) }
   fn add(a: u64, b: u64) -> u64 { __wrapping_add(a, b) }
@@ -641,4 +723,14 @@ impl Sub[u64] {
 impl Mul[u64] {
   fn valid(a: u64, b: u64) -> bool { __fits_mul(a, b) }
   fn mul(a: u64, b: u64) -> u64 { __wrapping_mul(a, b) }
+}
+
+impl Div[u64] {
+  fn valid(a: u64, b: u64) -> bool { __fits_div(a, b) }
+  fn div(a: u64, b: u64) -> u64 { __wrapping_div(a, b) }
+}
+
+impl Rem[u64] {
+  fn valid(a: u64, b: u64) -> bool { __fits_rem(a, b) }
+  fn rem(a: u64, b: u64) -> u64 { __wrapping_rem(a, b) }
 }

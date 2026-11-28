@@ -1092,8 +1092,11 @@ impl<'a> Checker<'a> {
                     l.clone()
                 }
             }
+            // `/` and `%` are trait calls where a side is a type parameter.
             _ if !unary
-                && matches!(op, ArithOp::Add | ArithOp::Sub | ArithOp::Mul)
+                && (matches!(op, ArithOp::Add | ArithOp::Sub | ArithOp::Mul)
+                    || matches!(l, Ty::Param(_))
+                    || matches!(r, Ty::Param(_)))
                 && !(matches!(l, Ty::Int(_) | Ty::Flex(_))
                     && matches!(r, Ty::Int(_) | Ty::Flex(_))) =>
             {
@@ -1119,7 +1122,8 @@ impl<'a> Checker<'a> {
     }
 
     /// Checks `left + right`, `left - right`, or `left * right` of two types
-    /// that are not both whole numbers, which is a call of the function of the
+    /// that are not both whole numbers, or `left / right` or `left % right`
+    /// where a side is a type parameter, which is a call of the function of the
     /// trait of the operator that the two types choose. It compiles where the
     /// `requires` of that function is proven.
     fn operator(
@@ -1132,7 +1136,9 @@ impl<'a> Checker<'a> {
         let (k, name) = match op {
             ArithOp::Add => (defs.operators[0], "add"),
             ArithOp::Sub => (defs.operators[1], "sub"),
-            _ => (defs.operators[2], "mul"),
+            ArithOp::Mul => (defs.operators[2], "mul"),
+            ArithOp::Div => (defs.operators[3], "div"),
+            ArithOp::Rem => (defs.operators[4], "rem"),
         };
         let fi = traits::trait_function(&defs.file.traits[k], name).expect("a function");
         let types = vec![l.clone(), r.clone(), Ty::Unknown];
@@ -1526,7 +1532,8 @@ impl<'a> Checker<'a> {
             .collect();
         let ty = tys[0].clone();
         match call.callee.as_str() {
-            "__equal" | "__fits_add" | "__fits_sub" | "__fits_mul" => defs.bool_ty(),
+            "__equal" | "__fits_add" | "__fits_sub" | "__fits_mul" | "__fits_div"
+            | "__fits_rem" => defs.bool_ty(),
             "__compare" => Ty::Enum(defs.order, Vec::new()),
             "__decimal" | "__float_text" => {
                 self.needs(body, "alloc", call.pos, &format!("`{}`", call.callee));

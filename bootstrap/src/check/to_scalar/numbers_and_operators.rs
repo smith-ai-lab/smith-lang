@@ -1,6 +1,6 @@
 //! Lowers numbers and operators: a number written out, `+`, `-`, and `*`, the
 //! functions the compiler builds for comparing, for `wrapping_` and
-//! `saturating_` arithmetic, for whether a sum fits, for `Bits`, and for `narrow` and its relatives, and
+//! `saturating_` arithmetic, for whether a sum or a quotient fits, for `Bits`, and for `narrow` and its relatives, and
 //! `Convert` between numbers.
 
 use super::float_bits;
@@ -102,6 +102,22 @@ impl<'a> Lowering<'a> {
             crate::parser::ArithOp::Sub => form::Binary::Sub,
             crate::parser::ArithOp::Mul => form::Binary::Mul,
             crate::parser::ArithOp::Div | crate::parser::ArithOp::Rem => {
+                // In a copy of a function whose operands are of a type
+                // parameter, a signed `%` below 64 bits may take the least
+                // number by -1, which `valid` allows, so it is taken to twice
+                // the size, as a `%` of whole numbers is.
+                if let (ArithOp::Rem, Ty::Int(t)) = (op, &taken)
+                    && t.signed()
+                    && t.bits() < 64
+                    && !matches!(typed.types[&addr(left)], Ty::Int(_))
+                {
+                    let wide = Int::sized(true, 2 * t.bits());
+                    let (a, b) = (
+                        out.resize(true, a[0], bits_of(wide)),
+                        out.resize(true, b, bits_of(wide)),
+                    );
+                    return self.division(out, (op, right), (ty, Ty::Int(wide), a, b));
+                }
                 return self.division(out, (op, right), (ty, taken, a[0], b));
             }
         };
@@ -1076,6 +1092,22 @@ impl<'a> Lowering<'a> {
                     form::Type::Int(form::Bits::B8),
                 );
                 vec![out.compare(form::Compare::Equal, answer[0], some)]
+            }
+            // That the divisor is not zero and, where the operator asks it,
+            // that the least number is not divided by -1.
+            "__fits_div" | "__fits_rem" => {
+                let (b, bits) = (b.expect("two"), bits_of(t));
+                let zero = out.int(bits, 0);
+                let not_zero = out.compare(form::Compare::LessU, zero, b);
+                if !t.signed() || (name == "__fits_rem" && t.bits() < 64) {
+                    return vec![not_zero];
+                }
+                let (least, minus) = (out.int(bits, t.min()), out.int(bits, -1));
+                let is_least = out.compare(form::Compare::Equal, a, least);
+                let is_minus = out.compare(form::Compare::Equal, b, minus);
+                let both = out.binary(form::Binary::And, is_least, is_minus);
+                let no = out.int(form::Bits::B8, 0);
+                vec![out.choose(both, no, not_zero)]
             }
             "__decimal" => {
                 let kind = Runtime::Decimal {
