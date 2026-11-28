@@ -72,6 +72,12 @@ trait Rem[A, B = A, out C = A] {
     requires valid(a, b)
 }
 
+trait Index[C, I, out T] {
+  fn valid(c: C, i: I) -> bool
+  fn at(c: C, i: I) -> T
+    requires valid(c, i)
+}
+
 trait Hash[T] {
   fn hash(value: T) -> u64
 }

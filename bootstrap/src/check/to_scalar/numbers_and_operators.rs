@@ -126,7 +126,7 @@ impl<'a> Lowering<'a> {
 
     /// Lowers an operator that is a call of the function `instance` of the
     /// trait of the operator, on the two sides.
-    fn operator_call(
+    pub(super) fn operator_call(
         &mut self,
         out: &mut Out<'a>,
         instance: Instance,
