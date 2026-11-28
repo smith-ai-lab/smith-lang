@@ -140,7 +140,7 @@ fn main() <console, alloc> {
   texts = inputs()
   loop k in 0..texts.size {
     print("input")
-    match lex(texts[k]) {
+    match lex(take texts[k]) {
       .ok(tokens) { show_tokens(tokens, 100000) }
       .err(errors) {
         loop i in 0..errors.size { show_error(errors[i]) }
