@@ -711,6 +711,20 @@ impl<'a> Checker<'a> {
     /// a listed effect with no such name may be it misspelt. A default lists
     /// none, so each thing in it that needs one is reported.
     pub(super) fn needs(&mut self, body: &mut Body, effect: &str, pos: Pos, what: &str) {
+        // The rounds of a `for` have no order, and an effect has one.
+        if self.fors > 0 && written_name(effect) != "alloc" {
+            self.errors.push(
+                Error::new(
+                    pos,
+                    format!(
+                        "a `for` may only allocate, and {what} needs the `{}` effect",
+                        written_name(effect)
+                    ),
+                )
+                .with_fix("write a `loop`, which runs in order"),
+            );
+            return;
+        }
         // A group is a scheduler where none is in force and hands what it starts
         // to the one in force where one is, so it lists `task` for the copy that
         // is built for it, and no caller lists it for the group.

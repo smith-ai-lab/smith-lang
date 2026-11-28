@@ -35,6 +35,7 @@ use std::sync::{Arc, OnceLock};
 mod arith;
 mod core_term;
 mod effects_with_and_try;
+mod for_arrays;
 mod frames;
 mod functions_calls_and_lambdas;
 mod infer;
@@ -2442,6 +2443,7 @@ fn written_with(s: &dyn Fn(&str) -> Option<String>, e: &Expr) -> String {
                 None => "loop { ... }".to_string(),
             },
         },
+        Expr::For(f) => format!("for {} {{ ... }}", f.index().0),
         Expr::Break { .. } => "break".to_string(),
         Expr::Unbuilt { .. } => "what is not built".to_string(),
         Expr::Return { value: None, .. } => "return".to_string(),
@@ -6635,6 +6637,11 @@ pub(crate) fn walk<'a>(expr: &'a Expr, out: &mut Vec<&'a Expr>) {
                 walk(value, out);
             }
         }
+        Expr::For(f) => {
+            for value in values(&f.round.body) {
+                walk(value, out);
+            }
+        }
         Expr::Interp { parts, .. } => {
             for part in parts {
                 if let Part::Expr(e) = part {
@@ -6727,6 +6734,7 @@ pub(super) fn blocks<'a>(e: &'a Expr, out: &mut Vec<&'a [Stmt]>) {
             }
             out.push(&l.body);
         }
+        Expr::For(f) => out.push(&f.round.body),
         Expr::Interp { parts, .. } => {
             for part in parts {
                 if let Part::Expr(e) = part {
@@ -7658,6 +7666,7 @@ impl<'a> Checker<'a> {
             walked_calls: Vec::new(),
             kernel_calls: Vec::new(),
             invariant: false,
+            fors: 0,
             unused_effects: Vec::new(),
             circles: Vec::new(),
         }
@@ -7807,6 +7816,9 @@ struct Checker<'a> {
     /// Whether an `invariant` is being checked, which is never computed, so
     /// that a fact such as `boundary` may be written in it.
     invariant: bool,
+    /// How many `for`s the expression being checked is in, whose blocks may
+    /// need no effect but `alloc`.
+    fors: usize,
     /// The effects a function lists that nothing in its body needs: the place
     /// of the function, its name, the effect, where it is listed, and the
     /// signature without the effects nothing in it needs.
@@ -9643,6 +9655,7 @@ impl<'a> Checker<'a> {
                 }
             },
             Expr::Loop(l) => self.loop_expr(body, l),
+            Expr::For(f) => self.for_expr(body, f, want),
             Expr::Break { pos } => {
                 if body.loops == 0 {
                     let message = if body.outer_loops == 0 {

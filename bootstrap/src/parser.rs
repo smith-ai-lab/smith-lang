@@ -10,6 +10,8 @@ use crate::diag::{Error, Pos};
 use crate::lexer::{Piece, Tok, Token};
 
 mod effects_with_and_try;
+mod for_arrays;
+pub use for_arrays::For;
 mod functions_calls_and_lambdas;
 mod mut_parameters;
 pub(crate) use mut_parameters::{changed_place, gives_back, own_result};
@@ -543,6 +545,8 @@ pub enum Expr {
     },
     /// `loop i in a..b { ... }`, or an open-ended `loop { ... }`.
     Loop(Box<Loop>),
+    /// `for i { e }`, the array whose element at each index is `e`.
+    For(Box<For>),
     /// `break`, which ends the nearest `loop` around it.
     Break {
         pos: Pos,
@@ -760,6 +764,7 @@ impl Expr {
             | Expr::Return { pos, .. } => *pos,
             Expr::Index { of, .. } | Expr::Slice { of, .. } => of.pos(),
             Expr::Loop(l) => l.pos,
+            Expr::For(f) => f.pos,
             Expr::Call(call) => call.pos,
             Expr::Field { of, .. } => of.pos(),
             Expr::Arith { left, .. } => left.pos(),
@@ -2778,6 +2783,7 @@ impl Parser<'_> {
             Tok::Keyword("match") => Expr::Match(Box::new(self.match_expr()?)),
             Tok::Keyword("if") => Expr::Match(Box::new(self.if_expr()?)),
             Tok::Keyword("loop") => Expr::Loop(Box::new(self.loop_expr()?)),
+            Tok::Keyword("for") => Expr::For(Box::new(self.for_expr()?)),
             Tok::Keyword("try") => {
                 self.bump();
                 let operand = self.operand()?;

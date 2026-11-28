@@ -1311,6 +1311,11 @@ impl<'a> Walk<'a> {
                 self.looping(st, l);
                 None
             }
+            // The elements of a `for` have `Copy`, so each is only looked at.
+            Expr::For(f) => {
+                self.looping(st, &f.round);
+                None
+            }
             Expr::Break { .. } => {
                 // What the loop's block owns ends where it is left.
                 let inside = self.breaks.last().map(|(depth, _)| *depth);

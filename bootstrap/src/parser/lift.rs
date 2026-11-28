@@ -106,7 +106,8 @@ fn block(
     }
 }
 
-/// The blocks that hold bindings of their own: of a `match` and of a `loop`.
+/// The blocks that hold bindings of their own: of a `match`, a `loop`, and a
+/// `for`.
 fn nested(cx: &Cx, value: &mut Expr, out: &mut Vec<Function>) {
     match value {
         Expr::Match(m) => {
@@ -115,6 +116,7 @@ fn nested(cx: &Cx, value: &mut Expr, out: &mut Vec<Function>) {
             }
         }
         Expr::Loop(l) => block(cx, &mut l.body, None, out),
+        Expr::For(f) => block(cx, &mut f.round.body, None, out),
         _ => {}
     }
 }

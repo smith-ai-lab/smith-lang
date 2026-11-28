@@ -3273,7 +3273,7 @@ fn has_break(stmts: &[Stmt]) -> bool {
     fn breaks(e: &Expr) -> bool {
         match e {
             Expr::Break { .. } => true,
-            Expr::Loop(_) | Expr::Lambda(_) => false,
+            Expr::Loop(_) | Expr::For(_) | Expr::Lambda(_) => false,
             _ => {
                 let mut inside = Vec::new();
                 super::blocks(e, &mut inside);

@@ -514,7 +514,8 @@ fn each_child(e: &mut Expr, visit: &mut dyn FnMut(&mut Expr)) {
             }
         }
         Expr::Return { value: Some(v), .. } => visit(v),
-        Expr::Unbuilt { .. }
+        Expr::For(_)
+        | Expr::Unbuilt { .. }
         | Expr::Text { .. }
         | Expr::Number { .. }
         | Expr::Float { .. }
@@ -527,7 +528,7 @@ fn each_child(e: &mut Expr, visit: &mut dyn FnMut(&mut Expr)) {
 }
 
 /// Gives `visit` each block an expression holds directly: the arms of a
-/// `match`, the body of a loop, and the body of a lambda.
+/// `match`, the body of a loop or a `for`, and the body of a lambda.
 fn each_block(e: &mut Expr, visit: &mut dyn FnMut(&mut Vec<Stmt>)) {
     match e {
         Expr::Match(m) => {
@@ -536,6 +537,7 @@ fn each_block(e: &mut Expr, visit: &mut dyn FnMut(&mut Vec<Stmt>)) {
             }
         }
         Expr::Loop(l) => visit(&mut l.body),
+        Expr::For(f) => visit(&mut f.round.body),
         Expr::Lambda(l) => visit(&mut l.body),
         _ => {}
     }
