@@ -1874,7 +1874,7 @@ impl<'a> Checker<'a> {
     ) -> Ty {
         let defs = self.defs;
         let sig = &defs.trait_sigs[k][fi];
-        if self.effect_in_default(body, call, sig) {
+        if self.passed_mut_to_trait(body, call, k, fi) || self.effect_in_default(body, call, sig) {
             return self.unknown_call(body, call);
         }
         if k == defs.bits
