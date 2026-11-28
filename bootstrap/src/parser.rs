@@ -820,8 +820,8 @@ pub struct Arg {
     /// Where `take` is written before it, if it is: the call gives it away.
     pub take: Option<Pos>,
     /// Whether the source writes it inside the parentheses of the call, where
-    /// `take` can be written before it, and not a lambda after the call, the
-    /// value before `|>`, or an argument the parser makes.
+    /// `take` can be written before it, and not a lambda after the call,
+    /// or an argument the parser makes.
     pub written: bool,
 }
 
@@ -853,7 +853,6 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
         no_lambda: false,
         in_index: false,
         binds: Vec::new(),
-        holes: Vec::new(),
         modules: Vec::new(),
         qualified: Vec::new(),
     };
@@ -1394,9 +1393,6 @@ struct Parser<'a> {
     /// signature was read last that are written as patterns, in order. They
     /// open its body.
     binds: Vec<Stmt>,
-    /// Where a name `_` was read as a value, in order. A `|>` looks at the
-    /// ones read since its right side began, and takes them off.
-    holes: Vec<Pos>,
     /// The modules a `use` imported itself, each by the name it is written as
     /// and the name the `use` gives it.
     modules: Vec<(String, String)>,
@@ -2463,81 +2459,11 @@ impl Parser<'_> {
     }
 
     fn expr_inside(&mut self) -> Result<Expr, Error> {
-        let mut expr = self.either()?;
-        while self.tok() == &Tok::Punct("|>") {
-            expr = self.step(expr)?;
-        }
+        let expr = self.either()?;
         if continues_expression(self.tok()) {
             return Err(self.continuation());
         }
         Ok(expr)
-    }
-
-    /// Parses the call after a `|>`, and gives the call that has `left` in
-    /// the place of its `_`, or in front of its arguments when it has none.
-    fn step(&mut self, left: Expr) -> Result<Expr, Error> {
-        self.bump();
-        self.skip_newlines();
-        let try_at = (self.tok() == &Tok::Keyword("try")).then(|| self.pos());
-        if try_at.is_some() {
-            self.bump();
-        }
-        let holes = self.holes.len();
-        let pos = self.pos();
-        let right = self.operand()?;
-        let found = self.holes.split_off(holes);
-        let Expr::Call(mut call) = right else {
-            let error = Error::new(pos, "the right side of `|>` is not a call");
-            return Err(match right {
-                Expr::Name { name, .. } => error.with_fix(format!("write `{name}()`")),
-                _ => error.with_fix("write a call, with its parentheses"),
-            });
-        };
-        let whole: Vec<usize> = (call.args.iter().enumerate())
-            .filter(|(_, arg)| matches!(&arg.value, Expr::Name { name, .. } if name == "_"))
-            .map(|(at, _)| at)
-            .collect();
-        if let Some(&second) = whole.get(1) {
-            return Err(Error::new(
-                call.args[second].value.pos(),
-                "a call has one `_`, and this is one more",
-            )
-            .with_fix("write the value to a name before the call, and the name in each place"));
-        }
-        let inside = found
-            .iter()
-            .find(|at| !whole.iter().any(|&arg| call.args[arg].value.pos() == **at));
-        if let Some(&at) = inside {
-            return Err(Error::new(
-                at,
-                "`_` is a whole argument, and this one is inside another expression",
-            )
-            .with_fix("write the call that holds it as a step of its own, as `x |> g() |> f(_)`"));
-        }
-        match whole.first() {
-            Some(&at) => {
-                call.args[at].value = left;
-                call.args[at].written = false;
-            }
-            None => call.args.insert(
-                0,
-                Arg {
-                    name: None,
-                    value: left,
-                    after: false,
-                    mutable: None,
-                    given_back: false,
-                    keeps: false,
-                    take: None,
-                    written: false,
-                },
-            ),
-        }
-        let call = Expr::Call(call);
-        Ok(match try_at {
-            Some(at) => split(at, call),
-            None => call,
-        })
     }
 
     /// Parses operands joined by `or`.

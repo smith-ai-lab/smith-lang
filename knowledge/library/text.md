@@ -74,7 +74,7 @@ use std.console (console, print)
 use std.text (append, append_ascii, finish, text)
 
 fn pair(name: str, value: str) -> str <alloc> {
-  text() |> append(name) |> append_ascii('=') |> append(value) |> finish()
+  finish(append(append_ascii(append(text(), name), '='), value))
 }
 
 fn main() <console, alloc> {

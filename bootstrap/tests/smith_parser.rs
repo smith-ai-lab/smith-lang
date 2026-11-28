@@ -143,7 +143,6 @@ fn punct_text(p: Punct) -> str {
     .at_sign { "@" }
     .caret { "^" }
     .bang { "!" }
-    .pipe_arrow { "|>" }
     .percent { "%" }
     .semicolon { ";" }
   }
