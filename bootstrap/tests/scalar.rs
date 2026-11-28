@@ -16,6 +16,7 @@ use crate::generate::{self, Gen, sample};
 use crate::lambdas;
 use crate::numbers;
 use crate::programs;
+use crate::shared;
 use crate::reprs;
 use crate::text;
 use crate::traits;
@@ -354,8 +355,8 @@ type Source = (Vec<u8>, Option<Vec<u8>>);
 
 /// The text of every program of every generator.
 fn sources() -> &'static [Source] {
-    static SOURCES: OnceLock<Vec<Source>> = OnceLock::new();
-    SOURCES.get_or_init(|| {
+    static SOURCES: shared::Once<Vec<Source>> = shared::Once::new();
+    SOURCES.get(|| {
         let mut sources: Vec<Source> = Vec::new();
         for case in 0..CASES {
             let c = sample(3, case, programs::program);
@@ -394,9 +395,9 @@ fn sources() -> &'static [Source] {
 /// is lowered once, by the first test that reads it, so that a test that reads a
 /// part of them does not pay for the others.
 fn lowered(at: usize) -> &'static Lowered {
-    static LOWERED: OnceLock<Vec<OnceLock<Lowered>>> = OnceLock::new();
-    let all = LOWERED.get_or_init(|| sources().iter().map(|_| OnceLock::new()).collect());
-    all[at].get_or_init(|| {
+    static LOWERED: OnceLock<Vec<shared::Once<Lowered>>> = OnceLock::new();
+    let all = LOWERED.get_or_init(|| sources().iter().map(|_| shared::Once::new()).collect());
+    all[at].get(|| {
         let (source, stdout) = &sources()[at];
         lowered_from(source, stdout.clone())
     })

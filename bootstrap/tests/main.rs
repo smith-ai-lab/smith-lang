@@ -1,16 +1,16 @@
 //! The compiler's tests, and the harness that runs them.
 //!
 //! The tests run in parallel, in this one process. A run prints each test
-//! that failed, with the message it failed with, and ends with its slowest tests and how long each took.
-//! Arguments that do not start with `-` keep only the tests whose names
-//! hold one of them.
+//! that failed, with the message it failed with, and ends with the tests that
+//! did the most work and how much each did. Arguments that do not start with
+//! `-` keep only the tests whose names hold one of them.
 //!
-//! A test that computes for more than 2 s fails the run, and the run
-//! names it, as `LIMIT` says. A test that is over it in its first measure is
-//! run once more, and is judged by the least of the two, as `support/limit.rs`
-//! says, so that a machine that was slow once does not fail it and its work does.
-//! A test starts no thread, as the time of a
-//! thread it starts is not the time of its own. A test that has made no
+//! The work of a test is the steps that the compiler and the evaluator took for
+//! it, which `smith::work` counts on the thread that ran it and which are the
+//! same on every machine and every run. `--steps=<file>` writes, for each test
+//! that passed, a line `name,steps`, in the order of the names, which
+//! `.github/check-work.sh` compares with what main wrote. A test starts no
+//! thread, as the steps of a thread it starts are not its own. A test that has made no
 //! progress for `clock::hang` and a little more on the wall fails the run, and
 //! the run names it, so that a program that never ends is a failing test and
 //! not a run that never ends. Progress is the test beginning, or a program it
@@ -18,8 +18,7 @@
 //! starts many programs, each of which ends, is never taken for one that hangs.
 //!
 //! `--hang=<ms>` sets that limit, which the tests of the limit itself make
-//! small, and `--group=hang` runs the tests they run. `--limit=<ms>` sets the
-//! limit of what a test computes for, and a small one makes every test run twice. `--wait=<ms>` runs
+//! small, and `--group=hang` runs the tests they run. `--wait=<ms>` runs
 //! nothing and ends after that long, as a program for them to start.
 //!
 //! `--fingerprint` runs nothing. It prints, for each target, a hash of
@@ -62,11 +61,8 @@ thread_local! {
 /// printed at the end of the run, where a log of a long run shows them.
 type Failed = Vec<(&'static str, String)>;
 
-/// How many of the slowest tests a run ends with.
-const SLOWEST: usize = 70;
-
-/// What a test may compute for, as `clock` measures it.
-const LIMIT: Duration = Duration::from_millis(2000);
+/// How many of the tests that did the most work a run ends with.
+const LARGEST: usize = 70;
 
 /// What a test is given beyond `clock::hang`, a fifth of it, so that a program
 /// it starts that does not end is stopped, and fails the test saying so,
@@ -74,11 +70,6 @@ const LIMIT: Duration = Duration::from_millis(2000);
 fn slack() -> Duration {
     clock::hang() / 5
 }
-
-/// Whether a test over the limit fails the run. It does on the kind of
-/// machine that the `linux` job of `ci` uses, where every test
-/// runs, and elsewhere is only printed.
-const ENFORCED: bool = cfg!(all(target_os = "linux", target_arch = "x86_64"));
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -89,10 +80,7 @@ fn main() -> ExitCode {
     if let Some(limit) = args.iter().find_map(|a| a.strip_prefix("--hang=")) {
         clock::set_hang(Duration::from_millis(limit.parse().unwrap()));
     }
-    let limit = args
-        .iter()
-        .find_map(|a| a.strip_prefix("--limit="))
-        .map_or(LIMIT, |ms| Duration::from_millis(ms.parse().unwrap()));
+    let steps_file = args.iter().find_map(|a| a.strip_prefix("--steps="));
     if args.iter().any(|a| a == "--fingerprint") {
         // The executables are the same for every commit, so that a change
         // that leaves them as they were needs no machine.
@@ -157,25 +145,13 @@ fn main() -> ExitCode {
                     let progress = clock::Progress::new(Mutex::new(Instant::now()));
                     clock::watch(Some(progress.clone()));
                     *slot.lock().unwrap() = Some((name, progress));
-                    let (mut passed, mut time) = measure(name, *test, &failures);
-                    if passed {
-                        time = limit::least(time, limit, || {
-                            let (again, second) = measure(name, *test, &failures);
-                            println!(
-                                "{name} computed for {}, so it ran again and computed for {}",
-                                milliseconds(time),
-                                milliseconds(second)
-                            );
-                            passed = again;
-                            second
-                        });
-                    }
+                    let (passed, steps) = measure(name, *test, &failures);
                     // A test the run gave up on has its result already.
                     if slot.lock().unwrap().take().is_none() {
                         return;
                     }
                     println!("test {name} ... {}", if passed { "ok" } else { "FAILED" });
-                    results.lock().unwrap().push((*name, passed, time));
+                    results.lock().unwrap().push((*name, passed, steps));
                 }
             });
         }
@@ -200,10 +176,7 @@ fn main() -> ExitCode {
                     );
                     println!("{message}");
                     failures.lock().unwrap().push((name, message));
-                    results
-                        .lock()
-                        .unwrap()
-                        .push((name, false, clock::hang() + slack()));
+                    results.lock().unwrap().push((name, false, 0));
                 }
             }
         }
@@ -214,7 +187,7 @@ fn main() -> ExitCode {
                 results.lock().unwrap().clone(),
                 &failures.lock().unwrap(),
                 on_machine,
-                limit,
+                steps_file,
             );
             scratch::remove();
             std::process::exit(if ok { 0 } else { 1 });
@@ -224,7 +197,7 @@ fn main() -> ExitCode {
         results.into_inner().unwrap(),
         &failures.into_inner().unwrap(),
         on_machine,
-        limit,
+        steps_file,
     );
     scratch::remove();
     if passed {
@@ -243,11 +216,11 @@ pub fn in_a_machine_test() -> bool {
     names.contains(CURRENT.get())
 }
 
-/// Runs the test on this thread and gives whether it passed and what it computed for,
-/// keeping what a failing test said.
-fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, Duration) {
+/// Runs the test on this thread and gives whether it passed and the steps it
+/// took, keeping what a failing test said.
+fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, u64) {
     CURRENT.set(name);
-    let begin = clock::thread_time();
+    let begin = shared::steps();
     MESSAGE.with(|m| *m.borrow_mut() = None);
     let passed = panic::catch_unwind(AssertUnwindSafe(test)).is_ok();
     if !passed {
@@ -257,15 +230,15 @@ fn measure(name: &'static str, test: fn(), failures: &Mutex<Failed>) -> (bool, D
             .unwrap()
             .push((name, message.unwrap_or_default()));
     }
-    (passed, clock::thread_time() - begin)
+    (passed, shared::steps() - begin)
 }
 
 /// Prints how the run went, and gives whether it passed.
 fn report(
-    mut results: Vec<(&'static str, bool, Duration)>,
+    mut results: Vec<(&'static str, bool, u64)>,
     failures: &Failed,
     on_machine: bool,
-    limit: Duration,
+    steps_file: Option<&str>,
 ) -> bool {
     let failed: Vec<&str> = results
         .iter()
@@ -292,24 +265,20 @@ fn report(
             println!("{line}");
         }
     }
-    results.sort_by_key(|(_, _, time)| std::cmp::Reverse(*time));
-    println!("\nslowest tests, by the time they spent computing:");
-    for (name, _, time) in results.iter().take(SLOWEST) {
-        println!("{:>10}  {name}", milliseconds(*time));
+    if let Some(path) = steps_file {
+        results.sort_by_key(|(name, _, _)| *name);
+        let lines: String = (results.iter())
+            .filter(|(_, passed, _)| *passed)
+            .map(|(name, _, steps)| format!("{name},{steps}\n"))
+            .collect();
+        std::fs::write(path, lines).unwrap_or_else(|e| panic!("{path}: {e}"));
     }
-    let slow: Vec<&str> = results
-        .iter()
-        .filter(|(_, _, time)| *time > limit)
-        .map(|(name, _, _)| *name)
-        .collect();
-    for name in &slow {
-        println!(
-            "{}: {name} computed for more than {}",
-            if ENFORCED { "too slow" } else { "slow" },
-            milliseconds(limit)
-        );
+    results.sort_by_key(|(_, _, steps)| std::cmp::Reverse(*steps));
+    println!("\nthe tests that did the most work, in the steps they took:");
+    for (name, _, steps) in results.iter().take(LARGEST) {
+        println!("{steps:>12}  {name}");
     }
-    failed.is_empty() && !(ENFORCED && !slow.is_empty())
+    failed.is_empty()
 }
 
 fn milliseconds(time: Duration) -> String {

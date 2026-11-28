@@ -1,0 +1,81 @@
+name: work
+
+# Records the steps every test of main takes, which the `linux` job of `ci`
+# compares a pull request's with, as `.github/check-work.sh` says. Runs after a
+# merge, never for a pull request, so it cannot hold one up, and the steps are
+# kept on the branch `work` and not in a file that a pull request edits.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time, and a run waiting for it is replaced by a newer one, so
+# the steps on the branch are never those of an older commit than before.
+concurrency:
+  group: work
+  cancel-in-progress: false
+
+jobs:
+  record:
+    name: record the steps of every test
+    runs-on: ubuntu-latest
+    permissions:
+      # Only this job may write, and only to the work branch.
+      contents: write
+    defaults:
+      run:
+        working-directory: bootstrap
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # What the `linux` job of `ci` installs, so that the same tests run, and
+      # none is skipped here that runs there.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the package that runs a Worker
+        working-directory: bootstrap/tests/support
+        run: npm ci --ignore-scripts
+      - name: Install the emulator of x86-64 chips
+        uses: ./.github/actions/qemu
+      - name: Count the steps of every test
+        run: SMITH_SEED=0 cargo test --locked -- --steps="$RUNNER_TEMP/steps"
+      - name: Put the steps on the work branch
+        env:
+          TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          url="https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
+          kept="$RUNNER_TEMP/kept"
+          for attempt in 1 2 3 4 5; do
+            rm -rf "$kept"
+            if git ls-remote --exit-code --heads "$url" work >/dev/null; then
+              git clone --quiet --branch work --single-branch "$url" "$kept"
+            else
+              git init --quiet --initial-branch=work "$kept"
+              git -C "$kept" remote add origin "$url"
+            fi
+            # A rerun of this job for the same commit changes nothing.
+            if [ "$(cat "$kept/commit" 2>/dev/null)" = "$COMMIT" ]; then
+              exit 0
+            fi
+            cp "$RUNNER_TEMP/steps" "$kept/steps.csv"
+            echo "$COMMIT" > "$kept/commit"
+            git -C "$kept" add steps.csv commit
+            git -C "$kept" commit --quiet -m "chore(work): record ${COMMIT}"
+            # Never forced, so the history of the steps is kept.
+            if git -C "$kept" push --quiet origin work:refs/heads/work; then
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          echo "could not push the work branch" >&2
+          exit 1

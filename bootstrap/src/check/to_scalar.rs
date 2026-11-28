@@ -701,6 +701,7 @@ impl<'a> Out<'a> {
 
     /// Adds an instruction to the block being filled, and gives its results.
     fn emit(&mut self, op: form::Op, results: Vec<form::Type>) -> Vec<form::Value> {
+        crate::work::step(1);
         let results: Vec<form::Value> = results.into_iter().map(|t| self.fresh(t)).collect();
         self.blocks[self.current]
             .instructions

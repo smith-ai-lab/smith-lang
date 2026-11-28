@@ -8,13 +8,13 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::process::{Child, ChildStdout, Command, Stdio};
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use smith::target::Target;
 
 use crate::Test;
 use crate::ports;
+use crate::shared;
 use crate::targets;
 
 pub const MACHINE: &[Test] = &[
@@ -163,16 +163,10 @@ fn linux() -> Vec<Target> {
 }
 
 fn program(source: &'static str, target: Target) -> Vec<u8> {
-    type Built = (usize, String, Vec<u8>);
-    static CACHE: OnceLock<std::sync::Mutex<Vec<Built>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(Default::default);
-    let key = (source.as_ptr() as usize, target.name().to_string());
-    if let Some((_, _, bytes)) = cache.lock().unwrap().iter().find(|(p, n, _)| (*p, n.clone()) == key) {
-        return bytes.clone();
-    }
-    let bytes = targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"));
-    cache.lock().unwrap().push((key.0, key.1, bytes.clone()));
-    bytes
+    static BUILT: shared::Keyed<(usize, &str), Vec<u8>> = shared::Keyed::new();
+    BUILT.get((source.as_ptr() as usize, target.name()), || {
+        targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
+    })
 }
 
 /// A server that is started and is killed when the test ends.

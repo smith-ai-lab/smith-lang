@@ -8,6 +8,15 @@
 //!
 //! Threading counts too, the parameters and instructions of the blocks it goes
 //! through, which `tests/pass_depth.rs` reads.
+//!
+//! And every part of the compiler that a test calls counts its steps, which the
+//! harness adds up for each test and compares with main: one for each
+//! expression the checker checks, one for each instruction the lowering
+//! writes, one for each instruction of the program each scalar pass is given,
+//! and one for each instruction the evaluator runs. The end of a block is an
+//! instruction, so a block of `n` instructions is `n + 1` of them. The count is
+//! kept by thread, as each test runs on one, and counting changes nothing that
+//! is built.
 
 use std::cell::Cell;
 
@@ -15,6 +24,17 @@ thread_local! {
     static ITEMS: Cell<u64> = const { Cell::new(0) };
     static INSTANCES: Cell<u64> = const { Cell::new(0) };
     static GONE_THROUGH: Cell<u64> = const { Cell::new(0) };
+    static STEPS: Cell<u64> = const { Cell::new(0) };
+}
+
+/// A part of the compiler took this many steps.
+pub(crate) fn step(steps: u64) {
+    STEPS.set(STEPS.get() + steps);
+}
+
+/// The steps taken so far, in the thread that asks.
+pub fn steps() -> u64 {
+    STEPS.get()
 }
 
 /// Threading went through a block of this many parameters and instructions.

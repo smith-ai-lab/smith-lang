@@ -75,9 +75,14 @@ pub use wellformed::{Malformed, Why, check};
 /// that only chooses, folding of constants, the replacing of what is worked out
 /// twice, and the removal of what nothing uses. None of them makes a fused
 /// instruction or takes one apart: `fuse` does that, once, to a form as it is
-/// made.
+/// made. Each pass takes a step for each instruction of the program it is
+/// given, the end of each block included.
 pub fn passes(program: &Program) -> Program {
-    remove(common(fold(thread(trim(inline(tail(program.clone())))))))
+    let passes: [fn(Program) -> Program; 7] = [tail, inline, trim, thread, fold, common, remove];
+    passes.iter().fold(program.clone(), |program, pass| {
+        crate::work::step(program.functions.iter().map(|f| size(f) as u64).sum());
+        pass(program)
+    })
 }
 
 /// How many bits an integer has.
