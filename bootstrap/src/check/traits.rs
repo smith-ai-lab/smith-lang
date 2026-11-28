@@ -1020,7 +1020,9 @@ impl<'a> Defs<'a> {
             Ty::Nothing => Some(Vec::new()),
             Ty::Int(_) if k == self.hash() => Some(Vec::new()),
             Ty::List(of) if k == self.hash() => Some(vec![of[0].clone()]),
-            Ty::List(of) | Ty::Slice(of) if k == self.fmt || k == self.repr || k == self.eq => {
+            Ty::List(of) | Ty::Slice(of)
+                if k == self.fmt || k == self.repr || k == self.eq || k == self.ord() =>
+            {
                 Some(vec![of[0].clone()])
             }
             Ty::Struct(s, args) if !taken(Def::Struct(*s)) => Some(self.data_types(*s, args)),
