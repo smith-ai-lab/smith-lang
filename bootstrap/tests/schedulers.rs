@@ -87,9 +87,9 @@ const USES: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse st
 /// the cases, as one program with a function for each, so that the library of
 /// tasks is lowered once.
 fn nested_all(cases: &[(u64, u64, u64)]) -> String {
-    let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(g)\n  wrapping_add(v, 1)\n}}\n\n");
+    let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(take g)\n  wrapping_add(v, 1)\n}}\n\n");
     for (i, &(n, m, seed)) in cases.iter().enumerate() {
-        s += &format!("fn run{i}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child({n}) }}\n  b = spawn {{ child({m}) }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
+        s += &format!("fn run{i}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child({n}) }}\n  b = spawn {{ child({m}) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\n");
     }
     s += "fn main() <console, alloc, diverge> {\n";
     for i in 0..cases.len() {
@@ -103,7 +103,7 @@ fn nested_all(cases: &[(u64, u64, u64)]) -> String {
 fn two_say_all(seeds: std::ops::Range<u64>) -> String {
     let mut s = USES.to_string();
     for seed in seeds.clone() {
-        s += &format!("fn run{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
+        s += &format!("fn run{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(take a), join(take b))\n}}\n\n");
     }
     s += "fn main() <console, alloc, diverge> {\n";
     for seed in seeds {
@@ -173,10 +173,10 @@ fn one_seed_gives_one_order_and_some_seed_shows_each_order_of_two_tasks() {
 fn a_task_that_waits_for_another_runs_again_after_that_one_has_ended() {
     // The seeds are one program, which is lowered once.
     let mut source = format!(
-        "{USES}fn child() -> u64 <console, task> {{\n  print(\"before\")\n  g = spawn {{\n    print(\"inside\")\n    v: u64 = 7\n    v\n  }}\n  v = join(g)\n  print(\"after\")\n  v\n}}\n\n"
+        "{USES}fn child() -> u64 <console, task> {{\n  print(\"before\")\n  g = spawn {{\n    print(\"inside\")\n    v: u64 = 7\n    v\n  }}\n  v = join(take g)\n  print(\"after\")\n  v\n}}\n\n"
     );
     for seed in 0..24u64 {
-        source += &format!("fn run{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child() }}\n  join(a)\n}}\n\n");
+        source += &format!("fn run{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child() }}\n  join(take a)\n}}\n\n");
     }
     source += "fn main() <console, alloc, diverge> {\n";
     for seed in 0..24u64 {
@@ -197,7 +197,7 @@ fn a_task_that_waits_for_another_runs_again_after_that_one_has_ended() {
 fn a_function_that_carries_only_the_effect_of_a_handler_that_holds_state_and_loops_runs_under_a_scheduler_of_a_test() {
     for seed in [0u64, 1, 2, 5] {
         let source = format!(
-            "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {{\n  mut ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn many() -> u64 <clock> {{\n  mut last: u64 = 0\n  loop i in 0..20 {{ last = now() }}\n  last\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({seed})\n  a = spawn {{ many() }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+            "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {{\n  mut ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn many() -> u64 <clock> {{\n  mut last: u64 = 0\n  loop i in 0..20 {{ last = now() }}\n  last\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with fake_clock()\n  with test_scheduler({seed})\n  a = spawn {{ many() }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
         );
         assert_eq!(run(&source), "20\n", "for seed {seed}");
     }
@@ -205,7 +205,7 @@ fn a_function_that_carries_only_the_effect_of_a_handler_that_holds_state_and_loo
 
 fn a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refused_as_not_built_yet() {
     let source = format!(
-        "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {{\n  mut ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  with fake_clock()\n  a = spawn {{ now() }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}effect clock {{\n  fn now() -> u64\n}}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {{\n  mut ticks: u64 = 0\n  clock(\n    now: {{\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    }},\n    body: body,\n  )\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  with fake_clock()\n  a = spawn {{ now() }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     );
     let errors = refused(&source);
     assert!(errors.contains("installed under its scheduler"), "{errors}");
@@ -215,11 +215,11 @@ fn a_handler_that_holds_state_installed_under_the_scheduler_of_a_child_is_refuse
 /// the parent joins both, and the function of `nested_all` for the numbers 4 and
 /// 9, as one program, so that the library of tasks is lowered and built once.
 fn every_seed(seeds: &[u64]) -> String {
-    let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(g)\n  wrapping_add(v, 1)\n}}\n\n");
+    let mut s = format!("{USES}fn child(n: u64) -> u64 <task> {{\n  g = spawn {{ wrapping_mul(n, 3) }}\n  v = join(take g)\n  wrapping_add(v, 1)\n}}\n\n");
     let mut main = String::new();
     for seed in seeds {
-        s += &format!("fn say{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
-        s += &format!("fn nest{seed}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child(4) }}\n  b = spawn {{ child(9) }}\n  wrapping_add(join(a), join(b))\n}}\n\n");
+        s += &format!("fn say{seed}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{\n    print(\"a\")\n    v: u64 = 1\n    v\n  }}\n  b = spawn {{\n    print(\"b\")\n    v: u64 = 2\n    v\n  }}\n  wrapping_add(join(take a), join(take b))\n}}\n\n");
+        s += &format!("fn nest{seed}() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ child(4) }}\n  b = spawn {{ child(9) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\n");
         main += &format!("  print(\"{{say{seed}()}}\")\n  print(\"{{nest{seed}()}}\")\n");
     }
     format!("{s}fn main() <console, alloc, diverge> {{\n{main}}}\n")
@@ -237,7 +237,7 @@ fn every_executable_runs_the_tasks_of_a_seed_in_the_order_the_evaluator_does() {
 
 /// Functions that take memory, which tasks run between the waits of one that holds
 /// a list, a list it pushes to on both sides of a wait, and an arena around one.
-const MEMORY: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (push)\nuse std.task (join, spawn, task, test_scheduler)\n\nfn build(n: u64, k: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, i), k)) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn noise(k: u64) -> u64 <alloc> {\n  total(build(300, k))\n}\n\nfn holder(n: u64) -> u64 <task, alloc> {\n  xs = build(40, n)\n  mut ys: List[u64] = build(10, n)\n  a = spawn { noise(1) }\n  b = spawn { noise(2) }\n  c = spawn { noise(3) }\n  ys = push(ys, 1000)\n  x = join(a)\n  y = join(b)\n  ys = push(ys, wrapping_add(x, y))\n  z = join(c)\n  wrapping_add(total(xs), wrapping_add(total(ys), z))\n}\n\nfn inside(n: u64) -> u64 <task> {\n  with arena()\n  xs = build(n, 7)\n  g = spawn { noise(5) }\n  v = join(g)\n  wrapping_add(total(xs), v)\n}\n\nfn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)\n  a = spawn { holder(5) }\n  b = spawn { holder(9) }\n  c = spawn { inside(20) }\n  d = spawn { inside(25) }\n  wrapping_add(join(a), wrapping_add(join(b), wrapping_add(join(c), join(d))))\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run(SEED)}\")\n}\n";
+const MEMORY: &str = "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (push)\nuse std.task (join, spawn, task, test_scheduler)\n\nfn build(n: u64, k: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(take acc, wrapping_add(wrapping_mul(i, i), k)) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn noise(k: u64) -> u64 <alloc> {\n  total(build(300, k))\n}\n\nfn holder(n: u64) -> u64 <task, alloc> {\n  xs = build(40, n)\n  mut ys: List[u64] = build(10, n)\n  a = spawn { noise(1) }\n  b = spawn { noise(2) }\n  c = spawn { noise(3) }\n  ys = push(take ys, 1000)\n  x = join(take a)\n  y = join(take b)\n  ys = push(take ys, wrapping_add(x, y))\n  z = join(take c)\n  wrapping_add(total(xs), wrapping_add(total(ys), z))\n}\n\nfn inside(n: u64) -> u64 <task> {\n  with arena()\n  xs = build(n, 7)\n  g = spawn { noise(5) }\n  v = join(take g)\n  wrapping_add(total(xs), v)\n}\n\nfn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)\n  a = spawn { holder(5) }\n  b = spawn { holder(9) }\n  c = spawn { inside(20) }\n  d = spawn { inside(25) }\n  wrapping_add(join(take a), wrapping_add(join(take b), wrapping_add(join(take c), join(take d))))\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run(SEED)}\")\n}\n";
 
 fn memory_answer() -> u64 {
     let t = |n: u64, k: u64| (0..n).map(|i| i * i + k).sum::<u64>();
@@ -258,7 +258,7 @@ fn what_a_task_holds_across_a_wait_lives_until_it_ends_while_other_tasks_take_an
 }
 
 /// `down` goes twenty-five levels, and at each spawns a task and waits for it.
-const DEEP: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze, push)\nuse std.task (join, spawn, task, test_scheduler)\n\nfn build(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, i) }\n  acc\n}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{\n  if at < xs.size {\n    first = xs[at]\n    g = spawn { wrapping_add(first, 1) }\n    v = join(g)\n    wrapping_add(v, down(xs, at + 1))\n  } else {\n    0\n  }\n}\n\nfn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)\n  a = spawn { down(freeze(build(25)), 0) }\n  join(a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run(SEED)}\")\n}\n";
+const DEEP: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze, push)\nuse std.task (join, spawn, task, test_scheduler)\n\nfn build(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(take acc, i) }\n  acc\n}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{\n  if at < xs.size {\n    first = xs[at]\n    g = spawn { wrapping_add(first, 1) }\n    v = join(take g)\n    wrapping_add(v, down(xs, at + 1))\n  } else {\n    0\n  }\n}\n\nfn run(seed: u64) -> u64 <alloc, diverge> {\n  with test_scheduler(seed)\n  a = spawn { down(freeze(build(25)), 0) }\n  join(take a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run(SEED)}\")\n}\n";
 
 fn a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for_every_seed(part: u64) {
     for seed in 2 * part..2 * part + 2 {
@@ -274,7 +274,7 @@ fn a_recursion_twenty_five_deep_with_a_wait_at_each_level_gives_the_same_sum_for
 fn a_block_that_assigns_a_var_of_its_function_gives_it_back_to_the_function() {
     for seed in 0..6u64 {
         let source = format!(
-            "{USES}fn run() -> u64 <alloc, diverge> {{\n  mut n: u64 = 1\n  loop i in 0..3 {{\n    with test_scheduler({seed})\n    a = spawn {{ wrapping_mul(n, 2) }}\n    n = wrapping_add(n, join(a))\n  }}\n  n\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+            "{USES}fn run() -> u64 <alloc, diverge> {{\n  mut n: u64 = 1\n  loop i in 0..3 {{\n    with test_scheduler({seed})\n    a = spawn {{ wrapping_mul(n, 2) }}\n    n = wrapping_add(n, join(take a))\n  }}\n  n\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
         );
         // n is 1, then 1 + 2, then 3 + 6, then 9 + 18.
         assert_eq!(run(&source), "27\n", "seed {seed}");
@@ -322,7 +322,7 @@ fn every_executable_keeps_what_a_task_holds_across_a_wait_and_goes_twenty_five_l
 fn a_task_that_may_wait_in_a_loop_and_does_not_gives_what_it_holds_and_the_scheduler_its_state() {
     let source = |n: u64| {
         format!(
-            "{USES}fn probe(n: u64) -> u64 <task> {{\n  mut got: u64 = 7\n  loop attempt in 0..10 {{\n    if n == 99 {{\n      g = spawn {{ wrapping_mul(n, 2) }}\n      got = join(g)\n    }} else {{\n      break\n    }}\n  }}\n  got\n}}\n\nfn run(n: u64) -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ probe(n) }}\n  join(a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run({n})}}\")\n}}\n"
+            "{USES}fn probe(n: u64) -> u64 <task> {{\n  mut got: u64 = 7\n  loop attempt in 0..10 {{\n    if n == 99 {{\n      g = spawn {{ wrapping_mul(n, 2) }}\n      got = join(take g)\n    }} else {{\n      break\n    }}\n  }}\n  got\n}}\n\nfn run(n: u64) -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ probe(n) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run({n})}}\")\n}}\n"
         )
     };
     assert_eq!(run(&source(5)), "7\n");
@@ -336,7 +336,7 @@ fn a_task_that_may_wait_in_a_loop_and_does_not_gives_what_it_holds_and_the_sched
 fn a_program_with_handles(cases: &[(&str, u64)]) -> String {
     let mut s = String::from("use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn say(handle: u64) -> u64 <task, console, alloc> {\n  test_ready(handle)\n  print(\"{handle}\")\n  handle\n}\n\n");
     for (i, (ready, seed)) in cases.iter().enumerate() {
-        s += &format!("fn run{i}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler_with_io({seed}, {ready})\n  a = spawn {{ say(1) }}\n  b = spawn {{ say(2) }}\n  c = spawn {{ say(3) }}\n  wrapping_add(join(a), wrapping_add(join(b), join(c)))\n}}\n\n");
+        s += &format!("fn run{i}() -> u64 <console, alloc, diverge> {{\n  with test_scheduler_with_io({seed}, {ready})\n  a = spawn {{ say(1) }}\n  b = spawn {{ say(2) }}\n  c = spawn {{ say(3) }}\n  wrapping_add(join(take a), wrapping_add(join(take b), join(take c)))\n}}\n\n");
     }
     s += "fn main() <console, alloc, diverge> {\n";
     for i in 0..cases.len() {

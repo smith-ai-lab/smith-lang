@@ -626,6 +626,8 @@ impl Parser<'_> {
             mutable: None,
             given_back: false,
             keeps: false,
+            take: None,
+            written: false,
         }))
     }
 
@@ -762,6 +764,10 @@ impl Parser<'_> {
         if mutable.is_some() {
             self.bump();
         }
+        let take = (mutable.is_none() && self.tok() == &Tok::Keyword("take")).then(|| self.pos());
+        if take.is_some() {
+            self.bump();
+        }
         let value = self.expr()?;
         Ok(Arg {
             name,
@@ -770,6 +776,8 @@ impl Parser<'_> {
             mutable,
             given_back: false,
             keeps: false,
+            take,
+            written: true,
         })
     }
 }

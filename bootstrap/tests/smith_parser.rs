@@ -174,9 +174,9 @@ fn main() <console, alloc> {
   texts = inputs()
   loop k in 0..texts.size {
     print("input")
-    match lex(texts[k]) {
+    match lex(take texts[k]) {
       .ok(tokens) {
-        r = parse_uses(tokens)
+        r = parse_uses(take tokens)
         loop i in 0..r.uses.size { show_use(r.uses[i]) }
         loop i in 0..r.errors.size { show_error(r.errors[i]) }
       }

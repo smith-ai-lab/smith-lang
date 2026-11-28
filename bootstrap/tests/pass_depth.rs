@@ -50,7 +50,7 @@ use std.list (freeze)
 use std.utf8 (utf8)
 
 fn s(bytes: take List[Byte]) -> str {{
-  match utf8(freeze(bytes)) {{
+  match utf8(freeze(take bytes)) {{
     .ok(t) {{ t }}
     .err(e) {{ \"\" }}
   }}

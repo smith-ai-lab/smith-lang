@@ -26,7 +26,7 @@ fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
   mut next: Byte = 0
   loop i in 0..bytes.size {
     next = wrapping_add(next, 1)
-    made = push(made, next)
+    made = push(take made, next)
   }
   made
 }
@@ -35,7 +35,7 @@ fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
 // port: each address on a line of its own, or the kind of the failure and what
 // it says.
 fn look(name: str, hosts: str, resolv: str, port: 0..65536) <console, alloc, task> {
-  match resolve(name, hosts, resolv, port, "{name}:80", fn(bytes) { counting(bytes) }) {
+  match resolve(name, hosts, resolv, port, "{name}:80", fn(bytes) { counting(take bytes) }) {
     .ok(found) {
       loop i in 0..found.size { print(written(found[i])) }
     }
@@ -76,12 +76,12 @@ fn main(args: List[str]) <console, alloc, task, time> {
         with tasks()
         a = spawn { look(args[1], args[3], args[2], port) }
         b = spawn { ticker() }
-        _ = join(b)
-        join(a)
+        _ = join(take b)
+        join(take a)
       } else if args.size > 4 and args[4] == "group" {
         with tasks()
         t = spawn { look(args[1], args[3], args[2], port) }
-        join(t)
+        join(take t)
       } else {
         look(args[1], args[3], args[2], port)
       }

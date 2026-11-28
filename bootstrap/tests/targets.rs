@@ -1485,7 +1485,7 @@ fn a_test_that_does_not_depend_on_the_machine_may_not_run_an_executable_the_fing
 /// system in `kqueue` on macOS, so it imports `_kqueue` and `_kevent`, and no
 /// other target is refused it for the calls it does not have.
 fn a_macos_executable_of_a_group_that_waits_imports_kqueue_and_kevent_and_the_other_targets_build_it_without() {
-    let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() <console, alloc> {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(t)}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.task (join, spawn, tasks)\n\nfn main() <console, alloc> {\n  with tasks()\n  t = spawn { 3 }\n  print(\"{join(take t)}\")\n}\n";
     // The program is lowered once, and each target writes it.
     let program = scalar::passes(&lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}")));
     for target in buildable() {

@@ -93,7 +93,7 @@ fn kinds(heads: &[Vec<u8>], request: bool) -> Vec<String> {
         })
         .collect();
     let source = format!(
-        "use std.console (console, print)\nuse std.http1 ({show})\nuse std.list (freeze)\n\nfn show(b: take List[Byte]) <console, alloc> {{\n  match {show}(freeze(b)) {{\n    .complete((h, used)) {{ print(\"complete\") }}\n    .incomplete {{ print(\"incomplete\") }}\n    .refused(why) {{ print(\"refused\") }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{calls}}}\n"
+        "use std.console (console, print)\nuse std.http1 ({show})\nuse std.list (freeze)\n\nfn show(b: take List[Byte]) <console, alloc> {{\n  match {show}(freeze(take b)) {{\n    .complete((h, used)) {{ print(\"complete\") }}\n    .incomplete {{ print(\"incomplete\") }}\n    .refused(why) {{ print(\"refused\") }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{calls}}}\n"
     );
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     let outcome = scalar::run(&program);
@@ -178,7 +178,7 @@ fn chunk_kinds(chunks: &[Vec<u8>]) -> Vec<String> {
         })
         .collect();
     let source = format!(
-        "use std.console (console, print)\nuse std.http1 (chunk)\nuse std.list (freeze)\n\nfn show(b: take List[Byte]) <console, alloc> {{\n  match chunk(freeze(b)) {{\n    .complete((h, used)) {{ print(\"complete\") }}\n    .incomplete {{ print(\"incomplete\") }}\n    .refused(why) {{ print(\"refused\") }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{calls}}}\n"
+        "use std.console (console, print)\nuse std.http1 (chunk)\nuse std.list (freeze)\n\nfn show(b: take List[Byte]) <console, alloc> {{\n  match chunk(freeze(take b)) {{\n    .complete((h, used)) {{ print(\"complete\") }}\n    .incomplete {{ print(\"incomplete\") }}\n    .refused(why) {{ print(\"refused\") }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n{calls}}}\n"
     );
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
     String::from_utf8(scalar::run(&program).stdout)

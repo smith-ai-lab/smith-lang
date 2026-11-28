@@ -56,12 +56,12 @@ fn shape(n: u64, k: u64) -> Shape <alloc> {
 
 fn numbers(n: u64, k: u64) -> List[u64] <alloc> {
   xs: List[u64] = []
-  push(push(xs, n), k)
+  push(push(take xs, n), k)
 }
 
 fn words(n: u64, k: u64) -> List[str] <alloc> {
   xs: List[str] = []
-  push(push(xs, \"{n}\"), \"{k}\")
+  push(push(take xs, \"{n}\"), \"{k}\")
 }
 ";
 

@@ -43,7 +43,7 @@ impl Abandon[Transaction] {
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   debit(t, 100)
-  commit(t)
+  commit(take t)
 }
 ```
 
@@ -57,7 +57,7 @@ A function that owns a value without `Discard` while it calls something that may
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   debit(t, 100)
-  commit(t)
+  commit(take t)
 }
 ```
 

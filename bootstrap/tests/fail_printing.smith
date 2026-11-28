@@ -16,7 +16,7 @@ fn say() <console> {
 // the peer sees the end of the file is the task's ending it as it goes up.
 fn spoil(c: take Connection) <net, console> {
   say()
-  close(c)
+  close(take c)
 }
 
 // Takes one connection and gives it to a task that fails in the same poll that
@@ -24,7 +24,7 @@ fn spoil(c: take Connection) <net, console> {
 fn one(l: Listener) -> Result[(), NetError] <net, time, console> {
   with tasks()
   c = try accept(l)
-  _ = spawn { spoil(c) }
+  _ = spawn { spoil(take c) }
   sleep(ms(200))
   .ok(())
 }

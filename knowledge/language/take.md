@@ -1,12 +1,13 @@
 ---
 type: specification
 title: Lending and take
-description: A parameter lends its argument unless it is marked take, which gives the callee ownership, and so a random Key cannot be used twice.
+description: A parameter lends its argument unless it is marked take, which gives the callee ownership and is marked take at the call, and so a random Key cannot be used twice.
 status: partial
 built:
   - "`take` before a parameter's type, and before a parameter of a function type, which a lambda passed to it is held to"
   - "A lent value, or a part of one, refused where it is returned, stored, or passed to a `take` parameter, unless its type has `Copy`"
   - "An argument of a `take` parameter given away, so that a use of it after the call is refused"
+  - "`f(take x)` at a call that gives away a name, a field, or an item whose type has no `Copy`, or a function that is called once, with a call that leaves it out refused with the call to write, and `take` where nothing is given away refused with why"
   - "a lambda that gives away a value of the function it is written in, passed to a parameter that takes its function, which spends the value from the call, and refused with one error at the lambda where the parameter lends its function"
   - "a function marked `take` is spent by its first call or by being passed to a parameter that takes its function, so a second call, on any path or in a later round of a loop, is refused"
   - "a lambda that gives away a value without `Discard` is refused where the function it is passed to takes its function, as that function may not call it"
@@ -18,7 +19,7 @@ built:
 
 # Lending and take
 
-Passing an argument lends it: the callee cannot keep, store, or return it. A parameter marked `take` receives ownership, and the caller cannot use the value again.
+Passing an argument lends it: the callee cannot keep, store, or return it. A parameter marked `take` receives ownership, and the caller cannot use the value again. The call is marked `take` too, as `split(take k)`, so a reader sees on the line which names end there, as [`mut`](mut-parameters.md) shows which names change.
 
 ```
 fn split(k: take Key) -> (Key, Key)
@@ -48,10 +49,10 @@ A function that gives back what it was passed, or passes it to a lambda that kee
 ```
 use std.bits (u64)
 
-fn lend_once(k: take Key, body: fn(take Key) -> u64) -> u64 { body(k) }
+fn lend_once(k: take Key, body: fn(take Key) -> u64) -> u64 { body(take k) }
 ```
 
-A call of `lend_once` gives it a key nothing else holds, so the caller may not use it again. And the lines after `with k = lend_once(key)` own `k`, so they may give it away, as `uniform(k)` does. A function that is made of such a call, as the `split` of [`try`](try.md) is, takes what it splits.
+A call of `lend_once` gives it a key nothing else holds, so the caller may not use it again. And the lines after `with k = lend_once(key)` own `k`, so they may give it away, as `uniform(take k)` does. A function that is made of such a call, as the `split` of [`try`](try.md) is, takes what it splits.
 
 ## A function that is called once
 
@@ -62,24 +63,24 @@ A lambda is lent the names around it that it reads or assigns, and takes the one
 ```
 use std.bits (u64)
 
-fn finish(xs: take List[Byte], f: take fn(take List[Byte]) -> u64) -> u64 { f(xs) }
+fn finish(xs: take List[Byte], f: take fn(take List[Byte]) -> u64) -> u64 { f(take xs) }
 
 fn collect(acc: take List[Byte], xs: take List[Byte]) -> u64 {
-  finish(xs) fn(ys) { append(acc, ys).size }
+  finish(take xs) fn(ys) { append(take acc, ys).size }
 }
 ```
 
-`finish` marks `f` with `take`, so it owns the function and its one call spends it. A second `f(xs)` in `finish` is refused, as a second use of any value that was given away is.
+`finish` marks `f` with `take`, so it owns the function and its one call spends it. A second `f(take xs)` in `finish` is refused, as a second use of any value that was given away is.
 
 A parameter that is not marked `take` lends the function, as it lends any value, and a lent value is only taken when it has `Copy`. So a lent function is one that can be called again, and a lambda that gives a value away is refused there.
 
 ```
 use std.bits (u64)
 
-fn twice(xs: take List[Byte], f: fn(take List[Byte]) -> u64) -> u64 { f(xs) }
+fn twice(xs: take List[Byte], f: fn(take List[Byte]) -> u64) -> u64 { f(take xs) }
 
 fn collect(acc: take List[Byte], xs: take List[Byte]) -> u64 {
-  twice(xs) fn(ys) { append(acc, ys).size }
+  twice(take xs) fn(ys) { append(take acc, ys).size }
 }
 ```
 
@@ -97,8 +98,8 @@ fn both(f: fn(str)) {
 
 fn gather() -> str <alloc> {
   mut page = text()
-  both() fn(part) { page = append(page, part) }
-  finish(page)
+  both() fn(part) { page = append(take page, part) }
+  finish(take page)
 }
 ```
 
@@ -112,6 +113,13 @@ A function that is taken is passed on only to a parameter that takes its functio
 
 The short form of a function type says one of two things, by whether its parameter is lent or taken. Anything else is said with a type parameter and `requires`, as for any type: `Function[F, Args, R]` for a function that is called once, with no `Discard` bound on `F` when it must be called exactly once, and `Copy[F]` beside it for one that is called again.
 
+## Where the give-away is seen
+
+- **The call is marked.** An argument of a `take` parameter that is a name, or a place that holds a value, as a field `doc.cursor` or an item `cs[0]`, is written `take x` when its type has no `Copy`. `split(k)` is refused with the fix "write `split(take k)`". A function that is called once is given away the same way, so it is written `take f` where a parameter takes its function.
+- **Nothing else is marked.** `take` before an argument that is not given away is refused, saying why: the parameter lends it, the argument is a new value that nothing else holds, as a call or a literal is, or its type has `Copy`. So `post(url, json(item))` is written with no `take`, as `json(item)` is a new value, and `split(take seeded(1))` is refused.
+- **Only an argument is marked.** A value given away by a binding, by being stored in a value that is built, as `Pair(a, b)` stores `a`, or by being returned, is written as it is, and `take` before what a value is built of is refused.
+- **It changes nothing.** A program is built to the same code with `take` written as without it. It says on the line what the checker already knows.
+
 ## Types that have Copy
 
 For a type that has [`Copy`](ownership.md) the difference between lending and `take` is invisible.
@@ -122,8 +130,8 @@ A random `Key` has `Discard` and not `Copy`. Every random function takes one, so
 
 ```
 fn two_numbers(key: take Key) -> (f32, f32) {
-  (k1, k2) = split(key)
-  (uniform(k1), uniform(k2))
+  (k1, k2) = split(take key)
+  (uniform(take k1), uniform(take k2))
 }
 ```
 
@@ -131,8 +139,8 @@ fn two_numbers(key: take Key) -> (f32, f32) {
 
 ```
 fn same_twice(key: take Key) -> (f32, f32) {
-  (k1, k2) = split(key)
-  (uniform(k1), uniform(k1))
+  (k1, k2) = split(take key)
+  (uniform(take k1), uniform(take k1))
 }
 ```
 
@@ -144,6 +152,7 @@ So a random key cannot be reused. Randomness needs no effect, because every rand
 | --- | --- |
 | `fn f(x: T)` | `x` is lent: `f` cannot keep, store, or return it |
 | `fn f(x: take T)` | `f` owns `x`, and the caller cannot use it again |
+| `f(take x)`, `f(take s.field)`, `f(take xs[i])` | A call that gives away a name, a field, or an item |
 | `fn(take T) -> R` | A function type whose function owns its argument |
 | `f: fn(T) -> R` | `f` is lent: it is called any number of times, and is a function that has `Copy` |
 | `f: take fn(T) -> R` | The callee owns `f`, and calling it spends it |

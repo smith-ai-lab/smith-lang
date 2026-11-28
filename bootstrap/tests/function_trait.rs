@@ -195,7 +195,7 @@ impl Callee {
              fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
              requires Function[F, A, R]\n  requires FromJson[A]\n  requires Discard[A]\n{{\n  \
              r: Result[A, ReadError] = from_json(text)\n  match r {{\n    \
-             .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
+             .ok(args) {{ Option.some(Function.call(f, take args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n\
              fn show(o: Option[i32]) -> str <alloc> {{\n  match o {{\n    .some(v) {{ \"{{v}}\" }}\n    .none {{ \"none\" }}\n  }}\n}}\n\n\
              fn main() <console, alloc> {{\n  text = \"{text}\"\n  print(show(run(pick, text)))\n}}\n",
             params.join(", "),

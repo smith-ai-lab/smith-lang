@@ -266,3 +266,33 @@ fn item_in(e: &Expr) -> Option<&Expr> {
         _ => None,
     }
 }
+
+impl Checker<'_> {
+    /// Reports a call that gives away the arguments at `at` without `take`
+    /// written before them, at the first, with the call written with `take`
+    /// before each argument it gives away.
+    pub(super) fn unmarked_take(&mut self, call: &Call, at: &[Pos]) {
+        let mut fixed = call.clone();
+        for a in &mut fixed.args {
+            if at.contains(&a.value.pos()) {
+                a.take = Some(a.value.pos());
+            }
+        }
+        let Some(arg) = call.args.iter().find(|a| at.contains(&a.value.pos())) else {
+            return;
+        };
+        let names = |_: usize, a: &Arg| a.name.as_ref().map(|(n, _)| n.clone());
+        let fix = format!("write `{}`", self.call_written(&fixed, &names));
+        self.errors.push(
+            Error::new(
+                arg.value.pos(),
+                format!(
+                    "`{}` takes `{}`, so the call marks it `take`",
+                    written_name(&call.callee),
+                    written_expr(&arg.value)
+                ),
+            )
+            .with_fix(fix),
+        );
+    }
+}

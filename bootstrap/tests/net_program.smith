@@ -27,7 +27,7 @@ fn said(e: NetError) -> str {
 }
 
 fn text(bytes: take List[Byte]) -> str {
-  match utf8(freeze(bytes)) {
+  match utf8(freeze(take bytes)) {
     .ok(s) { s }
     .err(e) { "not text" }
   }
@@ -40,13 +40,13 @@ fn once(port: 1..65536) -> Result[(), NetError] <console, net, alloc> {
   print("ready")
   c = try accept(l)
   result = turn(c)
-  close(c)
+  close(take c)
   result
 }
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   match try read(c, 4096) {
-    .bytes(chunk) { write(c, freeze(chunk.bytes)) }
+    .bytes(chunk) { write(c, freeze(take chunk.bytes)) }
     .ended { .ok(()) }
   }
 }
@@ -55,7 +55,7 @@ fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
   mut all: List[Byte] = []
   loop round in 0..2000000 {
     match try read(c, 4096) {
-      .bytes(chunk) { all = append(all, chunk.bytes) }
+      .bytes(chunk) { all = append(take all, chunk.bytes) }
       .ended { return .ok(all) }
     }
   }
@@ -65,7 +65,7 @@ fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
 fn send_back(c: Connection) -> Result[Nat, NetError] <net, alloc> {
   all = try drain(c)
   size = all.size
-  try write(c, freeze(all))
+  try write(c, freeze(take all))
   .ok(size)
 }
 
@@ -75,7 +75,7 @@ fn everything(port: 1..65536) -> Result[Nat, NetError] <console, net, alloc> {
   print("ready")
   c = try accept(l)
   result = send_back(c)
-  close(c)
+  close(take c)
   result
 }
 
@@ -99,8 +99,8 @@ fn datagram(port: 1..65536) -> Result[(Address, List[Byte]), NetError] <console,
 fn writing(port: 1..65536) -> Result[(), NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   mut block: List[Byte] = []
-  loop k in 0..65536 { block = push(block, 7) }
-  sent = freeze(block)
+  loop k in 0..65536 { block = push(take block, 7) }
+  sent = freeze(take block)
   loop round in 0..4000 {
     try write(c, sent)
   }
@@ -161,12 +161,12 @@ fn main(args: List[str]) <console, net, alloc> {
   } else if mode == "ask" {
     if args.size < 3 { return }
     match ask(p, args[2]) {
-      .ok(bytes) { print(text(bytes)) }
+      .ok(bytes) { print(text(take bytes)) }
       .err(e) { print(name(e)) }
     }
   } else if mode == "datagram" {
     match datagram(p) {
-      .ok((from, bytes)) { print("{from.host} {from.port} {text(bytes)}") }
+      .ok((from, bytes)) { print("{from.host} {from.port} {text(take bytes)}") }
       .err(e) { print(name(e)) }
     }
   } else if mode == "refused" {

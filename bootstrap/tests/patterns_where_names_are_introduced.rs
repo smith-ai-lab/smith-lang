@@ -209,7 +209,7 @@ fn body(s: &Shape) -> (Vec<String>, String) {
     for l in s.all() {
         for _ in 0..l.uses {
             terms.push(if l.key {
-                format!("eat({})", l.name)
+                format!("eat(take {})", l.name)
             } else {
                 l.name.clone()
             });
@@ -240,6 +240,8 @@ fn program(place: Place, (s, given): (&Shape, &Shape), other: &Shape, written_ou
         String::new()
     };
     let mark = if take { "take " } else { "" };
+    // What `apply` owns it gives away when it has no `Copy`, as a `Key` has none.
+    let give = if take && given.all().iter().any(|l| l.key) { "take " } else { "" };
     let lines = |indent: &str| -> String {
         bumps.iter().map(|b| format!("{indent}{b}\n")).collect()
     };
@@ -257,7 +259,7 @@ fn program(place: Place, (s, given): (&Shape, &Shape), other: &Shape, written_ou
         }
         Place::Lambda => {
             out.push_str(&format!(
-                "fn apply(v: {mark}{ty}, f: fn({mark}{ty}) -> i32) -> i32 {{ f(v) }}\n\nfn main() <console, alloc> {{\n  r = apply({}) fn({head}) {{\n{first}{}    {sum}\n  }}\n  print(\"{{r}}\")\n}}\n",
+                "fn apply(v: {mark}{ty}, f: fn({mark}{ty}) -> i32) -> i32 {{ f({give}v) }}\n\nfn main() <console, alloc> {{\n  r = apply({}) fn({head}) {{\n{first}{}    {sum}\n  }}\n  print(\"{{r}}\")\n}}\n",
                 given.value(),
                 lines("    ")
             ));

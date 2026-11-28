@@ -126,7 +126,7 @@ fn byte_at(i: Nat) -> Byte {{
 
 fn content(n: Nat) -> List[Byte] <alloc> {{
   mut made: List[Byte] = []
-  loop i in 0..n {{ made = push(made, byte_at(i)) }}
+  loop i in 0..n {{ made = push(take made, byte_at(i)) }}
   made
 }}
 
@@ -363,7 +363,7 @@ fn refusing[T](body: fn() -> T <fs>) -> T {
   fs(
     open_file: fn(path) { .err(.denied(path)) },
     create_file: fn(path, executable) { .err(.failed((path, \"disk\"))) },
-    close_file: fn(f) { n = release(f) },
+    close_file: fn(f) { n = release(take f) },
     size: fn(f) { .err(.missing(f.path)) },
     read: fn(f, range) { .err(.missing(f.path)) },
     write: fn(f, at, bytes) { .err(.denied(f.path)) },
@@ -627,11 +627,11 @@ fn main() <console, alloc, fs, time> {
     print(\"other ran\")
     7
   }
-  match join(a) {
+  match join(take a) {
     .ok(n) { print(\"got {n}\") }
     .err(_) { print(\"failed\") }
   }
-  print(\"{join(b)}\")
+  print(\"{join(take b)}\")
 }
 ";
     let dir = folder();
@@ -705,7 +705,7 @@ fn main() <fs, alloc> {{
 
 fn a_file_that_is_not_closed_or_is_closed_twice_or_is_used_after_it_is_closed_does_not_compile() {
     let uses = "  match size(value) {\n    .ok(_) { }\n    .err(_) { }\n  }\n";
-    let ended = "  close_file(value)\n";
+    let ended = "  close_file(take value)\n";
     let once = errors(&opened(&format!("{uses}{ended}")));
     assert!(once.is_empty(), "closed once: {once:?}");
     let not_ended = errors(&opened(uses));

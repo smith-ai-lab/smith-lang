@@ -134,7 +134,7 @@ fn bits_and_split_and_seeded_give_what_the_model_of_the_generator_gives_for_ever
         let mut body = String::from("fn main() <console, alloc> {\n");
         for (i, seed) in seeds.iter().enumerate() {
             body += &format!(
-                "  (a{i}, b{i}) = split(seeded({seed}))\n  print(\"{{bits(seeded({seed}))}} {{bits(a{i})}} {{bits(b{i})}}\")\n"
+                "  (a{i}, b{i}) = split(seeded({seed}))\n  print(\"{{bits(seeded({seed}))}} {{bits(take a{i})}} {{bits(take b{i})}}\")\n"
             );
         }
         body += "}\n";
@@ -162,7 +162,7 @@ fn bits_and_split_and_seeded_give_what_the_model_of_the_generator_gives_for_ever
 
 /// A key given to `bits` or `split` is given away, so a second use is refused.
 fn a_key_is_used_once() {
-    let twice = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(key)}} {{bits(key)}}\")\n}}\n");
+    let twice = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(take key)}} {{bits(take key)}}\")\n}}\n");
     let Err(errors) = check(twice.as_bytes()) else {
         panic!("a key was used twice");
     };
@@ -170,7 +170,7 @@ fn a_key_is_used_once() {
         errors.iter().any(|e| e.message.contains("key")),
         "{errors:?}"
     );
-    let once = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(key)}}\")\n}}\n");
+    let once = format!("{HEAD}fn main() <console, alloc> {{\n  key = seeded(1)\n  print(\"{{bits(take key)}}\")\n}}\n");
     assert!(check(once.as_bytes()).is_ok());
 }
 

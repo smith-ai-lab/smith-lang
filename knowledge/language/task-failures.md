@@ -9,20 +9,20 @@ built:
 
 # A failed task
 
-A child that ended by a [failure](task-ending.md) was not given a value, so `join(t)` has none to give. A task that joins it ends by the same failure.
+A child that ended by a [failure](task-ending.md) was not given a value, so `join(take t)` has none to give. A task that joins it ends by the same failure.
 
 ```
 fn fetch_both(a: str, b: str) -> Result[(List[Byte], List[Byte]), NetError] <net, alloc> {
   with tasks()
   ta = spawn { fetch(a) }
   tb = spawn { fetch(b) }
-  pa = try join(ta)
-  pb = try join(tb)
+  pa = try join(take ta)
+  pb = try join(take tb)
   .ok((pa, pb))
 }
 ```
 
-If `tb` runs out of memory, the `join(tb)` of `fetch_both` ends the task that runs `fetch_both` by running out of memory, and so does each parent that joins that task in turn. A `.err` that `fetch` returns is not a failure: it is a value, which `try` takes as it always does.
+If `tb` runs out of memory, the `join(take tb)` of `fetch_both` ends the task that runs `fetch_both` by running out of memory, and so does each parent that joins that task in turn. A `.err` that `fetch` returns is not a failure: it is a value, which `try` takes as it always does.
 
 ## The root
 
@@ -49,7 +49,7 @@ If either child of `fetch_both` runs out of memory, `main` ends the same way and
 fn fetch_or_empty(url: str) -> List[Byte] <net, alloc> {
   with tasks()
   t = spawn { fetch(url) }
-  match outcome(t) {
+  match outcome(take t) {
     .ok(.ok(page)) { page }
     .ok(.err(e)) { [] }
     .err(.out_of_memory) { [] }
@@ -80,7 +80,7 @@ Nothing joins the child of a `conn`, so if `handle(conn)` runs out of memory, on
 
 | Written | A child that ended by a failure |
 | --- | --- |
-| `join(t)` | Ends the joining task by the same failure |
+| `join(take t)` | Ends the joining task by the same failure |
 | `outcome(t)` | Gives `.err` that says which failure, and the task goes on |
 | Never joined | Ends alone |
 

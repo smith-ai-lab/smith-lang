@@ -598,7 +598,7 @@ fn a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_i
             "Listener",
             "listen_on",
             "stop",
-            "  match accept(value) {\n    .ok(c) { close(c) }\n    .err(e) { }\n  }\n",
+            "  match accept(value) {\n    .ok(c) { close(take c) }\n    .err(e) { }\n  }\n",
         ),
         (
             "Connection",
@@ -618,7 +618,7 @@ fn a_listener_a_connection_and_a_socket_that_is_not_ended_or_is_ended_twice_or_i
     .take(1)
     {
         let end = if open == "bind_to" { "unbind" } else { end };
-        let ended = format!("  {end}(value)\n");
+        let ended = format!("  {end}(take value)\n");
         let source = |lines: &str| opened(ty, open, end, lines);
         if part.is_multiple_of(2) {
             // Ended once, after it was used: it compiles.
@@ -713,15 +713,15 @@ fn main() <console, alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused(host)) },
     accept: fn(l) { .err(.refused(l.host)) },
-    stop: fn(l) { n = release(l) },
+    stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused(\"{host}:{port}\")) },
     read: fn(c, most) { .ok(.bytes(Chunk(bytes: [104, 101, 108, 108, 111]))) },
     write: fn(c, bytes) { .ok(()) },
-    close: fn(c) { n = release(c) },
+    close: fn(c) { n = release(take c) },
     bind_to: fn(host, port) { .err(.refused(host)) },
     send: fn(s, to, bytes) { .ok(()) },
     receive: fn(s, most) { .err(.refused(s.host)) },
-    unbind: fn(s) { n = release(s) }
+    unbind: fn(s) { n = release(take s) }
   ) {
     time(now: { instant(11) }, sleep: fn(span) { }) {
       match ask(\"x\") {
@@ -785,15 +785,15 @@ fn main() <console, alloc> {{
   net(
     listen_on: fn(host, port) {{ .err(.refused(host)) }},
     accept: fn(l) {{ .err(.refused(l.host)) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .ok(connection(2)) }},
     read: fn(c, most) {{ {read} }},
     write: fn(c, bytes) {{ .ok(()) }},
-    close: fn(c) {{ n = release(c) }},
+    close: fn(c) {{ n = release(take c) }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .ok(()) }},
     receive: fn(s, most) {{ .err(.refused(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }}
+    unbind: fn(s) {{ n = release(take s) }}
   ) {{
     match ask() {{
       .ok(b) {{ print(\"{{b}}\") }}

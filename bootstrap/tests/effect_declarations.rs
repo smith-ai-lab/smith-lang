@@ -358,7 +358,7 @@ fn printed(source: &str) -> String {
 /// and the type the handler gives were one, and one that built a struct of the
 /// type panicked.
 fn a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_given() {
-    let pass = "use std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn main() <console, alloc> {\n  r = store(put: fn(x) { same(x) }, body: { put(\"s\") })\n  print(r)\n}\n";
+    let pass = "use std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn main() <console, alloc> {\n  r = store(put: fn(x) { same(take x) }, body: { put(\"s\") })\n  print(r)\n}\n";
     assert_eq!(printed(pass), "s\n");
     let built = "use std.console (console, print)\n\nstruct Tk[T] {\n  value: T\n}\n\neffect jobs {\n  fn run[T](work: take fn() -> T) -> Tk[T]\n}\n\nfn main() <console, alloc> {\n  r = jobs(run: fn(work) { Tk(value: work()) }, body: { run({ \"x\" }) })\n  print(r.value)\n}\n";
     assert_eq!(printed(built), "x\n");
@@ -369,7 +369,7 @@ fn a_handler_lambda_of_an_operation_with_type_parameters_gives_the_value_it_is_g
 /// operation is called at.
 fn a_handler_in_a_generic_function_keeps_the_type_parameters_of_the_operation_and_of_the_function_apart()
 {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn through[U](u: take U) -> U <alloc> {\n  store(put: fn(x) { same(x) }, body: { put(u) })\n}\n\nfn main() <console, alloc> {\n  a = through(\"g\")\n  b: u64 = through(5)\n  r = store(put: fn(x) { same(x) }, body: {\n    c = put(\"s\")\n    d: u64 = put(7)\n    \"{c} {d}\"\n  })\n  print(\"{a} {b} {r}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\n\neffect store {\n  fn put[T](x: take T) -> T\n}\n\nfn same[T](x: take T) -> T { x }\n\nfn through[U](u: take U) -> U <alloc> {\n  store(put: fn(x) { same(take x) }, body: { put(take u) })\n}\n\nfn main() <console, alloc> {\n  a = through(\"g\")\n  b: u64 = through(5)\n  r = store(put: fn(x) { same(take x) }, body: {\n    c = put(\"s\")\n    d: u64 = put(7)\n    \"{c} {d}\"\n  })\n  print(\"{a} {b} {r}\")\n}\n";
     assert_eq!(printed(source), "g 5 s 7\n");
 }
 
@@ -400,14 +400,14 @@ fn a_handler_of_an_operation_with_type_parameters_gives_the_value_the_model_give
                 ),
                 1 => (
                     "fn put[T](x0: take T) -> T",
-                    ["fn(x0) { x0 }", "fn(x0) { open(keep(item: x0)) }", "fn(x0) { same(x0) }"][*lambda],
+                    ["fn(x0) { x0 }", "fn(x0) { open(keep(item: x0)) }", "fn(x0) { same(take x0) }"][*lambda],
                 ),
                 _ => (
                     "fn put[T, U](x0: take T, x1: take U) -> Pair[T, U]",
                     [
                         "fn(x0, x1) { Pair(first: x0, second: x1) }",
                         "fn(x0, x1) { Pair(first: open(keep(item: x0)), second: x1) }",
-                        "fn(x0, x1) { Pair(first: same(x0), second: same(x1)) }",
+                        "fn(x0, x1) { Pair(first: same(take x0), second: same(take x1)) }",
                     ][*lambda],
                 ),
             };

@@ -48,12 +48,12 @@ fn program(c: &Case) -> (String, String) {
         c.inner, c.outer
     );
     s += "fn asks(id: u64) -> (u64, u64) <near, far> {\n  (find(id), base())\n}\n\n";
-    s += "fn call_it0[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{\n  Function.call(f, a)\n}\n\n";
+    s += "fn call_it0[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{\n  Function.call(f, take a)\n}\n\n";
     let mut inner = "call_it0".to_string();
     for level in 1..=c.through {
         let name = format!("call_it{level}");
         s += &format!(
-            "fn {name}[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  {inner}(f, a)\n}}\n\n"
+            "fn {name}[F, A, R](f: F, a: take A) -> R\n  requires Function[F, A, R]\n{{\n  {inner}(f, take a)\n}}\n\n"
         );
         inner = name;
     }

@@ -357,7 +357,7 @@ fn a_type_taken_from_without_describe_refuses_every_type_that_holds_it() {
 
 fn a_types_own_impl_is_the_description_used_wherever_it_is_a_part() {
     let rest = format!(
-        "{}struct Celsius {{\n  degrees: Int\n}}\n\nimpl Describe[Celsius] {{\n  fn describe[D: Describer](to: take D) -> D <alloc> {{ Describer.text(to) }}\n}}\n\nstruct Reading {{\n  at: Celsius\n  past: List[Celsius]\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[Reading].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
+        "{}struct Celsius {{\n  degrees: Int\n}}\n\nimpl Describe[Celsius] {{\n  fn describe[D: Describer](to: take D) -> D <alloc> {{ Describer.text(take to) }}\n}}\n\nstruct Reading {{\n  at: Celsius\n  past: List[Celsius]\n}}\n\nfn main() <console, alloc> {{\n  d = Describe[Reading].describe(Log(lines: \"\"))\n  print(d.lines)\n}}\n",
         log()
     );
     let source = with_import(&imports(), &rest);

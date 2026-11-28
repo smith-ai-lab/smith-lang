@@ -32,7 +32,7 @@ fn commit(t: take Transaction) -> Result[(), DbError] <net>
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   debit(t, 100)
-  commit(t)
+  commit(take t)
 }
 ```
 
@@ -40,7 +40,7 @@ fn transfer(db: Db) -> Result[(), DbError] <net> {
 
 ## What is refused
 
-Leaving out `commit(t)` does not compile, as `t` is dropped and a `Transaction` has no `Discard`.
+Leaving out `commit(take t)` does not compile, as `t` is dropped and a `Transaction` has no `Discard`.
 
 ```
 fn forgotten(db: Db) -> Result[(), DbError] <net> {
@@ -55,8 +55,8 @@ Calling it twice does not compile, as `t` has no `Copy` and the first call took 
 ```
 fn twice(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
-  try commit(t)
-  commit(t)
+  try commit(take t)
+  commit(take t)
 }
 ```
 
@@ -69,7 +69,7 @@ fn rollback(t: take Transaction) -> Result[(), DbError] <net>
 
 fn finish(db: Db, ok: bool) -> Result[(), DbError] <net> {
   t = begin(db)
-  if ok { commit(t) } else { rollback(t) }
+  if ok { commit(take t) } else { rollback(take t) }
 }
 ```
 
@@ -94,7 +94,7 @@ fn prepare(db: Db) -> Result[(), DbError] <net>
 fn early(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
   try prepare(db)
-  commit(t)
+  commit(take t)
 }
 ```
 
@@ -105,7 +105,7 @@ fn replaced(db: Db) -> Result[(), DbError] <net> {
   mut t = begin(db)
   debit(t, 100)
   t = begin(db)
-  commit(t)
+  commit(take t)
 }
 ```
 

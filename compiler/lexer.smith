@@ -170,7 +170,7 @@ fn text_of(src: Slice[Byte], from: Nat, to: Nat) -> str {
 }
 
 fn text_from(bytes: take List[Byte]) -> str {
-  match utf8(freeze(bytes)) {
+  match utf8(freeze(take bytes)) {
     .ok(s) { s }
     .err(e) { "" }
   }
@@ -328,12 +328,12 @@ fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
       have = valid_prefix(src, i)
       if have == wanted(b) {
         if b == 13 {
-          errors = push(errors, LexError(pos: pos, message: "a carriage return is not allowed in a Smith file"))
+          errors = push(take errors, LexError(pos: pos, message: "a carriage return is not allowed in a Smith file"))
         }
         pos = advance(pos, b)
         i = i + have
       } else {
-        errors = push(errors, LexError(pos: pos, message: "the file is not valid UTF-8 here"))
+        errors = push(take errors, LexError(pos: pos, message: "the file is not valid UTF-8 here"))
         pos = Pos(line: pos.line, col: saturating_add(pos.col, 1))
         i = i + have
       }
@@ -346,7 +346,7 @@ fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
 
 fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer <alloc> {
   mut next = lx
-  next.errors = push(next.errors, LexError(pos: pos, message: message))
+  next.errors = push(take next.errors, LexError(pos: pos, message: message))
   next
 }
 
@@ -375,7 +375,7 @@ fn flush(lx: take Lexer) -> Lexer <alloc> {
   waiting = next.pending
   next.pending = []
   loop i in 0..waiting.size {
-    next.tokens = push(next.tokens, Token(tok: .newline, pos: waiting[i]))
+    next.tokens = push(take next.tokens, Token(tok: .newline, pos: waiting[i]))
   }
   next
 }
@@ -386,11 +386,11 @@ fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer <alloc> {
   mut next = lx
   next.line_has_token = not is_newline(tok)
   if is_newline(tok) {
-    next.pending = push(next.pending, pos)
+    next.pending = push(take next.pending, pos)
     next
   } else {
-    if is_pipe(tok) { next.pending = [] } else { next = flush(next) }
-    next.tokens = push(next.tokens, Token(tok: tok, pos: pos))
+    if is_pipe(tok) { next.pending = [] } else { next = flush(take next) }
+    next.tokens = push(take next.tokens, Token(tok: tok, pos: pos))
     next
   }
 }
@@ -410,10 +410,10 @@ fn bump(lx: take Lexer) -> Lexer {
 
 // Reads the whole character that starts here, however many bytes it has.
 fn bump_char(lx: take Lexer) -> Lexer {
-  mut next = bump(lx)
+  mut next = bump(take lx)
   loop round in 0..4 {
     match byte_at(next.src, next.at) {
-      .some(b) { if is_continuation(b) { next = bump(next) } }
+      .some(b) { if is_continuation(b) { next = bump(take next) } }
       .none { }
     }
   }
@@ -439,7 +439,7 @@ fn take_while_word(lx: take Lexer) -> Lexer {
   mut next = lx
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
-      .some(b) { if is_word_byte(b) { next = bump(next) } else { break } }
+      .some(b) { if is_word_byte(b) { next = bump(take next) } else { break } }
       .none { break }
     }
   }
@@ -516,21 +516,21 @@ fn keyword_of(word: str) -> Option[Keyword] {
 
 fn word(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
-  next = take_while_word(lx)
+  next = take_while_word(take lx)
   name = text_of(next.src, from, next.at)
   tok: Tok = match keyword_of(name) {
     .some(k) { .keyword(k) }
     .none { .ident(name) }
   }
-  push_token(next, tok, start)
+  push_token(take next, take tok, start)
 }
 
 fn comment(lx: take Lexer, start: Pos) -> Lexer <alloc> {
-  mut next = if lx.line_has_token { error_at(lx, start, "a comment must stand on its own line") } else { lx }
+  mut next = if lx.line_has_token { error_at(take lx, start, "a comment must stand on its own line") } else { lx }
   rounds = next.src.size
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
-      .some(b) { if b == '\n' { break } else { next = bump(next) } }
+      .some(b) { if b == '\n' { break } else { next = bump(take next) } }
       .none { break }
     }
   }
@@ -635,10 +635,10 @@ fn check_number(text: str) -> Option[str] <alloc> {
 
 fn number(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
-  mut next = take_while_word(lx)
+  mut next = take_while_word(take lx)
   if byte_at(next.src, next.at) == .some('.') {
     match byte_after(next.src, next.at) {
-      .some(d) { if is_digit(d) { next = take_while_word(bump(next)) } }
+      .some(d) { if is_digit(d) { next = take_while_word(bump(take next)) } }
       .none { }
     }
   }
@@ -651,7 +651,7 @@ fn number(lx: take Lexer, start: Pos) -> Lexer <alloc> {
       .some(sign) {
         if sign == '+' or sign == '-' {
           match byte_after(next.src, next.at) {
-            .some(d) { if is_digit(d) { next = take_while_word(bump(next)) } }
+            .some(d) { if is_digit(d) { next = take_while_word(bump(take next)) } }
             .none { }
           }
         }
@@ -661,58 +661,58 @@ fn number(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   }
   text = text_of(next.src, from, next.at)
   checked = match check_number(text) {
-    .some(why) { error_at(next, start, "`{text}` is not a number: {why}") }
+    .some(why) { error_at(take next, start, "`{text}` is not a number: {why}") }
     .none { next }
   }
-  push_token(checked, .number(text), start)
+  push_token(take checked, .number(text), start)
 }
 
 // ---- characters ----
 
 fn close_character(lx: take Lexer, start: Pos, from: Nat, ok: bool) -> Lexer <alloc> {
   if byte_at(lx.src, lx.at) == .some('\'') {
-    closed = bump(lx)
+    closed = bump(take lx)
     text = text_of(closed.src, from, closed.at)
-    if ok { push_token(closed, .number(text), start) } else { closed }
+    if ok { push_token(take closed, .number(text), start) } else { closed }
   } else {
-    error_at(lx, start, "a character has no closing `'`, and holds one character only")
+    error_at(take lx, start, "a character has no closing `'`, and holds one character only")
   }
 }
 
 fn character(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
-  opened = bump(lx)
+  opened = bump(take lx)
   at = opened.pos
   match byte_at(opened.src, opened.at) {
-    .none { error_at(opened, start, "a character has no closing `'`") }
+    .none { error_at(take opened, start, "a character has no closing `'`") }
     .some(c) {
       if c == '\n' {
-        error_at(opened, start, "a character has no closing `'`")
+        error_at(take opened, start, "a character has no closing `'`")
       } else if c == '\'' {
-        error_at(bump(opened), start, "a character is written between single quotes, and this has none")
+        error_at(bump(take opened), start, "a character is written between single quotes, and this has none")
       } else if c == '\\' {
-        escaped = bump(opened)
+        escaped = bump(take opened)
         match byte_at(escaped.src, escaped.at) {
           .some(e) {
             if e == '\'' or e == '\\' or e == 'n' or e == 't' {
-              close_character(bump(escaped), start, from, true)
+              close_character(bump(take escaped), start, from, true)
             } else {
               shown = after_backslash(escaped)
-              wrong = error_at(escaped, at, "unknown escape: a backslash is followed by {shown}, not one of ' \\ n t")
+              wrong = error_at(take escaped, at, "unknown escape: a backslash is followed by {shown}, not one of ' \\ n t")
               if e == '\n' {
-                close_character(wrong, start, from, false)
+                close_character(take wrong, start, from, false)
               } else {
-                close_character(bump_char(wrong), start, from, false)
+                close_character(bump_char(take wrong), start, from, false)
               }
             }
           }
           .none {
-            wrong = error_at(escaped, at, "unknown escape: a backslash is followed by nothing, not one of ' \\ n t")
-            close_character(wrong, start, from, false)
+            wrong = error_at(take escaped, at, "unknown escape: a backslash is followed by nothing, not one of ' \\ n t")
+            close_character(take wrong, start, from, false)
           }
         }
       } else {
-        close_character(bump_char(opened), start, from, true)
+        close_character(bump_char(take opened), start, from, true)
       }
     }
   }
@@ -795,14 +795,14 @@ fn punct(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   match punct_at(lx.src, lx.at) {
     .none {
       from = lx.at
-      after = bump_char(lx)
+      after = bump_char(take lx)
       shown = show_char(text_of(after.src, from, after.at))
-      error_at(after, start, "unexpected character {shown}")
+      error_at(take after, start, "unexpected character {shown}")
     }
     .some((p, width)) {
       mut next = lx
-      loop i in 0..width { next = bump(next) }
-      push_token(next, .punct(p), start)
+      loop i in 0..width { next = bump(take next) }
+      push_token(take next, .punct(p), start)
     }
   }
 }
@@ -821,7 +821,7 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
   decreases fuel
 {
   rounds = lx.src.size
-  mut next = bump(lx)
+  mut next = bump(take lx)
   mut pieces: List[Piece] = []
   mut value: List[Byte] = []
   mut interpolated = false
@@ -829,64 +829,64 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
     at = next.pos
     match byte_at(next.src, next.at) {
       .none {
-        next = error_at(next, start, unclosed())
+        next = error_at(take next, start, unclosed())
         break
       }
       .some(c) {
         if c == '\n' {
-          next = error_at(next, start, unclosed())
+          next = error_at(take next, start, unclosed())
           break
         } else if c == '"' {
-          next = bump(next)
+          next = bump(take next)
           break
         } else if c == '{' {
-          next = bump(next)
+          next = bump(take next)
           interpolated = true
-          if value.size > 0 { pieces = push(pieces, .text(text_from(value))) }
+          if value.size > 0 { pieces = push(take pieces, .text(text_from(take value))) }
           value = []
           if fuel > 0 {
-            (after, tokens) = expression(next, start, fuel - 1)
+            (after, tokens) = expression(take next, start, fuel - 1)
             next = after
             match tokens {
-              .some(inside) { pieces = push(pieces, .expr(inside)) }
+              .some(inside) { pieces = push(take pieces, .expr(inside)) }
               .none { break }
             }
           } else {
             break
           }
         } else if c == '}' {
-          next = error_at(bump(next), at, "a `\}` in a string closes no expression")
+          next = error_at(bump(take next), at, "a `\}` in a string closes no expression")
         } else if c == '\\' {
-          next = bump(next)
+          next = bump(take next)
           match byte_at(next.src, next.at) {
             .some(e) {
               if e == '"' or e == '\\' or e == '{' or e == '}' or e == 'n' or e == 't' {
-                next = bump(next)
+                next = bump(take next)
                 decoded: Byte = if e == 'n' { '\n' } else if e == 't' { '\t' } else { e }
-                value = push(value, decoded)
+                value = push(take value, decoded)
               } else {
                 shown = after_backslash(next)
-                next = error_at(next, at, "unknown escape: a backslash is followed by {shown}, not one of \" \\ \{ \} n t")
-                if e == '\n' { break } else { next = bump_char(next) }
+                next = error_at(take next, at, "unknown escape: a backslash is followed by {shown}, not one of \" \\ \{ \} n t")
+                if e == '\n' { break } else { next = bump_char(take next) }
               }
             }
             .none {
-              next = error_at(next, at, "unknown escape: a backslash is followed by nothing, not one of \" \\ \{ \} n t")
+              next = error_at(take next, at, "unknown escape: a backslash is followed by nothing, not one of \" \\ \{ \} n t")
               break
             }
           }
         } else {
-          next = bump(next)
-          value = push(value, c)
+          next = bump(take next)
+          value = push(take value, c)
         }
       }
     }
   }
   if not interpolated {
-    push_token(next, .string(text_from(value)), start)
+    push_token(take next, .string(text_from(take value)), start)
   } else {
-    if value.size > 0 { pieces = push(pieces, .text(text_from(value))) }
-    push_token(next, .interp(pieces), start)
+    if value.size > 0 { pieces = push(take pieces, .text(text_from(take value))) }
+    push_token(take next, .interp(pieces), start)
   }
 }
 
@@ -929,13 +929,13 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
         if c == '\n' {
           break
         } else if c == '}' and depth == 0 {
-          next = push_token(bump(next), .punct(.close_brace), at)
+          next = push_token(bump(take next), .punct(.close_brace), at)
           closed = true
           break
         } else {
           if c == '{' { depth = saturating_add(depth, 1) }
           if c == '}' { depth = saturating_sub(depth, 1) }
-          next = if fuel > 0 { token(next, at, c, fuel - 1) } else { next }
+          next = if fuel > 0 { token(take next, at, c, fuel - 1) } else { next }
         }
       }
     }
@@ -951,7 +951,7 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
   } else if inner {
     (next, .none)
   } else {
-    (error_at(next, start, unclosed()), .none)
+    (error_at(take next, start, unclosed()), .none)
   }
 }
 
@@ -961,19 +961,19 @@ fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer <alloc>
   decreases fuel
 {
   if c == ' ' or c == '\t' {
-    bump(lx)
+    bump(take lx)
   } else if c == '/' and byte_after(lx.src, lx.at) == .some('/') {
-    comment(lx, start)
+    comment(take lx, start)
   } else if c == '"' {
-    if fuel > 0 { string(lx, start, fuel - 1) } else { lx }
+    if fuel > 0 { string(take lx, start, fuel - 1) } else { lx }
   } else if c == '\'' {
-    character(lx, start)
+    character(take lx, start)
   } else if is_name_start(c) {
-    word(lx, start)
+    word(take lx, start)
   } else if is_digit(c) {
-    number(lx, start)
+    number(take lx, start)
   } else {
-    punct(lx, start)
+    punct(take lx, start)
   }
 }
 
@@ -987,15 +987,15 @@ fn run(lx: take Lexer) -> Lexer <alloc> {
       .some(c) {
         start = next.pos
         if c == '\n' {
-          next = push_token(bump(next), .newline, start)
+          next = push_token(bump(take next), .newline, start)
         } else {
-          next = token(next, start, c, fuel)
+          next = token(take next, start, c, fuel)
         }
       }
     }
   }
   eof = next.pos
-  push_token(next, .eof, eof)
+  push_token(take next, .eof, eof)
 }
 
 // Splits a file into tokens. The last token is always `eof`.
@@ -1004,9 +1004,9 @@ fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] <alloc> {
   if bad.size > 0 {
     .err(bad)
   } else {
-    lx = Lexer(src: freeze(src), at: 0, pos: Pos(line: 1, col: 1), tokens: [], pending: [],
+    lx = Lexer(src: freeze(take src), at: 0, pos: Pos(line: 1, col: 1), tokens: [], pending: [],
                errors: [], line_has_token: false)
-    done = run(lx)
+    done = run(take lx)
     if done.errors.size > 0 { .err(done.errors) } else { .ok(done.tokens) }
   }
 }

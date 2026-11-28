@@ -83,7 +83,7 @@ fn wider(r: Rect) -> Rect {
 ```
 fn transfer(db: Db) -> Result[(), DbError] <net> {
   t = begin(db)
-  commit(t)
+  commit(take t)
 }
 ```
 

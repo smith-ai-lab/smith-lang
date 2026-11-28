@@ -8697,13 +8697,16 @@ impl<'a> Checker<'a> {
         if self.errors.len() == errors {
             let view = self.defs.view(template);
             let scope = self.extended.get(&addr(view.f)).unwrap_or(view.scope);
-            ownership::check(
+            let unmarked = ownership::check(
                 self.defs,
                 &self.types,
                 (view.f, scope, &view.params),
                 &mut self.errors,
                 &mut self.drops,
             );
+            for (call, at) in unmarked {
+                self.unmarked_take(&call, &at);
+            }
         }
     }
 

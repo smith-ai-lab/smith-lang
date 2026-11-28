@@ -50,7 +50,7 @@ use std.task (join, outcome, spawn, task, test_scheduler)
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(xs, i)
+    xs = push(take xs, i)
   }}
   0
 }}
@@ -66,18 +66,18 @@ fn main() <console, alloc, diverge> {{
   r = net(
     listen_on: fn(host, port) {{ .err(.refused(host)) }},
     accept: fn(l) {{ .err(.closed(l.host)) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{ .ok(()) }},
     close: fn(c) {{
       print(\"closed {{handle(c)}}\")
-      n = release(c)
+      n = release(take c)
     }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .err(.closed(s.host)) }},
     receive: fn(s, most) {{ .err(.closed(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: {{ run() }},
   )
   print(\"{{r}}\")
@@ -103,13 +103,13 @@ fn said_by(source: &str, program: scalar::Program) -> Vec<String> {
 const OWNER: &str = "fn owner(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
-  close(c)
+  close(take c)
   x
 }
 ";
 
 const REPORT: &str = "  child = spawn { owner(5) }
-  match outcome(child) {
+  match outcome(take child) {
     .ok(n) { print(\"a value\") }
     .err(.out_of_memory) { print(\"out of memory\") }
     .err(.refused_write) { print(\"refused write\") }
@@ -124,14 +124,14 @@ fn a_task_that_runs_out_of_memory_closes_the_connection_it_opened_once_and_its_p
 const TWO_DEEP: &str = "fn inner(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
-  close(c)
+  close(take c)
   x
 }
 
 fn outer(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = inner(6)
-  close(c)
+  close(take c)
   x
 }
 
@@ -151,7 +151,7 @@ const THROUGH_A_CALL_INLINED: &str = "fn middle() -> u64 <alloc> {
 fn owner(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = middle()
-  close(c)
+  close(take c)
   x
 }
 ";
@@ -164,14 +164,14 @@ fn a_failure_in_a_function_that_owns_nothing_and_is_inlined_ends_what_its_caller
 const OWNS_AND_INLINED: &str = "fn middle(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
-  close(c)
+  close(take c)
   x
 }
 
 fn owner(n: u64) -> u64 <net, alloc> {
   c = connection(n)
   x = middle(6)
-  close(c)
+  close(take c)
   x
 }
 ";
@@ -194,9 +194,9 @@ fn owner(n: u64) -> u64 <net, alloc> {{
   c = connection(n)
   mut kept: List[List[u64]] = []
   loop i in 0..9223372036854775807 {{
-    kept = push(kept, big(i))
+    kept = push(take kept, big(i))
   }}
-  close(c)
+  close(take c)
   0
 }}
 "
@@ -222,7 +222,7 @@ fn a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowher
     let source = program(
         "fn owner(n: u64) -> u64 <net, alloc> {
   c = connection(n)
-  close(c)
+  close(take c)
   n
 }
 ",

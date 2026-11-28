@@ -86,7 +86,7 @@ fn demo() -> (List[Nat], List[Nat]) <alloc> {
 
 `append([1, 2], [3])` is `[1, 2, 3]`. `append([], [3])` is `[3]`, and with an empty `b` the result has the elements of `a` alone.
 
-`append` is built as `push` is. It takes `a` as `push` takes its list, so `out = append(out, more)` grows `out` in place, as [a list is never copied unasked](../language/ownership.md#a-list-is-never-copied-unasked). It tests once whether `a`'s memory has room for the elements of `b`, and when it has not, asks once for memory that holds both and copies `a`'s elements, then it copies the elements of `b` after them in one go. `b` is lent, and its elements are copied, so `T` has `Copy`: a list of lists is joined with `push`.
+`append` is built as `push` is. It takes `a` as `push` takes its list, so `out = append(take out, more)` grows `out` in place, as [a list is never copied unasked](../language/ownership.md#a-list-is-never-copied-unasked). It tests once whether `a`'s memory has room for the elements of `b`, and when it has not, asks once for memory that holds both and copies `a`'s elements, then it copies the elements of `b` after them in one go. `b` is lent, and its elements are copied, so `T` has `Copy`: a list of lists is joined with `push`.
 
 ## The forms
 
@@ -97,4 +97,4 @@ fn demo() -> (List[Nat], List[Nat]) <alloc> {
 | `find(xs, part)` | `.some` of the place where `part` first begins, or `.none`; an empty `part` is at 0 |
 | `starts_with(xs, prefix)` | `true` when `xs` begins with `prefix`; an empty `prefix` is always one |
 | `ends_with(xs, suffix)` | `true` when `xs` ends with `suffix`; an empty `suffix` is always one |
-| `append(a, b)` | The elements of `a` and then those of `b`, with `alloc` |
+| `append(take a, b)` | The elements of `a` and then those of `b`, with `alloc` |

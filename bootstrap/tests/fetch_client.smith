@@ -14,7 +14,7 @@ struct Item {
 }
 
 fn shown(b: take List[Byte]) -> str <alloc> {
-  match utf8(freeze(b)) {
+  match utf8(freeze(take b)) {
     .ok(t) { t }
     .err(e) { "not text" }
   }
@@ -28,11 +28,11 @@ fn address(port: 1..65536, path: str) -> str <alloc> {
 fn basic(port: 1..65536, closed: 1..65536) <console, net, alloc> {
   with client()
   match get[64](address(port, "/a")) {
-    .ok(r) { print("get {r.status} {shown(r.body.bytes)} {r.headers.size}") }
+    .ok(r) { print("get {r.status} {shown(take r.body.bytes)} {r.headers.size}") }
     .err(e) { print("get {e}") }
   }
   match post[64](address(port, "/b"), json(Item(id: 7, name: "Ana"))) {
-    .ok(r) { print("post {r.status} {shown(r.body.bytes)}") }
+    .ok(r) { print("post {r.status} {shown(take r.body.bytes)}") }
     .err(e) { print("post {e}") }
   }
   match put[64](address(port, "/c"), form([("a b", "c&d")])) {
@@ -56,11 +56,11 @@ fn basic(port: 1..65536, closed: 1..65536) <console, net, alloc> {
     .err(e) { print("big {e}") }
   }
   match get[5](address(port, "/exact")) {
-    .ok(r) { print("exact {r.status} {shown(r.body.bytes)}") }
+    .ok(r) { print("exact {r.status} {shown(take r.body.bytes)}") }
     .err(e) { print("exact {e}") }
   }
   match get[64](address(port, "/chunked")) {
-    .ok(r) { print("chunked {r.status} {shown(r.body.bytes)}") }
+    .ok(r) { print("chunked {r.status} {shown(take r.body.bytes)}") }
     .err(e) { print("chunked {e}") }
   }
   match get[64](address(port, "/moved")) {

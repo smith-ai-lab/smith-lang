@@ -61,7 +61,7 @@ const BOTH: &str = "fn both(f: fn(str)) {\n  f(\"a\")\n  f(\"b\")\n}\n\n";
 fn a_lambda_that_appends_to_a_var_it_gives_away_is_accepted_and_the_var_is_whole_after_the_call() {
     let source = format!(
         "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-         fn gather() -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{ page = append(page, part) }}\n  finish(page)\n}}\n\n\
+         fn gather() -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{ page = append(take page, part) }}\n  finish(take page)\n}}\n\n\
          fn main() <console, alloc> {{\n  print(gather())\n}}\n"
     );
     assert_eq!(outcome(&source).stdout, b"ab\n");
@@ -130,9 +130,9 @@ fn lambda(g: &mut Gen) -> Lambda {
 impl Lambda {
     fn statement(branch: Branch, leaves: bool) -> String {
         let mut text = match branch {
-            Branch::Appends => "page = append(page, part)\n".to_string(),
-            Branch::Restarts => "s = finish(append(page, part))\npage = text()\n".to_string(),
-            Branch::Spends => "s = finish(append(page, part))\n".to_string(),
+            Branch::Appends => "page = append(take page, part)\n".to_string(),
+            Branch::Restarts => "s = finish(append(take page, part))\npage = text()\n".to_string(),
+            Branch::Spends => "s = finish(append(take page, part))\n".to_string(),
         };
         if leaves {
             text += "return\n";
@@ -144,7 +144,7 @@ impl Lambda {
         let mut text = String::new();
         for line in &self.lines {
             match line {
-                None => text += "      page = append(page, part)\n",
+                None => text += "      page = append(take page, part)\n",
                 Some(l) => {
                     text += "      if c {\n";
                     for row in Lambda::statement(l.then.0, l.then.1).lines() {
@@ -208,7 +208,7 @@ impl Lambda {
     fn source(&self, c: bool) -> String {
         format!(
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-             fn gather(c: bool) -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{\n{}  }}\n  finish(page)\n}}\n\n\
+             fn gather(c: bool) -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{\n{}  }}\n  finish(take page)\n}}\n\n\
              fn main() <console, alloc> {{\n  print(gather({c}))\n}}\n",
             self.body()
         )
@@ -251,19 +251,19 @@ fn a_try_between_the_give_away_and_the_assignment_is_a_path_that_leaves_with_the
             "use std.console (console, print)\nuse std.text (text, append, finish)\n\n\
              fn both(f: fn(str) -> Result[(), str]) -> Result[(), str] {{\n  try f(\"a\")\n  f(\"b\")\n}}\n\n\
              fn ok(s: str) -> Result[(), str] {{ .ok(()) }}\n\n\
-             fn gather() -> Result[str, str] <alloc> {{\n  mut page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(page))\n}}\n\n\
+             fn gather() -> Result[str, str] <alloc> {{\n  mut page = text()\n  r = both() fn(part) {{\n{lines}    .ok(())\n  }}\n  try r\n  .ok(finish(take page))\n}}\n\n\
              fn main() <console, alloc> {{\n  r = gather()\n  print(\"x\")\n}}\n"
         )
     };
-    let between = program("    t = append(page, part)\n    try ok(part)\n    page = t\n");
+    let between = program("    t = append(take page, part)\n    try ok(part)\n    page = t\n");
     let found = errors(&between);
     assert!(
         found.iter().any(|e| e.message.contains("gives away `page`")),
         "{found:?} for\n{between}"
     );
-    let before = program("    try ok(part)\n    page = append(page, part)\n");
+    let before = program("    try ok(part)\n    page = append(take page, part)\n");
     assert!(errors(&before).is_empty(), "{:?}", errors(&before));
-    let after = program("    page = append(page, part)\n    try ok(part)\n");
+    let after = program("    page = append(take page, part)\n    try ok(part)\n");
     assert!(errors(&after).is_empty(), "{:?}", errors(&after));
 }
 
@@ -305,10 +305,10 @@ impl Puts {
                 "part: str",
                 "part",
                 "text()",
-                "append(held, part)",
-                "finish(held)",
+                "append(take held, part)",
+                "finish(take held)",
             ),
-            false => ("Byte", "b: Byte", "b", "[]", "push(held, b)", "held"),
+            false => ("Byte", "b: Byte", "b", "[]", "push(take held, b)", "held"),
         };
         let result = if self.text { "str" } else { "List[Byte]" };
         let uses = if self.text {
@@ -326,9 +326,9 @@ impl Puts {
                 for b in part {
                     let value = if self.text { format!("\"{}\"", *b as char) } else { b.to_string() };
                     let step = if self.text {
-                        format!("append(held, {value})")
+                        format!("append(take held, {value})")
                     } else {
-                        format!("push(held, {value})")
+                        format!("push(take held, {value})")
                     };
                     all += &format!("  held = {step}\n");
                 }

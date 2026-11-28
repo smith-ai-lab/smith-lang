@@ -130,7 +130,7 @@ fn read(m: List[Byte], kind: u16) -> Nat <alloc> {{
 fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] <alloc> {{
   mut made: List[Byte] = []
   loop i in 0..m.size {{
-    if i == at {{ made = push(made, value) }} else {{ made = push(made, m[i]) }}
+    if i == at {{ made = push(take made, value) }} else {{ made = push(take made, m[i]) }}
   }}
   made
 }}
@@ -139,7 +139,7 @@ fn changed(m: List[Byte], at: Nat, value: Byte) -> List[Byte] <alloc> {{
 fn first(m: List[Byte], n: Nat) -> List[Byte] <alloc> {{
   mut made: List[Byte] = []
   loop i in 0..m.size {{
-    if i < n {{ made = push(made, m[i]) }}
+    if i < n {{ made = push(take made, m[i]) }}
   }}
   made
 }}

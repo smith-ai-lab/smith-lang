@@ -210,7 +210,7 @@ fn rd(changed: &[(&str, &str)]) -> String {
 /// that the type has none of when `lenient` is true.
 fn fresh(xs: &str, log: bool, lenient: bool) -> String {
     format!(
-        "Rd(shapes: freeze({xs}), at: 0, asked: \"\", log: {log}, lenient: {lenient}, depth: 0, \
+        "Rd(shapes: freeze(take {xs}), at: 0, asked: \"\", log: {log}, lenient: {lenient}, depth: 0, \
          p1: \"\", p2: \"\", p3: \"\", p4: \"\", k1: 0, k2: 0, k3: 0, k4: 0)"
     )
 }
@@ -822,7 +822,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
         out.push_str(
             "impl Deserialize[Celsius] {
   fn read[R: Reader](from: take R) -> (R, Result[Celsius, ReadError]) <alloc> {
-    (r, n) = Reader.signed(from)
+    (r, n) = Reader.signed(take from)
     match n {
       .ok(d) { (r, Result.ok(Celsius(degrees: d))) }
       .err(e) { (r, Result.err(e)) }
@@ -831,7 +831,7 @@ fn definitions(defs: &Defs, own_impl: bool) -> String {
 }
 
 impl Serialize[Celsius] {
-  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(to, value.degrees) }
+  fn write[W: Writer](value: Celsius, to: take W) -> W <alloc> { Writer.signed(take to, value.degrees) }
 }
 
 ",

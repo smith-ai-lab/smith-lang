@@ -56,6 +56,8 @@ fn interpolated(
             mutable: None,
             given_back: false,
             keeps: false,
+            take: None,
+            written: false,
         }],
         end: pos,
     }))

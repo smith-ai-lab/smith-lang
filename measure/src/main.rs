@@ -90,7 +90,7 @@ fn push(smith: &Path, work: &Path) {
             )
         };
         let (time, reps) = smith_time(smith, work, "push", &n.to_string(), |reps| {
-            (program(reps, "xs = push(xs, i)"), program(reps, ""))
+            (program(reps, "xs = push(take xs, i)"), program(reps, ""))
         });
         let rust = per_run(|| {
             let mut xs: Vec<u64> = Vec::new();
@@ -169,10 +169,10 @@ pub(crate) fn lex_for(
     let (pieces, input) = lexer_input(size);
     let program = |reps: usize, body: &str| {
         format!(
-            "{lexer_source}\nfn piece() -> List[Byte] <alloc> {{\n  [{piece}]\n}}\n\nfn main() <console, alloc> {{\n  p = piece()\n  mut last: Nat = 0\n  loop k in 0..{reps} {{\n    mut src: List[Byte] = []\n    loop r in 0..{pieces} {{\n      loop j in 0..p.size {{ src = push(src, p[j]) }}\n    }}\n    {body}\n  }}\n  print(\"{{last}}\")\n}}\n"
+            "{lexer_source}\nfn piece() -> List[Byte] <alloc> {{\n  [{piece}]\n}}\n\nfn main() <console, alloc> {{\n  p = piece()\n  mut last: Nat = 0\n  loop k in 0..{reps} {{\n    mut src: List[Byte] = []\n    loop r in 0..{pieces} {{\n      loop j in 0..p.size {{ src = push(take src, p[j]) }}\n    }}\n    {body}\n  }}\n  print(\"{{last}}\")\n}}\n"
         )
     };
-    let lexing = "match lex(src) {\n      .ok(tokens) { last = tokens.size }\n      .err(errors) { last = 0 }\n    }";
+    let lexing = "match lex(take src) {\n      .ok(tokens) { last = tokens.size }\n      .err(errors) { last = 0 }\n    }";
     let tokens = smith::count_tokens(&input).expect("the input lexes");
     let (time, reps) = smith_time_on(
         smith,

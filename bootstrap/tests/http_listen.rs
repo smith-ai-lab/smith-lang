@@ -674,7 +674,7 @@ fn main(args: List[str]) <net, time, alloc> {
       match listen_on(\"127.0.0.1\", .at(port)) {
         .ok(l) {
           sleep(ms(60000))
-          stop(l)
+          stop(take l)
         }
         .err(e) { }
       }

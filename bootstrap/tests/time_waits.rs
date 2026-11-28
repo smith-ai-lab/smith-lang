@@ -144,7 +144,7 @@ fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
     t = spawn { sleep(ms(1)) }
-    join(t)
+    join(take t)
   }
   print(\"slept\")
 }
@@ -172,7 +172,7 @@ fn main() <console, alloc, time> {
   loop i in 0..2000 {
     with tasks()
     t = spawn { sleep(ms(1)) }
-    join(t)
+    join(take t)
   }
   print(\"slept\")
 }
@@ -193,8 +193,8 @@ fn main() <console, alloc, time> {{
   with tasks()
   a = spawn {{ nap(300) }}
   b = spawn {{ nap(100) }}
-  x = join(a)
-  y = join(b)
+  x = join(take a)
+  y = join(take b)
   print(\"done {{x + y}}\")
 }}
 "
@@ -226,7 +226,7 @@ fn main() <console, alloc, time> {{
     t = spawn {{ sleeper(i) }}
   }}
   last = spawn {{ nap(400) }}
-  _ = join(last)
+  _ = join(take last)
   print(\"done\")
 }}
 "
@@ -270,7 +270,7 @@ fn main(args: List[str]) <console, alloc, net> {
     (.ok(port), .ok(wait)) {
       with tasks()
       t = spawn { waiting(port, wait) }
-      match join(t) {
+      match join(take t) {
         .ok(data) { print(\"data {data}\") }
         .err(e) { print(\"failed\") }
       }
@@ -327,7 +327,7 @@ fn main(args: List[str]) <console, alloc, time, diverge> {
     t = spawn { sleeper(i) }
   }
   last = spawn { sleeper(5000) }
-  _ = join(last)
+  _ = join(take last)
   end: u64 = since_1970(now())
   start: u64 = since_1970(before)
   print(\"done {wrapping_sub(end, start)}\")
@@ -366,7 +366,7 @@ fn main() <console, alloc, time> {
   with tasks()
   a = spawn { long() }
   b = spawn { short() }
-  _ = join(b)
+  _ = join(take b)
   print(\"done\")
 }
 ";
@@ -414,7 +414,7 @@ fn short() -> u64 <console, time, alloc, task> {
   with test_scheduler({seed})
   a = spawn {{ long() }}
   b = spawn {{ short() }}
-  _ = join(b)
+  _ = join(take b)
   print(\"done\")
 }}
 
@@ -475,7 +475,7 @@ fn main(args: List[str]) <console, alloc, diverge> {
       a = spawn { waits(1099511627781) }
       b = spawn { waits(5) }
       c = spawn { waits(9) }
-      print(\"{join(a)} {join(b)} {join(c)}\")
+      print(\"{join(take a)} {join(take b)} {join(take c)}\")
     }
     .err(e) { print(\"usage\") }
   }

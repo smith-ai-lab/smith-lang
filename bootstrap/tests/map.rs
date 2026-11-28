@@ -528,7 +528,7 @@ fn wrapping(a: Nat, b: Nat) -> Nat { if a > 1000 { b } else { wrapping_add(a, b)
 
 fn main() <console, alloc> {
   mut xs: List[Nat] = []
-  loop i in 0..50 { xs = push(xs, i) }
+  loop i in 0..50 { xs = push(take xs, i) }
   print("hello {same(total(xs))} {same("s")}")
 }
 "#;
@@ -674,7 +674,7 @@ fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
 /// cannot be left without its name.
 /// A text that is appended to in a function of its own, which holds the code
 /// of `<append>`.
-const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text <alloc> {\n  append(to, s)\n}\n\nfn main() <alloc, console> {\n  mut w = text()\n  w = put_text(w, \"hi\")\n  w = put_text(w, \"there\")\n  w = put_text(w, \"you\")\n  w = put_text(w, \"all\")\n  print(finish(w))\n}\n";
+const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text <alloc> {\n  append(take to, s)\n}\n\nfn main() <alloc, console> {\n  mut w = text()\n  w = put_text(take w, \"hi\")\n  w = put_text(take w, \"there\")\n  w = put_text(take w, \"you\")\n  w = put_text(take w, \"all\")\n  print(finish(take w))\n}\n";
 
 fn a_function_with_no_at_line_holds_no_place_but_its_own() {
     // A text that is appended to, in a function of its own, which holds the

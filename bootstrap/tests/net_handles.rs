@@ -46,21 +46,21 @@ fn faked[T](body: fn() -> T <net>) -> T <console, alloc> {{
       print(\"{{handle(l)}}\")
       .ok(connection({c}))
     }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{ .err(.closed(c.host)) }},
     write: fn(c, bytes) {{
       print(\"{{handle(c)}}\")
       .ok(())
     }},
-    close: fn(c) {{ n = release(c) }},
+    close: fn(c) {{ n = release(take c) }},
     bind_to: fn(host, port) {{ .ok(socket({s})) }},
     send: fn(s, to, bytes) {{
       print(\"{{handle(s)}}\")
       .ok(())
     }},
     receive: fn(s, most) {{ .err(.closed(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: body,
   )
 }}
@@ -74,11 +74,11 @@ fn use_all() <net, alloc> {{
             .ok(u) {{ }}
             .err(e) {{ }}
           }}
-          close(c)
+          close(take c)
         }}
         .err(e) {{ }}
       }}
-      stop(l)
+      stop(take l)
     }}
     .err(e) {{ }}
   }}
@@ -88,7 +88,7 @@ fn use_all() <net, alloc> {{
         .ok(u) {{ }}
         .err(e) {{ }}
       }}
-      unbind(s)
+      unbind(take s)
     }}
     .err(e) {{ }}
   }}
@@ -124,7 +124,7 @@ fn ask(word: str) -> Result[str, NetError] <net, alloc> {{
   try write(c, word.bytes)
   match try read(c, 64) {{
     .bytes(chunk) {{
-      match utf8(freeze(chunk.bytes)) {{
+      match utf8(freeze(take chunk.bytes)) {{
         .ok(text) {{ .ok(text) }}
         .err(e) {{ .err(.failed((\"peer.test:7\", \"not text\"))) }}
       }}
@@ -142,18 +142,18 @@ fn peer[T](body: fn() -> T <net>) -> T <alloc> {{
   net(
     listen_on: fn(host, port) {{ .err(.refused(host)) }},
     accept: fn(l) {{ .err(.refused(l.host)) }},
-    stop: fn(l) {{ n = release(l) }},
+    stop: fn(l) {{ n = release(take l) }},
     connect_to: fn(host, port) {{ .ok(connection({handle})) }},
     read: fn(c, most) {{
       said = copy(\"{{handle(c)}} read {{most}}\".bytes)
       if said.size >= 1 {{ .ok(.bytes(Chunk(bytes: said))) }} else {{ .ok(.ended) }}
     }},
     write: fn(c, bytes) {{ .ok(()) }},
-    close: fn(c) {{ n = release(c) }},
+    close: fn(c) {{ n = release(take c) }},
     bind_to: fn(host, port) {{ .err(.refused(host)) }},
     send: fn(s, to, bytes) {{ .err(.refused(s.host)) }},
     receive: fn(s, most) {{ .err(.refused(s.host)) }},
-    unbind: fn(s) {{ n = release(s) }},
+    unbind: fn(s) {{ n = release(take s) }},
     body: body,
   )
 }}
@@ -207,16 +207,16 @@ fn main() <console, net, alloc> {
     .ok(b) { print(\"read\") }
     .err(e) { print(said(e)) }
   }
-  close(c)
+  close(take c)
   l = listener(1)
   match accept(l) {
     .ok(k) {
       print(\"accepted\")
-      close(k)
+      close(take k)
     }
     .err(e) { print(said(e)) }
   }
-  stop(l)
+  stop(take l)
   s = socket(1)
   match send(s, Address(host: \"127.0.0.1\", port: 9), \"SHOULD NOT APPEAR\\n\".bytes) {
     .ok(u) { print(\"sent\") }
@@ -226,7 +226,7 @@ fn main() <console, net, alloc> {
     .ok(p) { print(\"received\") }
     .err(e) { print(said(e)) }
   }
-  unbind(s)
+  unbind(take s)
   print(\"standard output is open\")
 }
 ";

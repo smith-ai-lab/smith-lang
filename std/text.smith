@@ -9,13 +9,13 @@ pub fn text() -> Text {
 }
 
 pub fn append(t: take Text, s: str) -> Text <alloc> {
-  Text(bytes: __append(t.bytes, s))
+  Text(bytes: __append(take t.bytes, s))
 }
 
 pub fn append_ascii(t: take Text, b: 0..128) -> Text <alloc> {
-  Text(bytes: push(t.bytes, b))
+  Text(bytes: push(take t.bytes, b))
 }
 
 pub fn finish(t: take Text) -> str {
-  __finish(t.bytes)
+  __finish(take t.bytes)
 }

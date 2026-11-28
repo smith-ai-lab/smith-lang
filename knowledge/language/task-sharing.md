@@ -23,8 +23,8 @@ fn fetch_twice(url: str) -> Result[(List[Byte], List[Byte]), NetError] <net, all
   with tasks()
   ta = spawn { fetch(url) }
   tb = spawn { fetch(url) }
-  pa = try join(ta)
-  pb = try join(tb)
+  pa = try join(take ta)
+  pb = try join(take tb)
   .ok((pa, pb))
 }
 ```
@@ -42,11 +42,11 @@ fn snapshot() -> i32 {
   with tasks()
   t = spawn { n + 1 }
   n = 5
-  n + join(t)
+  n + join(take t)
 }
 ```
 
-The child read `n` as `1`, so `join(t)` is `2` and `snapshot()` is `7`.
+The child read `n` as `1`, so `join(take t)` is `2` and `snapshot()` is `7`.
 
 A child that assigns a `mut` is refused: "this child assigns `n`, which belongs to the function it is spawned in, and a child reads a `mut` as it was at the spawn", with the fix "give the new value back as the value of the child, and read it with `join`".
 
@@ -58,7 +58,7 @@ fn counted() -> i32 {
   mut n = 0
   with tasks()
   t = spawn { n = n + 1 }
-  join(t)
+  join(take t)
   n
 }
 ```
@@ -85,7 +85,7 @@ A `Key` is single-use, as [Lending and take](take.md) says. The parent that spaw
 use std.task (join, spawn, tasks)
 
 fn two_draws(key: take Key) -> f32 {
-  (k1, k2) = split(key)
+  (k1, k2) = split(take key)
   with tasks()
   ta = spawn { uniform(k1) }
   tb = spawn { uniform(k1) }

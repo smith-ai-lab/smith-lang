@@ -508,7 +508,7 @@ fn a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_ne
         let body = |declared: &str| {
             let mut out = format!("fn main() <console, alloc> {{\n  mut xs{declared} = []\n");
             for n in &p.numbers {
-                out.push_str(&format!("  xs = push(xs, {n})\n"));
+                out.push_str(&format!("  xs = push(take xs, {n})\n"));
             }
             out.push_str("  print(\"{xs.size}\")\n}\n");
             with_header(format!("use std.list (push)\n\n{out}"))
@@ -537,7 +537,7 @@ fn a_list_and_an_option_written_with_nothing_are_settled_by_what_they_are_given_
          fn total(xs: List[0..256]) -> Nat { xs.size }\n\n\
          fn used() -> Nat {\n  xs = []\n  total(xs)\n}\n\n\
          fn pick(c: bool) -> Option[Nat] {\n  mut o = .none\n  if c { o = .some(7) }\n  o\n}\n\n\
-         fn main() <console, alloc> {\n  mut ys = []\n  ys = push(ys, 3)\n  ys = push(ys, 200)\n  \
+         fn main() <console, alloc> {\n  mut ys = []\n  ys = push(take ys, 3)\n  ys = push(take ys, 200)\n  \
          print(\"{used()} {ys.size} {pick(true)} {pick(false)}\")\n}\n"
             .to_string(),
     );
@@ -582,7 +582,7 @@ fn prints(source: &str, said: &str) {
 fn a_list_written_with_nothing_that_a_loop_counter_is_pushed_to_has_the_range_of_the_counter() {
     prints(
         "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs = []\n  \
-         loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
+         loop i in 0..5 { xs = push(take xs, i) }\n  print(\"{xs.size}\")\n}\n",
         "5\n",
     );
 }
@@ -594,7 +594,7 @@ fn a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_
  {
     prints(
         "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[0..5] = []\n  \
-         loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
+         loop i in 0..5 { xs = push(take xs, i) }\n  print(\"{xs.size}\")\n}\n",
         "5\n",
     );
     prints(
@@ -630,7 +630,7 @@ fn a_push_of_the_program_is_not_the_push_that_settles_a_list() {
 fn a_list_pushed_to_for_another_name_is_settled_and_a_use_that_needs_less_says_what_was_inferred() {
     prints(
         "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs = []\n  \
-         ys = push(xs, 4)\n  print(\"{ys.size}\")\n}\n",
+         ys = push(take xs, 4)\n  print(\"{ys.size}\")\n}\n",
         "1\n",
     );
     let source = with_header(

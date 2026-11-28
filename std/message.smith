@@ -121,9 +121,9 @@ fn one_line(s: str) -> bool {
 fn small(t: str) -> str <alloc> {
   mut bytes: List[Byte] = []
   loop i in 0..t.size {
-    bytes = push(bytes, lowered(t[i]))
+    bytes = push(take bytes, lowered(t[i]))
   }
-  match utf8(freeze(bytes)) {
+  match utf8(freeze(take bytes)) {
     .ok(made) { made }
     .err(e) { "" }
   }
@@ -226,11 +226,11 @@ fn form_part(t: str) -> List[Byte] <alloc> {
   loop i in 0..t.size {
     b = t[i]
     if plain_in_form(b) {
-      made = push(made, b)
+      made = push(take made, b)
     } else if b == ' ' {
-      made = push(made, '+')
+      made = push(take made, '+')
     } else {
-      made = push(push(push(made, '%'), hex_digit(b / 16)), hex_digit(b % 16))
+      made = push(push(push(take made, '%'), hex_digit(b / 16)), hex_digit(b % 16))
     }
   }
   made
@@ -242,8 +242,8 @@ pub fn form(pairs: List[(str, str)]) -> Payload <alloc> {
   mut made: List[Byte] = []
   loop i in 0..pairs.size {
     (name, value) = pairs[i]
-    if i > 0 { made = push(made, '&') }
-    made = append(push(append(made, form_part(name)), '='), form_part(value))
+    if i > 0 { made = push(take made, '&') }
+    made = append(push(append(take made, form_part(name)), '='), form_part(value))
   }
   Payload(kind: header_value("application/x-www-form-urlencoded"), data: made)
 }

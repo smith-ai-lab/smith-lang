@@ -118,7 +118,7 @@ fn a_number_read_for_an_argument_of_a_function_called_by_call_is_held_to_the_ran
             "{USES}fn run[F, A, R](f: F, text: str) -> Option[R] <alloc>\n  \
              requires Function[F, A, R]\n  requires FromJson[A]\n  requires Discard[A]\n{{\n  \
              r: Result[A, ReadError] = from_json(text)\n  match r {{\n    \
-             .ok(args) {{ Option.some(Function.call(f, args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n"
+             .ok(args) {{ Option.some(Function.call(f, take args)) }}\n    .err(e) {{ Option.none }}\n  }}\n}}\n\n"
         );
         let mut main = String::from("fn main() <console, alloc> {\n");
         let mut said = String::new();

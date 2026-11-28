@@ -127,7 +127,7 @@ use std.net (Connection, NetError, accept, close, listen, net, read, write)
 
 fn turn(c: Connection) -> Result[(), NetError] <net, alloc> {
   match try read(c, 4096) {
-    .bytes(chunk) { write(c, freeze(chunk.bytes)) }
+    .bytes(chunk) { write(c, freeze(take chunk.bytes)) }
     .ended { .ok(()) }
   }
 }
@@ -136,12 +136,12 @@ fn echo_once(port: 1..65536) -> Result[(), NetError] <net, alloc> {
   with l = listen("::", .at(port))
   c = try accept(l)
   result = turn(c)
-  close(c)
+  close(take c)
   result
 }
 ```
 
-`echo_once` takes one connection, sends back what it reads, and ends; a connection that is finished before it says anything is answered with nothing. The connection is closed on every path, as a `try` that left before `close(c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
+`echo_once` takes one connection, sends back what it reads, and ends; a connection that is finished before it says anything is answered with nothing. The connection is closed on every path, as a `try` that left before `close(take c)` would drop it. `write` takes a `Slice`, which `freeze` makes of the bytes `read` gives.
 
 ## Ending a value in a handler
 
@@ -154,15 +154,15 @@ fn ended[T](body: fn() -> T <net>) -> T <alloc> {
   net(
     listen_on: fn(host, port) { .err(.refused("{host}:{port}")) },
     accept: fn(l) { .err(.refused("{l.host}:{l.port}")) },
-    stop: fn(l) { n = release(l) },
+    stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     read: fn(c, most) { .err(.closed("{c.host}:{c.port}")) },
     write: fn(c, bytes) { .err(.closed("{c.host}:{c.port}")) },
-    close: fn(c) { n = release(c) },
+    close: fn(c) { n = release(take c) },
     bind_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     send: fn(s, to, bytes) { .err(.closed("{to.host}:{to.port}")) },
     receive: fn(s, most) { .err(.closed("{s.host}:{s.port}")) },
-    unbind: fn(s) { n = release(s) },
+    unbind: fn(s) { n = release(take s) },
     body: body,
   )
 }
@@ -182,15 +182,15 @@ fn one_client[T](body: fn() -> T <net>) -> T <alloc> {
   net(
     listen_on: fn(host, port) { .ok(listener(1)) },
     accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
-    stop: fn(l) { n = release(l) },
+    stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     read: fn(c, most) { .ok(.ended) },
     write: fn(c, bytes) { .ok(()) },
-    close: fn(c) { n = release(c) },
+    close: fn(c) { n = release(take c) },
     bind_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     send: fn(s, to, bytes) { .err(.closed("{to.host}:{to.port}")) },
     receive: fn(s, most) { .err(.closed("{s.host}:{s.port}")) },
-    unbind: fn(s) { n = release(s) },
+    unbind: fn(s) { n = release(take s) },
     body: body,
   )
 }

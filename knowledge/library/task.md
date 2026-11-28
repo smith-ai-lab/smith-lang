@@ -4,7 +4,7 @@ title: Task
 description: std.task, with the effect task, and tasks, spawn, and join, which open a task group, start a child in it, and wait for the child's value.
 status: partial
 built:
-  - "`std.task` declares the effect `task`, with the operations `start` and `finish`, and has `tasks`, `spawn`, and `join`, with which `with tasks()` opens a group for the rest of its block, `spawn { e }` starts a child that runs `e` under the handlers in force where it is written, and `join(t)` gives the child's value, as [Tasks](../language/tasks.md) says"
+  - "`std.task` declares the effect `task`, with the operations `start` and `finish`, and has `tasks`, `spawn`, and `join`, with which `with tasks()` opens a group for the rest of its block, `spawn { e }` starts a child that runs `e` under the handlers in force where it is written, and `join(take t)` gives the child's value, as [Tasks](../language/tasks.md) says"
   - "a group that no scheduler is in force of is the scheduler of its children, with `epoll` on Linux and `kqueue` on macOS: it runs each child until it waits, and when every child waits for the system it waits in `epoll_wait` or `kevent`, on the one thread of the program, so a connection that says nothing holds up no other; a group inside a task that a scheduler runs hands each `spawn` to that scheduler, and never opens a second loop; a program with no group is built as it was"
   - "`test_scheduler(seed, body)` is a scheduler written in Smith, for tests: `body` is its first task, it runs the tasks that may run in an order that `seed` picks, a task that joins another is suspended until that one has ended, and one seed always gives one order, so a child that starts a grandchild and joins it gives the same value for every seed, and some seed shows each order of two tasks; it carries `diverge` and builds nothing, since a scheduler holds only numbers"
   - "`test_scheduler_with_io(seed, ready, body)` is the same with the I/O of a test: the handles of `ready` become ready one at a time, in that order, each when no task can run, and wake the tasks that wait for it with `test_ready(handle)`, so a test fixes the order in which tasks that wait for the system go on, for every seed"
@@ -54,6 +54,6 @@ use std.task (join, spawn, tasks)
 fn doubled(n: u64) -> u64 {
   with tasks()
   t = spawn { wrapping_mul(n, 2) }
-  join(t)
+  join(take t)
 }
 ```

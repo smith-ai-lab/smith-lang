@@ -6,6 +6,6 @@ use std.list (push)
 fn main() <console, alloc> {
   a: Byte = 250
   mut xs: List[Byte] = []
-  xs = push(xs, wrapping_add(a, 10))
+  xs = push(take xs, wrapping_add(a, 10))
   print("{xs.size} {wrapping_add(a, 10)} {bit_and(a, 15)} {checked_add(a, 10)}")
 }
