@@ -761,6 +761,7 @@ impl<'a> Lowering<'a> {
         let (a, b) = (&self.open(out, ty, a)[..], &self.open(out, ty, b)[..]);
         let parts: Vec<Ty> = match ty {
             Ty::Text => return self.ordered_text(out, a, b),
+            Ty::List(of) | Ty::Slice(of) => return self.ordered_elements(out, &of[0], a, b),
             Ty::Enum(e, args) => {
                 let layout = self.layout(*e, args);
                 let holds: Vec<Option<Ty>> = (defs.cases[*e].iter())
@@ -865,6 +866,69 @@ impl<'a> Lowering<'a> {
             };
             ends.push((out.current, vec![value]));
         }
+        out.join(&[BYTE], ends)[0]
+    }
+
+    /// How two lists or slices, whose addresses and sizes are the first two
+    /// of `a` and of `b`, stand: by the first elements that are not equal,
+    /// each by its type's `Ord`, and by their sizes when one is the start of
+    /// the other.
+    fn ordered_elements(
+        &mut self,
+        out: &mut Out<'a>,
+        element: &Ty,
+        a: &[form::Value],
+        b: &[form::Value],
+    ) -> form::Value {
+        let defs = self.typed.defs;
+        let scalars = self.scalars(element);
+        let (places, stride) = form::element(&scalars);
+        let places: Vec<(form::Type, u64)> = scalars.into_iter().zip(places).collect();
+        let stride = out.int(form::Bits::B64, i128::from(stride));
+        let zero = out.int(form::Bits::B64, 0);
+        let header = out.new_block();
+        let i = out.fresh(WORD);
+        out.blocks[header].params = vec![i];
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![zero],
+        });
+        out.current = header;
+        // The loop leaves when a list ends, and where two elements differ.
+        let at_a = out.compare(form::Compare::Equal, i, a[1]);
+        let at_b = out.compare(form::Compare::Equal, i, b[1]);
+        let arms = out.switch(at_a, 2);
+        let mut ends = Vec::new();
+        out.current = arms[1];
+        // `a` ended: it is below `b` unless `b` ended too.
+        let (less, equal) = (self.order_case(out, "less"), self.order_case(out, "equal"));
+        let ended = out.choose(at_b, equal, less);
+        ends.push((out.current, vec![ended]));
+        out.current = arms[0];
+        let arms = out.switch(at_b, 2);
+        out.current = arms[1];
+        let greater = self.order_case(out, "greater");
+        ends.push((out.current, vec![greater]));
+        out.current = arms[0];
+        let offset = out.binary(form::Binary::Mul, i, stride);
+        let (p, q) = (
+            out.binary(form::Binary::Add, a[0], offset),
+            out.binary(form::Binary::Add, b[0], offset),
+        );
+        let (x, y) = (self.load(out, p, &places), self.load(out, q, &places));
+        let order = self.part_order(out, element, [x, y].concat());
+        let arms = out.switch(order, 3);
+        for name in ["less", "greater"] {
+            out.current = arms[defs.case_of(defs.order, name).expect("a case")];
+            ends.push((out.current, vec![order]));
+        }
+        out.current = arms[defs.case_of(defs.order, "equal").expect("a case")];
+        let one = out.int(form::Bits::B64, 1);
+        let next = out.binary(form::Binary::Add, i, one);
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![next],
+        });
         out.join(&[BYTE], ends)[0]
     }
 

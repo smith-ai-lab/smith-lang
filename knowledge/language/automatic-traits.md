@@ -6,7 +6,8 @@ status: partial
 built:
   - "`Ord` given to a `str`, a struct, an enum, a tuple, `bool`, and `()`, from their parts as the page says, and `without Ord for T`, which takes it away, and a type's own `impl Ord`, which replaces it"
   - "An `impl Eq[T]` that a program writes is refused, as `==` is only the `Eq` a type is given"
-  - "`Eq` of a `List` and of a `Slice`, which are equal when they have the same size and equal elements in order, and a list whose element has no `Eq` has none; not `Ord` of a list or a slice"
+  - "`Eq` of a `List` and of a `Slice`, which are equal when they have the same size and equal elements in order, and a list whose element has no `Eq` has none"
+  - "`Ord` of a `List` and of a `Slice`, which orders them by their first elements that are not equal and puts one that is the start of another first, and a list whose element has no `Ord` has none"
   - "`Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` of a struct, which leave its proof fields out"
   - "`without Eq for T`, which takes away the `Eq` a struct was given, and a struct with a part that has no `Eq` has none"
 ---

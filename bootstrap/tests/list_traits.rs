@@ -1,5 +1,7 @@
 //! `Eq` of a `List` and of a `Slice`, which are equal when they have the same
-//! size and equal elements in order, and what a list holds that lacks `Eq`.
+//! size and equal elements in order, `Ord`, which orders them by their first
+//! unequal elements and puts one that is the start of another first, and what
+//! a list holds that lacks either.
 //! The `Fmt` and `Repr` of a list are held by the generator of `reprs.rs`.
 
 use smith::check;
@@ -10,6 +12,7 @@ use crate::Test;
 use crate::generate::{self, Gen};
 use crate::numbers::with_header;
 use crate::reprs;
+use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
     (
@@ -32,7 +35,20 @@ pub const ONCE: &[Test] = &[
         "a_list_whose_element_has_no_eq_is_refused_naming_the_element_in_every_place",
         a_list_whose_element_has_no_eq_is_refused_naming_the_element_in_every_place,
     ),
+    (
+        "two_lists_or_slices_are_ordered_as_rust_orders_two_vecs_alone_and_in_a_tuple_and_a_struct",
+        two_lists_or_slices_are_ordered_as_rust_orders_two_vecs_alone_and_in_a_tuple_and_a_struct,
+    ),
+    (
+        "a_list_whose_element_has_no_ord_is_refused_naming_the_element_in_every_place",
+        a_list_whose_element_has_no_ord_is_refused_naming_the_element_in_every_place,
+    ),
 ];
+
+pub const MACHINE: &[Test] = &[(
+    "every_executable_orders_two_lists_or_slices_as_rust_orders_two_vecs",
+    every_executable_orders_two_lists_or_slices_as_rust_orders_two_vecs,
+)];
 
 fn stdout(source: &str) -> String {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for\n{source}"));
@@ -42,7 +58,7 @@ fn stdout(source: &str) -> String {
 }
 
 /// A value of an element type, which two lists are made of.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Item {
     Number(u64),
     Text(&'static str),
@@ -221,4 +237,154 @@ fn a_list_of_what_lacks_fmt_or_repr_is_refused_naming_the_element() {
             case.source
         );
     });
+}
+
+/// Two lists of elements of one type, where one is often the other with an
+/// element changed, or the start of the other, and where each is held: alone
+/// as a `List`, alone as a `Slice`, in a tuple, or in a struct.
+fn ordered_pair(g: &mut Gen) -> (Kind, Vec<Item>, Vec<Item>, usize) {
+    let kind = match g.below(7) {
+        0..=4 => LEAVES[g.below(5)],
+        5 => TWO,
+        _ => Kind::List(&TWO),
+    };
+    let xs: Vec<Item> = (0..g.below(4)).map(|_| kind.item(g)).collect();
+    let mut ys = xs.clone();
+    match g.below(5) {
+        0 => ys = (0..g.below(4)).map(|_| kind.item(g)).collect(),
+        1 if !ys.is_empty() => {
+            let at = g.below(ys.len());
+            ys[at] = kind.item(g);
+        }
+        2 => ys.push(kind.item(g)),
+        3 => ys.truncate(g.below(ys.len() + 1)),
+        _ => {}
+    }
+    (kind, xs, ys, g.below(4))
+}
+
+/// The lines of `main` that compare the `n`th pair, and what they print, as
+/// Rust orders two `Vec`s. A list alone is compared by every operator, by a
+/// function bound by `Ord`, and by `==`, which the order must agree with.
+fn ordered_lines(n: usize, pair: &(Kind, Vec<Item>, Vec<Item>, usize)) -> (String, String) {
+    let (kind, xs, ys, place) = pair;
+    let written = |of: &[Item]| {
+        let items: Vec<String> = of.iter().map(expr).collect();
+        format!("[{}]", items.join(", "))
+    };
+    let collection = if *place == 1 && matches!(kind, Kind::Number) {
+        "Slice"
+    } else {
+        "List"
+    };
+    let (x, y) = (format!("xs{n}"), format!("ys{n}"));
+    let mut lines = format!(
+        "  {x}: {collection}[{}] = {}\n  {y}: {collection}[{}] = {}\n",
+        kind.written(),
+        written(xs),
+        kind.written(),
+        written(ys)
+    );
+    let (asked, want) = match place {
+        0 | 1 => (
+            format!(
+                "{{{x} < {y}}} {{{x} <= {y}}} {{{x} > {y}}} {{{x} >= {y}}} {{less({x}, {y})}} {{less({y}, {x})}} {{{x} == {y}}}"
+            ),
+            format!(
+                "{} {} {} {} {} {} {}",
+                xs < ys,
+                xs <= ys,
+                xs > ys,
+                xs >= ys,
+                xs < ys,
+                ys < xs,
+                xs == ys
+            ),
+        ),
+        2 => (
+            format!("{{({x}, 1) < ({y}, 0)}}"),
+            format!("{}", (xs, 1) < (ys, 0)),
+        ),
+        _ => (
+            format!("{{Held(items: {x}) < Held(items: {y})}}"),
+            format!("{}", xs < ys),
+        ),
+    };
+    lines += &format!("  print(\"{asked}\")\n");
+    (lines, want + "\n")
+}
+
+/// A program that compares each pair, and what it prints.
+fn ordered_program(pairs: &[(Kind, Vec<Item>, Vec<Item>, usize)]) -> (String, String) {
+    let (mut body, mut want) = (String::new(), String::new());
+    for (n, pair) in pairs.iter().enumerate() {
+        let (lines, said) = ordered_lines(n, pair);
+        body += &lines;
+        want += &said;
+    }
+    let program = with_header(format!(
+        "struct Record {{\n  number: Nat\n  text: str\n}}\n\nstruct Held[T] {{\n  items: List[T]\n}}\n\nfn less[T: Ord](x: T, y: T) -> bool {{ x < y }}\n\nfn main() <console, alloc> {{\n{body}}}\n"
+    ));
+    (program, want)
+}
+
+fn two_lists_or_slices_are_ordered_as_rust_orders_two_vecs_alone_and_in_a_tuple_and_a_struct() {
+    generate::check(4024, 40, ordered_pair, |pair| {
+        let (program, want) = ordered_program(std::slice::from_ref(pair));
+        let said = stdout(&program);
+        // Neither is below the other exactly when the two are equal.
+        if let [_, _, _, _, below, above, equal] = said.split_whitespace().collect::<Vec<_>>()[..] {
+            assert_eq!(
+                below == "false" && above == "false",
+                equal == "true",
+                "for\n{program}"
+            );
+        }
+        assert_eq!(said, want, "for\n{program}");
+    });
+}
+
+fn every_executable_orders_two_lists_or_slices_as_rust_orders_two_vecs() {
+    let pairs: Vec<_> = (0..12)
+        .map(|case| generate::sample(4025, case, ordered_pair))
+        .collect();
+    let (program, want) = ordered_program(&pairs);
+    assert_eq!(stdout(&program), want, "for\n{program}");
+    let outcome = scalar::Outcome {
+        stdout: want.into_bytes(),
+        status: 0,
+    };
+    for target in runnable() {
+        runs_as(program.as_bytes(), target, &outcome);
+    }
+}
+
+fn a_list_whose_element_has_no_ord_is_refused_naming_the_element_in_every_place() {
+    let program = |ty: &str, make: &str, ask: &str| {
+        with_header(format!(
+            "struct Hidden {{\n  key: str\n}}\n\nwithout Ord for Hidden\n\nfn main() <console, alloc> {{\n  xs: {ty} = {make}\n  ys: {ty} = {make}\n  print(\"{{{ask}}}\")\n}}\n"
+        ))
+    };
+    for (ty, make) in [
+        ("List[Hidden]", "[]"),
+        ("Slice[Hidden]", "[]"),
+        ("List[List[Hidden]]", "[]"),
+        ("List[(Nat, Hidden)]", "[]"),
+        ("(List[Hidden], Nat)", "([], 1)"),
+        ("Option[List[Hidden]]", ".none"),
+    ] {
+        // `without Ord` leaves the list its `Eq`.
+        let source = program(ty, make, "xs == ys");
+        let errors = check(source.as_bytes()).err().unwrap_or_default();
+        assert!(
+            !errors.iter().any(|e| e.message.contains("no implementation")),
+            "{errors:?} for\n{source}"
+        );
+        let source = program(ty, make, "xs < ys");
+        let errors = check(source.as_bytes()).expect_err("a list of what has no Ord");
+        assert!(
+            errors.iter().any(|e| e.message.contains("as `Hidden` has no `Ord`")),
+            "{errors:?} for\n{source}"
+        );
+    }
 }
