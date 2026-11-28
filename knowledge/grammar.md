@@ -120,7 +120,7 @@ match      = "match" expr "{" { pattern block } "}" ;
 for        = "for" IDENT { "," IDENT } block ;
 loop       = "loop" [ ( IDENT | tuple_pat ) "in" expr { "invariant" expr } | "decreases" expr { "," expr } ] block ;
 lambda     = [ "fn" [ generics ] "(" lambda_arg { "," lambda_arg } ")" [ "->" type ] ] block ;
-lambda_arg = ( IDENT | tuple_pat ) [ ":" type ] ;
+lambda_arg = ( IDENT | tuple_pat ) [ ":" [ "mut" ] type ] ;   (* `mut` before the type of a parameter the lambda changes for its caller *)
 
 type       = statement
            | IDENT [ "[" type_arg { "," type_arg } "]" ]

@@ -203,9 +203,14 @@ fn names_struct_generic(kept: Kept, types: &[&Type]) -> bool {
     named.iter().any(|n| generics.iter().any(|g| g.name == *n))
 }
 
-/// The function the lambda becomes, if it holds nothing lent and writes every
-/// type that its function would need.
+/// The function the lambda becomes, if it holds nothing lent, changes no
+/// parameter, and writes every type that its function would need.
 fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
+    // A lambda that changes a parameter is passed to a parameter of a
+    // function type, and is not kept.
+    if l.mutable.contains(&true) {
+        return None;
+    }
     // The type a parameter or the result is left out with is the one the
     // function type that decides it has, when the lambda has as many parameters.
     let (types, result) = written_types(l, kept)?;
@@ -221,6 +226,7 @@ fn lift_lambda(cx: &Cx, l: &Lambda, kept: Kept) -> Option<Function> {
             take: false,
             mutable: false,
             takes: Vec::new(),
+            muts: Vec::new(),
             effects: Vec::new(),
             by_name: false,
         })

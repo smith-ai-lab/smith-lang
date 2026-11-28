@@ -466,8 +466,8 @@ impl Parser<'_> {
         } else {
             None
         };
-        let (ty, takes, effects) = match proof {
-            Some(statement) => (statement, Vec::new(), Vec::new()),
+        let (ty, (takes, muts), effects) = match proof {
+            Some(statement) => (statement, (Vec::new(), Vec::new()), Vec::new()),
             None => {
                 self.name_bound_ok = self.bound_names_allowed && self.tok() != &Tok::Keyword("fn");
                 let read = self.ty_taking();
@@ -509,50 +509,69 @@ impl Parser<'_> {
             take,
             mutable,
             takes,
+            muts,
             effects,
             by_name: false,
         })
     }
 
     /// Parses a function type, from its `fn`: the types of its parameters in
-    /// parentheses, each marked `take` if the function owns it, then
-    /// `-> R` if it gives a result, and the effects it carries. It gives
-    /// whether each parameter is marked `take`, and the effects it carries,
-    /// which only the type of a parameter keeps: the effects of any other
-    /// function type are not built.
-    pub(super) fn function_type(
-        &mut self,
-        kept: bool,
-    ) -> Result<(Type, Vec<bool>, Effects), Error> {
+    /// parentheses, each marked `take` if the function owns it or `mut` if it
+    /// changes it, then `-> R` if it gives a result, and the effects it
+    /// carries. It gives whether each parameter is marked `take` and `mut`,
+    /// and the effects it carries, which only the type of a parameter keeps:
+    /// the effects of any other function type are not built, and nor is
+    /// `mut` in one. A parameter marked `mut` is lowered as a function's is:
+    /// the function takes it and gives it back, before what it gives.
+    pub(super) fn function_type(&mut self, kept: bool) -> Result<(Type, Marks, Effects), Error> {
         let pos = self.pos();
         self.bump();
         if self.tok() != &Tok::Punct("(") {
             return Err(self.expected("`(` and the function type's parameters", self.tok()));
         }
         let marked = self.list(|p| {
-            if p.tok() == &Tok::Keyword("mut") {
-                p.unbuilt
-                    .push(Error::unsupported(p.pos(), "`mut` in a function type"));
+            let at = p.pos();
+            let mutable = p.tok() == &Tok::Keyword("mut");
+            if mutable {
                 p.bump();
             }
-            let take = p.taking();
-            Ok((take, p.ty()?))
+            let take = !mutable && p.taking();
+            Ok(((take, mutable, at), p.ty()?))
         })?;
-        let (takes, mut args): (Vec<bool>, Vec<Type>) = marked.into_iter().unzip();
-        if self.tok() == &Tok::Punct("->") {
+        let (marks, mut args): (Vec<(bool, bool, Pos)>, Vec<Type>) = marked.into_iter().unzip();
+        let nothing = Type {
+            name: String::new(),
+            pos,
+            args: Vec::new(),
+            function: false,
+            range: None,
+            statement: None,
+            sizes: Vec::new(),
+        };
+        let own = if self.tok() == &Tok::Punct("->") {
             self.bump();
-            args.push(self.ty()?);
+            Some(self.ty()?)
         } else {
-            args.push(Type {
-                name: String::new(),
-                pos,
-                args: Vec::new(),
-                function: false,
-                range: None,
-                statement: None,
-                sizes: Vec::new(),
-            });
+            None
+        };
+        let changed: Vec<Type> = (marks.iter().zip(&args))
+            .filter(|((_, mutable, _), _)| *mutable)
+            .map(|(_, t)| t.clone())
+            .collect();
+        if let (false, Some((_, _, at))) = (kept, marks.iter().find(|m| m.1)) {
+            self.unbuilt.push(Error::unsupported(
+                *at,
+                "`mut` in a function type that is not the type of a parameter",
+            ));
         }
+        args.push(match (&changed[..], own) {
+            ([], own) => own.unwrap_or(nothing),
+            ([one], None) => one.clone(),
+            (_, own) => Type {
+                args: changed.iter().cloned().chain(own).collect(),
+                ..nothing
+            },
+        });
         let open = self.pos();
         let mut effects = self.effects()?;
         if !kept && !effects.is_empty() {
@@ -569,7 +588,9 @@ impl Parser<'_> {
             statement: None,
             sizes: Vec::new(),
         };
-        Ok((function, takes, effects))
+        let takes = marks.iter().map(|(t, m, _)| *t || *m).collect();
+        let muts = marks.iter().map(|m| m.1).collect();
+        Ok((function, (takes, muts), effects))
     }
 
     /// Parses what follows a name, which is at `pos` and after the name
@@ -635,6 +656,7 @@ impl Parser<'_> {
         let mut result = None;
         let mut binds = Vec::new();
         let mut generics = Vec::new();
+        let mut mutable = Vec::new();
         if self.tok() == &Tok::Keyword("fn") {
             self.bump();
             generics = self.generics()?;
@@ -656,12 +678,16 @@ impl Parser<'_> {
                 } else {
                     params.push(self.defined("a parameter's name")?);
                 }
-                types.push(if self.tok() == &Tok::Punct(":") {
+                let typed = self.tok() == &Tok::Punct(":");
+                if typed {
                     self.bump();
-                    Some(self.ty()?)
-                } else {
-                    None
-                });
+                }
+                let changes = typed && self.tok() == &Tok::Keyword("mut");
+                if changes {
+                    self.bump();
+                }
+                mutable.push(changes);
+                types.push(if typed { Some(self.ty()?) } else { None });
                 self.skip_newlines();
                 match self.tok() {
                     Tok::Punct(",") => {
@@ -688,6 +714,7 @@ impl Parser<'_> {
             generics,
             params,
             types,
+            mutable,
             result,
             body,
             end,

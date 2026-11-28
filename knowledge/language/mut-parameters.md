@@ -11,6 +11,9 @@ built:
   - "one place passed twice, or a place and a part of it, refused"
   - "a parameter marked `mut`, or a part of it without `Copy`, refused where it is stored, bound to another name, given to a `take` parameter, or returned, and any lambda that reads or assigns it refused"
   - "what `arith` knew of a value before a call that changes it not known after, but what the function [ensures](contracts.md#what-the-function-gives) of it"
+  - "`mut` before a parameter of a trait's function, of an `impl`'s, of an operation of an effect, and of a function type that is the type of a parameter, each lowered as a function's is, so a program is built to the code of the one written with `take` and the value added to the result, and a call of each, a trait's function called in a function bound by the trait among them, marks `mut` and keeps what it gives as a function's call does"
+  - "an `impl` that marks `mut` a parameter its trait's function does not, or does not mark one it does, refused at the parameter, naming the trait"
+  - "a lambda that marks a parameter `mut` with its type, passed where a function type or an operation marks it, which changes it as a function does, and a lambda that marks a parameter the function type or the operation does not, or does not mark one it does, refused at the parameter; a lambda that changes a parameter and gives a result with its result's type left out, one bound to a name, and `mut` in a function type that is not the type of a parameter are not built"
 ---
 
 # Changing a value in place
@@ -92,6 +95,55 @@ This prints `2 1`. Such a function means taking the value and giving it back bef
 
 What the function gives is used as any value is. It is bound or assigned by the whole line, as `t = next(mut c)`, `mut t = next(mut c)`, or `d.last = next(mut c)`, and `show(next(mut c))` is refused. `next(mut c)` on a line of its own is refused, as a `u8` that nothing uses is, and `_ = next(mut c)` throws it away. A function that gives nothing is called on a line of its own, and binding or assigning its call is refused.
 
+## In a trait, a function type, and an effect
+
+A trait's function, a function type, and an operation of an [effect](effect-declarations.md) mark a parameter `mut` as a function does, and it means what it means for a function. `fn step(t: mut T)` in a trait is `fn step(t: take T) -> T`, `fn(mut Count)` is `fn(take Count) -> Count`, and with a result `fn(mut Count) -> u8` is `fn(take Count) -> (Count, u8)`. They are built to the same code.
+
+```
+use std.console (console, print)
+use std.bits (u8)
+
+struct Count {
+  n: u8
+}
+
+trait Step[T] {
+  fn step(t: mut T)
+}
+
+impl Step[Count] {
+  fn step(t: mut Count) {
+    if t.n < 9 { t.n = t.n + 1 }
+  }
+}
+
+fn twice[T: Step](t: mut T) {
+  step(mut t)
+  step(mut t)
+}
+
+fn main() <console, alloc> {
+  mut c = Count(n: 0)
+  twice(mut c)
+  print("{c.n}")
+}
+```
+
+This prints `2`. A trait's function is called with `mut` as any function is, in a function that the trait bounds as anywhere else.
+
+- **An `impl` marks what its trait marks.** `fn step(t: Count)` in the `impl` above is refused: "`step` changes `t` for its caller in `Step`, so an implementation marks it `mut`", with the fix "write `t: mut Count`". A parameter that the trait's function does not mark, marked `mut` in an `impl`, is refused too: "`t` is marked `mut`, where `step` does not change it in `Step`".
+- **A lambda marks what its function type marks.** A lambda writes `mut` before the type of a parameter it changes, as a function does: `fn(t: mut Count) { t.n = 0 }`. Passed where a function type marks the parameter `mut`, a lambda that does not mark it is refused: "the function this lambda is passed as changes `t` for its caller, so the lambda marks it `mut`", and one that marks a parameter the function type does not mark is refused too.
+- **A handler's lambda marks what its operation marks.** An operation `fn bump(c: mut Count)` is called as `bump(mut c)`, and the lambda a handler gives for it is written `fn(c: mut Count) { ... }`, held to the operation as a lambda is to a function type.
+
+```
+fn apply(f: fn(mut Count), c: mut Count) {
+  f(mut c)
+  f(mut c)
+}
+```
+
+`apply(fn(t: mut Count) { if t.n < 9 { t.n = t.n + 1 } }, mut c)` adds 2 to `c.n`, as `twice(mut c)` does.
+
 ## The forms
 
 | Written | Means |
@@ -102,5 +154,7 @@ What the function gives is used as any value is. It is bound or assigned by the 
 | `fn f(x: mut T)` and `fn f(x: take T) -> T` | The same function |
 | `t = f(mut x)`, `s.field = f(mut x)` | A call that changes `x` and keeps what `f` gives |
 | `fn f(x: mut T) -> R` and `fn f(x: take T) -> (T, R)` | The same function |
+| `fn(mut T)` and `fn(take T) -> T` | The same function type |
+| `fn(x: mut T) { e }` | A lambda that changes `x` for its caller |
 
 Next: [Values used exactly once](resources.md)

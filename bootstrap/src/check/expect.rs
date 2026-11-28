@@ -290,6 +290,7 @@ impl Writer<'_> {
             generics: Vec::new(),
             params: Vec::new(),
             types: Vec::new(),
+            mutable: Vec::new(),
             result: None,
             body: vec![Stmt::Expr(failed)],
             end: p,
