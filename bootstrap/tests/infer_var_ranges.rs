@@ -1,7 +1,7 @@
-//! The range of a `var` with no stated type is the smallest that holds every
+//! The range of a `mut` with no stated type is the smallest that holds every
 //! value it is given, solved in the order the body is read.
 //!
-//! Every generator knows the values it gives each `var`, so what it expects
+//! Every generator knows the values it gives each `mut`, so what it expects
 //! comes from there and shares nothing with the compiler.
 
 use smith::scalar::{self, Outcome};
@@ -93,7 +93,7 @@ enum Step {
 
 #[derive(Debug)]
 struct Program {
-    /// What the `var`s are first given.
+    /// What the `mut`s are first given.
     start: [i128; 2],
     steps: Vec<Step>,
 }
@@ -133,7 +133,7 @@ fn program(g: &mut Gen) -> Program {
     Program { start, steps }
 }
 
-/// The range each `var` has, from what the steps give it, read in order:
+/// The range each `mut` has, from what the steps give it, read in order:
 /// the least and greatest value of each, with the greatest not included.
 fn ranges(p: &Program) -> [(i128, i128); 2] {
     let mut total = [(p.start[0], p.start[0]), (p.start[1], p.start[1])];
@@ -162,17 +162,17 @@ fn ranges(p: &Program) -> [(i128, i128); 2] {
     total.map(|(lo, hi)| (lo, hi + 1))
 }
 
-/// The program, with each `var` written as the range `stated` gives it, or
+/// The program, with each `mut` written as the range `stated` gives it, or
 /// with no range written.
 fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
     let mut out = String::from("fn need(x: 0..30) -> 0..30 { x }\n\nfn f(c: Byte) {\n");
     for v in 0..2 {
         match stated {
             Some(r) => out.push_str(&format!(
-                "  var {}: {}..{} = {}\n",
+                "  mut {}: {}..{} = {}\n",
                 NAMES[v], r[v].0, r[v].1, p.start[v]
             )),
-            None => out.push_str(&format!("  var {} = {}\n", NAMES[v], p.start[v])),
+            None => out.push_str(&format!("  mut {} = {}\n", NAMES[v], p.start[v])),
         }
     }
     for s in &p.steps {
@@ -192,7 +192,7 @@ fn source(p: &Program, stated: Option<[(i128, i128); 2]>) -> String {
     with_header(out)
 }
 
-/// A program with a `var` that no range is written for is accepted exactly
+/// A program with a `mut` that no range is written for is accepted exactly
 /// when the same program, with the range its values need written, is, and is
 /// the same program when it is: the same executable, and the same errors.
 fn a_var_with_no_range_written_is_what_stating_the_range_its_values_need_is() {
@@ -224,7 +224,7 @@ fn line_of(source: &str, text: &str) -> usize {
 
 #[derive(Debug)]
 struct Narrow {
-    /// What the `var` is first given, then in each arm of an `if`.
+    /// What the `mut` is first given, then in each arm of an `if`.
     start: i128,
     then: i128,
     otherwise: i128,
@@ -244,7 +244,7 @@ fn narrow(g: &mut Gen) -> Narrow {
     }
 }
 
-/// A `var` given a value in each arm of an `if` has the range of the least
+/// A `mut` given a value in each arm of an `if` has the range of the least
 /// to the greatest of them, and passing it to a parameter whose range is below
 /// the greatest is refused with the range inferred, the assignment that set its
 /// top, and the use that needs less, each with its line.
@@ -254,14 +254,14 @@ fn a_use_that_needs_less_than_the_inferred_range_says_what_was_inferred_from_wha
         let limit = n.limit;
         let source = with_header(format!(
             "fn need(x: 0..{limit}) -> 0..{limit} {{ x }}\n\n\
-             fn f(c: Byte) {{\n  var x = {}\n  if c < 2 {{ x = {} }} else {{ x = {} }}\n  need(x)\n}}\n\n\
+             fn f(c: Byte) {{\n  mut x = {}\n  if c < 2 {{ x = {} }} else {{ x = {} }}\n  need(x)\n}}\n\n\
              fn main() {{\n  f(1)\n}}\n",
             n.start, n.then, n.otherwise
         ));
         let errors = lower(source.as_bytes()).expect_err("a use that needs less");
         let top_line = line_of(&source, &format!("if c < 2 {{ x = {} }} else {{ x = {} }}", n.then, n.otherwise));
         let use_line = line_of(&source, "need(x)");
-        let start_line = line_of(&source, &format!("var x = {}", n.start));
+        let start_line = line_of(&source, &format!("mut x = {}", n.start));
         let said = errors
             .iter()
             .find(|e| e.pos.line == use_line)
@@ -279,17 +279,17 @@ fn a_use_that_needs_less_than_the_inferred_range_says_what_was_inferred_from_wha
     });
 }
 
-/// A `var` that a loop gives a value that depends on the `var` itself in a way
+/// A `mut` that a loop gives a value that depends on the `mut` itself in a way
 /// no template covers has no range inferred: the error says that it is changed
 /// by itself in the loop and that its range is not inferred, and the fix states
 /// a range.
 fn a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state() {
     for step in ["acc = acc * i", "acc = acc * 2"] {
         let source = with_header(format!(
-            "fn sum(n: 0..11) -> 0..101 {{\n  var acc = 0\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\n\
+            "fn sum(n: 0..11) -> 0..101 {{\n  mut acc = 0\n  loop i in 0..n {{\n    {step}\n  }}\n  acc\n}}\n\n\
              fn main() {{\n  x = sum(3)\n}}\n"
         ));
-        let errors = lower(source.as_bytes()).expect_err("a var changed by itself");
+        let errors = lower(source.as_bytes()).expect_err("a mut changed by itself");
         let at = line_of(&source, step);
         let said = errors
             .iter()
@@ -302,16 +302,16 @@ fn a_var_a_loop_changes_by_itself_is_refused_with_the_range_to_state() {
             "{said:?}"
         );
         let fix = said.fix.as_deref().expect("a fix");
-        assert!(fix.contains("var acc: ") && fix.contains("= 0"), "{fix}");
+        assert!(fix.contains("mut acc: ") && fix.contains("= 0"), "{fix}");
     }
 }
 
-/// A body of `lines` lines, each pair of which gives one of a few `var`s a value
+/// A body of `lines` lines, each pair of which gives one of a few `mut`s a value
 /// and reads it.
 fn long_body(lines: usize) -> String {
     let mut out = String::from("fn need(x: 0..60) -> 0..60 { x }\n\nfn f(c: Byte) {\n");
     for v in 0..8 {
-        out.push_str(&format!("  var v{v} = {v}\n"));
+        out.push_str(&format!("  mut v{v} = {v}\n"));
     }
     for k in 0..lines / 2 {
         let v = k % 8;
@@ -337,7 +337,7 @@ fn cost(lines: usize) -> f64 {
     spent.as_secs_f64()
 }
 
-/// Checking a body that has such `var`s takes time in proportion to its size:
+/// Checking a body that has such `mut`s takes time in proportion to its size:
 /// five times the lines take about five times as long, far less than the
 /// twenty-five times that looking at the body again for each line would. The
 /// bound leaves room for what a busy machine adds to a longer body.
@@ -355,13 +355,13 @@ fn run(source: &str) -> Outcome {
     scalar::run(&program)
 }
 
-/// `var last = 0` that a `loop` gives the counter, `last = i`, is the `0` and
+/// `mut last = 0` that a `loop` gives the counter, `last = i`, is the `0` and
 /// each `i`, so `small(last)` of a parameter that holds them is accepted and
 /// prints the last counter.
 fn a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_fits_is_accepted() {
     let source = with_header(
         "fn small(x: 0..10) -> 0..10 { x }\n\n\
-         fn main() <console, alloc> {\n  var last = 0\n  loop i in 0..5 { last = i }\n  print(\"{small(last)}\")\n}\n"
+         fn main() <console, alloc> {\n  mut last = 0\n  loop i in 0..5 { last = i }\n  print(\"{small(last)}\")\n}\n"
             .to_string(),
     );
     assert_eq!(
@@ -374,14 +374,14 @@ fn a_var_given_a_loops_counter_is_the_range_of_the_counter_and_a_use_of_it_that_
     );
 }
 
-/// `var sum = 0` that a `loop` gives itself times a number has no range
+/// `mut sum = 0` that a `loop` gives itself times a number has no range
 /// inferred, and is refused at the assignment, with the range to state.
 fn a_var_that_a_loop_gives_itself_times_a_number_is_refused_at_the_assignment_with_the_range_to_state() {
     let source = with_header(
-        "fn main() <console, alloc> {\n  var sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
+        "fn main() <console, alloc> {\n  mut sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
             .to_string(),
     );
-    let errors = lower(source.as_bytes()).expect_err("a var changed by itself");
+    let errors = lower(source.as_bytes()).expect_err("a mut changed by itself");
     let at = line_of(&source, "loop i in 0..5 { sum = sum * 2 }");
     let said = errors
         .iter()
@@ -393,11 +393,11 @@ fn a_var_that_a_loop_gives_itself_times_a_number_is_refused_at_the_assignment_wi
             && said.message.contains("not inferred"),
         "{said:?}"
     );
-    assert!(said.fix.as_deref().is_some_and(|f| f.contains("var sum: ")), "{said:?}");
+    assert!(said.fix.as_deref().is_some_and(|f| f.contains("mut sum: ")), "{said:?}");
     assert_eq!(errors.len(), 1, "{errors:?}");
 }
 
-/// One step of a body that gives the `var` `v` a value and prints it.
+/// One step of a body that gives the `mut` `v` a value and prints it.
 #[derive(Clone, Debug)]
 enum Turn {
     /// `loop i in 0..k { v = i }`.
@@ -419,11 +419,11 @@ fn turns(g: &mut Gen) -> Vec<Turn> {
         .collect()
 }
 
-/// A `var` given loop counters and numbers, and never itself, never makes a
+/// A `mut` given loop counters and numbers, and never itself, never makes a
 /// program that is refused, and the program prints what the steps give.
 fn every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_and_prints_what_the_steps_give() {
     generate::check(63, 60, turns, |steps| {
-        let mut source = String::from("fn main() <console, alloc> {\n  var v = 0\n");
+        let mut source = String::from("fn main() <console, alloc> {\n  mut v = 0\n");
         let (mut held, mut expected) = (0i128, String::new());
         for step in steps {
             match step {
@@ -455,11 +455,11 @@ fn every_generated_body_that_gives_a_var_loop_counters_and_numbers_is_accepted_a
 }
 
 /// A program that has another mistake, here a missing `alloc`, is refused for
-/// the `var` that a loop changes by itself and for the mistake, and the range
-/// the `var` has so far is said in neither.
+/// the `mut` that a loop changes by itself and for the mistake, and the range
+/// the `mut` has so far is said in neither.
 fn a_var_changed_by_itself_in_a_loop_is_refused_beside_every_other_error_of_the_program() {
     let source = with_header(
-        "fn main() <console> {\n  var sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
+        "fn main() <console> {\n  mut sum = 0\n  loop i in 0..5 { sum = sum * 2 }\n  print(\"{sum}\")\n}\n"
             .to_string(),
     );
     let errors = lower(source.as_bytes()).expect_err("two mistakes");
@@ -496,7 +496,7 @@ fn pushes(g: &mut Gen) -> Pushes {
     }
 }
 
-/// `var xs = []` that numbers are pushed to has the element the smallest range
+/// `mut xs = []` that numbers are pushed to has the element the smallest range
 /// that holds them, so the program is the one that states `List` of it, in the
 /// same executable on two targets.
 fn a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_need_is() {
@@ -506,7 +506,7 @@ fn a_list_or_an_option_written_with_nothing_is_what_stating_the_type_its_uses_ne
             *p.numbers.iter().max().expect("a number"),
         );
         let body = |declared: &str| {
-            let mut out = format!("fn main() <console, alloc> {{\n  var xs{declared} = []\n");
+            let mut out = format!("fn main() <console, alloc> {{\n  mut xs{declared} = []\n");
             for n in &p.numbers {
                 out.push_str(&format!("  xs = push(xs, {n})\n"));
             }
@@ -536,8 +536,8 @@ fn a_list_and_an_option_written_with_nothing_are_settled_by_what_they_are_given_
         "use std.list (push)\n\n\
          fn total(xs: List[0..256]) -> Nat { xs.size }\n\n\
          fn used() -> Nat {\n  xs = []\n  total(xs)\n}\n\n\
-         fn pick(c: bool) -> Option[Nat] {\n  var o = .none\n  if c { o = .some(7) }\n  o\n}\n\n\
-         fn main() <console, alloc> {\n  var ys = []\n  ys = push(ys, 3)\n  ys = push(ys, 200)\n  \
+         fn pick(c: bool) -> Option[Nat] {\n  mut o = .none\n  if c { o = .some(7) }\n  o\n}\n\n\
+         fn main() <console, alloc> {\n  mut ys = []\n  ys = push(ys, 3)\n  ys = push(ys, 200)\n  \
          print(\"{used()} {ys.size} {pick(true)} {pick(false)}\")\n}\n"
             .to_string(),
     );
@@ -577,28 +577,28 @@ fn prints(source: &str, said: &str) {
     );
 }
 
-/// `var xs = []` that a `loop` pushes its counter to is a list of the range of
+/// `mut xs = []` that a `loop` pushes its counter to is a list of the range of
 /// the counter, and the program prints the number of rounds.
 fn a_list_written_with_nothing_that_a_loop_counter_is_pushed_to_has_the_range_of_the_counter() {
     prints(
-        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs = []\n  \
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs = []\n  \
          loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
         "5\n",
     );
 }
 
-/// A loop over `0..5` whose counter is given to a `var` that states `0..5`, or
+/// A loop over `0..5` whose counter is given to a `mut` that states `0..5`, or
 /// pushed to a list that states `List[0..5]`, ends at a number the range does
 /// not hold, as the counter never is it.
 fn a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_the_loop_one_above_it()
  {
     prints(
-        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[0..5] = []\n  \
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[0..5] = []\n  \
          loop i in 0..5 { xs = push(xs, i) }\n  print(\"{xs.size}\")\n}\n",
         "5\n",
     );
     prints(
-        "fn main() <console, alloc> {\n  var last: 0..5 = 0\n  loop i in 0..5 { last = i }\n  \
+        "fn main() <console, alloc> {\n  mut last: 0..5 = 0\n  loop i in 0..5 { last = i }\n  \
          print(\"{last}\")\n}\n",
         "4\n",
     );
@@ -609,7 +609,7 @@ fn a_list_or_a_var_with_a_written_range_that_a_loop_counter_is_given_to_may_end_
 fn a_push_of_the_program_is_not_the_push_that_settles_a_list() {
     let source = with_header(
         "fn push(xs: take List[Byte], n: 0..10) -> List[Byte] { xs }\n\n\
-         fn main() <console, alloc> {\n  var xs = []\n  xs = push(xs, 300)\n  \
+         fn main() <console, alloc> {\n  mut xs = []\n  xs = push(xs, 300)\n  \
          print(\"{xs.size}\")\n}\n"
             .to_string(),
     );
@@ -629,13 +629,13 @@ fn a_push_of_the_program_is_not_the_push_that_settles_a_list() {
 /// it has, what it was inferred from and where, and what the use needs.
 fn a_list_pushed_to_for_another_name_is_settled_and_a_use_that_needs_less_says_what_was_inferred() {
     prints(
-        "use std.list (push)\n\nfn main() <console, alloc> {\n  var xs = []\n  \
+        "use std.list (push)\n\nfn main() <console, alloc> {\n  mut xs = []\n  \
          ys = push(xs, 4)\n  print(\"{ys.size}\")\n}\n",
         "1\n",
     );
     let source = with_header(
         "use std.list (push)\n\nfn small(xs: List[0..3]) -> Nat { xs.size }\n\n\
-         fn main() <alloc> {\n  var xs = []\n  xs = push(xs, 7)\n  n = small(xs)\n}\n"
+         fn main() <alloc> {\n  mut xs = []\n  xs = push(xs, 7)\n  n = small(xs)\n}\n"
             .to_string(),
     );
     let errors = lower(source.as_bytes()).expect_err("a list that is too wide");

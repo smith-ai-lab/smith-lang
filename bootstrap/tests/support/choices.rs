@@ -382,7 +382,7 @@ enum Stmt {
     /// `x{i} = if c { "a" }`, which gives `()`, then `print("{x{i}}")`,
     /// or `print(repr(x{i}))` if it says so.
     Unit(usize, Cond, usize, bool),
-    /// `var x{i} = "a"`, `if c { x{i} = "b" }`, then `print(x{i})`.
+    /// `mut x{i} = "a"`, `if c { x{i} = "b" }`, then `print(x{i})`.
     Assign(usize, Cond, usize, usize),
     /// `match c { true { ... } false { ... } }`, with each case written
     /// with a leading dot if it says so.
@@ -718,7 +718,7 @@ fn write_stmt(m: &Model, s: &Stmt, depth: usize, out: &mut String) {
         }
         Stmt::Assign(i, given, a, b) => {
             out.push_str(&format!(
-                "{at}var x{i} = \"{}\"\n{at}if {} {{ x{i} = \"{}\" }}\n{at}print(x{i})\n",
+                "{at}mut x{i} = \"{}\"\n{at}if {} {{ x{i} = \"{}\" }}\n{at}print(x{i})\n",
                 LABELS[*a],
                 c(given),
                 LABELS[*b]
@@ -919,8 +919,8 @@ pub fn program_with_mistake(g: &mut Gen) -> ChoiceCase {
             let (lead, rest) = *g.pick(&[
                 ("", " = \"a\""),
                 ("", ": str = \"a\""),
-                ("var ", " = \"a\""),
-                ("(var ", ", spare) = (\"a\", \"b\")"),
+                ("mut ", " = \"a\""),
+                ("(mut ", ", spare) = (\"a\", \"b\")"),
                 ("twice fn(", ") { }"),
             ]);
             (lead.to_string(), format!("{word}{rest}"), named, None)

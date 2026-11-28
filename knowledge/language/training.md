@@ -55,7 +55,7 @@ fn sgd_step(
 fn train[n: Nat](data: Dataset[n, 784, 10], steps: Nat, key: take Key) -> Mlp[784, 256, 10]
   requires n >= 64
 {
-  var m = init_mlp(key)
+  mut m = init_mlp(key)
   loop step in 0..steps {
     (xs, ys) = batch(data, step, 64)
     m = sgd_step(m, xs, ys, 0.01)

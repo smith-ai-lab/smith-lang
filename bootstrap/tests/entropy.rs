@@ -94,7 +94,7 @@ fn every_executable_for_this_machine_that_asks_for_entropy_prints_64_hex_digits_
 pub const DRAW: &str = "use std.console (console, print)\nuse std.entropy (entropy, fill)\nuse std.fmt (hex)\n\n\
 fn main() <console, entropy, alloc> {\n  \
 bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]\n  \
-var line = \"\"\n  loop b in fill(bytes) { line = \"{line}{hex(b, width: 2, upper: false)}\" }\n  print(line)\n}\n";
+mut line = \"\"\n  loop b in fill(bytes) { line = \"{line}{hex(b, width: 2, upper: false)}\" }\n  print(line)\n}\n";
 
 /// What the executable for `target` prints, and how it ends, when run on a
 /// machine that is this one or is an emulator of arm64.
@@ -259,8 +259,8 @@ fn a_host_that_gives_no_bytes_ends_the_module_and_says_so_before_anything_is_use
 /// those among the last thousand, which only a second piece fills.
 const LARGE: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.entropy (entropy, fill)\nuse std.int (wrapping_add)\nuse std.list (push)\n\n\
 fn main() <console, entropy, alloc> {\n  \
-var bytes: List[Byte] = []\n  loop i in 0..70000 { bytes = push(bytes, 0) }\n  \
-filled = fill(bytes)\n  var all: u64 = 0\n  var last: u64 = 0\n  \
+mut bytes: List[Byte] = []\n  loop i in 0..70000 { bytes = push(bytes, 0) }\n  \
+filled = fill(bytes)\n  mut all: u64 = 0\n  mut last: u64 = 0\n  \
 loop i in 0..filled.size {\n    if filled[i] != 0 {\n      all = wrapping_add(all, 1)\n      if i >= 69000 { last = wrapping_add(last, 1) }\n    }\n  }\n  \
 print(\"{all} {last}\")\n}\n";
 

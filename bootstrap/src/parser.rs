@@ -413,9 +413,9 @@ impl Type {
 /// A statement of a block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
-    /// `x = e` or `x: T = e`, which defines a name, or `var x = e` or
-    /// `var x: T = e`, which defines a name that can change. Whether a
-    /// bare `x = e` defines `x` or assigns to a `var` is for the checker to
+    /// `x = e` or `x: T = e`, which defines a name, or `mut x = e` or
+    /// `mut x: T = e`, which defines a name that can change. Whether a
+    /// bare `x = e` defines `x` or assigns to a `mut` is for the checker to
     /// decide.
     Define {
         name: String,
@@ -435,8 +435,8 @@ pub enum Stmt {
         at: Element,
         value: Expr,
     },
-    /// `(a, var b) = e`, which takes a tuple apart. Whether each bare name
-    /// in it defines a name or assigns to a `var` is for the checker to
+    /// `(a, mut b) = e`, which takes a tuple apart. Whether each bare name
+    /// in it defines a name or assigns to a `mut` is for the checker to
     /// decide.
     Destructure {
         pattern: Pattern,
@@ -669,7 +669,7 @@ pub enum Pattern {
         name: String,
         /// Where the name is.
         pos: Pos,
-        /// Where `var` is, if the name is marked as one that can change.
+        /// Where `mut` is, if the name is marked as one that can change.
         var: Option<Pos>,
     },
     Case {
@@ -1210,7 +1210,7 @@ fn checked_match(pos: Pos, call: &Call, arms: Vec<Arm>) -> Result<Match, Error> 
         ));
     }
     // Whether the arm is the case `want`, and what it holds: nothing, or a
-    // name that is not a `var`.
+    // name that is not a `mut`.
     let holds = |arm: &Arm, want: &str| match &arm.pattern {
         Pattern::Case { name, inner, .. } if name == want => match inner.as_deref() {
             None => Some(false),
@@ -1901,12 +1901,12 @@ impl Parser<'_> {
     }
 
     /// Parses a tuple pattern where a name is introduced: a parameter, or
-    /// the name of a `loop`. Its parts are names, `var` and a name, and
+    /// the name of a `loop`. Its parts are names, `mut` and a name, and
     /// tuples of these, as these always match.
     fn binder(&mut self) -> Result<Pattern, Error> {
         match self.tok() {
             Tok::Ident(name) if name != "true" && name != "false" => self.pattern(),
-            Tok::Keyword("var") => self.pattern(),
+            Tok::Keyword("mut") => self.pattern(),
             Tok::Punct("(") => {
                 let pos = self.pos();
                 let items = self.list(Self::binder)?;
@@ -2112,7 +2112,7 @@ impl Parser<'_> {
                         "write the bound as a number, or say what holds between two fields with a proof field",
                     ),
                     Some(NoNames::Var) => (
-                        "the type of a `var`, which can change",
+                        "the type of a `mut`, which can change",
                         "write the bound as a number, or bind the value with `=`",
                     ),
                     None => ("a type inside another type", "write the bound as a number"),
@@ -2324,9 +2324,9 @@ impl Parser<'_> {
                     Ok(Stmt::Expr(expr))
                 }
             },
-            Tok::Keyword("var") => {
+            Tok::Keyword("mut") => {
                 self.bump();
-                let (name, pos) = self.defined("the name of the `var`")?;
+                let (name, pos) = self.defined("the name of the `mut`")?;
                 self.definition(name, pos, true)
             }
             Tok::Punct("(") => self.tuple_statement(),
@@ -2398,7 +2398,7 @@ impl Parser<'_> {
         if self.tok() == &Tok::Punct(":") {
             self.bump();
             // A name that cannot change is a bound of a binding's type, and a
-            // `var` can change.
+            // `mut` can change.
             self.name_bound_ok = !var && self.tok() != &Tok::Keyword("fn");
             self.no_names = var.then_some(NoNames::Var);
             let written = self.ty();
@@ -2964,9 +2964,9 @@ impl Parser<'_> {
                     var: None,
                 })
             }
-            Tok::Keyword("var") => {
+            Tok::Keyword("mut") => {
                 self.bump();
-                let (name, at) = self.defined("the name of the `var`")?;
+                let (name, at) = self.defined("the name of the `mut`")?;
                 Ok(Pattern::Bind {
                     name,
                     pos: at,
@@ -3087,7 +3087,7 @@ impl Parser<'_> {
         let pos = error.pos;
         self.unbuilt.push(error);
         let found = self.skip_statement(start);
-        let var = self.tokens[start].tok == Tok::Keyword("var");
+        let var = self.tokens[start].tok == Tok::Keyword("mut");
         let first = start + usize::from(var);
         // The names the statement binds: one, or those of a tuple taken
         // apart, which are the names in its parentheses.

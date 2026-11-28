@@ -38,7 +38,7 @@ fn twice(body: fn()) {
 fn apply(text: str, f: fn(str) -> str) -> str { f(text) }
 
 fn main() <console> {
-  var note = "a"
+  mut note = "a"
   say("")
   u15 = name_of(Cat(name: note))
   u16 = cat_of(note)

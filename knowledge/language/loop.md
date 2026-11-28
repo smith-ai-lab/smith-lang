@@ -4,14 +4,14 @@ title: loop
 description: loop runs a block once for each number in a range, in order, and break ends it early.
 status: partial
 built:
-  - "`loop i in a..b` over whole numbers of one type, whose counter `arith` knows is in range of a `var` list's `size` as of any other, which runs in order, ended by `break`"
-  - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `var` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
+  - "`loop i in a..b` over whole numbers of one type, whose counter `arith` knows is in range of a `mut` list's `size` as of any other, which runs in order, ended by `break`"
+  - "`loop v in xs` over a `List` of any type, which gives `v` each element from the first to the last, once each, over the list the loop began with, which a `mut` list assigned in the block does not change, and ended by `break` or left by `return`; the scalar form of its round is one comparison and one load, with no call and no check of the index"
   - "`loop v in x` over a `str`, which gives `v` each byte of it, and over a type of a program's own that implements [`Iterate`](iterate.md)"
   - "`loop i in a..b` written only where `arith` proves `a <= b`, as [Ranges and slices](ranges.md#a-range-is-ordered) says, so `0..n` needs nothing written and `loop i in 5..2` is refused"
   - "not a `loop` over an array or `reversed`, a counter whose type is a range, or the two ends of a range of different types"
   - "an `invariant` after the head of a `loop` over a range, a `List`, or a `str`, which `arith` proves holds before the first pass, with the counter as the first end, and holds at the end of each pass, with the counter one more, from its holding at the start of the pass, and which it uses in the block and, where no `break` ends the loop, after it, with the counter as the greater of the two ends"
   - "not an `invariant` that is not a comparison of whole numbers or a [`boundary`](text.md#a-piece-of-a-text), joined with `and`, `or`, and `not`, which is refused as one `arith` cannot prove"
-  - "a `var` that a loop gives a value that does not depend on it, given the range that holds every value it is given, one that adds to itself or takes from itself given the range its templates over the count of passes bound, and one that gives itself a value in any other way refused when it starts as a number written out, with the range to state"
+  - "a `mut` that a loop gives a value that does not depend on it, given the range that holds every value it is given, one that adds to itself or takes from itself given the range its templates over the count of passes bound, and one that gives itself a value in any other way refused when it starts as a number written out, with the range to state"
 ---
 
 # `loop`
@@ -22,7 +22,7 @@ A `loop` runs a block once for each number in a range, in order, one step at a t
 use std.int (wrapping_add)
 
 fn sum_below(n: Nat) -> Nat {
-  var total: Nat = 0
+  mut total: Nat = 0
   loop i in 0..n {
     step: Nat = i
     total = wrapping_add(total, step)
@@ -46,7 +46,7 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints only `done`. The counter is a name for the number of this round and not a `var`, so the block cannot assign it. `loop i in 0..3 { i = 5 }` is refused: "`i` is not a `var`, so it cannot be assigned to", with the fix "declare it with `var`: write `var i` where it is defined". A `loop` gives nothing, so a function whose block ends in one gives nothing. `fn count() -> u64 { loop i in 0..3 { } }` is refused: "this gives nothing, where a `u64` is needed".
+This prints only `done`. The counter is a name for the number of this round and not a `mut`, so the block cannot assign it. `loop i in 0..3 { i = 5 }` is refused: "`i` is not a `mut`, so it cannot be assigned to", with the fix "declare it with `mut`: write `mut i` where it is defined". A `loop` gives nothing, so a function whose block ends in one gives nothing. `fn count() -> u64 { loop i in 0..3 { } }` is refused: "this gives nothing, where a `u64` is needed".
 
 ## The type of the counter
 
@@ -65,29 +65,29 @@ fn main() <console, alloc> {
 
 This prints `250`, `251`, and `252`. Here `j` is a `0..3`, so `x + j` is a `0..258`, as [Integer arithmetic](arithmetic.md) says. The two ends may be of any ranges, and an end that is a literal is the range that holds it alone, so `loop i in 0..300` counts `i` to `299`, a number a `u8` does not hold.
 
-### A `var` the loop changes
+### A `mut` the loop changes
 
-A `var` with no stated type has the range that holds every value it is given, as [`var`](var.md#the-range-of-a-var) says, so a loop that gives it `i` makes it the range of `i`.
+A `mut` with no stated type has the range that holds every value it is given, as [`mut`](mut.md#the-range-of-a-mut) says, so a loop that gives it `i` makes it the range of `i`.
 
 ```
 fn last_index(n: 0..11) -> 0..11 {
-  var last = 0
+  mut last = 0
   loop i in 0..n { last = i }
   last
 }
 ```
 
-`last_index(4)` is `3`. `last` holds the `0` and each `i`, a `0..11`, so it is that. A `var` can state a narrower range, and then each assignment in the loop is proven to stay in it.
+`last_index(4)` is `3`. `last` holds the `0` and each `i`, a `0..11`, so it is that. A `mut` can state a narrower range, and then each assignment in the loop is proven to stay in it.
 
 ```
 fn last_index(n: 0..11) -> 0..10 {
-  var last: 0..10 = 0
+  mut last: 0..10 = 0
   loop i in 0..n { last = i }
   last
 }
 ```
 
-`last_index(4)` is `3`. A `var` that starts as a number written out and that the loop gives itself plus a value, as `acc = acc + x`, has its range from the number of passes, as [Inference](inference.md#a-name-a-loop-changes-by-itself) says, so a sum of the bytes of an array or a count over a list is a range with nothing written. A change that no template covers states its range.
+`last_index(4)` is `3`. A `mut` that starts as a number written out and that the loop gives itself plus a value, as `acc = acc + x`, has its range from the number of passes, as [Inference](inference.md#a-name-a-loop-changes-by-itself) says, so a sum of the bytes of an array or a count over a list is a range with nothing written. A change that no template covers states its range.
 
 ## An invariant
 
@@ -95,7 +95,7 @@ A loop may state a fact that holds at the start of every pass, an `invariant`. I
 
 ```
 fn total(xs: [8]0..4) -> 0..25 {
-  var acc: 0..25 = 0
+  mut acc: 0..25 = 0
   loop i in 0..8 invariant acc <= 3 * i {
     acc = acc + xs[i]
   }
@@ -103,14 +103,14 @@ fn total(xs: [8]0..4) -> 0..25 {
 }
 ```
 
-`total([3, 3, 3, 3, 3, 3, 3, 3])` is `24`. Each element is at most `3`, so a pass adds at most `3` to `acc`. [`arith`](arith.md) proves two things of the invariant, and searches for nothing: that it holds before the first pass, where `i` is `0` and `acc` is `0`, and that it holds at the end of a pass if it holds at the start of it, where the next pass has `i` one more. It then knows `acc <= 3 * i` in the block, so `acc + xs[i]` is at most `3 * 7 + 3` and fits a `0..25`, which it does not know without the invariant, as `acc` may be anything the type holds when a pass begins. A `var` that the loop assigns is in the invariant what it holds at the start of the pass, and the counter is the counter of that pass.
+`total([3, 3, 3, 3, 3, 3, 3, 3])` is `24`. Each element is at most `3`, so a pass adds at most `3` to `acc`. [`arith`](arith.md) proves two things of the invariant, and searches for nothing: that it holds before the first pass, where `i` is `0` and `acc` is `0`, and that it holds at the end of a pass if it holds at the start of it, where the next pass has `i` one more. It then knows `acc <= 3 * i` in the block, so `acc + xs[i]` is at most `3 * 7 + 3` and fits a `0..25`, which it does not know without the invariant, as `acc` may be anything the type holds when a pass begins. A `mut` that the loop assigns is in the invariant what it holds at the start of the pass, and the counter is the counter of that pass.
 
 An invariant is never computed when the program runs, so it adds nothing to the executable, as a [`decreases`](open-loop.md#a-loop-that-is-proven-to-end) does not. A loop may have more than one `invariant`, each on its line, and the `{` that opens the block may follow them on a line of its own.
 
 ```
 fn gap() -> Nat {
-  var a: 0..11 = 0
-  var b: 0..11 = 0
+  mut a: 0..11 = 0
+  mut b: 0..11 = 0
   loop i in 0..10
     invariant a == i
     invariant b == a
@@ -180,7 +180,7 @@ This is refused: "`break` is inside a lambda, which cannot end a `loop` outside 
 
 ## The ends are worked out once
 
-The two ends of a range are worked out when the loop starts. Assigning a `var` that an end was read from changes nothing about how many rounds there are.
+The two ends of a range are worked out when the loop starts. Assigning a `mut` that an end was read from changes nothing about how many rounds there are.
 
 ```
 use std.bits (u64)
@@ -188,7 +188,7 @@ use std.console (console, print)
 use std.int (wrapping_add)
 
 fn main() <console, alloc> {
-  var n: u64 = 3
+  mut n: u64 = 3
   loop i in 0..n {
     n = wrapping_add(n, 1)
     print("{i}")
@@ -205,7 +205,7 @@ Inside the block, [`arith`](arith.md) knows that the counter is at least the fir
 
 ```
 fn next(n: Byte) -> Byte {
-  var last: Byte = 0
+  mut last: Byte = 0
   loop i in 0..n { last = i + 1 }
   last
 }
@@ -213,14 +213,14 @@ fn next(n: Byte) -> Byte {
 
 `next(4)` is `4`. The counter is below `n`, which is at most `255`, so `i` is a `0..255`, `i + 1` is at most `255`, and a `u8` holds it. With `i + 2` it is refused, as `i` may be `254` and `254 + 2` is above `255`, with the fix to check the operands first.
 
-This is what makes `xs[i]` compile in `loop i in 0..xs.size`, as [Indexing](indexing.md#from-a-loop) shows. The ends are worked out once, so `arith` ties them to nothing that a `var` the loop assigns holds in a later round, or after an assignment in this one. So the `ys[i]` below is refused, since `ys` is assigned before it.
+This is what makes `xs[i]` compile in `loop i in 0..xs.size`, as [Indexing](indexing.md#from-a-loop) shows. The ends are worked out once, so `arith` ties them to nothing that a `mut` the loop assigns holds in a later round, or after an assignment in this one. So the `ys[i]` below is refused, since `ys` is assigned before it.
 
 ```
 use std.bits (u32)
 
 fn last_of(xs: List[u32]) -> u32 {
-  var ys = xs
-  var t: u32 = 0
+  mut ys = xs
+  mut t: u32 = 0
   loop i in 0..ys.size {
     ys = []
     t = ys[i]
@@ -239,7 +239,7 @@ A `loop` runs over an array as well as over a range. It runs once for each eleme
 use std.bits (u32)
 
 fn largest(a: [3]u32) -> u32 {
-  var best: u32 = 0
+  mut best: u32 = 0
   loop v in a { if v > best { best = v } }
   best
 }
@@ -252,7 +252,7 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn before_zero(a: [4]Byte) -> u64 {
-  var n: u64 = 0
+  mut n: u64 = 0
   loop v in a {
     if v == 0 { break }
     n = wrapping_add(n, 1)

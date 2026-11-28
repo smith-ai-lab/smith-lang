@@ -78,7 +78,7 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn first_bad(xs: List[Result[u64, str]]) -> Result[u64, str] {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..xs.size {
     v = try xs[i]
     total = wrapping_add(total, v)

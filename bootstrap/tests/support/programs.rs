@@ -5,7 +5,7 @@
 //!
 //! A program is a few structs, whose fields are text or other structs, and
 //! a few functions that take and return text and structs, with bindings,
-//! `var` locals, assignments to them and to their fields, constructions,
+//! `mut` locals, assignments to them and to their fields, constructions,
 //! field reads, and calls nested a few deep. Fields and parameters may have
 //! defaults, which calls and constructions may leave out. It first builds
 //! a model of the program, works out from the model what the program
@@ -354,11 +354,11 @@ enum Stmt {
         name: String,
         ty: Type,
         typed: bool,
-        /// Whether it is a `var`.
+        /// Whether it is a `mut`.
         var: bool,
         value: Expr,
     },
-    /// An assignment to a `var`, or to a field of it through `path`, each
+    /// An assignment to a `mut`, or to a field of it through `path`, each
     /// step a field by its place in its struct.
     Assign {
         name: String,
@@ -670,7 +670,7 @@ fn body(g: &mut Gen, m: &Model, i: usize) -> Vec<Stmt> {
     let mut names: Vec<(String, Type)> = (m.fns[i].params.iter())
         .map(|(p, ty)| (p.to_string(), *ty))
         .collect();
-    // The names defined with `var`.
+    // The names defined with `mut`.
     let mut vars: Vec<String> = Vec::new();
     let mut stmts = Vec::new();
     let count = g.below(6);
@@ -1412,7 +1412,7 @@ fn function(b: &mut Builder, m: &Model, f: usize, site: bool, around: Option<&Ex
         extra.push(kind);
     }
     let one_line = func.body.len() == 1 && extra.is_empty() && b.g.one_in(2);
-    // The names defined so far, each with whether it is a `var`.
+    // The names defined so far, each with whether it is a `mut`.
     let mut names: Vec<(String, bool)> = Vec::new();
     for stmt in &func.body {
         if one_line {
@@ -1429,7 +1429,7 @@ fn function(b: &mut Builder, m: &Model, f: usize, site: bool, around: Option<&Ex
                 value,
             } => {
                 if *var {
-                    b.pick(&["var ", "var  "]);
+                    b.pick(&["mut ", "mut  "]);
                 }
                 b.push(name);
                 if *typed {
@@ -1601,12 +1601,12 @@ fn main_statement(
             let name = match names.first() {
                 Some((name, _)) => name.clone(),
                 None => {
-                    b.pick(&["twice = \"a\"\n  ", "var twice = \"a\"\n  "]);
+                    b.pick(&["twice = \"a\"\n  ", "mut twice = \"a\"\n  "]);
                     "twice".to_string()
                 }
             };
-            // `var` defines a name, and never assigns to one.
-            b.push("var ");
+            // `mut` defines a name, and never assigns to one.
+            b.push("mut ");
             b.mark(format!("`{name}`"), None);
             b.push(&name);
             b.push(" = \"b\"");
@@ -1623,7 +1623,7 @@ fn main_statement(
                     "once".to_string()
                 }
             };
-            b.mark(format!("`{name}`"), Some("`var".to_string()));
+            b.mark(format!("`{name}`"), Some("`mut".to_string()));
             b.push(&name);
             b.push(" = \"b\"");
         }
@@ -1633,7 +1633,7 @@ fn main_statement(
             b.push("kept = ");
             expr(b, m, around, &no_console);
             b.push("\n  ");
-            b.mark("`kept`", Some("`var kept`".to_string()));
+            b.mark("`kept`", Some("`mut kept`".to_string()));
             b.push("kept.");
             b.push(m.structs[s].fields[0].0);
             b.push(" = \"a\"");
@@ -1641,7 +1641,7 @@ fn main_statement(
         Kind::AssignedWrongType => {
             let around = around.expect("a value of a struct");
             let s = struct_of(m, around);
-            b.push("var changed = ");
+            b.push("mut changed = ");
             expr(b, m, around, &no_console);
             b.push("\n  changed");
             let (field, ty) = *b.g.pick(&m.structs[s].fields);
@@ -1705,7 +1705,7 @@ fn main_statement(
             let around = around.expect("a value of a struct");
             let name = m.structs[struct_of(m, around)].name;
             if b.g.one_in(2) {
-                b.pick(&["", "var "]);
+                b.pick(&["", "mut "]);
                 b.push("wrong: ");
                 b.push(name);
                 b.push(" = ");

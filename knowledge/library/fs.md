@@ -47,7 +47,7 @@ fn header(path: str) -> Result[List[Byte], FsError] <fs, alloc> {
 }
 ```
 
-`read` gives the bytes of the file that lie in the range, which are fewer than the range asks for where the file ends first, and none past its end. A file too large to hold is read a range at a time. Each range is a new value, and one that replaces the last in a `var` uses the same memory.
+`read` gives the bytes of the file that lie in the range, which are fewer than the range asks for where the file ends first, and none past its end. A file too large to hold is read a range at a time. Each range is a new value, and one that replaces the last in a `mut` uses the same memory.
 
 ```
 enum FsError {

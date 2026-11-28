@@ -1,11 +1,11 @@
 ---
 type: specification
 title: What a spawned task may use
-description: How a spawned lambda uses the values around it: an ordinary value is shared, a var is read as it was at the spawn, and a single-use value moves into the child.
+description: How a spawned lambda uses the values around it: an ordinary value is shared, a mut is read as it was at the spawn, and a single-use value moves into the child.
 status: partial
 built:
-  - "an ordinary value is shared by the children of a group, a `var` is read as it was at the spawn, and a value that is used once and is given away by a child moves into it, so the parent has none left and a second child that uses it is refused"
-  - "a child that assigns a `var` of the function it is written in is refused, as the page says"
+  - "an ordinary value is shared by the children of a group, a `mut` is read as it was at the spawn, and a value that is used once and is given away by a child moves into it, so the parent has none left and a second child that uses it is refused"
+  - "a child that assigns a `mut` of the function it is written in is refused, as the page says"
 ---
 
 # What a spawned task may use
@@ -29,16 +29,16 @@ fn fetch_twice(url: str) -> Result[(List[Byte], List[Byte]), NetError] <net, all
 }
 ```
 
-## A var is read as it was
+## A mut is read as it was
 
-A [`var`](var.md) is read as its value at the moment of the spawn, and the child cannot assign it. Results come back through `join`.
+A [`mut`](mut.md) is read as its value at the moment of the spawn, and the child cannot assign it. Results come back through `join`.
 
 ```
 use std.bits (i32)
 use std.task (join, spawn, tasks)
 
 fn snapshot() -> i32 {
-  var n: 0..10 = 1
+  mut n: 0..10 = 1
   with tasks()
   t = spawn { n + 1 }
   n = 5
@@ -48,14 +48,14 @@ fn snapshot() -> i32 {
 
 The child read `n` as `1`, so `join(t)` is `2` and `snapshot()` is `7`.
 
-A child that assigns a `var` is refused: "this child assigns `n`, which belongs to the function it is spawned in, and a child reads a `var` as it was at the spawn", with the fix "give the new value back as the value of the child, and read it with `join`".
+A child that assigns a `mut` is refused: "this child assigns `n`, which belongs to the function it is spawned in, and a child reads a `mut` as it was at the spawn", with the fix "give the new value back as the value of the child, and read it with `join`".
 
 ```
 use std.bits (i32)
 use std.task (join, spawn, tasks)
 
 fn counted() -> i32 {
-  var n = 0
+  mut n = 0
   with tasks()
   t = spawn { n = n + 1 }
   join(t)
@@ -100,7 +100,7 @@ Written with `k1` and `k2`, one for each child, it is accepted.
 | What the child uses | What it gets |
 | --- | --- |
 | An ordinary value | The value, shared |
-| A `var` | Its value at the spawn, never assigned |
+| A `mut` | Its value at the spawn, never assigned |
 | A single-use value | The value, which the parent no longer has |
 
 Next: [Memory of a task](task-arenas.md)

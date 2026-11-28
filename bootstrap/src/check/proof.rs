@@ -3,8 +3,8 @@
 //!
 //! The facts in scope are the condition of each `if` the operation is inside,
 //! which holds in the first block and is false in the `else`, and what each
-//! binding that is not a `var` was given. The range of each value's type and
-//! the value of each literal are added when a goal is asked. A `var` can be
+//! binding that is not a `mut` was given. The range of each value's type and
+//! the value of each literal are added when a goal is asked. A `mut` can be
 //! given another value between a fact and a use, so nothing is known of one
 //! but the range of its type, except inside one round of a loop that assigns
 //! it, where the value it holds is tracked as a sum of the variables.
@@ -31,12 +31,12 @@ const ASCII_MOST: i128 = 127;
 /// What a variable of `arith` stands for.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Key {
-    /// A name that is not a `var`, by its place among the names, with the
+    /// A name that is not a `mut`, by its place among the names, with the
     /// range of its type.
     Name(usize, i128, i128),
     /// A field read from such a name, written out, with its range.
     Field(String, i128, i128),
-    /// A value nothing is known of but the range of its type: a `var`, or
+    /// A value nothing is known of but the range of its type: a `mut`, or
     /// what a call gives. Each is its own.
     Fresh(usize, i128, i128),
     /// What a call gave, by the place of the call, with the range of its
@@ -156,20 +156,20 @@ pub(super) struct Facts {
     pub(super) sibling: Option<usize>,
     /// How many predicates are being read through, one inside another.
     depth: usize,
-    /// The `var`s, by their place among the names, whose value is tracked
+    /// The `mut`s, by their place among the names, whose value is tracked
     /// through one round of a loop, each with the sum it holds now or none
     /// when it is not known. The newest entry for a place is the one that
     /// counts.
     held: Vec<(usize, Option<Lin>)>,
-    /// The version of each `var`, by its place among the names, that the
+    /// The version of each `mut`, by its place among the names, that the
     /// facts about its fields are about. A version is never used twice.
     versions: HashMap<usize, usize>,
     epoch: usize,
-    /// While the ranges of the `var`s are solved, the range each `var` that is
+    /// While the ranges of the `mut`s are solved, the range each `mut` that is
     /// solved holds now, by its place among the names, or none when it is
     /// not known. The newest entry for a place is the one that counts.
     steps: Vec<(usize, Option<Int>)>,
-    /// Whether the ranges of the `var`s are being solved.
+    /// Whether the ranges of the `mut`s are being solved.
     pub(super) solving: bool,
     /// Whether a byte of a text that is read is a variable of its own, which
     /// only a function that may need a `boundary` asks for.
@@ -237,7 +237,7 @@ impl Facts {
         self.versions.clone_from(&mark.versions);
     }
 
-    /// The `var` at `at` may hold another value: nothing known of its
+    /// The `mut` at `at` may hold another value: nothing known of its
     /// fields so far is known of what it holds now.
     fn bump(&mut self, at: usize) {
         if self.solving {
@@ -276,9 +276,9 @@ impl Facts {
         self.bits.insert(addr(call), info);
     }
 
-    /// What the `var` at `at` holds, when it is tracked: the sum, or none
+    /// What the `mut` at `at` holds, when it is tracked: the sum, or none
     /// when it is not known.
-    /// The range the `var` at `at` holds now, where it is known.
+    /// The range the `mut` at `at` holds now, where it is known.
     pub(super) fn step(&self, at: usize) -> Option<Int> {
         self.steps
             .iter()
@@ -286,12 +286,12 @@ impl Facts {
             .and_then(|(_, v)| *v)
     }
 
-    /// The `var` at `at` was given a value whose range is not known.
+    /// The `mut` at `at` was given a value whose range is not known.
     pub(super) fn unset_step(&mut self, at: usize) {
         self.steps.push((at, None));
     }
 
-    /// The `var` at `at` was given a value of the range `held`.
+    /// The `mut` at `at` was given a value of the range `held`.
     pub(super) fn set_step(&mut self, at: usize, held: Int) {
         self.steps.push((at, Some(held)));
     }
@@ -954,7 +954,7 @@ impl Builder<'_, '_> {
     }
 
     /// A field read from a name, written out with the place of the name, and
-    /// for a `var` its version.
+    /// for a `mut` its version.
     fn path(&self, e: &Expr) -> Option<String> {
         if self.facts.subst.is_some() {
             return None;
@@ -969,7 +969,7 @@ impl Builder<'_, '_> {
             Expr::Field { of, name, .. } if name == "bytes" && self.is_text(of) => self.path(of),
             Expr::Field { of, name, .. } => Some(format!("{}.{name}", self.path(of)?)),
             // An element of a list that is never assigned, at a number or at
-            // a name that is not a `var`.
+            // a name that is not a `mut`.
             Expr::Index { of, index, .. } => {
                 let base = self.path(of)?;
                 let at = match &**index {
@@ -989,7 +989,7 @@ impl Builder<'_, '_> {
 }
 
 /// How the name at `at` starts the path of a field: its place, and for a
-/// `var` the version of what it holds.
+/// `mut` the version of what it holds.
 fn root(body: &Body, facts: &Facts, at: usize) -> String {
     if body.vars.contains(&body.names[at].0) {
         format!("{at}@{}", facts.versions.get(&at).copied().unwrap_or(0))
@@ -1512,7 +1512,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Notes what the name defined last was given, when it is a whole number
-    /// and not a `var`.
+    /// and not a `mut`.
     pub(super) fn assume_binding(&mut self, body: &mut Body<'a>, value: &Expr) {
         if let Some((_, Ty::List(_) | Ty::Slice(_))) = body.names.last() {
             if Self::decided(body) {
@@ -1585,7 +1585,7 @@ impl<'a> Checker<'a> {
 
     /// Notes the size of the list the name at `at` was given, when the size
     /// is known: that of a list written out, or of another name's list. A
-    /// `var` is given a version of its own first.
+    /// `mut` is given a version of its own first.
     fn give_list(&mut self, body: &mut Body<'a>, at: usize, value: &Expr) {
         let mut facts = std::mem::take(&mut body.facts);
         let sized = matches!(body.names[at].1, Ty::List(_) | Ty::Slice(_) | Ty::Text);
@@ -2502,7 +2502,7 @@ fn plainly(facts: &Facts, bound: &Bound, place: &Lin, known: &[usize], used: &[F
 }
 
 /// Whether the place of `bound` is a value that the paths of an `if` that
-/// joined gave, as a `var` is after one, and on each path it is plainly a
+/// joined gave, as a `mut` is after one, and on each path it is plainly a
 /// place that falls between characters, with what that path knows.
 fn by_cases(facts: &Facts, bound: &Bound, known: &[usize], used: &[Formula]) -> bool {
     let mut one = bound.sum.terms.iter();
@@ -3315,7 +3315,7 @@ fn is_local(keys: &[Key], id: usize, outer: usize) -> bool {
 }
 
 impl<'a> Checker<'a> {
-    /// The `var`s, by their place among the names, that the blocks assign,
+    /// The `mut`s, by their place among the names, that the blocks assign,
     /// however deep.
     pub(super) fn assigned_vars(&self, body: &Body<'a>, blocks: &[&[Stmt]]) -> Vec<usize> {
         let mut names: Vec<&str> = Vec::new();
@@ -3340,7 +3340,7 @@ impl<'a> Checker<'a> {
         places
     }
 
-    /// A round of a loop begins: each `var` the loop assigns holds what it
+    /// A round of a loop begins: each `mut` the loop assigns holds what it
     /// held when the round began, which is nothing but the range of its type.
     pub(super) fn begin_round(&mut self, body: &mut Body<'a>, assigned: &[usize]) {
         if !Self::decided(body) {
@@ -3633,7 +3633,7 @@ impl<'a> Checker<'a> {
         body.facts = facts;
     }
 
-    /// The `var`s that are tracked, among `assigned`, are no longer known.
+    /// The `mut`s that are tracked, among `assigned`, are no longer known.
     pub(super) fn forget(&mut self, body: &mut Body<'a>, assigned: &[usize]) {
         for &at in assigned {
             body.facts.bump(at);
@@ -3643,7 +3643,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Every `var` is no longer known.
+    /// Every `mut` is no longer known.
     pub(super) fn forget_all(&mut self, body: &mut Body<'a>) {
         let mut tracked: Vec<usize> = body.facts.held.iter().map(|(at, _)| *at).collect();
         tracked.extend(
@@ -3666,7 +3666,7 @@ impl<'a> Checker<'a> {
         sum
     }
 
-    /// The `var` at `at`, tracked, is given `value`.
+    /// The `mut` at `at`, tracked, is given `value`.
     pub(super) fn assign(&mut self, body: &mut Body<'a>, at: usize, value: &Expr) {
         if !Self::decided(body) {
             return;
@@ -3682,14 +3682,14 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A field of the `var` at `at` is given a value.
+    /// A field of the `mut` at `at` is given a value.
     pub(super) fn assign_field(&mut self, body: &mut Body<'a>, at: usize) {
         if Self::decided(body) {
             body.facts.bump(at);
         }
     }
 
-    /// Each parameter marked `mut` that is a whole number is a `var` that
+    /// Each parameter marked `mut` that is a whole number is a `mut` that
     /// starts as what the caller passes.
     pub(super) fn hold_changed(&mut self, body: &mut Body<'a>, f: &Function) {
         if !Self::decided(body) {
@@ -3707,7 +3707,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The `var` defined last is given `value`.
+    /// The `mut` defined last is given `value`.
     pub(super) fn track_var(&mut self, body: &mut Body<'a>, value: &Expr) {
         if !Self::decided(body) || body.contract {
             return;

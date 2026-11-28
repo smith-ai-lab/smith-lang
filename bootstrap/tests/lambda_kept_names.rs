@@ -301,9 +301,9 @@ fn a_lambda_that_holds_something_lent_or_assigns_a_name_is_refused_where_it_is_k
         let lent = format!(
             "fn kept(xs: List[f32]) -> {result} {{\n  {open}fn(v: f32) -> f32 {{ float(xs.size) }}{close}\n}}\n"
         );
-        // Assigned: a `var` of the function.
+        // Assigned: a `mut` of the function.
         let assigned = format!(
-            "fn kept(xs: List[f32]) -> {result} {{\n  var m: f32 = 1.0\n  {open}fn(v: f32) -> f32 {{\n    m = m + v\n    m\n  }}{close}\n}}\n"
+            "fn kept(xs: List[f32]) -> {result} {{\n  mut m: f32 = 1.0\n  {open}fn(v: f32) -> f32 {{\n    m = m + v\n    m\n  }}{close}\n}}\n"
         );
         for item in [lent, assigned] {
             let source = refused_source(&item, call);

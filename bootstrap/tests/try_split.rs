@@ -76,7 +76,7 @@ fn try_in_a_loop_reads_the_elements_up_to_the_first_failure_and_no_more() {
             .collect();
         let source = with_uses(&format!(
             "fn read(r: Result[u64, str]) -> Result[u64, str] <console> {{\n  print(\"read\")\n  r\n}}\n\n\
-             fn first_bad(xs: List[Result[u64, str]]) -> Result[u64, str] <console> {{\n  var total: u64 = 0\n  \
+             fn first_bad(xs: List[Result[u64, str]]) -> Result[u64, str] <console> {{\n  mut total: u64 = 0\n  \
              loop i in 0..xs.size {{\n    v = try read(xs[i])\n    total = wrapping_add(total, v)\n  }}\n  .ok(total)\n}}\n\n\
              fn main() <console, alloc> {{\n  xs: List[Result[u64, str]] = [{}]\n  match first_bad(xs) {{\n    \
              .ok(t) {{ print(\"ok {{t}}\") }}\n    .err(e) {{ print(\"err {{e}}\") }}\n  }}\n}}\n",
@@ -170,14 +170,14 @@ struct Place {
 const PLACES: [Place; 5] = [
     // In a loop.
     Place {
-        body: "  var total: u64 = 0\n  loop i in 0..4 {\n    v = @0\n    total = wrapping_add(total, v)\n  }\n",
+        body: "  mut total: u64 = 0\n  loop i in 0..4 {\n    v = @0\n    total = wrapping_add(total, v)\n  }\n",
         operands: &["step(i, cut)"],
         last: "total",
         gives: |cut| if cut >= 4 { Ok(6) } else { Err(cut) },
     },
     // In a loop inside a loop.
     Place {
-        body: "  lim: u64 = 3\n  var total: u64 = 0\n  loop i in 0..lim {\n    loop j in 0..lim {\n      v = @0\n      total = wrapping_add(total, v)\n    }\n  }\n",
+        body: "  lim: u64 = 3\n  mut total: u64 = 0\n  loop i in 0..lim {\n    loop j in 0..lim {\n      v = @0\n      total = wrapping_add(total, v)\n    }\n  }\n",
         operands: &["step(wrapping_add(wrapping_mul(i, 3), j), cut)"],
         last: "total",
         gives: |cut| if cut >= 9 { Ok(36) } else { Err(cut) },

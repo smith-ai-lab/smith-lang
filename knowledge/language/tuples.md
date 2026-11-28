@@ -5,7 +5,7 @@ description: Tuples that group values without names, patterns that take them apa
 status: partial
 built:
   - "tuples, and patterns that define and assign"
-  - "a tuple's pattern, with `var` on some names and tuples inside it, as a parameter of a function, as a parameter of a lambda, and as the name of a `loop`, which does what the same binding as the first line of the body does and adds nothing to the executable; a pattern that may not match there is one error that names `match`, and a pattern of the wrong size or on a value that is no tuple gives the error a binding gives"
+  - "a tuple's pattern, with `mut` on some names and tuples inside it, as a parameter of a function, as a parameter of a lambda, and as the name of a `loop`, which does what the same binding as the first line of the body does and adds nothing to the executable; a pattern that may not match there is one error that names `match`, and a pattern of the wrong size or on a value that is no tuple gives the error a binding gives"
 ---
 
 # Tuples
@@ -71,7 +71,7 @@ use std.int (wrapping_add)
 fn first((n, s): (i32, str)) -> i32 { n }
 
 fn total(pairs: List[(str, i32)]) -> i32 {
-  var sum = 0
+  mut sum = 0
   loop (name, count) in pairs { sum = wrapping_add(sum, count) }
   sum
 }
@@ -100,25 +100,25 @@ A parameter written as a pattern has no name of its own, so its argument is give
 
 Each of these is the same program as the one that has a name there and the pattern as a binding on the first line of the body. A pattern in a `loop` is taken apart in each round, before the rest of the block.
 
-## A `var` in a pattern
+## A `mut` in a pattern
 
-A name in a pattern is immutable, as any [binding](bindings.md) is. `var` before a name makes that one a [`var`](var.md).
+A name in a pattern is immutable, as any [binding](bindings.md) is. `mut` before a name makes that one a [`mut`](mut.md).
 
 ```
 use std.console (console, print)
 
 fn main() <console, alloc> {
-  (a, var b) = sides(3, 4)
+  (a, mut b) = sides(3, 4)
   b = 9
   print("{a} {b}")
 }
 ```
 
-This prints `3 9`. Assigning to `a` is refused, as it is for any name that is not a `var`: "`a` is not a `var`, so it cannot be assigned to".
+This prints `3 9`. Assigning to `a` is refused, as it is for any name that is not a `mut`: "`a` is not a `mut`, so it cannot be assigned to".
 
 ## A pattern that assigns
 
-A pattern may name a `var` that is already defined, and then it assigns to it where it would otherwise define a new name. One pattern may define some names and assign to others. In `(total, rest) = split(total)`, `total` is a `var`, so it is assigned, and `rest` is new, so it is defined.
+A pattern may name a `mut` that is already defined, and then it assigns to it where it would otherwise define a new name. One pattern may define some names and assign to others. In `(total, rest) = split(total)`, `total` is a `mut`, so it is assigned, and `rest` is new, so it is defined.
 
 ```
 use std.bits (i32)
@@ -127,7 +127,7 @@ use std.console (console, print)
 fn split(n: i32) -> (i32, i32) { (n, 1) }
 
 fn main() <console, alloc> {
-  var total = 5
+  mut total = 5
   (total, rest) = split(total)
   print("{total} {rest}")
 }
@@ -139,8 +139,8 @@ This prints `5 1`. The elements of the tuple on the right are evaluated from lef
 use std.console (console, print)
 
 fn main() <console, alloc> {
-  var a = 1
-  var b = 2
+  mut a = 1
+  mut b = 2
   (a, b) = (b, a)
   print("{a} {b}")
 }
@@ -165,7 +165,7 @@ fn main() <console, alloc> {
 
 This prints `first`, `second`, and `1 2`.
 
-A pattern names a `var` once. `(a, a) = (2, 3)` is refused, whether `a` is a `var` it assigns to or a name it defines, as one of the two values would be lost. For a `var` `a` it assigned to, the error is at the second `a`, at any depth of the pattern, as in `(a, (b, a))`: "this pattern names `a` twice". For a name it defines, it is "`a` is already defined in `main`".
+A pattern names a `mut` once. `(a, a) = (2, 3)` is refused, whether `a` is a `mut` it assigns to or a name it defines, as one of the two values would be lost. For a `mut` `a` it assigned to, the error is at the second `a`, at any depth of the pattern, as in `(a, (b, a))`: "this pattern names `a` twice". For a name it defines, it is "`a` is already defined in `main`".
 
 ## The empty tuple
 
@@ -191,8 +191,8 @@ There is nothing in it to take apart, so it is never the pattern of a binding: `
 | `(a, b)` | A tuple of two values |
 | `(T, U)` | The type of a tuple of a `T` and a `U` |
 | `(x, y) = e` | Defines `x` and `y` as the two parts of `e` |
-| `(x, var y) = e` | The same, where `y` is a `var` |
-| `(x, y) = e`, where `x` is a `var` | Assigns `x` and defines `y` |
+| `(x, mut y) = e` | The same, where `y` is a `mut` |
+| `(x, y) = e`, where `x` is a `mut` | Assigns `x` and defines `y` |
 | `()` | The empty tuple, which a function with no return type returns |
 
 Next: [Enums](enums.md)

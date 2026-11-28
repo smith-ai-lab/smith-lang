@@ -379,7 +379,7 @@ fn a_range_is_taken_where_a_range_that_holds_every_number_of_it_is_needed() {
         let wide = format!("{low}..{}", high + 1);
         let narrow = format!("{ilow}..{}", ihigh + 1);
         let source = with_header(format!(
-            "struct Held {{\n  n: {wide}\n}}\n\nfn pass(x: {wide}) -> {wide} {{ x }}\n\nfn lift(x: {narrow}) -> {wide} {{ x }}\n\nfn pick(flag: bool, x: {narrow}) -> {wide} {{\n  if flag {{ x }} else {{ {ilow} }}\n}}\n\nfn which(o: Option[{narrow}]) -> {wide} {{\n  match o {{\n    .some(v) {{ v }}\n    .none {{ {ilow} }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  a: {narrow} = {n}\n  b: {wide} = a\n  var c: {wide} = {low}\n  c = a\n  h = Held(n: a)\n  xs: List[{wide}] = [a, {low}]\n  print(\"{{b}} {{pass(a)}} {{lift(a)}} {{c}} {{h.n}} {{xs[0]}} {{pick(true, a)}} {{which(.some(a))}}\")\n}}\n"
+            "struct Held {{\n  n: {wide}\n}}\n\nfn pass(x: {wide}) -> {wide} {{ x }}\n\nfn lift(x: {narrow}) -> {wide} {{ x }}\n\nfn pick(flag: bool, x: {narrow}) -> {wide} {{\n  if flag {{ x }} else {{ {ilow} }}\n}}\n\nfn which(o: Option[{narrow}]) -> {wide} {{\n  match o {{\n    .some(v) {{ v }}\n    .none {{ {ilow} }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  a: {narrow} = {n}\n  b: {wide} = a\n  mut c: {wide} = {low}\n  c = a\n  h = Held(n: a)\n  xs: List[{wide}] = [a, {low}]\n  print(\"{{b}} {{pass(a)}} {{lift(a)}} {{c}} {{h.n}} {{xs[0]}} {{pick(true, a)}} {{which(.some(a))}}\")\n}}\n"
         ));
         assert_eq!(stdout(&source), format!("{}\n", vec![n.to_string(); 8].join(" ")), "for\n{source}");
     });
@@ -453,7 +453,7 @@ fn a_value_enters_a_narrower_range_exactly_when_a_condition_or_a_requires_shows_
             )
         };
         let tail = format!(
-            "fn checked(x: {wide}) -> {narrow} {{\n  {checked}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  var y: {narrow} = {ilow}\n{assigned}  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n{facts}{{\n  takes(x)\n}}\n\nfn main() <console, alloc> {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
+            "fn checked(x: {wide}) -> {narrow} {{\n  {checked}\n}}\n\nfn bound(x: {wide}) -> {narrow} {{\n  mut y: {narrow} = {ilow}\n{assigned}  y\n}}\n\nfn passed(x: {wide}) -> {narrow}\n{facts}{{\n  takes(x)\n}}\n\nfn main() <console, alloc> {{\n  a: {wide} = {n}\n  print(\"{{result(a)}} {{checked(a)}} {{bound(a)}} {{passed(a)}}\")\n}}\n"
         );
         let proven = with_header(format!("{lead}\n{facts}{{ x }}\n\n{tail}"));
         assert_eq!(stdout(&proven), format!("{}\n", vec![n.to_string(); 4].join(" ")), "for\n{proven}");
@@ -552,7 +552,7 @@ fn a_range_from_a_name_is_at_least_it_at_every_call() {
 
 /// A bound that is a name is a parameter of the function, other than the
 /// parameter itself, and a whole number. A name is not a bound in a field, a
-/// `var`, or inside another type, and each is refused with the reason.
+/// `mut`, or inside another type, and each is refused with the reason.
 fn a_bound_that_is_not_a_parameter_or_is_written_where_a_name_is_not_a_bound_is_refused() {
     for (bad, call, mentions) in [
         ("fn f(n: Nat, i: 0..m) -> Nat { i }", "f(1, 0)", "`m`"),
@@ -564,8 +564,8 @@ fn a_bound_that_is_not_a_parameter_or_is_written_where_a_name_is_not_a_bound_is_
         ("fn f(n: Nat) -> Nat {\n  x: 0..n = 0\n  0\n}", "f(1)", "`0 < n`"),
         ("fn f(n: Nat) -> Nat {\n  x: 0..m = 0\n  0\n}", "f(1)", "there is no name `m`"),
         ("fn f(n: Nat) -> Nat {\n  m = \"a\"\n  x: 0..m = 0\n  0\n}", "f(1)", "not a whole number"),
-        ("fn f(n: Nat) -> Nat {\n  var m: Nat = 3\n  x: 0..m = 0\n  0\n}", "f(1)", "`m` is a `var`"),
-        ("fn f(n: Nat) -> Nat {\n  var x: 0..n = 0\n  0\n}", "f(1)", "a name is not a bound in the type of a `var`"),
+        ("fn f(n: Nat) -> Nat {\n  mut m: Nat = 3\n  x: 0..m = 0\n  0\n}", "f(1)", "`m` is a `mut`"),
+        ("fn f(n: Nat) -> Nat {\n  mut x: 0..n = 0\n  0\n}", "f(1)", "a name is not a bound in the type of a `mut`"),
         ("fn f(n: Nat, xs: List[0..n]) -> Nat { 0 }", "f(1, [0])", "a name is not a bound in a type inside another type"),
         ("struct S {\n  a: 0..n\n}\n\nfn f(s: S) -> Nat { 0 }", "f(S(a: 0))", "a name is not a bound in the type of a field"),
     ] {
@@ -640,7 +640,7 @@ fn a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(par
 
 
 /// Wherever a value is given where a type is needed, a range is taken as any
-/// value is: a binding, a `var`, an argument, a result, the item of a case, an
+/// value is: a binding, a `mut`, an argument, a result, the item of a case, an
 /// element of a tuple, a field of a struct that is generic or not, and an item
 /// of a list, each also inside another. A narrower range is taken as
 /// it is, a wider one where a condition shows that it fits, and one not shown to
@@ -648,12 +648,12 @@ fn a_sum_a_difference_and_a_product_give_the_exact_range_and_no_narrower_one(par
 fn a_range_is_taken_in_every_place_a_type_is_needed(part: u64) {
     // The declarations, the type the place is, how the place is made of an
     // expression, what it is made of when it is left out, and how it is read.
-    // A place is a binding, a `var`, an argument, a result, an item of a case, a
+    // A place is a binding, a `mut`, an argument, a result, an item of a case, a
     // tuple, a struct that is generic or not, and a list, and each is also
     // written inside another.
     const PLACES: [(&str, &str, &str, &str, &str); 14] = [
         ("", "Byte", "\n    x: Byte = E\n    x\n  ", "0", "print(\"{r}\")"),
-        ("", "Byte", "\n    var x: Byte = 0\n    x = E\n    x\n  ", "0", "print(\"{r}\")"),
+        ("", "Byte", "\n    mut x: Byte = 0\n    x = E\n    x\n  ", "0", "print(\"{r}\")"),
         ("fn same(v: Byte) -> Byte { v }\n\n", "Byte", "same(E)", "0", "print(\"{r}\")"),
         ("", "Byte", "E", "0", "print(\"{r}\")"),
         (

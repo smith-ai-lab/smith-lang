@@ -2,7 +2,7 @@ use std.bits (u64)
 use std.console (console, print)
 
 fn lower(t: str) -> bool {
-  var ok = true
+  mut ok = true
   loop c in t {
     if c < 97 {
       ok = false

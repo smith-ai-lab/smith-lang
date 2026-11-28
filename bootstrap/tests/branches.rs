@@ -57,15 +57,15 @@ pub const ONCE: &[Test] = &[
 /// Programs that print nothing, so that their code is all the executable
 /// holds, and that compare values the compiler cannot know.
 const QUIET: &[&str] = &[
-    "use std.bits (u64)\nuse std.list (push)\n\nfn main() <alloc> {\n  var xs: List[u64] = []\n  loop i in 0..1000 { xs = push(xs, i) }\n}\n",
+    "use std.bits (u64)\nuse std.list (push)\n\nfn main() <alloc> {\n  mut xs: List[u64] = []\n  loop i in 0..1000 { xs = push(xs, i) }\n}\n",
     "use std.bits (u64)
 use std.list (push)
 
 fn main() <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..100 { xs = push(xs, i) }
-  var best: u64 = 0
-  var at: Nat = 0
+  mut best: u64 = 0
+  mut at: Nat = 0
   loop j in 0..xs.size {
     if xs[j] > best {
       best = xs[j]
@@ -74,7 +74,7 @@ fn main() <alloc> {
       at = j
     }
   }
-  var ys: List[Nat] = []
+  mut ys: List[Nat] = []
   loop k in 0..xs.size { if xs[k] < best { ys = push(ys, at) } }
 }
 ",
@@ -137,7 +137,7 @@ fn a_push_that_has_room_is_20_instructions_or_fewer_in_a_loop_on_x86_64() {
     // instruction that holds it is the loop's own test.
     const PUSHES: i64 = 1_000_003;
     let source = format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  var xs: List[u64] = []\n  loop i in 0..{PUSHES} {{ xs = push(xs, i) }}\n  print(\"{{xs.size}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {{\n  mut xs: List[u64] = []\n  loop i in 0..{PUSHES} {{ xs = push(xs, i) }}\n  print(\"{{xs.size}}\")\n}}\n"
     );
     let mut read = 0;
     for target in Target::ALL {

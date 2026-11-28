@@ -7,7 +7,7 @@
 //! tuples. A few functions each take a tuple, take it apart, and return a
 //! value built from its parts, and `main` calls each of them. Values are
 //! built, bound, passed, and returned, and taken apart by patterns in
-//! bindings, where a name may be marked `var` or be a `var` already, which
+//! bindings, where a name may be marked `mut` or be a `mut` already, which
 //! the pattern assigns to, and in `match`, used as a statement and as an
 //! expression. Calls of `say` inside tuples show the order in which their
 //! elements are worked out.
@@ -52,7 +52,7 @@ fn cases() -> Vec<(&'static str, Option<Ty>)> {
     ]
 }
 
-/// A pattern: a name it defines, which is a `var` if marked so, a `var` it
+/// A pattern: a name it defines, which is a `mut` if marked so, a `mut` it
 /// assigns to, a case of `Pet` by its place, or a tuple of patterns.
 #[derive(Clone, Debug)]
 enum Pat {
@@ -173,7 +173,7 @@ fn tuple_type(g: &mut Gen, depth: usize) -> Ty {
     )
 }
 
-/// What generating code needs to know: the names defined and the `var`s
+/// What generating code needs to know: the names defined and the `mut`s
 /// among them, the functions it may call, and a count for fresh names.
 #[derive(Clone)]
 struct Ctx {
@@ -317,9 +317,9 @@ impl Writing<'_> {
     }
 
     /// A pattern for a binding of a value of the type, which is a tuple
-    /// when `tuple`: of patterns while `depth` allows, of `var`s already
-    /// defined it assigns to, and of new names, some marked `var`. `used`
-    /// holds the `var`s already assigned to in the pattern.
+    /// when `tuple`: of patterns while `depth` allows, of `mut`s already
+    /// defined it assigns to, and of new names, some marked `mut`. `used`
+    /// holds the `mut`s already assigned to in the pattern.
     fn binding(
         &mut self,
         ctx: &mut Ctx,
@@ -409,7 +409,7 @@ impl Writing<'_> {
     }
 
     /// The blocks of a `match` on a value of the type. Each gives text if
-    /// `gives`, and otherwise prints, or assigns to a `var` that holds
+    /// `gives`, and otherwise prints, or assigns to a `mut` that holds
     /// text.
     fn arms(&mut self, ctx: &mut Ctx, ty: &Ty, depth: usize, gives: bool) -> Vec<Arm> {
         let pats = self.rows(ctx, ty, 2);
@@ -586,8 +586,8 @@ fn mistake(w: &mut Writing, ctx: &mut Ctx, kind: Kind) -> Stmt {
         Kind::NotAVar => raw(
             "fixed = \"a\"\n  (",
             "fixed, w) = (\"b\", \"c\")",
-            "is not a `var`",
-            Some("declare it with `var`"),
+            "is not a `mut`",
+            Some("declare it with `mut`"),
         ),
         Kind::VarHolds => raw(
             "(",
@@ -600,7 +600,7 @@ fn mistake(w: &mut Writing, ctx: &mut Ctx, kind: Kind) -> Stmt {
                 raw("(w, ", "w) = (\"a\", \"b\")", "already defined", None)
             } else {
                 raw(
-                    "(var ",
+                    "(mut ",
                     "note, w) = (\"a\", \"b\")",
                     "already defined",
                     None,
@@ -678,7 +678,7 @@ fn mistake(w: &mut Writing, ctx: &mut Ctx, kind: Kind) -> Stmt {
                 ("w: ", "fn(str) -> str = \"a\"", NOT_BUILT),
                 ("(", ".none, w) = (Pet.none, \"a\")", NOT_BUILT),
                 (
-                    "var twice = \"a\"\n  (twice, ",
+                    "mut twice = \"a\"\n  (twice, ",
                     "twice) = (\"b\", \"c\")",
                     "names `twice` twice",
                 ),
@@ -700,7 +700,7 @@ fn sentence(items: &[String]) -> String {
 
 fn pattern_text(p: &Pat) -> String {
     match p {
-        Pat::Bind(name, true) => format!("var {name}"),
+        Pat::Bind(name, true) => format!("mut {name}"),
         Pat::Bind(name, false) | Pat::Assign(name) => name.clone(),
         Pat::Case(k, inner) => {
             let name = cases()[*k].0;
@@ -966,7 +966,7 @@ impl Writer {
                     self.expr(e, indent);
                 }
                 Stmt::Var(name, e) => {
-                    self.push(&format!("var {name} = "));
+                    self.push(&format!("mut {name} = "));
                     self.expr(e, indent);
                 }
                 Stmt::Assign(name, e) => {

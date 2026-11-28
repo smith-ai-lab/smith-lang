@@ -84,7 +84,7 @@ fn main() <console, alloc> {
 use std.bits (i32)
 
 fn largest(c: Countdown) -> i32 {
-  var top = 0
+  mut top = 0
   loop v in c { if v > top { top = v } }
   top
 }
@@ -150,7 +150,7 @@ A loop over a type that implements `Iterate` is ended by `break`, and left by [`
 use std.bits (i32)
 
 fn first_small(c: Countdown) -> i32 {
-  var found = 0
+  mut found = 0
   loop v in c {
     if v < 3 {
       found = v

@@ -8,14 +8,14 @@ built:
   - "a value of a range of 65 to 128 bits that enters a range of 64 bits where a condition or a `requires` shows that it fits"
   - "`wrapping_`, `saturating_`, and `checked_` of `add`, `sub`, and `mul`, and `wrapping_div`, `wrapping_rem`, `checked_div`, and `checked_rem` of the traits `Wrapping` and `Checked`, and `checked_div`, `checked_rem`, `wrapping_div`, and `wrapping_rem` of `std.int`, the last two compiling only where `arith` proves the divisor is not zero"
   - "`/` and `%` of two whole numbers, which round toward zero, give the exact range of the quotient and of what is left over, bind as `*` does, and compile when `arith` proves that the divisor is not zero and, for a signed number, that the least number is not divided by -1 where the result would not fit"
-  - "a value that enters a narrower range, at a binding, a `var`, an argument, and a result, which compiles when a condition or a `requires` shows that it fits, and an error that says what could not be proven"
+  - "a value that enters a narrower range, at a binding, a `mut`, an argument, and a result, which compiles when a condition or a `requires` shows that it fits, and an error that says what could not be proven"
   - "a unary `-`, which gives the negated range and groups tighter than `*`"
   - "not `saturating_` of `div` and `rem`"
   - "`/` and `%` of a number of 65 to 128 bits, which give the exact range of the quotient and of what is left over, as a number of 64 bits does, by 2 to some power as the halves of the number moved or kept, and by any other number through one function of the runtime that divides two numbers of 128 bits, which is slow beside every other operator, so `times` below gives a `Nat` and a `Nat` from a product with no division"
   - "the product of two numbers of 64 bits or fewer, both signed or both not, as the one instruction of each chip that gives both halves: `mul` or `imul` of one operand on x86-64, and `mul` with `umulh` or `smulh` on arm64"
   - "`narrow(x)` and `clamp(x)` of a number of 65 to 128 bits, to a range of 64 bits or fewer, compared with the ends of the range as two words"
   - "not `wrapping_`, `saturating_`, and `checked_` of a number of more than 64 bits, or `narrow` and `clamp` of a float"
-  - "a `var` with no stated type given the range its body infers, where it is a number"
+  - "a `mut` with no stated type given the range its body infers, where it is a number"
 ---
 
 # Integer arithmetic
@@ -46,7 +46,7 @@ fn sum(a: 0..256, b: 0..256) -> 0..511 { a + b }
 
 ## Where a value enters a narrower range
 
-A proof is asked for only where a value enters a range narrower than its own. That is a binding or a `var` with a stated type, an argument of a narrower parameter, and a narrower result.
+A proof is asked for only where a value enters a range narrower than its own. That is a binding or a `mut` with a stated type, an argument of a narrower parameter, and a narrower result.
 
 ```
 fn average(a: 0..256, b: 0..256) -> 0..256 {

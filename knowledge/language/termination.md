@@ -21,7 +21,7 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn sum_below(n: u64) -> u64 {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..n { total = wrapping_add(total, i) }
   total
 }

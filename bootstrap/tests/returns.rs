@@ -80,7 +80,7 @@ struct Cond {
     k: i64,
 }
 
-/// A line of a function whose parameter is `x` and that has `var acc`.
+/// A line of a function whose parameter is `x` and that has `mut acc`.
 #[derive(Clone, Debug)]
 enum Item {
     /// `acc = wrapping_add(acc, k)`.
@@ -302,7 +302,7 @@ fn write(items: &[Item], p: &str) -> String {
 /// or `acc` when the lines do not end in a `return`.
 fn body(items: &[Item], p: &str) -> String {
     let tail = if ends_in_return(items) { "" } else { "acc\n" };
-    format!("var acc: Int = 0\n{}{tail}", write(items, p))
+    format!("mut acc: Int = 0\n{}{tail}", write(items, p))
 }
 
 /// The same lines with no `return`: each is the value of an `if` that holds
@@ -410,7 +410,7 @@ fn a_function_with_returns_prints_what_it_prints_with_each_return_as_the_value_o
             let said = printed(lines);
             let returned = program(&body(lines, "x"));
             assert_eq!(evaluate(&returned), said, "for {returned}");
-            let rewritten = program(&format!("var acc: Int = 0\n{}", as_value(lines, &[], "x")));
+            let rewritten = program(&format!("mut acc: Int = 0\n{}", as_value(lines, &[], "x")));
             assert!(!rewritten.contains("return"), "{rewritten}");
             assert_eq!(evaluate(&rewritten), said, "for {rewritten}");
         },
@@ -579,7 +579,7 @@ fn a_return_costs_a_jump_and_a_last_return_is_the_value_it_gives() {
         |g| reached(items(g, 2, false)),
         |lines| {
             let returned = program(&body(lines, "x"));
-            let rewritten = program(&format!("var acc: Int = 0\n{}", as_value(lines, &[], "x")));
+            let rewritten = program(&format!("mut acc: Int = 0\n{}", as_value(lines, &[], "x")));
             assert_eq!(evaluate(&returned), evaluate(&rewritten), "for {returned}");
             // The rewrite holds the lines after an `if` once for each block of
             // it, so it may call more, and the `return`s call nothing more.
@@ -603,12 +603,12 @@ fn a_return_costs_a_jump_and_a_last_return_is_the_value_it_gives() {
             // The function is larger than what a pass inlines, as it was when a
             // `wrapping_` function was a call and not an instruction. Its
             // statements are read by nothing, so no pass removes them first.
-            let mut padding = String::from("var padding = x\n");
+            let mut padding = String::from("mut padding = x\n");
             for _ in 0..scalar::LEAF_BOUND {
                 padding += "padding = wrapping_add(padding, x)\n";
             }
             let with = |end: String| {
-                program(&format!("{padding}var acc: Int = 0\n{}{end}\n", write(&lines, "x")))
+                program(&format!("{padding}mut acc: Int = 0\n{}{end}\n", write(&lines, "x")))
             };
             let by_return = with(format!("return {}", last.write("x")));
             let by_value = with(last.write("x"));

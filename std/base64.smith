@@ -26,9 +26,9 @@ fn put(t: take Text, v: Byte, url: bool) -> Text <alloc>
 }
 
 fn spell(bytes: Slice[Byte], url: bool) -> str <alloc> {
-  var built = text()
-  var state: Byte = 0
-  var rest: Byte = 0
+  mut built = text()
+  mut state: Byte = 0
+  mut rest: Byte = 0
   loop b in bytes {
     if state == 0 {
       built = put(built, shift_right(b, 2), url)
@@ -83,10 +83,10 @@ fn value(c: Byte, url: bool) -> Option[0..64] {
 }
 
 fn unspell(s: str, url: bool) -> Option[List[Byte]] <alloc> {
-  var bytes: List[Byte] = []
-  var state: Byte = 0
-  var rest: Byte = 0
-  var mode: Byte = 0
+  mut bytes: List[Byte] = []
+  mut state: Byte = 0
+  mut rest: Byte = 0
+  mut mode: Byte = 0
   loop c in s {
     if mode == 2 { return .none }
     if c == 61 {

@@ -62,7 +62,7 @@ fn digit(b: Byte) -> Option[Byte] {
 }
 
 fn number(bytes: Slice[Byte], base: Nat) -> Option[Nat] {
-  var n: Nat = 0
+  mut n: Nat = 0
   if bytes.size == 0 { return .none }
   loop b in bytes {
     d = try digit(b)
@@ -95,7 +95,7 @@ fn name_of(bytes: Slice[Byte]) -> str <alloc> {
       .err(e) { return "" }
     }
   }
-  var t = text()
+  mut t = text()
   loop b in bytes {
     c = lower(b)
     if c < 128 { t = append_ascii(t, c) }
@@ -238,10 +238,10 @@ fn scan(bytes: Slice[Byte], limit: Nat, fold: bool) -> Read[Lines] <alloc> {
     .some(why) { return .refused(why) }
     .none { }
   }
-  var headers: List[(str, str)] = []
-  var first = view[0..0]
-  var seen = false
-  var at: Nat = 0
+  mut headers: List[(str, str)] = []
+  mut first = view[0..0]
+  mut seen = false
+  mut at: Nat = 0
   loop round in 0..view.size {
     if at > view.size { break }
     e = crlf_at(view, at)
@@ -306,10 +306,10 @@ fn step(r: Run, b: Byte) -> Run {
 }
 
 fn framing(headers: List[(str, str)], request: bool) -> Result[Body, str] {
-  var lengths: Nat = 0
-  var length: Nat = 0
-  var coded = false
-  var r = Run(elements: 0, chunks: 0, last: false, seen: 0, matched: 0, ended: false, other: false)
+  mut lengths: Nat = 0
+  mut length: Nat = 0
+  mut coded = false
+  mut r = Run(elements: 0, chunks: 0, last: false, seen: 0, matched: 0, ended: false, other: false)
   loop h in headers {
     match h {
       (name, value) {
@@ -366,7 +366,7 @@ fn is_host(value: Slice[Byte]) -> bool {
 }
 
 fn host_fault(headers: List[(str, str)], required: bool) -> Option[str] {
-  var hosts: Nat = 0
+  mut hosts: Nat = 0
   loop h in headers {
     match h {
       (name, value) {
@@ -440,9 +440,9 @@ fn head_end(view: Slice[Byte]) -> Option[Nat] {
 
 // The head with each obsolete line fold, after the start line, made one space.
 fn unfold(head: Slice[Byte]) -> List[Byte] <alloc> {
-  var written: List[Byte] = []
-  var started = false
-  var drop: Nat = 0
+  mut written: List[Byte] = []
+  mut started = false
+  mut drop: Nat = 0
   loop i in 0..head.size {
     b = head[i]
     if drop == 1 {
@@ -519,7 +519,7 @@ fn trailer(view: Slice[Byte], from: Nat) -> Read[Slice[Byte]]
     .some(why) { return .refused(why) }
     .none { }
   }
-  var next: Nat = 0
+  mut next: Nat = 0
   loop round in 0..rest.size {
     if next > rest.size { break }
     e = crlf_at(rest, next)
@@ -581,9 +581,9 @@ fn hex_digit(d: Byte) -> Byte {
 }
 
 pub fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] <alloc> {
-  var written = to
-  var rest: Nat = bytes.size
-  var started = false
+  mut written = to
+  mut rest: Nat = bytes.size
+  mut started = false
   loop k in 0..16 {
     d: Byte = bit_and(shift_right(rest, 60), 15)
     rest = wrapping_shift_left(rest, 4)

@@ -9,7 +9,7 @@
 //! adds to its fields, copies one to the other, replaces it, and leaves early
 //! by `return`. It works out what the cursor is after each call, and writes the
 //! function twice, with `mut` and with `take`, and the call twice, with
-//! `mut` and as an assignment, of a `var`, a field of one, or an item of a
+//! `mut` and as an assignment, of a `mut`, a field of one, or an item of a
 //! list.
 
 use smith::check;
@@ -91,7 +91,7 @@ fn step(c: mut Cursor) {{
 }}
 
 fn main() <console, alloc> {{
-  var c = Cursor(at: 0, line: 1)
+  mut c = Cursor(at: 0, line: 1)
   step(mut c)
   step(mut c)
   print(\"{{c.at}}\")
@@ -148,7 +148,7 @@ struct Change {
     lines: Vec<Step>,
     start: (u8, u8),
     calls: usize,
-    /// 0 for a `var`, 1 for a field of one, 2 for an item of a list.
+    /// 0 for a `mut`, 1 for a field of one, 2 for an item of a list.
     place: usize,
     /// Whether the body ends with a bare `return`.
     returns: bool,
@@ -184,17 +184,17 @@ fn change_program(c: &Change, mutable: bool) -> String {
     } else {
         let body = body.join("\n").replace("{ return }", "{ return x }");
         let end = if c.returns { "return x" } else { "x" };
-        format!("fn change(given: take Cursor) -> Cursor {{\n  var x = given\n{body}\n  {end}\n}}")
+        format!("fn change(given: take Cursor) -> Cursor {{\n  mut x = given\n{body}\n  {end}\n}}")
     };
     let (at, line) = c.start;
     let start = format!("Cursor(at: {at}, line: {line})");
     let (made, place) = match c.place {
-        0 => (format!("var c = {start}"), "c"),
+        0 => (format!("mut c = {start}"), "c"),
         1 => (
-            format!("var d = Doc(cursor: {start}, other: Cursor(at: 0, line: 0))"),
+            format!("mut d = Doc(cursor: {start}, other: Cursor(at: 0, line: 0))"),
             "d.cursor",
         ),
-        _ => (format!("var cs = [{start}]"), "cs[0]"),
+        _ => (format!("mut cs = [{start}]"), "cs[0]"),
     };
     let call = if mutable {
         format!("  change(mut {place})\n")
@@ -273,7 +273,7 @@ fn mistake_program(lines: &[&str], mutable: bool) -> String {
         (format!("fn change(x: mut Cursor) {{\n{body}}}"), "change(mut c)")
     } else {
         (
-            format!("fn change(given: take Cursor) -> Cursor {{ var x = given\n{body}  x\n}}"),
+            format!("fn change(given: take Cursor) -> Cursor {{ mut x = given\n{body}  x\n}}"),
             "c = change(c)",
         )
     };
@@ -288,7 +288,7 @@ fn look(c: Cursor) -> u8 {{ c.at }}
 {function}
 
 fn main() <alloc> {{
-  var c = Cursor(at: 0, line: 0)
+  mut c = Cursor(at: 0, line: 0)
   {call}
 }}
 "
@@ -377,7 +377,7 @@ fn marks_program(m: &Marks) -> (String, String, String) {
     let call = written(&|i| m.args[i]);
     let fixed = written(&|i| m.args[i] || m.params[i]);
     let vars: String = (0..m.params.len())
-        .map(|i| format!("  var c{i} = Cursor(at: {i}, line: 0)\n"))
+        .map(|i| format!("  mut c{i} = Cursor(at: {i}, line: 0)\n"))
         .collect();
     let before_call = format!(
         "{CURSOR}\nfn f({}) {{\n{}}}\n\nfn main() {{\n{vars}  ",
@@ -430,9 +430,9 @@ fn what_is_passed_mut_is_a_var_or_a_field_or_an_item_of_one() {
     let start = "Cursor(at: 0, line: 0)";
     let doc = format!("Doc(cursor: {start}, other: {start})");
     for (made, passed) in [
-        (format!("var c = {start}"), "c".to_string()),
-        (format!("var d = {doc}"), "d.cursor".to_string()),
-        (format!("var cs = [{start}]"), "cs[0]".to_string()),
+        (format!("mut c = {start}"), "c".to_string()),
+        (format!("mut d = {doc}"), "d.cursor".to_string()),
+        (format!("mut cs = [{start}]"), "cs[0]".to_string()),
     ] {
         let source = program(&made, &passed);
         assert!(errors(&source).is_empty(), "{:?} for {source}", errors(&source));
@@ -454,7 +454,7 @@ fn what_is_passed_mut_is_a_var_or_a_field_or_an_item_of_one() {
     }
     // A field of an item is a place that is not built, and is refused as one,
     // at the argument.
-    let source = program(&format!("var ds = [{doc}]"), "ds[0].cursor");
+    let source = program(&format!("mut ds = [{doc}]"), "ds[0].cursor");
     let at = pos_after(&source[..source.find("ds[0].cursor").expect("call")]);
     let errors = errors(&source);
     assert!(
@@ -485,9 +485,9 @@ fn both[T, U](p: mut T, q: mut U) {{
 }}
 
 fn main() <alloc> {{
-  var a = Doc(cursor: {start}, other: Cursor(at: 3, line: 4))
-  var b = Doc(cursor: {start}, other: {start})
-  var xs = [{start}, Cursor(at: 5, line: 6)]
+  mut a = Doc(cursor: {start}, other: Cursor(at: 3, line: 4))
+  mut b = Doc(cursor: {start}, other: {start})
+  mut xs = [{start}, Cursor(at: 5, line: 6)]
   both(mut {x}, mut {y})
 }}
 "
@@ -514,9 +514,9 @@ fn swap(p: mut Cursor, q: mut Cursor) {{
 }}
 
 fn main() <console, alloc> {{
-  var d = Doc(cursor: Cursor(at: 1, line: 0), other: Cursor(at: 2, line: 0))
+  mut d = Doc(cursor: Cursor(at: 1, line: 0), other: Cursor(at: 2, line: 0))
   swap(mut d.cursor, mut d.other)
-  var xs = [Cursor(at: 3, line: 0), Cursor(at: 4, line: 0)]
+  mut xs = [Cursor(at: 3, line: 0), Cursor(at: 4, line: 0)]
   swap(mut xs[0], mut xs[1])
   print(\"{{d.cursor.at}} {{d.other.at}} {{xs[0].at}} {{xs[1].at}}\")
 }}
@@ -551,7 +551,7 @@ fn run(f: fn() -> u8) -> u8 { f() }
     for (line, before) in [
         ("shelf = Shelf(log: l)", "shelf = Shelf(log: "),
         ("kept = Kept(items: l.items)", "kept = Kept(items: "),
-        ("var other = l", "var other = "),
+        ("mut other = l", "mut other = "),
         ("burn(l)", "burn("),
         ("return l", ""),
         ("n = run() { l.count }", "n = run() { "),
@@ -564,7 +564,7 @@ fn keep(l: mut Log) {{
 }}
 
 fn main() <alloc> {{
-  var l = Log(items: [], count: 0)
+  mut l = Log(items: [], count: 0)
   keep(mut l)
 }}
 "
@@ -586,7 +586,7 @@ fn keep(l: mut Log) {{
 }}
 
 fn main() <alloc> {{
-  var l = Log(items: [], count: 0)
+  mut l = Log(items: [], count: 0)
   keep(mut l)
 }}
 "
@@ -607,8 +607,8 @@ fn same(n: mut u8) {{
 }}
 
 fn main() {{
-  var n: u8 = 0
-  var m: u8 = 0
+  mut n: u8 = 0
+  mut m: u8 = 0
   zero(n)
   same(mut {changed})
   zero(n)

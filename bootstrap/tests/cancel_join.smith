@@ -10,7 +10,7 @@ use std.net (Connection, close, connection, handle, net, release)
 use std.task (outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 fn eat() -> u64 <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     xs = push(xs, i)
   }
@@ -35,7 +35,7 @@ fn n2(c: take Connection) -> u64 <net, task, console, alloc> {
   g = opened(7)
   t = spawn { n3(g) }
   test_ready(12)
-  var total: u64 = 0
+  mut total: u64 = 0
   match outcome(t) {
     .ok(v) { total = wrapping_add(total, v) }
     .err(failure) { }

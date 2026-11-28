@@ -123,7 +123,7 @@ fn utf8_of_a_frozen_list_is_what_the_standard_says_of_its_bytes() {
 fn every_byte_of_a_text_made_by_utf8_is_read_after_other_lists_reuse_memory() {
     generate::check(402, 60, bytes, |bytes| {
         let source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (freeze, push)\nuse std.utf8 (utf8)\n\nfn fill(n: u64, v: Byte) -> List[Byte] <alloc> {{\n  var xs: List[Byte] = []\n  loop i in 0..n {{ xs = push(xs, v) }}\n  xs\n}}\n\nfn main() <console, alloc> {{\n  b: List[Byte] = {}\n  match utf8(freeze(b)) {{\n    .ok(t) {{\n      a = fill(40, 255)\n      c = fill(300, 254)\n      d = fill(9, 253)\n      print(\"ok {{t.size}} {{a.size}} {{c.size}} {{d.size}}\")\n      loop i in 0..t.size {{ print(\"{{t[i]}}\") }}\n    }}\n    .err(e) {{\n      a = fill(40, 255)\n      print(\"err {{e.at}} {{a.size}}\")\n    }}\n  }}\n}}\n",
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (freeze, push)\nuse std.utf8 (utf8)\n\nfn fill(n: u64, v: Byte) -> List[Byte] <alloc> {{\n  mut xs: List[Byte] = []\n  loop i in 0..n {{ xs = push(xs, v) }}\n  xs\n}}\n\nfn main() <console, alloc> {{\n  b: List[Byte] = {}\n  match utf8(freeze(b)) {{\n    .ok(t) {{\n      a = fill(40, 255)\n      c = fill(300, 254)\n      d = fill(9, 253)\n      print(\"ok {{t.size}} {{a.size}} {{c.size}} {{d.size}}\")\n      loop i in 0..t.size {{ print(\"{{t[i]}}\") }}\n    }}\n    .err(e) {{\n      a = fill(40, 255)\n      print(\"err {{e.at}} {{a.size}}\")\n    }}\n  }}\n}}\n",
             written(bytes)
         );
         let lines = match std::str::from_utf8(bytes) {
@@ -220,7 +220,7 @@ fn the_bytes_of_a_text_and_a_piece_of_them_as_text_ask_for_no_memory() {
 fn the_bytes_of_a_text_are_not_assigned_to() {
     let source = |target: &str| {
         format!(
-            "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn main() <console, alloc> {{\n  match utf8(freeze([104, 105])) {{\n    .ok(t) {{\n      var s = t\n      {target}\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n"
+            "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn main() <console, alloc> {{\n  match utf8(freeze([104, 105])) {{\n    .ok(t) {{\n      mut s = t\n      {target}\n    }}\n    .err(e) {{ print(\"err\") }}\n  }}\n}}\n"
         )
     };
     assert!(!refused(&source("s.bytes = [104]")).is_empty());

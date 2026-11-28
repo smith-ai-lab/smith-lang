@@ -251,7 +251,7 @@ struct Refused {
     names: &'static str,
 }
 
-/// A `check` of a statement that names a `var`, or calls a function that
+/// A `check` of a statement that names a `mut`, or calls a function that
 /// carries an effect, written as the generator picks, and the same program
 /// with the statement that is allowed.
 fn refused(g: &mut Gen) -> (Refused, String) {
@@ -259,7 +259,7 @@ fn refused(g: &mut Gen) -> (Refused, String) {
     let n = 1 + g.below(9);
     let by_var = g.one_in(2);
     let (names, bound, statement, effect) = if by_var {
-        ("count", "var count = a", format!("count {op} {n}"), "")
+        ("count", "mut count = a", format!("count {op} {n}"), "")
     } else {
         (
             "noisy",
@@ -288,7 +288,7 @@ fn refused(g: &mut Gen) -> (Refused, String) {
     )
 }
 
-/// For every statement that names a `var` or carries an effect, a `check` of
+/// For every statement that names a `mut` or carries an effect, a `check` of
 /// it is refused with the name, and the program that tests a statement that is
 /// allowed in its place is accepted.
 fn a_check_of_a_statement_that_names_a_var_or_carries_an_effect_is_refused() {

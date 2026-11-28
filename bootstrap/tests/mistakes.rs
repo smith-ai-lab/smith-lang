@@ -461,7 +461,7 @@ fn file_with_functions_that_end_in_nothing(g: &mut Gen) -> File {
                 file.push(&format!(" = {value}\n}}\n"));
             }
             _ => {
-                file.push("\n  var ");
+                file.push("\n  mut ");
                 file.mistake("y", format!("`f{i}` returns `{result}`, and its body ends with"));
                 file.push(&format!(" = {value}\n}}\n"));
             }
@@ -613,14 +613,14 @@ fn write_pattern(
     value.push(')');
 }
 
-/// A file whose `main` assigns a pattern to some `var`s, where the pattern
-/// names a `var` more than once, as deep in the pattern as it likes.
+/// A file whose `main` assigns a pattern to some `mut`s, where the pattern
+/// names a `mut` more than once, as deep in the pattern as it likes.
 fn file_with_patterns_that_assign_twice(g: &mut Gen) -> File {
     let mut file = File::default();
     let vars = 1 + g.below(3);
     file.push("fn main() <console, alloc> {\n");
     for i in 0..vars {
-        file.push(&format!("  var v{i} = {i}\n"));
+        file.push(&format!("  mut v{i} = {i}\n"));
     }
     file.push("  ");
     let (mut value, mut named) = (String::new(), Vec::new());

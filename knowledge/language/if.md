@@ -129,15 +129,15 @@ fn log(v: bool, a: Option[str]) -> Result[str, str] {
 
 This gives "this gives a `Result[str, str]`, which nothing uses, so a failure would be dropped", with the fix "write `try` before it, match on it, or write `_ =` before it to throw it away". `if v { _ = find("a", a) }` is allowed, and so is `if v { _ = try find("a", a) }`.
 
-## Changing a `var`
+## Changing a `mut`
 
-A block may assign to a [`var`](var.md) of the function around it, which is how a block does something to the function. The name it assigns is the one defined outside.
+A block may assign to a [`mut`](mut.md) of the function around it, which is how a block does something to the function. The name it assigns is the one defined outside.
 
 ```
 use std.console (console, print)
 
 fn main() <console> {
-  var word = "a"
+  mut word = "a"
   if true { word = "b" } else { word = "c" }
   print(word)
 }

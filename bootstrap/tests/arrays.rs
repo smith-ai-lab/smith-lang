@@ -101,7 +101,7 @@ fn an_array_is_held_by_a_parameter_a_result_a_binding_a_var_a_field_a_case_and_a
                 .collect::<String>()
         };
         let source = header(format!(
-            "struct Holder {{\n  a: [{n}]{ty}\n  n: u8\n}}\n\nenum Either {{\n  array: [{n}]{ty}\n  nothing\n}}\n\nfn pass_on(a: [{n}]{ty}) -> [{n}]{ty} {{ a }}\n\nfn from_case(e: Either) -> [{n}]{ty} {{\n  match e {{\n    .array(a) {{ a }}\n    .nothing {{ {written} }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  bound = pass_on({written})\n  var held: [{n}]{ty} = bound\n  holder = Holder(a: held, n: 1)\n  inside = from_case(Either.array(holder.a))\n  listed: List[[{n}]{ty}] = [inside]\n  last = listed[0]\n{}}}\n",
+            "struct Holder {{\n  a: [{n}]{ty}\n  n: u8\n}}\n\nenum Either {{\n  array: [{n}]{ty}\n  nothing\n}}\n\nfn pass_on(a: [{n}]{ty}) -> [{n}]{ty} {{ a }}\n\nfn from_case(e: Either) -> [{n}]{ty} {{\n  match e {{\n    .array(a) {{ a }}\n    .nothing {{ {written} }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  bound = pass_on({written})\n  mut held: [{n}]{ty} = bound\n  holder = Holder(a: held, n: 1)\n  inside = from_case(Either.array(holder.a))\n  listed: List[[{n}]{ty}] = [inside]\n  last = listed[0]\n{}}}\n",
             reads("last")
         ));
         let expected: String = items.iter().map(|i| format!("{i}\n")).collect();
@@ -154,7 +154,7 @@ fn a_literal_of_the_wrong_number_of_elements_is_refused_and_the_error_gives_both
 }
 
 /// `a[i]` compiles when `arith` proves `i` below the size, from the type of
-/// the index or an `if`, and is refused otherwise, the elements of a `var`
+/// the index or an `if`, and is refused otherwise, the elements of a `mut`
 /// are assigned the same way, and the array that was passed is unchanged.
 fn an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where_it_is_proven() {
     generate::check(4104, 12, |g: &mut Gen| (1 + g.below(5), g.below(7)), |(n, i)| {
@@ -182,7 +182,7 @@ fn an_index_is_proven_below_the_size_or_refused_and_an_element_is_assigned_where
             "{errors:?} for\n{unproven}"
         );
         let assigned = header(format!(
-            "fn bump(a: [{n}]u8) -> [{n}]u8 {{\n  var b = a\n  b[{i}] = 100\n  b\n}}\n\nfn main() <console, alloc> {{\n  a: [{n}]u8 = [{}]\n  b = bump(a)\n  print(\"{{a[{i}]}} {{b[{i}]}}\")\n}}\n",
+            "fn bump(a: [{n}]u8) -> [{n}]u8 {{\n  mut b = a\n  b[{i}] = 100\n  b\n}}\n\nfn main() <console, alloc> {{\n  a: [{n}]u8 = [{}]\n  b = bump(a)\n  print(\"{{a[{i}]}} {{b[{i}]}}\")\n}}\n",
             items.join(", ")
         ));
         assert_eq!(compiles(&assigned), i < n, "for\n{assigned}");
@@ -240,7 +240,7 @@ fn an_element_is_read_and_assigned_at_an_index_the_program_works_out_as_a_vector
                 .map(|k| format!("  print(\"{{get(w, {k})}}\")\n"))
                 .collect();
             let source = header(format!(
-                "fn set(a: [{n}]u32, at: Nat, x: u32) -> [{n}]u32 {{\n  var b = a\n  if at < {n} {{ b[at] = x }}\n  b\n}}\n\nfn get(a: [{n}]u32, at: Nat) -> u32 {{ if at < {n} {{ a[at] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  var w: [{n}]u32 = [{}]\n{calls}{reads}  loop x in w {{ print(\"{{x}}\") }}\n}}\n",
+                "fn set(a: [{n}]u32, at: Nat, x: u32) -> [{n}]u32 {{\n  mut b = a\n  if at < {n} {{ b[at] = x }}\n  b\n}}\n\nfn get(a: [{n}]u32, at: Nat) -> u32 {{ if at < {n} {{ a[at] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  mut w: [{n}]u32 = [{}]\n{calls}{reads}  loop x in w {{ print(\"{{x}}\") }}\n}}\n",
                 start.join(", ")
             ));
             let expected: String = model
@@ -294,7 +294,7 @@ fn an_array_that_is_indexed_is_written_once_and_reading_it_again_stores_nothing(
                 .map(|_| "  sum = wrapping_add(sum, a[at])\n".to_string())
                 .collect();
             header(format!(
-                "use std.int (wrapping_add)\n\nfn total(a: [{n}]u32, at: 0..{n}) -> u32 {{\n  var sum: u32 = 0\n{body}  sum\n}}\n\nfn main() <console, alloc> {{\n  a: [{n}]u32 = [{}]\n  x = total(a, 1)\n  print(\"{{x}}\")\n}}\n",
+                "use std.int (wrapping_add)\n\nfn total(a: [{n}]u32, at: 0..{n}) -> u32 {{\n  mut sum: u32 = 0\n{body}  sum\n}}\n\nfn main() <console, alloc> {{\n  a: [{n}]u32 = [{}]\n  x = total(a, 1)\n  print(\"{{x}}\")\n}}\n",
                 items.join(", ")
             ))
         };
@@ -319,7 +319,7 @@ fn an_array_written_with_no_type_is_as_long_as_written_and_is_taken_as_a_list_of
         |items| {
             let written: Vec<String> = items.iter().map(u64::to_string).collect();
             let source = header(format!(
-                "use std.int (wrapping_add)\n\nfn total(xs: List[Nat]) -> Nat {{\n  var sum: Nat = 0\n  loop x in xs {{ sum = wrapping_add(sum, x) }}\n  sum\n}}\n\nfn main() <console, alloc> {{\n  xs = [{}]\n  print(\"{{total(xs)}} {{xs[0]}}\")\n}}\n",
+                "use std.int (wrapping_add)\n\nfn total(xs: List[Nat]) -> Nat {{\n  mut sum: Nat = 0\n  loop x in xs {{ sum = wrapping_add(sum, x) }}\n  sum\n}}\n\nfn main() <console, alloc> {{\n  xs = [{}]\n  print(\"{{total(xs)}} {{xs[0]}}\")\n}}\n",
                 written.join(", ")
             ));
             let sum: u64 = items.iter().sum();

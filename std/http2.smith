@@ -145,13 +145,13 @@ fn put64(to: take List[Byte], x: Nat) -> List[Byte] <alloc> {
 }
 
 fn put_all(to: take List[Byte], s: Slice[Byte]) -> List[Byte] <alloc> {
-  var w = to
+  mut w = to
   loop x in s { w = push(w, x) }
   w
 }
 
 fn put_zeros(to: take List[Byte], n: Nat) -> List[Byte] <alloc> {
-  var w = to
+  mut w = to
   loop i in 0..n { w = push(w, 0) }
   w
 }
@@ -231,7 +231,7 @@ pub fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc> {
     .priority(s) { push(put32(head(to, 5, 2, 0, s), 0), 0) }
     .reset(f) { put32(head(to, 4, 3, 0, f.stream), f.code) }
     .settings(pairs) {
-      var w = head(to, wrapping_mul(pairs.size, 6), 4, 0, 0)
+      mut w = head(to, wrapping_mul(pairs.size, 6), 4, 0, 0)
       loop (id, value) in pairs { w = put32(put16(w, id), value) }
       w
     }
@@ -342,7 +342,7 @@ fn on_connection(bytes: Slice[Byte], n: Nat, kind: Byte, flags: Byte) -> Read[Fr
   if bytes.size < end { return Read.incomplete }
   if kind == 4 {
     if has(flags, 1) { return done(.settings_ack, end) }
-    var pairs: List[(u16, u32)] = []
+    mut pairs: List[(u16, u32)] = []
     loop i in 0..sixths(n) {
       at_ = wrapping_add(9, wrapping_mul(i, 6))
       pairs = push(pairs, (half_of(be16(bytes, at_)), word_of(be32(bytes, wrapping_add(at_, 2)))))
@@ -424,9 +424,9 @@ fn table_get(t: Table, d: Nat) -> Option[Entry] {
 
 // The table with the entries that are gone taken out of the list.
 fn table_packed(t: take Table) -> Table <alloc> {
-  var w = t
+  mut w = t
   if w.first >= 32 and wrapping_mul(w.first, 2) >= w.entries.size {
-    var kept: List[Entry] = []
+    mut kept: List[Entry] = []
     if w.first <= w.entries.size {
       loop i in w.first..w.entries.size {
         if i < w.entries.size { kept = push(kept, w.entries[i]) }
@@ -440,7 +440,7 @@ fn table_packed(t: take Table) -> Table <alloc> {
 
 // The table with its oldest entries gone until it holds no more than `room`.
 fn table_evict(t: take Table, room: Nat) -> Table <alloc> {
-  var w = t
+  mut w = t
   loop k in 0..w.entries.size {
     if w.size <= room or w.first >= w.entries.size { break }
     e = w.entries[w.first]
@@ -451,7 +451,7 @@ fn table_evict(t: take Table, room: Nat) -> Table <alloc> {
 }
 
 fn table_resize(t: take Table, to: Nat) -> Table <alloc> {
-  var w = t
+  mut w = t
   w.working = to
   table_evict(w, to)
 }
@@ -461,7 +461,7 @@ fn table_resize(t: take Table, to: Nat) -> Table <alloc> {
 fn table_add(t: take Table, e: Entry) -> Table <alloc> {
   size = entry_size(e)
   working = t.working
-  var w = table_evict(t, saturating_sub(working, size))
+  mut w = table_evict(t, saturating_sub(working, size))
   if size <= working {
     w.entries = push(w.entries, e)
     w.size = wrapping_add(w.size, size)
@@ -510,9 +510,9 @@ fn read_num(b: Slice[Byte], start: Nat, mask: Byte) -> Result[Num, str] {
   m = nat(mask)
   first = nat(bit_and(at(b, start), mask))
   if first < m { return Result.ok(Num(value: first, next: wrapping_add(start, 1))) }
-  var v = m
-  var shift: Byte = 0
-  var i = wrapping_add(start, 1)
+  mut v = m
+  mut shift: Byte = 0
+  mut i = wrapping_add(start, 1)
   loop k in 0..5 {
     if i >= b.size { return Result.err("a number that does not end") }
     c = at(b, i)
@@ -536,12 +536,12 @@ fn read_num(b: Slice[Byte], start: Nat, mask: Byte) -> Result[Num, str] {
 fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] <alloc> {
   counts = huffman_counts()
   order = huffman_order()
-  var acc: List[Byte] = []
-  var code: Nat = 0
-  var first: Nat = 0
-  var index: Nat = 0
-  var len: Byte = 0
-  var ones = true
+  mut acc: List[Byte] = []
+  mut code: Nat = 0
+  mut first: Nat = 0
+  mut index: Nat = 0
+  mut len: Byte = 0
+  mut ones = true
   loop i in 0..b.size {
     c = b[i]
     loop j in 0..8 {
@@ -616,7 +616,7 @@ struct Run {
 
 // The run with a header added and the block read up to `next`, or why not.
 fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Option[str]) <alloc> {
-  var w = r
+  mut w = r
   used = wrapping_add(w.used, wrapping_add(name.size, value.size))
   if used > largest { return (w, .some("headers of more bytes than are read")) }
   w.used = used
@@ -627,7 +627,7 @@ fn emit(r: take Run, name: str, value: str, next: Nat, largest: Nat) -> (Run, Op
 
 // One representation of the block.
 fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc> {
-  var w = r
+  mut w = r
   c = at(b, w.at)
   if c >= 128 {
     w.updates = false
@@ -660,8 +660,8 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
     .err(why) { return (w, .some(why)) }
     .ok(n) {
       room = saturating_sub(largest, w.used)
-      var name = ""
-      var next = n.next
+      mut name = ""
+      mut next = n.next
       if n.value == 0 {
         match read_text(b, next, room) {
           .err(why) { return (w, .some(why)) }
@@ -690,7 +690,7 @@ fn step(r: take Run, b: Slice[Byte], largest: Nat) -> (Run, Option[str]) <alloc>
 }
 
 pub fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc> {
-  var r = Run(table: d.table, acc: [], used: 0, at: 0, updates: true)
+  mut r = Run(table: d.table, acc: [], used: 0, at: 0, updates: true)
   loop k in 0..block.size {
     if r.at >= block.size { break }
     (next, bad) = step(r, block, largest)
@@ -707,8 +707,8 @@ pub fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Dec
 fn write_num(to: take List[Byte], prefix: Byte, mask: Byte, value: Nat) -> List[Byte] <alloc> {
   m = nat(mask)
   if value < m { return push(to, bit_or(prefix, low(value))) }
-  var w = push(to, bit_or(prefix, mask))
-  var rest = wrapping_sub(value, m)
+  mut w = push(to, bit_or(prefix, mask))
+  mut rest = wrapping_sub(value, m)
   loop k in 0..10 {
     if rest < 128 { return push(w, low(rest)) }
     w = push(w, bit_or(128, low(bit_and(rest, 127))))
@@ -720,7 +720,7 @@ fn write_num(to: take List[Byte], prefix: Byte, mask: Byte, value: Nat) -> List[
 // How many bytes the short code gives for `s`.
 fn huffman_size(s: str) -> Nat {
   lengths = huffman_lengths()
-  var bits: Nat = 0
+  mut bits: Nat = 0
   loop i in 0..s.size { bits = wrapping_add(bits, nat(at(lengths, nat(s[i])))) }
   shift_right(wrapping_add(bits, 7), 3)
 }
@@ -730,9 +730,9 @@ fn huffman_size(s: str) -> Nat {
 fn write_huffman(to: take List[Byte], s: str) -> List[Byte] <alloc> {
   codes = huffman_codes()
   lengths = huffman_lengths()
-  var w = to
-  var acc: Nat = 0
-  var pending: Byte = 0
+  mut w = to
+  mut acc: Nat = 0
+  mut pending: Byte = 0
   loop i in 0..s.size {
     sym = nat(s[i])
     len = at(lengths, sym)
@@ -755,14 +755,14 @@ fn write_huffman(to: take List[Byte], s: str) -> List[Byte] <alloc> {
 fn write_text(to: take List[Byte], s: str) -> List[Byte] <alloc> {
   short = huffman_size(s)
   if short <= s.size { return write_huffman(write_num(to, 128, 127, short), s) }
-  var w = write_num(to, 0, 127, s.size)
+  mut w = write_num(to, 0, 127, s.size)
   loop i in 0..s.size { w = push(w, s[i]) }
   w
 }
 
 // A header written as a literal, with its name by its index when it has one.
 fn write_literal(to: take List[Byte], prefix: Byte, mask: Byte, name_at: Nat, name: str, value: str) -> List[Byte] <alloc> {
-  var w = write_num(to, prefix, mask, name_at)
+  mut w = write_num(to, prefix, mask, name_at)
   if name_at == 0 { w = write_text(w, name) }
   write_text(w, value)
 }
@@ -775,8 +775,8 @@ struct Found {
 }
 
 fn find(t: Table, name: str, value: str) -> Found {
-  var whole: Nat = 0
-  var by_name: Nat = 0
+  mut whole: Nat = 0
+  mut by_name: Nat = 0
   loop i in 1..62 {
     (n, v) = static_entry(i)
     if n == name {
@@ -814,8 +814,8 @@ fn is_secret(name: str) -> bool {
 }
 
 pub fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) <alloc> {
-  var t = e.table
-  var w = to
+  mut t = e.table
+  mut w = to
   if e.update {
     limit = t.limit
     w = write_num(w, 32, 31, limit)

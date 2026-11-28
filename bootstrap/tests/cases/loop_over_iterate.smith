@@ -33,13 +33,13 @@ impl Iterate[Countdown, i32] {
 }
 
 fn largest(c: Countdown) -> i32 {
-  var top = 0
+  mut top = 0
   loop v in c { if v > top { top = v } }
   top
 }
 
 fn first_small(c: Countdown) -> i32 {
-  var found = 0
+  mut found = 0
   loop v in c {
     if v < 3 {
       found = v
@@ -57,7 +57,7 @@ fn find(c: Countdown, wanted: i32) -> bool {
 }
 
 fn count_bytes(s: str) -> u64 {
-  var n: u64 = 0
+  mut n: u64 = 0
   loop b in s { n = wrapping_add(n, 1) }
   n
 }

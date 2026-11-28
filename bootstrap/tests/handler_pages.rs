@@ -48,7 +48,7 @@ const HEAD: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse st
 const FIXED: &str =
     "fn fixed_clock[T](body: fn() -> T <time>) -> T {\n  time(now: { 42 }, body: body)\n}\n\n";
 
-const FAKE: &str = "fn fake_clock[T](body: fn() -> T <time>) -> T {\n  var ticks: u64 = 0\n  time(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\n";
+const FAKE: &str = "fn fake_clock[T](body: fn() -> T <time>) -> T {\n  mut ticks: u64 = 0\n  time(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\n";
 
 const DOUBLED: &str = "fn doubled_clock[T](body: fn() -> T <time>) -> T <time> {\n  time(now: { wrapping_mul(now(), 2) }, body: body)\n}\n\n";
 

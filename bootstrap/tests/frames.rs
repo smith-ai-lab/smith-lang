@@ -78,7 +78,7 @@ fn with_std<'a>(library: &[(&'a str, &'a str)]) -> Vec<(&'a str, &'a str)> {
 
 /// What the module of the library gives a program of the tests: the work a
 /// lambda is, the waits it makes, and the functions that poll frames.
-const HEAD: &str = "use std.bits (u8, u16, u32, u64, i8, i16, i32, i64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul, wrapping_narrow, wrapping_rem)\nuse std.float (sqrt)\nuse std.task (Frame, Handle, Poll, Wait)\n\nstruct Pair {\n  a: u8\n  b: u32\n}\n\nenum Shape {\n  circle: u16\n  square: u64\n  dot\n}\n\nfn fold_i8(x: i8) -> u64 { wrapping_narrow(x) }\n\nfn fold_i16(x: i16) -> u64 { wrapping_narrow(x) }\n\nfn fold_i32(x: i32) -> u64 { wrapping_narrow(x) }\n\nfn fold_i64(x: i64) -> u64 { wrapping_narrow(x) }\n\nfn fold_u8(x: u8) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u16(x: u16) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u32(x: u32) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u64(x: u64) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_bool(x: bool) -> u64 { if x { 7 } else { 9 } }\n\nfn fold_f32(x: f32) -> u64 {\n  half: f32 = 1.5\n  if x == half { 2 } else { 3 }\n}\n\nfn fold_f64(x: f64) -> u64 {\n  half: f64 = 2.5\n  if x == half { 2 } else { 3 }\n}\n\nfn fold_text(x: str) -> u64 {\n  n: u64 = x.size\n  n\n}\n\nfn fold_pair(x: Pair) -> u64 {\n  a: u64 = x.a\n  b: u64 = x.b\n  wrapping_add(a, b)\n}\n\nfn fold_shape(x: Shape) -> u64 {\n  match x {\n    .circle(r) {\n      wide: u64 = r\n      wide\n    }\n    .square(s) { s }\n    .dot { 11 }\n  }\n}\n\nfn fold_list(xs: take List[u64]) -> u64 {\n  var sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  sum\n}\n\nfn step0(acc: u64) -> u64 {\n  __wait(.read(Handle(number: acc)))\n  wrapping_add(acc, 1)\n}\n\nfn step1(acc: u64) -> u64 {\n  __wait(.write(Handle(number: acc)))\n  wrapping_add(acc, 2)\n}\n\nfn step2(acc: u64) -> u64 {\n  __wait(.time(acc))\n  wrapping_add(acc, 3)\n}\n\nfn step3(acc: u64) -> u64 {\n  __wait(.task(acc))\n  wrapping_add(acc, 4)\n}\n\nfn mix(hash: u64, kind: u64, handle: u64) -> u64 {\n  wrapping_add(wrapping_mul(hash, 1000003), wrapping_add(wrapping_mul(kind, 1000000007), handle))\n}\n\nfn fold_wait(hash: u64, w: Wait) -> u64 {\n  match w {\n    .read(h) { mix(hash, 0, h.number) }\n    .write(h) { mix(hash, 1, h.number) }\n    .time(t) { mix(hash, 2, t) }\n    .task(t) { mix(hash, 3, t) }\n    .read_by(h) { mix(hash, 4, h.number) }\n    .write_by(h) { mix(hash, 5, h.number) }\n  }\n}\n\n";
+const HEAD: &str = "use std.bits (u8, u16, u32, u64, i8, i16, i32, i64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul, wrapping_narrow, wrapping_rem)\nuse std.float (sqrt)\nuse std.task (Frame, Handle, Poll, Wait)\n\nstruct Pair {\n  a: u8\n  b: u32\n}\n\nenum Shape {\n  circle: u16\n  square: u64\n  dot\n}\n\nfn fold_i8(x: i8) -> u64 { wrapping_narrow(x) }\n\nfn fold_i16(x: i16) -> u64 { wrapping_narrow(x) }\n\nfn fold_i32(x: i32) -> u64 { wrapping_narrow(x) }\n\nfn fold_i64(x: i64) -> u64 { wrapping_narrow(x) }\n\nfn fold_u8(x: u8) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u16(x: u16) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u32(x: u32) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_u64(x: u64) -> u64 {\n  w: u64 = x\n  w\n}\n\nfn fold_bool(x: bool) -> u64 { if x { 7 } else { 9 } }\n\nfn fold_f32(x: f32) -> u64 {\n  half: f32 = 1.5\n  if x == half { 2 } else { 3 }\n}\n\nfn fold_f64(x: f64) -> u64 {\n  half: f64 = 2.5\n  if x == half { 2 } else { 3 }\n}\n\nfn fold_text(x: str) -> u64 {\n  n: u64 = x.size\n  n\n}\n\nfn fold_pair(x: Pair) -> u64 {\n  a: u64 = x.a\n  b: u64 = x.b\n  wrapping_add(a, b)\n}\n\nfn fold_shape(x: Shape) -> u64 {\n  match x {\n    .circle(r) {\n      wide: u64 = r\n      wide\n    }\n    .square(s) { s }\n    .dot { 11 }\n  }\n}\n\nfn fold_list(xs: take List[u64]) -> u64 {\n  mut sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  sum\n}\n\nfn step0(acc: u64) -> u64 {\n  __wait(.read(Handle(number: acc)))\n  wrapping_add(acc, 1)\n}\n\nfn step1(acc: u64) -> u64 {\n  __wait(.write(Handle(number: acc)))\n  wrapping_add(acc, 2)\n}\n\nfn step2(acc: u64) -> u64 {\n  __wait(.time(acc))\n  wrapping_add(acc, 3)\n}\n\nfn step3(acc: u64) -> u64 {\n  __wait(.task(acc))\n  wrapping_add(acc, 4)\n}\n\nfn mix(hash: u64, kind: u64, handle: u64) -> u64 {\n  wrapping_add(wrapping_mul(hash, 1000003), wrapping_add(wrapping_mul(kind, 1000000007), handle))\n}\n\nfn fold_wait(hash: u64, w: Wait) -> u64 {\n  match w {\n    .read(h) { mix(hash, 0, h.number) }\n    .write(h) { mix(hash, 1, h.number) }\n    .time(t) { mix(hash, 2, t) }\n    .task(t) { mix(hash, 3, t) }\n    .read_by(h) { mix(hash, 4, h.number) }\n    .write_by(h) { mix(hash, 5, h.number) }\n  }\n}\n\n";
 
 /// A kind of value a lambda may read.
 #[derive(Clone, Copy, Debug)]
@@ -217,7 +217,7 @@ impl Lambda {
     /// is taken is taken once, and then the work reads the names that are not
     /// lists as often as it says.
     fn body(&self, k: usize, indent: &str) -> String {
-        let mut s = format!("{indent}var acc: u64 = 17\n");
+        let mut s = format!("{indent}mut acc: u64 = 17\n");
         for (i, (v, _)) in self.names.iter().enumerate() {
             s += &format!(
                 "{indent}acc = wrapping_add(wrapping_mul(acc, 31), {})\n",
@@ -280,7 +280,7 @@ fn module_of(case: &[Lambda]) -> String {
             } else {
                 s += &format!("  f{k} = __frame({{ plain{k}() }})\n");
             }
-            s += &format!("  var done{k}: u64 = 0\n  var hash{k}: u64 = 0\n");
+            s += &format!("  mut done{k}: u64 = 0\n  mut hash{k}: u64 = 0\n");
         }
         let poll = |k: usize, indent: &str| {
             format!(
@@ -300,7 +300,7 @@ fn module_of(case: &[Lambda]) -> String {
         for k in (0..n).rev() {
             s += &poll(k, "      ");
         }
-        s += "    }\n  } else {\n    var turn: u64 = 0\n    loop i in 0..900 {\n";
+        s += "    }\n  } else {\n    mut turn: u64 = 0\n    loop i in 0..900 {\n";
         s += &format!("      pick: u64 = wrapping_rem(turn, {n})\n      turn = wrapping_add(turn, 1)\n");
         for k in 0..n {
             s += &format!("      if pick == {k} {{\n{}      }}\n", poll(k, "        "));
@@ -426,7 +426,7 @@ fn a_frame_that_finish_gives_for_a_number_that_is_not_a_tasks_is_refused() {
 }
 
 fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
-    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  var s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  r: u64 = __result(f)\n  r\n}\n\npub fn twice() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  g = total(xs)\n  r: u64 = __result(f)\n  wrapping_add(r, g)\n}\n";
+    let module = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame)\n\nfn total(xs: take List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop v in xs { s = wrapping_add(s, v) }\n  s\n}\n\npub fn once() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  r: u64 = __result(f)\n  r\n}\n\npub fn twice() -> u64 <alloc> {\n  xs: List[u64] = [1, 2, 3]\n  f = __frame({ total(xs) })\n  g = total(xs)\n  r: u64 = __result(f)\n  wrapping_add(r, g)\n}\n";
     let main = "use std.frames (once)\n\nfn main() <alloc> {\n  a = once()\n}\n";
     lowered(main, module).expect("a list taken once");
     let main = "use std.frames (twice)\n\nfn main() <alloc> {\n  a = twice()\n}\n";
@@ -435,7 +435,7 @@ fn a_name_a_lambda_takes_moves_into_the_frame_and_a_second_use_is_refused() {
 }
 
 /// A handler of `count` that keeps state, and one that does not.
-const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T <sense>) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T <sense>) -> T {\n  var n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 <sense> {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
+const HANDLERS: &str = "use std.bits (u64)\nuse std.int (wrapping_add)\nuse std.task (Frame, Poll, Wait)\n\npub effect sense {\n  pub fn reading() -> u64\n}\n\npub fn fixed[T](n: u64, body: fn() -> T <sense>) -> T {\n  sense(reading: { n }, body: body)\n}\n\npub fn counting[T](body: fn() -> T <sense>) -> T {\n  mut n: u64 = 0\n  sense(\n    reading: {\n      n = wrapping_add(n, 1)\n      n\n    },\n    body: body,\n  )\n}\n\npub fn read() -> u64 <sense> {\n  f = __frame({ reading() })\n  match __poll(f) {\n    .done { }\n    .waiting(w) { }\n    .failed(kind) { }\n  }\n  r: u64 = __result(f)\n  r\n}\n";
 
 fn a_frame_under_a_handler_that_holds_state_reads_and_changes_it() {
     let main = "use std.console (console, print)\nuse std.frames (counting, read)\n\nfn main() <console, alloc> {\n  with counting()\n  a = read()\n  b = read()\n  print(\"{a} {b}\")\n}\n";

@@ -12,7 +12,7 @@
 //! functions it was given, or functions with a name. A lambda takes no
 //! parameter or several, is written after the call, with no parentheses
 //! when it is the only argument, or by name inside them, and may assign a
-//! `var` of the function it is written in and call a function with a lambda
+//! `mut` of the function it is written in and call a function with a lambda
 //! in turn. `main` calls the functions in the same ways.
 //!
 //! The generator first builds a model of the program and works out from it
@@ -264,7 +264,7 @@ fn subst_fn(f: &FnTy, t: &Ty) -> FnTy {
     }
 }
 
-/// What generating code needs to know: the names defined, the `var`s among
+/// What generating code needs to know: the names defined, the `mut`s among
 /// them, the parameters that hold functions, the functions it may call,
 /// whether it may print, and whether `T` is a type there.
 #[derive(Clone)]
@@ -609,7 +609,7 @@ fn model(g: &mut Gen) -> Model {
             fresh,
         };
         let mut body = Vec::new();
-        // A `var` that the lambdas written here may assign.
+        // A `mut` that the lambdas written here may assign.
         if w.g.one_in(2) {
             let name = w.fresh("v");
             body.push(Stmt::Var(name.clone(), w.literal()));
@@ -724,7 +724,7 @@ fn mistake(g: &mut Gen, kind: Kind) -> (Stmt, Option<Item>) {
             let (before, rest) = *g.pick(&[
                 ("w = ", "{ \"a\" }"),
                 ("w = ", "fn(t) { t }"),
-                ("var w = ", "{ say(\"a\") }"),
+                ("mut w = ", "{ say(\"a\") }"),
                 ("note = ", "{ \"a\" }"),
             ]);
             (raw(before, rest, "bound to a name", None), None)
@@ -1199,7 +1199,7 @@ impl Writer {
                     self.expr(e, indent);
                 }
                 Stmt::Var(name, e) => {
-                    self.push(&format!("var {name} = "));
+                    self.push(&format!("mut {name} = "));
                     self.expr(e, indent);
                 }
                 Stmt::Assign(name, e) => {
@@ -1345,7 +1345,7 @@ fn build(g: &mut Gen, kind: Option<Kind>) -> LambdaCase {
     }
 }
 
-// A function that calls its lambda in loops, and the `var`s the lambda
+// A function that calls its lambda in loops, and the `mut`s the lambda
 // assigns.
 
 /// How a function calls the lambda it is given, `body`, which takes a
@@ -1370,7 +1370,7 @@ enum Shape {
     Pass(usize, u32, bool),
 }
 
-/// What the lambda does with the `var`s `a`, `b` and the field `p.a`, for
+/// What the lambda does with the `mut`s `a`, `b` and the field `p.a`, for
 /// the number `x` it is given. Each is a `u32` that wraps.
 #[derive(Clone, Copy, Debug)]
 enum Effect {
@@ -1380,7 +1380,7 @@ enum Effect {
     ReadsAndAssigns,
     /// `a` and `b` both.
     Two,
-    /// `p.a = wrapping_add(p.a, x)`, a field of a `var`.
+    /// `p.a = wrapping_add(p.a, x)`, a field of a `mut`.
     Field,
 }
 
@@ -1568,7 +1568,7 @@ fn write_shape(
         Shape::Open(rounds, inner) => {
             let name = format!("k{}", *opens);
             *opens += 1;
-            out.push_str(&format!("{pad}var {name}: u32 = 0\n{pad}loop {{\n"));
+            out.push_str(&format!("{pad}mut {name}: u32 = 0\n{pad}loop {{\n"));
             out.push_str(&format!("{pad}  if {name} == {rounds} {{ break }}\n"));
             write_shape(inner, depth + 1, counters, opens, out);
             out.push_str(&format!(
@@ -1613,7 +1613,7 @@ impl std::fmt::Debug for LoopCase {
 /// A program with functions that call their lambda in a `loop` over a
 /// range, in an open-ended loop, in nested loops, under an `if` or a
 /// `match`, or by passing it on, and a `main` that gives one a lambda
-/// that assigns `var`s. What it prints is what the lambda's statements
+/// that assigns `mut`s. What it prints is what the lambda's statements
 /// written in place of each call give.
 pub fn loop_program(g: &mut Gen) -> LoopCase {
     let count = g.below(3) + 1;
@@ -1658,7 +1658,7 @@ pub fn loop_program(g: &mut Gen) -> LoopCase {
     };
     let mode = if second { ".two" } else { ".one" };
     text.push_str(&format!(
-        "\nfn main() <{diverge}console, alloc> {{\n  var a: u32 = 0\n  var b: u32 = 0\n  var p = Pair(a: 0, b: 0)\n  f{called}({n}, {mode}) fn(x) {{\n    {}\n  }}\n  print(\"{{a}} {{b}} {{p.a}}\")\n}}\n",
+        "\nfn main() <{diverge}console, alloc> {{\n  mut a: u32 = 0\n  mut b: u32 = 0\n  mut p = Pair(a: 0, b: 0)\n  f{called}({n}, {mode}) fn(x) {{\n    {}\n  }}\n  print(\"{{a}} {{b}} {{p.a}}\")\n}}\n",
         effect.text()
     ));
     // `wrapping_mul` is written by only some of the effects.

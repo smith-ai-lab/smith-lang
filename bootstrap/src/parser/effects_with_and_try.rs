@@ -266,7 +266,7 @@ impl Parser<'_> {
         let mut lead = Vec::new();
         let binds = match self.tok() {
             Tok::Ident(_) => self.next_tok() == &Tok::Punct("="),
-            Tok::Keyword("var") | Tok::Punct("(") => true,
+            Tok::Keyword("mut") | Tok::Punct("(") => true,
             _ => false,
         };
         if binds {

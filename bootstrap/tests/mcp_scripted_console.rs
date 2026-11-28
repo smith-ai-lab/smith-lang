@@ -57,14 +57,14 @@ fn serve() <messages, alloc> {
 }
 
 fn scripted[T](lines: List[str], body: fn() -> T <console>) -> (T, List[str]) <alloc> {
-  var next: u64 = 0
-  var printed: List[str] = []
+  mut next: u64 = 0
+  mut printed: List[str] = []
   result = console(
     print: fn(text, end, to) {
       printed = push(printed, text)
     },
     input: fn(prompt) {
-      var found: Option[str] = .none
+      mut found: Option[str] = .none
       loop i in 0..lines.size {
         if i == next { found = .some(lines[i]) }
       }

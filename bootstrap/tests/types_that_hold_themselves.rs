@@ -95,8 +95,8 @@ fn a_field_assigned_through_a_value_that_holds_itself_changes_no_copy_of_it() {
     let source = format!(
         "{PAGE}struct Box {{\n  p: Pair\n  n: f64\n}}\n\n\
          fn main() <console, alloc> {{\n  \
-         var p = Pair(left: .num(1.0), right: .num(2.0))\n  q = p\n  p.left = .neg(.num(5.0))\n  \
-         var b = Box(p: q, n: 3.0)\n  b.p.right = .num(9.0)\n  b.n = 4.0\n  \
+         mut p = Pair(left: .num(1.0), right: .num(2.0))\n  q = p\n  p.left = .neg(.num(5.0))\n  \
+         mut b = Box(p: q, n: 3.0)\n  b.p.right = .num(9.0)\n  b.n = 4.0\n  \
          print(\"{{p}}\")\n  print(\"{{q}}\")\n  print(\"{{b}}\")\n  \
          print(\"{{eval(.add(b.p))}} {{eval(twice(negate_all(.add(p))))}}\")\n}}\n"
     );
@@ -253,7 +253,7 @@ impl Shape {
         format!(
             "fn mix(h: u64, x: u64) -> u64 {{ wrapping_add(wrapping_mul(h, 31), x) }}\n\n\
              fn walk(t: T) -> u64 <alloc> {{\n  match t {{\n    .leaf(v) {{ v }}\n    .node(n) {{\n      \
-             var h: u64 = n.value\n{body}      h\n    }}\n  }}\n}}\n\n"
+             mut h: u64 = n.value\n{body}      h\n    }}\n  }}\n}}\n\n"
         )
     }
 
@@ -469,7 +469,7 @@ impl Chain {
             .collect();
         format!(
             "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\n\n{}{}\
-             fn chain(depth: Nat) -> T <alloc> {{\n  var t = T.leaf(1)\n  \
+             fn chain(depth: Nat) -> T <alloc> {{\n  mut t = T.leaf(1)\n  \
              loop level in 0..depth {{\n    t = .node(N(value: level % 5, {}))\n  }}\n  t\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{walk(chain({}))}}\")\n}}\n",
             self.shape.declarations(lists),
@@ -535,10 +535,10 @@ fn in_arena(n: usize, calls: usize) -> String {
     format!(
         "use std.alloc (arena)\nuse std.bits (u64)\nuse std.console (console, print)\n\
          use std.int (wrapping_add, wrapping_mul)\n\n{}{}\
-         fn chain(depth: Nat) -> T <alloc> {{\n  var t = T.leaf(1)\n  \
+         fn chain(depth: Nat) -> T <alloc> {{\n  mut t = T.leaf(1)\n  \
          loop level in 0..depth {{\n    t = .node(N(value: level % 5, s0: t, s1: (3, .leaf(2))))\n  }}\n  t\n}}\n\n\
          fn once(n: Nat) -> u64 {{\n  with arena()\n  walk(chain(n))\n}}\n\n\
-         fn main() <console, alloc> {{\n  var s: u64 = 0\n  \
+         fn main() <console, alloc> {{\n  mut s: u64 = 0\n  \
          loop i in 0..{calls} {{ s = wrapping_add(s, once({n})) }}\n  print(\"{{s}}\")\n}}\n",
         shape.declarations(false),
         shape.walk(false),

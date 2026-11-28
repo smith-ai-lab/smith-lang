@@ -72,7 +72,7 @@ const UNBUILT: &[Unbuilt] = &[
         parsed: false,
     },
     Unbuilt {
-        declares: "fn u{i}(n: Int) -> Int {\n  var y = n\n  y @+= 1\n  wrapping_add(y, 1)\n}\n",
+        declares: "fn u{i}(n: Int) -> Int {\n  mut y = n\n  y @+= 1\n  wrapping_add(y, 1)\n}\n",
         call: "u{i}(1)",
         parsed: true,
     },

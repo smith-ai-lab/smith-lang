@@ -14,7 +14,7 @@ use std.bits (bit_or, bit_xor)
 use std.secret (Secret, is_zero, reveal, secret)
 
 fn same(a: Secret[[32]Byte], b: Secret[[32]Byte]) -> bool {
-  var diff: Secret[Byte] = secret(0)
+  mut diff: Secret[Byte] = secret(0)
   loop i in 0..32 { diff = bit_or(diff, bit_xor(a[i], b[i])) }
   reveal(is_zero(diff))
 }

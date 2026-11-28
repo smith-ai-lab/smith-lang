@@ -51,13 +51,13 @@ struct Out {
 }
 
 fn put(to: take Out, b: 0..128) -> Out <alloc> {
-  var w = to
+  mut w = to
   w.bytes = append_ascii(w.bytes, b)
   w
 }
 
 fn put_text(to: take Out, s: str) -> Out <alloc> {
-  var w = to
+  mut w = to
   w.bytes = append(w.bytes, s)
   w
 }
@@ -76,7 +76,7 @@ fn put_hex(to: take Out, d: Byte) -> Out <alloc> {
 // The bytes of `s` from `from` up to `end`, which are whole characters, as
 // they are.
 fn run(to: take Out, s: str, from: Nat, end: Nat) -> Out <alloc> {
-  var w = to
+  mut w = to
   if from == 0 and end == s.size {
     w = put_text(w, s)
   } else if from < end and end <= s.size {
@@ -113,8 +113,8 @@ fn escape(to: take Out, b: Byte) -> Out <alloc> {
 // space are written as escapes, and every other byte as it is. The bytes
 // between two that are escaped are written together.
 fn body(to: take Out, s: str) -> Out <alloc> {
-  var w = to
-  var from: Nat = 0
+  mut w = to
+  mut from: Nat = 0
   loop i in 0..s.size {
     b = s[i]
     if b >= 32 and b != '"' and b != '\\' {
@@ -135,10 +135,10 @@ fn quote(to: take Out, s: str) -> Out <alloc> {
 // that is followed by anything else stays, so two names written with lower
 // case letters, digits, and `_` are never made one.
 fn camel_case(to: take Out, name: str) -> Out <alloc> {
-  var w = to
-  var from: Nat = 0
-  var after: Nat = 0
-  var before: Byte = 0
+  mut w = to
+  mut from: Nat = 0
+  mut after: Nat = 0
+  mut before: Byte = 0
   loop i in 0..name.size {
     next: Byte = if i + 1 < name.size { name[i + 1] } else { 0 }
     if i >= after and name[i] == '_' and before != '_' and next >= 'a' and next <= 'z' {
@@ -154,7 +154,7 @@ fn camel_case(to: take Out, name: str) -> Out <alloc> {
 // Starts a value: a `,` where the value follows another, or what a case
 // that holds a value gives before it.
 fn start(to: take Out) -> Out <alloc> {
-  var w = to
+  mut w = to
   if w.tagged {
     w = put_text(w, ",\"value\":")
     w.opens = push(w.opens, Open(depth: w.depth, below: w.top))
@@ -169,7 +169,7 @@ fn start(to: take Out) -> Out <alloc> {
 
 // Ends a value, and closes each case whose value it is.
 fn ended(to: take Out) -> Out <alloc> {
-  var w = to
+  mut w = to
   w.comma = true
   loop j in 0..w.top {
     t = w.top
@@ -191,13 +191,13 @@ fn ended(to: take Out) -> Out <alloc> {
 fn scalar(to: take Out, s: str) -> Out <alloc> { ended(put_text(start(to), s)) }
 
 fn open(to: take Out, b: 0..128) -> Out <alloc> {
-  var w = put(start(to), b)
+  mut w = put(start(to), b)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
 fn close(to: take Out, b: 0..128) -> Out <alloc> {
-  var w = put(to, b)
+  mut w = put(to, b)
   w.depth = saturating_sub(w.depth, 1)
   ended(w)
 }
@@ -205,8 +205,8 @@ fn close(to: take Out, b: 0..128) -> Out <alloc> {
 // The bytes as the bytes of a text: each byte that does not begin a character
 // of UTF-8 is U+FFFD.
 fn text_of(bytes: Slice[Byte]) -> str <alloc> {
-  var acc = text()
-  var i: Nat = 0
+  mut acc = text()
+  mut i: Nat = 0
   loop k in 0..bytes.size {
     if i >= bytes.size { break }
     c = bytes[i]
@@ -216,7 +216,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
     } else {
       n: Nat = if c >= 194 and c < 224 { 2 } else if c >= 224 and c < 240 { 3 } else if c >= 240 and c < 245 { 4 } else { 0 }
       end = saturating_add(i, n)
-      var whole = false
+      mut whole = false
       if n > 0 and i <= end and end <= bytes.size {
         match utf8(bytes[i..end]) {
           .ok(t) {
@@ -253,7 +253,7 @@ impl Writer[Out] {
   fn end_tuple(w: take Out) -> Out <alloc> { close(w, ']') }
   fn structure(w: take Out, name: str, fields: Nat) -> Out <alloc> {
     if w.tagged {
-      var v = w
+      mut v = w
       v.tagged = false
       v.depth = saturating_add(v.depth, 1)
       v
@@ -262,7 +262,7 @@ impl Writer[Out] {
     }
   }
   fn field(w: take Out, name: str) -> Out <alloc> {
-    var v = w
+    mut v = w
     lead = if v.comma { ",\"" } else { "\"" }
     match v.settings.names {
       .written { v = body(put_text(v, lead), name) }
@@ -276,7 +276,7 @@ impl Writer[Out] {
     match w.settings.cases {
       .key {
         if holds {
-          var v = put(quote(put(start(w), '{'), name), ':')
+          mut v = put(quote(put(start(w), '{'), name), ':')
           v.opens = push(v.opens, Open(depth: v.depth, below: v.top))
           v.top = v.opens.size
           v
@@ -285,7 +285,7 @@ impl Writer[Out] {
         }
       }
       .tag(t) {
-        var v = quote(put(quote(put(start(w), '{'), t), ':'), name)
+        mut v = quote(put(quote(put(start(w), '{'), t), ':'), name)
         if holds {
           v.tagged = true
           v.comma = true
@@ -299,7 +299,7 @@ impl Writer[Out] {
   fn map(w: take Out, size: Nat) -> Out <alloc> { open(w, '[') }
   fn end_map(w: take Out) -> Out <alloc> { close(w, ']') }
   fn raw(w: take Out, of: str, bytes: Slice[Byte]) -> Out <alloc> {
-    var v = start(w)
+    mut v = start(w)
     if of == "json" {
       match utf8(bytes) {
         .ok(t) { v = put_text(v, t) }
@@ -341,7 +341,7 @@ struct Check {
 }
 
 fn note_clash(to: take Check, of: str, case: str, member: str) -> Check {
-  var w = to
+  mut w = to
   match w.clash {
     .none { w.clash = Option.some(Clash(of: of, case: case, member: member)) }
     .some(c) { }
@@ -351,7 +351,7 @@ fn note_clash(to: take Check, of: str, case: str, member: str) -> Check {
 
 // A value that is not a struct, held by a case, is written under `value`.
 fn begin(to: take Check) -> Check {
-  var w = to
+  mut w = to
   if w.held {
     w.held = false
     if w.tag == "value" {
@@ -364,19 +364,19 @@ fn begin(to: take Check) -> Check {
 }
 
 fn deeper(to: take Check) -> Check {
-  var w = begin(to)
+  mut w = begin(to)
   w.depth = saturating_add(w.depth, 1)
   w
 }
 
 fn shallower(to: take Check) -> Check {
-  var w = to
+  mut w = to
   w.depth = saturating_sub(w.depth, 1)
   w
 }
 
 fn same_bytes(bytes: List[Byte], t: str) -> bool {
-  var same = bytes.size == t.size
+  mut same = bytes.size == t.size
   if same {
     loop i in 0..t.size {
       if i < bytes.size and bytes[i] != t[i] { same = false }
@@ -387,7 +387,7 @@ fn same_bytes(bytes: List[Byte], t: str) -> bool {
 
 // The name of a field as `Out` writes it.
 fn written_name(name: str, camel: bool) -> str <alloc> {
-  var w = Out(settings: Json(cases: .key, names: .camel), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0)
+  mut w = Out(settings: Json(cases: .key, names: .camel), bytes: text(), depth: 0, comma: false, tagged: false, opens: [], top: 0)
   if camel {
     w = camel_case(w, name)
   } else {
@@ -412,7 +412,7 @@ impl Writer[Check] {
   fn end_map(w: take Check) -> Check <alloc> { shallower(w) }
   fn raw(w: take Check, of: str, bytes: Slice[Byte]) -> Check <alloc> { begin(w) }
   fn structure(w: take Check, name: str, fields: Nat) -> Check <alloc> {
-    var v = w
+    mut v = w
     if v.held {
       v.held = false
       v.frames = push(v.frames, Beside(depth: saturating_add(v.depth, 1), of: v.of, case: v.case, below: v.top))
@@ -424,7 +424,7 @@ impl Writer[Check] {
     }
   }
   fn field(w: take Check, name: str) -> Check <alloc> {
-    var v = w
+    mut v = w
     m = v.top
     if m > 0 and m <= v.frames.size {
       frame = v.frames[m - 1]
@@ -436,7 +436,7 @@ impl Writer[Check] {
     v
   }
   fn end_structure(w: take Check) -> Check <alloc> {
-    var v = w
+    mut v = w
     m = v.top
     if m > 0 and m <= v.frames.size {
       frame = v.frames[m - 1]
@@ -445,7 +445,7 @@ impl Writer[Check] {
     shallower(v)
   }
   fn case(w: take Check, of: str, name: str, holds: bool) -> Check <alloc> {
-    var v = begin(w)
+    mut v = begin(w)
     if holds {
       v.held = true
       v.of = of
@@ -533,7 +533,7 @@ fn skip_space(b: Slice[Byte], from: Nat) -> Nat {
 // The last byte before `at` that is not a space, or 0.
 fn last_before(b: Slice[Byte], at: Nat) -> Byte {
   if at > 0 and at <= b.size and not is_space(b[at - 1]) { return b[at - 1] }
-  var i = at
+  mut i = at
   loop k in 0..at {
     if i == 0 { return 0 }
     i = i - 1
@@ -561,7 +561,7 @@ fn wrong(b: Slice[Byte], at: Nat, wanted: str) -> Bad {
 
 // The end of the word `w` that is at `at`.
 fn word(b: Slice[Byte], at: Nat, w: str) -> Result[Nat, Bad] {
-  var ok = saturating_add(at, w.size) <= b.size
+  mut ok = saturating_add(at, w.size) <= b.size
   if ok {
     loop i in 0..w.size {
       j = saturating_add(at, i)
@@ -586,18 +586,18 @@ struct Num {
 // JSON: a `-`, a `0` or a digit other than `0` and digits, a fraction, and an
 // exponent. `from` is where its digits start.
 fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
-  var i = at
+  mut i = at
   negative = byte(b, i) == '-'
   if negative { i = saturating_add(i, 1) }
   from = i
   c = byte(b, i)
   if not is_digit(c) { return Result.err(malformed(i)) }
-  var size: u64 = 0
+  mut size: u64 = 0
   if c == '0' {
     i = saturating_add(i, 1)
   } else {
     // The digits run to the first byte that is not one, or to the end.
-    var stop = b.size
+    mut stop = b.size
     if i <= b.size {
       loop j in i..b.size {
         d = b[j]
@@ -612,7 +612,7 @@ fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
     }
     i = stop
   }
-  var whole = true
+  mut whole = true
   if byte(b, i) == '.' {
     whole = false
     i = saturating_add(i, 1)
@@ -638,7 +638,7 @@ fn number(b: Slice[Byte], at: Nat) -> Result[Num, Bad] {
 // The value of the digits of a whole number of 20 digits or more, or `.none`
 // when it is more than a `u64` holds.
 fn magnitude(b: Slice[Byte], from: Nat, end: Nat) -> Option[u64] {
-  var m: u64 = 0
+  mut m: u64 = 0
   if from <= end {
     loop i in from..end {
       if i < b.size {
@@ -664,7 +664,7 @@ fn hex_value(c: Byte) -> Option[u32] {
 
 // The four hexadecimal digits at `at`.
 fn hex4(b: Slice[Byte], at: Nat) -> Option[u32] {
-  var v: u32 = 0
+  mut v: u32 = 0
   loop i in 0..4 {
     match hex_value(byte(b, saturating_add(at, i))) {
       .some(d) { v = wrapping_add(wrapping_mul(v, 16), d) }
@@ -683,8 +683,8 @@ struct Quoted {
 }
 
 fn quoted(b: Slice[Byte], at: Nat) -> Result[Quoted, Bad] {
-  var i = saturating_add(at, 1)
-  var escaped = false
+  mut i = saturating_add(at, 1)
+  mut escaped = false
   loop k in 0..b.size {
     if i >= b.size { return Result.err(malformed(i)) }
     c = b[i]
@@ -775,13 +775,13 @@ fn frame_at(frames: List[Frame], at: Nat) -> Frame {
 // it says which containers are open. The containers are kept as the byte that
 // opened each, so a value that holds none asks for no memory.
 fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
-  var frames: List[Frame] = []
-  var top: Nat = 0
-  var key: Nat = 0
-  var index: Nat = 0
-  var at = start
+  mut frames: List[Frame] = []
+  mut top: Nat = 0
+  mut key: Nat = 0
+  mut index: Nat = 0
+  mut at = start
   // Whether a value is wanted at `at`, or one has just ended.
-  var wanted = true
+  mut wanted = true
   loop k in 0..saturating_add(b.size, 2) {
     if wanted {
       at = skip_space(b, at)
@@ -904,7 +904,7 @@ fn member(b: Slice[Byte], at: Nat) -> Result[Nat, Bad] {
 
 // A character of the number `code`, as bytes.
 fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
-  var acc = to
+  mut acc = to
   if code < 128 {
     acc = push(acc, wrapping_narrow(code))
   } else if code < 2048 {
@@ -926,15 +926,15 @@ fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
 // Takes the bytes of a string that `quoted` checked from `at` to `end`, with
 // its escapes undone.
 fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] <alloc> {
-  var acc: List[Byte] = []
-  var i = saturating_add(at, 1)
+  mut acc: List[Byte] = []
+  mut i = saturating_add(at, 1)
   loop k in 0..b.size {
     if saturating_add(i, 1) >= end { break }
     c = byte(b, i)
-    var made: Byte = c
-    var step: Nat = 1
-    var code: u32 = 0
-    var is_code = false
+    mut made: Byte = c
+    mut step: Nat = 1
+    mut code: u32 = 0
+    mut is_code = false
     if c == '\\' {
       e = byte(b, saturating_add(i, 1))
       step = 2
@@ -996,8 +996,8 @@ fn byte_of(name: List[Byte], i: Nat, before: bool) -> Byte {
 // a `_` is taken out when a name is written, and an upper case letter is the
 // letter after one, so a name that has either is not written.
 fn written_camel(name: List[Byte]) -> (bool, bool) {
-  var ok = true
-  var upper = false
+  mut ok = true
+  mut upper = false
   loop i in 0..name.size {
     c = name[i]
     previous = byte_of(name, i, true)
@@ -1024,7 +1024,7 @@ fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str <alloc> {
   }
   raw = unescape(b, at, q.end)
   (ok, upper) = written_camel(raw)
-  var acc: List[Byte] = []
+  mut acc: List[Byte] = []
   if not ok { acc = push(acc, ' ') }
   loop i in 0..raw.size {
     c = raw[i]
@@ -1050,7 +1050,7 @@ fn path_at(b: Slice[Byte], at: Nat) -> str <alloc> {
 }
 
 fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: Nat) -> List[Byte] <alloc> {
-  var acc = to
+  mut acc = to
   if kind == '{' {
     match quoted(b, key) {
       .ok(q) {
@@ -1071,14 +1071,14 @@ fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: 
 
 fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
   // The open containers, innermost first.
-  var chain: List[Nat] = []
-  var t = w.top
+  mut chain: List[Nat] = []
+  mut t = w.top
   loop k in 0..w.frames.size {
     if t == 0 or t > w.frames.size { break }
     chain = push(chain, t)
     t = frame_at(w.frames, t).below
   }
-  var acc: List[Byte] = []
+  mut acc: List[Byte] = []
   loop j in 0..chain.size {
     f = frame_at(w.frames, chain[chain.size - 1 - j])
     if f.below != 0 and f.below <= w.frames.size {
@@ -1097,8 +1097,8 @@ fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
 // The line and the column of the byte `at`, each counted from 1, the column in
 // bytes.
 fn place(b: Slice[Byte], at: Nat) -> (Nat, Nat) {
-  var line: Nat = 1
-  var row: Nat = 0
+  mut line: Nat = 1
+  mut row: Nat = 0
   loop i in 0..b.size {
     if i >= at { break }
     if b[i] == '\n' {
@@ -1115,13 +1115,13 @@ fn read_error(b: Slice[Byte], bad: Bad) -> ReadError <alloc> {
 }
 
 fn grown_nat(items: Slice[Nat], item: Nat) -> Slice[Nat] <alloc> {
-  var acc: List[Nat] = []
+  mut acc: List[Nat] = []
   loop i in 0..items.size { acc = push(acc, items[i]) }
   freeze(push(acc, item))
 }
 
 fn grown_byte(items: Slice[Byte], item: Byte) -> Slice[Byte] <alloc> {
-  var acc: List[Byte] = []
+  mut acc: List[Byte] = []
   loop i in 0..items.size { acc = push(acc, items[i]) }
   freeze(push(acc, item))
 }
@@ -1160,7 +1160,7 @@ fn tag_at(r: In) -> Nat {
 
 // The reader with the tag of a case that is open at `at`.
 fn tagged(r: take In, at: Nat) -> Result[In, Bad] <alloc> {
-  var w = r
+  mut w = r
   w.tags = grown_nat(w.tags, at)
   Result.ok(w)
 }
@@ -1188,7 +1188,7 @@ fn top_closes(r: In) -> bool {
 
 // The reader with the innermost case not taking a `}` to close.
 fn top_not_closing(r: take In) -> In <alloc> {
-  var w = r
+  mut w = r
   n = saturating_sub(w.cases, 1)
   if w.cases == 0 {
     w
@@ -1205,7 +1205,7 @@ fn top_not_closing(r: take In) -> In <alloc> {
 
 // The reader with the innermost case closed.
 fn left_case(r: take In) -> In {
-  var w = r
+  mut w = r
   n = saturating_sub(w.cases, 1)
   if w.cases == 0 {
     w
@@ -1283,8 +1283,8 @@ fn value_start(r: In) -> Result[Nat, Bad] <alloc> {
     // The members of the object of a case, after its `{`, of which the tag is
     // one: the other is `value`.
     tag = tag_at(r)
-    var at = a
-    var first = true
+    mut at = a
+    mut first = true
     loop k in 0..saturating_add(b.size, 1) {
       if byte(b, at) == '}' { return Result.err(Bad(at: at, problem: .missing("value"))) }
       if not first {
@@ -1327,7 +1327,7 @@ fn value_start(r: In) -> Result[Nat, Bad] <alloc> {
 }
 
 fn moved(r: take In, at: Nat, mark: Nat) -> In {
-  var w = r
+  mut w = r
   w.at = at
   w.mark = mark
   w.pending = false
@@ -1375,7 +1375,7 @@ fn literal(r: take In, a: Nat, w: str, wanted: str) -> (In, Result[(), ReadError
 }
 
 fn pushed(r: take In, form: u64) -> Result[In, Bad] <alloc> {
-  var w = r
+  mut w = r
   n = w.cases
   if n < 64 {
     by: Byte = n
@@ -1398,8 +1398,8 @@ struct Found {
 // at `open`, in any place, passing over the others. It gives the `missing` of
 // the tag at the `}` that ends an object that has none.
 fn find_tag(b: Slice[Byte], open: Nat, tag: str) -> Result[Found, Bad] <alloc> {
-  var at = skip_space(b, saturating_add(open, 1))
-  var first = true
+  mut at = skip_space(b, saturating_add(open, 1))
+  mut first = true
   loop k in 0..saturating_add(b.size, 1) {
     if byte(b, at) == '}' { return Result.err(Bad(at: at, problem: .missing(tag))) }
     if not first {
@@ -1605,9 +1605,9 @@ impl Reader[In] {
   fn field(r: take In) -> (In, Result[Option[str], ReadError]) <alloc> {
     b = r.bytes
     tag = tag_at(r)
-    var at = r.at
+    mut at = r.at
     loop k in 0..saturating_add(b.size, 1) {
-      var a = skip_space(b, at)
+      mut a = skip_space(b, at)
       c = byte(b, a)
       if c == '}' { return (moved(r, saturating_add(a, 1), a), Result.ok(Option.none)) }
       if last_before(b, a) != '{' {
@@ -1712,7 +1712,7 @@ impl Reader[In] {
                       match tagged(w, f.key) {
                         .err(e) { failed_str(moved(r, r.at, a), e) }
                         .ok(held) {
-                          var open = held
+                          mut open = held
                           open.pending = true
                           (open, Result.ok(text_at(b, f.name, f.name_at)))
                         }
@@ -1728,13 +1728,13 @@ impl Reader[In] {
     }
   }
   fn end_case(r: take In) -> (In, Result[(), ReadError]) <alloc> {
-    var w = r
+    mut w = r
     closes = top_closes(w)
     empty = w.pending
     tag = tag_at(w)
     w = left_case(w)
     w.pending = false
-    var at = skip_space(w.bytes, w.at)
+    mut at = skip_space(w.bytes, w.at)
     match w.json.cases {
       .key { }
       .tag(t) { w.tags = without_last_nat(w.tags) }
@@ -1821,7 +1821,7 @@ impl Reader[In] {
 // Looks in the members of the object from `from`, after the value of a member
 // named `name`, for another of that name, and gives it as `twice` at its name.
 fn again(b: Slice[Byte], from: Nat, name: str) -> Option[Bad] <alloc> {
-  var at = from
+  mut at = from
   loop k in 0..b.size {
     at = skip_space(b, at)
     if byte(b, at) != ',' { return Option.none }

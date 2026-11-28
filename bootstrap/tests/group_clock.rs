@@ -41,9 +41,9 @@ use std.int (wrapping_add)
 use std.task (time_left)
 
 fn main() <console, alloc> {
-  var wrong: u64 = 0
-  var lost_two: u64 = 0
-  var lost_one: u64 = 0
+  mut wrong: u64 = 0
+  mut lost_two: u64 = 0
+  mut lost_one: u64 = 0
   loop d in 0..8 {
     loop a in 0..8 {
       come = d <= a

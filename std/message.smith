@@ -70,7 +70,7 @@ fn token_byte(b: Byte) -> bool {
 
 // Whether a text is a token: one byte or more, each of which a name may hold.
 fn a_token(t: str) -> bool {
-  var yes = t.size > 0
+  mut yes = t.size > 0
   loop b in t {
     if not token_byte(b) {
       yes = false
@@ -82,7 +82,7 @@ fn a_token(t: str) -> bool {
 
 // Whether a text is the name, whatever the case of its letters.
 fn is_named(t: str, name: str) -> bool {
-  var yes = t.size == name.size
+  mut yes = t.size == name.size
   have = t.bytes
   want = name.bytes
   loop i in 0..have.size {
@@ -107,7 +107,7 @@ fn not_written_by_the_library(t: str) -> bool {
 // Whether a text holds no line break, so that a header made of it cannot add
 // a line of its own.
 fn one_line(s: str) -> bool {
-  var yes = true
+  mut yes = true
   loop b in s {
     if b == 13 or b == 10 {
       yes = false
@@ -119,7 +119,7 @@ fn one_line(s: str) -> bool {
 
 // The text with its letters in small letters.
 fn small(t: str) -> str <alloc> {
-  var bytes: List[Byte] = []
+  mut bytes: List[Byte] = []
   loop i in 0..t.size {
     bytes = push(bytes, lowered(t[i]))
   }
@@ -222,7 +222,7 @@ fn plain_in_form(b: Byte) -> bool {
 // A text as a part of a form: a space is `+`, and any byte that is not plain is
 // a percent sign and its two digits.
 fn form_part(t: str) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..t.size {
     b = t[i]
     if plain_in_form(b) {
@@ -239,7 +239,7 @@ fn form_part(t: str) -> List[Byte] <alloc> {
 // Pairs of texts, as `application/x-www-form-urlencoded`: each name and value
 // is a form part, joined by `=`, and the pairs by `&`.
 pub fn form(pairs: List[(str, str)]) -> Payload <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..pairs.size {
     (name, value) = pairs[i]
     if i > 0 { made = push(made, '&') }

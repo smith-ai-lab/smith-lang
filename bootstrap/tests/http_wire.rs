@@ -130,9 +130,9 @@ fn app() <http, alloc> {{
 }}
 
 fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {{
-  var accepted: u64 = 0
-  var asked: List[u64] = []
-  var kept: List[(u64, List[Byte])] = []
+  mut accepted: u64 = 0
+  mut asked: List[u64] = []
+  mut kept: List[(u64, List[Byte])] = []
   result = net(
     listen_on: fn(host, port) {{ .ok(listener(1)) }},
     accept: fn(l) {{
@@ -146,7 +146,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{
-      var seen = false
+      mut seen = false
       loop i in 0..asked.size {{ if asked[i] == handle(c) {{ seen = true }} }}
       if seen {{
         .ok(.ended)
@@ -158,7 +158,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {
       }}
     }},
     write: fn(c, bytes) {{
-      var copied: List[Byte] = []
+      mut copied: List[Byte] = []
       loop i in 0..bytes.size {{ copied = push(copied, bytes[i]) }}
       kept = push(kept, (handle(c), copied))
       .ok(())
@@ -183,7 +183,7 @@ fn main() <console, alloc, diverge> {{
   (done, writes) = run()
   loop i in 0..writes.size {{
     (who, inner) = writes[i]
-    var line = \"{{who}}:\"
+    mut line = \"{{who}}:\"
     loop j in 0..inner.size {{ line = \"{{line}} {{inner[j]}}\" }}
     print(line)
   }}

@@ -17,8 +17,8 @@ use std.bits (u64)
 use std.int (wrapping_add, wrapping_sub)
 
 fn takes(from: u64, step: u64) -> u64 <diverge> {
-  var left: u64 = from
-  var times: u64 = 0
+  mut left: u64 = from
+  mut times: u64 = 0
   loop {
     if left < step { break }
     left = wrapping_sub(left, step)
@@ -59,8 +59,8 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn count_down(n: u64) -> u64 {
-  var left = n
-  var rounds: u64 = 0
+  mut left = n
+  mut rounds: u64 = 0
   loop decreases left {
     if left == 0 { break }
     left = left - 1
@@ -79,8 +79,8 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn count_down(n: u64) -> u64 {
-  var left = n
-  var rounds: u64 = 0
+  mut left = n
+  mut rounds: u64 = 0
   loop decreases left {
     if left == 0 { break }
     rounds = wrapping_add(rounds, 1)
@@ -100,8 +100,8 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn count_to(size: u64) -> u64 {
-  var at: u64 = 0
-  var n: u64 = 0
+  mut at: u64 = 0
+  mut n: u64 = 0
   loop decreases size - at {
     if at >= size { break }
     at = at + 1
@@ -124,8 +124,8 @@ fn skip(src: List[Byte], at: u64) -> next: u64
 }
 
 fn steps(src: List[Byte]) -> u64 {
-  var at: u64 = 0
-  var n: u64 = 0
+  mut at: u64 = 0
+  mut n: u64 = 0
   loop decreases src.size - at {
     if at >= src.size { break }
     at = skip(src, at)

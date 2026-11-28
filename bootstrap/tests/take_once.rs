@@ -2,10 +2,10 @@
 //! on every path, so that a resource cannot be forgotten.
 //!
 //! The generator builds a function over one value, of a type with `Discard`
-//! or without it, held by a parameter, a binding, or a `var`, in each kind of
+//! or without it, held by a parameter, a binding, or a `mut`, in each kind of
 //! type that holds another: a struct, a tuple, an enum, and a list. The body
 //! lends it, reads a field of it, gives it away, takes an enum apart, hands it
-//! to a lambda, assigns the `var` again, and leaves by `return`, by a `try`, or
+//! to a lambda, assigns the `mut` again, and leaves by `return`, by a `try`, or
 //! by `break`, inside an `if`, a `match`, and a `loop`.
 //!
 //! The expectation is worked out by running every path of the body, with a
@@ -243,7 +243,7 @@ enum Form {
     LamLent,
     /// The same, to a function that takes it.
     LamTake,
-    /// Assigns the `var` a new value.
+    /// Assigns the `mut` a new value.
     Again,
     /// Leaves by `return`.
     Return,
@@ -714,7 +714,7 @@ fn write(c: &Case) -> Written {
             out.push_str("a = mk()\n");
         }
         Origin::Var => {
-            out.push_str("  var ");
+            out.push_str("  mut ");
             w.first = pos_after(&out);
             out.push_str("a = mk()\n");
         }
@@ -897,7 +897,7 @@ fn the_examples_of_values_used_exactly_once_do_what_the_page_says() {
         ),
         (
             "fn run(db: Db, ok: bool) -> Result[(), DbError] <diverge> {
-  var t = begin(db)
+  mut t = begin(db)
   debit(t, 100)
   t = begin(db)
   commit(t)
@@ -1061,7 +1061,7 @@ fn a_chain_of_vars_that_a_loop_moves_a_value_along_is_read_until_it_settles() {
             }
             let mut source = format!("{PARTS}fn mk2() -> Tx {{ begin() }}\n\nfn run(c: bool) <diverge> {{\n");
             for v in &names {
-                source.push_str(&format!("  var {v} = mk2()\n"));
+                source.push_str(&format!("  mut {v} = mk2()\n"));
             }
             source.push_str(&format!("  loop i in 0..3 {{\n{}  }}\n", body.replace("mk()", "mk2()")));
             for v in &names {

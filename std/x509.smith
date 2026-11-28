@@ -123,10 +123,10 @@ fn two(b: Slice[Byte], at: Nat) -> Option[Nat] {
 // leap year. Division is not built, so the years are counted with a counter of
 // each of the three periods that decide a leap year.
 fn years(year: Nat) -> (Nat, bool) {
-  var days: Nat = 0
-  var c4: Nat = 2
-  var c100: Nat = 70
-  var c400: Nat = 370
+  mut days: Nat = 0
+  mut c4: Nat = 2
+  mut c100: Nat = 70
+  mut c400: Nat = 370
   if 1970 <= year {
     loop i in 1970..year {
       if c4 == 0 and (c100 != 0 or c400 == 0) { days = wrapping_add(days, 366) } else { days = wrapping_add(days, 365) }
@@ -151,8 +151,8 @@ fn days_in(leap: bool, month: Nat) -> Nat {
 // The instant of a time written `YYMMDDHHMMSSZ`, or with a year of four digits.
 fn moment(v: Value) -> Result[Instant, str] {
   b = v.bytes
-  var year: Nat = 0
-  var at: Nat = 0
+  mut year: Nat = 0
+  mut at: Nat = 0
   match v.tag {
     .utc_time {
       if b.size != 13 { return .err("a time that is not written as DER writes it") }
@@ -205,7 +205,7 @@ fn moment(v: Value) -> Result[Instant, str] {
   (before, is_leap) = years(year)
   if day < 1 or day > days_in(is_leap, month) { return .err("a day that the month does not have") }
   if hour > 23 or minute > 59 or second > 59 { return .err("a time of day that is not one") }
-  var days: Nat = before
+  mut days: Nat = before
   loop m in 1..month {
     days = wrapping_add(days, days_in(is_leap, m))
   }
@@ -224,7 +224,7 @@ fn is_id_ce(arcs: List[Nat], n: Nat) -> bool {
 }
 
 fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> {
-  var found = names
+  mut found = names
   xs = try children(v)
   if xs.size == 0 { return .err("a subject alternative name of no names") }
   loop i in 0..xs.size {
@@ -244,9 +244,9 @@ fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> 
 fn basic_constraints(v: Value) -> Result[Signing, str] <alloc> {
   xs = try children(v)
   if xs.size > 2 { return .err("basic constraints of more than two parts") }
-  var authority = false
-  var path: Option[Nat] = .none
-  var at: Nat = 0
+  mut authority = false
+  mut path: Option[Nat] = .none
+  mut at: Nat = 0
   if xs.size > at {
     if is_boolean(xs[at]) {
       if not true_boolean(xs[at]) { return .err("a boolean that DER would not write: false is left out") }
@@ -258,7 +258,7 @@ fn basic_constraints(v: Value) -> Result[Signing, str] <alloc> {
     if not is_integer(xs[at]) { return .err("basic constraints with a part that is not a length") }
     digits = try whole(xs[at])
     if digits.size > 4 { return .err("a path length that is too great") }
-    var n: Nat = 0
+    mut n: Nat = 0
     loop i in 0..digits.size {
       b: Nat = digits[i]
       n = wrapping_add(wrapping_mul(n, 256), b)
@@ -283,9 +283,9 @@ struct Found {
 // The extensions, which are the parts of a sequence of them.
 fn extensions(list: Value) -> Result[Found, str] <alloc> {
   xs = try parts(list, 1, 1000000)
-  var names: List[str] = []
-  var signing: Signing = .unstated
-  var seen: List[List[Nat]] = []
+  mut names: List[str] = []
+  mut signing: Signing = .unstated
+  mut seen: List[List[Nat]] = []
   loop i in 0..xs.size {
     ext = try parts(xs[i], 2, 3)
     if ext.size < 2 { return .err("an extension of too few parts") }
@@ -366,9 +366,9 @@ pub fn certificate(bytes: Slice[Byte]) -> Result[Certificate, str] <alloc> {
   key_algorithm = try algorithm_of(info_parts[0])
   key = try whole_bits(info_parts[1])
 
-  var names: List[str] = []
-  var signing: Signing = .unstated
-  var rest = t7
+  mut names: List[str] = []
+  mut signing: Signing = .unstated
+  mut rest = t7
   loop i in 0..t7.size {
     if rest.size == 0 { break }
     (field, field_bytes, more) = try next_value(rest)
@@ -446,7 +446,7 @@ fn started(input: str, from: Nat, end: Nat) -> begin: Nat
 }
 
 fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str] <alloc> {
-  var s = state
+  mut s = state
   if to > input.size or from > to { return .err("a line that is not in the text") }
   end = trimmed(input, from, to)
   match s.at {
@@ -500,9 +500,9 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
 }
 
 pub fn pem(input: str) -> Result[List[List[Byte]], str] <alloc> {
-  var s = Pem(found: [], body: new_text(), at: .outside)
-  var from: Nat = 0
-  var i: Nat = 0
+  mut s = Pem(found: [], body: new_text(), at: .outside)
+  mut from: Nat = 0
+  mut i: Nat = 0
   // A line ends at a carriage return, a line feed, or both in that order.
   loop n in 0..input.size {
     if i < input.size {

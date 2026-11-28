@@ -263,7 +263,7 @@ struct Build {
     elem: Elem,
     start: Vec<Val>,
     pushes: Vec<Val>,
-    /// Whether the list is a `var` pushed to in place, or a name for each
+    /// Whether the list is a `mut` pushed to in place, or a name for each
     /// list that `push` makes of the last.
     var: bool,
 }
@@ -281,19 +281,19 @@ fn build(g: &mut Gen) -> Build {
 }
 
 fn a_program_builds_a_list_pushes_to_it_and_reads_each_element() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
     prints(source, ["1", "2", "3", "4"].map(String::from).to_vec());
 }
 
 /// For every type of whole number and `bool`, and every list built from a
-/// literal, or from `[]`, and a run of pushes, whether to a `var` or one name
+/// literal, or from `[]`, and a run of pushes, whether to a `mut` or one name
 /// after another, the size and each element are what was put in, in order.
 fn a_list_holds_the_size_and_the_elements_that_were_put_in_in_order(part: u64) {
     generate::check_part(61, 200, part, 2, build, |b| {
         let t = b.elem.name();
         let mut body = String::new();
         let last = if b.var {
-            body += &format!("  var xs: List[{t}] = {}\n", literal(&b.start));
+            body += &format!("  mut xs: List[{t}] = {}\n", literal(&b.start));
             for v in &b.pushes {
                 body += &format!("  xs = push(xs, {})\n", v.written());
             }
@@ -334,7 +334,7 @@ fn reach(g: &mut Gen) -> Reach {
     }
 }
 
-/// A list that is a `var`, and a field of a `var`, are known to `arith` as any
+/// A list that is a `mut`, and a field of a `mut`, are known to `arith` as any
 /// value is, and everything known of one is forgotten at an assignment to it
 /// or to a field of it, however the assignment is reached.
 fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
@@ -342,13 +342,13 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
         let push: &[&str] = if body.contains("push(") { &["push"] } else { &[] };
         let uses = header(&[("std.console", &["console", "print"]), ("std.list", push)], "");
         format!(
-            "{uses}fn run(f: fn()) {{ f() }}\n\nfn main() <console, alloc> {{\n  var xs: List[Byte] = [1, 2, 3]\n  k: Nat = 1\n  if k < xs.size {{\n{body}\n  }}\n}}\n"
+            "{uses}fn run(f: fn()) {{ f() }}\n\nfn main() <console, alloc> {{\n  mut xs: List[Byte] = [1, 2, 3]\n  k: Nat = 1\n  if k < xs.size {{\n{body}\n  }}\n}}\n"
         )
     };
     let field = |body: &str| {
         let uses = header(&[("std.bits", &["u64"]), ("std.console", &["console", "print"])], "");
         format!(
-            "{uses}struct Cursor {{\n  at: u64\n}}\n\nfn main() <console, alloc> {{\n  var c = Cursor(at: 1)\n  n: u64 = 5\n  if c.at < n {{\n{body}\n  }}\n}}\n"
+            "{uses}struct Cursor {{\n  at: u64\n}}\n\nfn main() <console, alloc> {{\n  mut c = Cursor(at: 1)\n  n: u64 = 5\n  if c.at < n {{\n{body}\n  }}\n}}\n"
         )
     };
     let read = "    print(\"{xs[k]}\")";
@@ -379,7 +379,7 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
     for source in &lost {
         assert!(!refused(source).is_empty(), "compiles: {source}");
     }
-    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  var xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
+    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  xs = push(xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
     prints(example, vec!["4".to_string()]);
 }
 
@@ -456,7 +456,7 @@ fn an_index_is_never_tested_when_the_program_runs() {
         let t = ty.name;
         let uses = header(&[("std.int", &["wrapping_add"])], t);
         let source = format!(
-            "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
+            "{uses}fn total(xs: List[{t}]) -> {t} {{\n  mut sum: {t} = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
         );
         // The function that sums, before inlining puts it into `main`, where
         // nothing reads the sum.
@@ -483,7 +483,7 @@ fn an_index_is_never_tested_when_the_program_runs() {
     }
 }
 
-/// A program that builds lists with `var`s and snapshots, whose model says
+/// A program that builds lists with `mut`s and snapshots, whose model says
 /// what each name holds at the end.
 #[derive(Debug)]
 struct Names {
@@ -512,7 +512,7 @@ fn names(g: &mut Gen) -> Names {
             0 | 13 => {
                 let items: Vec<u8> = (0..g.below(4)).map(|_| byte(g)).collect();
                 let shown: Vec<String> = items.iter().map(u8::to_string).collect();
-                body += &format!("  var a{}: List[Byte] = [{}]\n", vars.len(), shown.join(", "));
+                body += &format!("  mut a{}: List[Byte] = [{}]\n", vars.len(), shown.join(", "));
                 vars.push(items);
             }
             1 => {
@@ -525,7 +525,7 @@ fn names(g: &mut Gen) -> Names {
                 vars[j].push(v);
             }
             4 => {
-                body += &format!("  var a{} = copy(a{j})\n", vars.len());
+                body += &format!("  mut a{} = copy(a{j})\n", vars.len());
                 let copy = vars[j].clone();
                 vars.push(copy);
             }
@@ -607,13 +607,13 @@ fn names(g: &mut Gen) -> Names {
     let copy: &[&str] = if body.contains("copy(") { &["copy"] } else { &[] };
     let uses = header(&[("std.console", &["console", "print"]), ("std.list", &["push"]), ("std.list", copy)], "");
     let source = format!(
-        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] <alloc> {{\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
+        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] <alloc> {{\n  mut grown = xs\n  grown = push(grown, 9)\n  grown\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
     );
     Names { source, lines }
 }
 
 /// A name given a list holds the same elements after any other name is
-/// pushed to, whether the two lists are a `var` and its `copy`, a `var` and
+/// pushed to, whether the two lists are a `mut` and its `copy`, a `mut` and
 /// a copy of a snapshot, or a list `push` grew from a copy. Lists that share
 /// a beginning are built in every order of binding and pushing.
 fn a_name_given_a_list_holds_the_same_elements_after_any_other_name_is_pushed_to(part: u64) {
@@ -624,7 +624,7 @@ fn ceil_log2(n: usize) -> usize {
     (usize::BITS - (n - 1).leading_zeros()) as usize
 }
 
-/// A program that pushes `n` times to one `var` that starts empty, and does
+/// A program that pushes `n` times to one `mut` that starts empty, and does
 /// nothing else, so that the last memory it asked for is the list's.
 fn pushed(elem: Elem, n: usize) -> String {
     let one = match elem {
@@ -633,7 +633,7 @@ fn pushed(elem: Elem, n: usize) -> String {
     };
     let uses = header(&[("std.list", &["push"])], elem.name());
     format!(
-        "{uses}fn main() <alloc> {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {one}) }}\n}}\n",
+        "{uses}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {one}) }}\n}}\n",
         elem.name()
     )
 }
@@ -650,7 +650,7 @@ fn sizes_of() -> impl Iterator<Item = (Elem, usize)> {
         .flat_map(move |e| ns.into_iter().map(move |n| (e, n)))
 }
 
-/// Building a list of `n` elements by pushing to one `var` asks the system
+/// Building a list of `n` elements by pushing to one `mut` asks the system
 /// for memory a number of times that grows as the logarithm of `n`.
 fn building_a_list_by_pushing_asks_for_memory_a_logarithmic_number_of_times() {
     for (elem, n) in sizes_of() {
@@ -696,7 +696,7 @@ fn push_and_a_list_with_elements_need_the_alloc_effect() {
 }
 
 fn a_list_of_people_prints_each_name_and_age() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() <console, alloc> {\n  var people: List[Person] = []\n  people = push(people, Person(name: \"ada\", age: 36))\n  people = push(people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() <console, alloc> {\n  mut people: List[Person] = []\n  people = push(people, Person(name: \"ada\", age: 36))\n  people = push(people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
     prints(source, ["ada 36", "alan 41"].map(String::from).to_vec());
 }
 
@@ -1012,7 +1012,7 @@ fn items(ty: &Ty, vs: &[V]) -> String {
 
 /// For every type built from whole numbers, `bool`, text, structs, enums,
 /// tuples, and lists, to the depth the generator reaches, a list of the type
-/// built from a literal and a run of pushes, to a `var` or one name after
+/// built from a literal and a run of pushes, to a `mut` or one name after
 /// another, and passed through a function, a struct, a tuple, or an enum,
 /// holds what was put in, in order.
 fn a_list_of_any_type_holds_what_was_put_in_in_order(part: u64) {
@@ -1020,7 +1020,7 @@ fn a_list_of_any_type_holds_what_was_put_in_in_order(part: u64) {
         let t = h.ty.name();
         let mut body = String::new();
         let last = if h.var {
-            body += &format!("var xs: List[{t}] = {}\n", items(&h.ty, &h.start));
+            body += &format!("mut xs: List[{t}] = {}\n", items(&h.ty, &h.start));
             for v in &h.pushes {
                 body += &format!("xs = push(xs, {})\n", h.ty.written(v));
             }
@@ -1065,7 +1065,7 @@ const HOLDERS: &[(&str, &str, &str)] = &[
     ("[{}]", "head({})", "List[List[Byte]]"),
 ];
 
-const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] <alloc> {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> {\n  var grown = xs\n  grown = push(grown, 9)\n  grown\n}\n\n";
+const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] <alloc> {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> {\n  mut grown = xs\n  grown = push(grown, 9)\n  grown\n}\n\n";
 
 fn fill(pattern: &str, with: &str) -> String {
     pattern.replace("{}", with)
@@ -1102,7 +1102,7 @@ fn shared(g: &mut Gen) -> Shared {
             0 => {
                 let new: Vec<u8> = (0..g.below(4)).map(|_| byte(g)).collect();
                 let shown: Vec<String> = new.iter().map(u8::to_string).collect();
-                body += &format!("var a{}: List[Byte] = [{}]\n", vars.len(), shown.join(", "));
+                body += &format!("mut a{}: List[Byte] = [{}]\n", vars.len(), shown.join(", "));
                 vars.push(new);
             }
             1..=3 => {
@@ -1128,7 +1128,7 @@ fn shared(g: &mut Gen) -> Shared {
             6 | 7 if live => {
                 let (kind, held) = holders[h].take().expect("live");
                 body += &format!(
-                    "var a{} = {}\n",
+                    "mut a{} = {}\n",
                     vars.len(),
                     fill(HOLDERS[kind].1, &format!("h{h}"))
                 );
@@ -1150,7 +1150,7 @@ fn shared(g: &mut Gen) -> Shared {
             }
             _ => {
                 let new = vars[j].clone();
-                body += &format!("var a{} = copy(a{j})\n", vars.len());
+                body += &format!("mut a{} = copy(a{j})\n", vars.len());
                 vars.push(new);
             }
         }
@@ -1201,13 +1201,13 @@ fn requests(source: &str) -> usize {
 
 /// A push to a list held inside another value, or a list that a function
 /// was given and gives back, asks for memory when the list is full and not
-/// otherwise, as a push to a `var` does.
+/// otherwise, as a push to a `mut` does.
 fn a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room() {
     for (kind, (build, take, ty)) in HOLDERS.iter().enumerate() {
         for n in 1usize..=9 {
             let program = |push: &str| {
                 format!(
-                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <alloc> {{\n  var a: List[Byte] = []\n  loop i in 0..{n} {{ a = push(a, 1) }}\n  h: {ty} = {}\n  var b = {}\n{push}}}\n",
+                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <alloc> {{\n  mut a: List[Byte] = []\n  loop i in 0..{n} {{ a = push(a, 1) }}\n  h: {ty} = {}\n  mut b = {}\n{push}}}\n",
                     fill(build, "a"),
                     fill(take, "h"),
                 )
@@ -1227,14 +1227,14 @@ fn a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room()
 /// a list `n` times in the way `loop` says, with `setup` before it.
 fn pushes_by(setup: &str, loop_body: &str, n: usize) -> usize {
     requests(&format!(
-        "{setup}fn main() <alloc> {{\n  var a = Acc(items: [], n: 0)\n  var items: List[u64] = []\n  loop i in 0..{n} {{ {loop_body} }}\n}}\n"
+        "{setup}fn main() <alloc> {{\n  mut a = Acc(items: [], n: 0)\n  mut items: List[u64] = []\n  loop i in 0..{n} {{ {loop_body} }}\n}}\n"
     ))
 }
 
-const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc <alloc> {\n  var next = a\n  next.items = push(next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] <alloc> { push(items, x) }\n\n";
+const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc <alloc> {\n  mut next = a\n  next.items = push(next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] <alloc> { push(items, x) }\n\n";
 
 /// A list grown in the way `form` says asks for memory as many times as one
-/// grown in a plain `var` may, as many as the logarithm of the pushes, however
+/// grown in a plain `mut` may, as many as the logarithm of the pushes, however
 /// many pushes there are.
 fn grows_as_a_plain_var_does(form: &str) {
     for n in [1000, 10000, 50000] {
@@ -1243,17 +1243,17 @@ fn grows_as_a_plain_var_does(form: &str) {
     }
 }
 
-/// A list that a function takes, grows, and returns grows as a plain `var` does.
+/// A list that a function takes, grows, and returns grows as a plain `mut` does.
 fn a_list_that_a_function_takes_in_a_struct_and_returns_grows_as_a_plain_var_does() {
     grows_as_a_plain_var_does("a = add(a, i)");
 }
 
-/// A list that is a field of a `var` grows as a plain `var` does.
+/// A list that is a field of a `mut` grows as a plain `mut` does.
 fn a_list_that_is_a_field_of_a_var_grows_as_a_plain_var_does() {
     grows_as_a_plain_var_does("a.items = push(a.items, i)");
 }
 
-/// A list that a function pushes to and returns grows as a plain `var` does.
+/// A list that a function pushes to and returns grows as a plain `mut` does.
 fn a_list_that_a_function_pushes_to_and_returns_grows_as_a_plain_var_does() {
     grows_as_a_plain_var_does("items = more(items, i)");
 }
@@ -1263,7 +1263,7 @@ fn a_list_that_a_function_pushes_to_and_returns_grows_as_a_plain_var_does() {
 /// that a list of `n` of them has room for between `n` and `2n` elements of
 /// the size the types give.
 fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest() {
-    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() <alloc> {\n  var xs: List[M] = []\n  loop i in 0..3 { xs = push(xs, M(a: 1, b: 2, c: 3)) }\n}\n";
+    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() <alloc> {\n  mut xs: List[M] = []\n  loop i in 0..3 { xs = push(xs, M(a: 1, b: 2, c: 3)) }\n}\n";
     let program = lower(mixed.as_bytes()).expect("compiles");
     let (_, asked) = scalar::run_taking(&program, usize::MAX);
     let asked = growth::rooms(&asked);
@@ -1286,7 +1286,7 @@ fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest
             let declarations = Ty::source(&[t]);
             let uses = header(&[("std.list", &["push"])], &format!("{} {declarations}", t.name()));
             let source = format!(
-                "{uses}{}fn main() <alloc> {{\n  var xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {}) }}\n}}\n",
+                "{uses}{}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(xs, {}) }}\n}}\n",
                 declarations,
                 t.name(),
                 t.written(v),
@@ -1348,7 +1348,7 @@ fn reading_a_field_of_an_element_reads_only_the_scalars_of_that_field() {
 /// The program of the issue: a loop over a list sums it, and needs neither
 /// `diverge` nor anything but the effects of its body.
 fn a_loop_over_a_list_sums_it() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() <console, alloc> {\n  xs: List[u64] = [1, 2, 3]\n  var sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  print(\"{sum}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn main() <console, alloc> {\n  xs: List[u64] = [1, 2, 3]\n  mut sum: u64 = 0\n  loop v in xs { sum = wrapping_add(sum, v) }\n  print(\"{sum}\")\n}\n";
     prints(source, vec!["6".into()]);
 }
 
@@ -1383,7 +1383,7 @@ fn looped(g: &mut Gen) -> Looped {
 
 /// For every list of every type the generator builds, `loop v in xs` gives
 /// `v` each element from the first to the last, once each, and not at all
-/// for an empty list, whatever the block does to the `var` list `xs`, and a
+/// for an empty list, whatever the block does to the `mut` list `xs`, and a
 /// `break` ends it.
 fn a_loop_over_a_list_of_any_type_gives_each_element_of_the_list_it_began_with_until_a_break() {
     generate::check(97, 30, looped, |l| {
@@ -1413,7 +1413,7 @@ fn a_loop_over_a_list_of_any_type_gives_each_element_of_the_list_it_began_with_u
             &format!("{t} {declarations}"),
         );
         let source = format!(
-            "{uses}{}fn main() <console, alloc> {{\nvar ys: List[{t}] = {}\nvar seen: u64 = 0\n{setup}loop v in ys {{\n{block}}}\nprint(\"{{ys.size}}\")\n}}\n",
+            "{uses}{}fn main() <console, alloc> {{\nmut ys: List[{t}] = {}\nmut seen: u64 = 0\n{setup}loop v in ys {{\n{block}}}\nprint(\"{{ys.size}}\")\n}}\n",
             declarations,
             items(&l.ty, &l.items)
         );
@@ -1460,7 +1460,7 @@ fn a_loop_over_a_list_is_one_comparison_and_one_load_of_the_element_each_time_ro
         let uses = header(&[("std.int", &["wrapping_add"])], t);
         let sum = |head: &str, element: &str| {
             format!(
-                "{uses}fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  {head} {{ sum = wrapping_add(sum, {element}) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
+                "{uses}fn total(xs: List[{t}]) -> {t} {{\n  mut sum: {t} = 0\n  {head} {{ sum = wrapping_add(sum, {element}) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  xs: List[{t}] = [1, 2, 3]\n  total(xs)\n}}\n"
             )
         };
         let each = sum("loop v in xs", "v");

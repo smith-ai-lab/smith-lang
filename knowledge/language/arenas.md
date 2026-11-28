@@ -6,7 +6,7 @@ status: partial
 built:
   - "the `alloc` effect, carried by every function that builds a text at run time"
   - "a function's temporaries released when it returns, and its result built in its caller's memory and never copied"
-  - "`with arena()`, imported from `std.alloc`, which handles `alloc` for the rest of its block: a function whose every allocation is under it carries no `alloc`, and neither does its caller; what the block allocates and does not hand out is released when it ends, in no instruction that depends on how much that was; a value that is the value of the block, or is assigned to a `var` outside it, is built in the memory outside, and a `return` in the block ends the block"
+  - "`with arena()`, imported from `std.alloc`, which handles `alloc` for the rest of its block: a function whose every allocation is under it carries no `alloc`, and neither does its caller; what the block allocates and does not hand out is released when it ends, in no instruction that depends on how much that was; a value that is the value of the block, or is assigned to a `mut` outside it, is built in the memory outside, and a `return` in the block ends the block"
 ---
 
 # The alloc effect and arenas
@@ -36,7 +36,7 @@ use std.int (wrapping_mul)
 use std.list (push)
 
 fn squares(n: u64) -> List[u64] <alloc> {
-  var acc: List[u64] = []
+  mut acc: List[u64] = []
   loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }
   acc
 }
@@ -58,7 +58,7 @@ use std.int (wrapping_add)
 
 fn sum_of_squares(n: u64) -> u64 <alloc> {
   xs = squares(n)
-  var total = 0
+  mut total = 0
   loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }
   total
 }
@@ -66,7 +66,7 @@ fn sum_of_squares(n: u64) -> u64 <alloc> {
 
 `xs` is a temporary of `sum_of_squares`, and is gone when it returns the `u64`. The list `squares` returns is built where `sum_of_squares` keeps `xs`.
 
-A `var` that is replaced is updated in place when its old value is provably unused, as `acc` is in `squares`: each `push` adds to the buffer it already has.
+A `mut` that is replaced is updated in place when its old value is provably unused, as `acc` is in `squares`: each `push` adds to the buffer it already has.
 
 ## with arena
 

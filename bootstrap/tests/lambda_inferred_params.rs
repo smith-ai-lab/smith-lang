@@ -302,7 +302,7 @@ fn a_bound_lambda_called_with_what_its_own_calls_give_that_settles_is_inferred()
 }
 
 /// A name the lambda reads keeps the type its function gave it, whether it is a
-/// parameter, a `var` with a type or without one, or a field the lambda is
+/// parameter, a `mut` with a type or without one, or a field the lambda is
 /// stored in, and only the parameters of the lambda take the joined range.
 fn a_bound_lambda_that_reads_names_keeps_the_types_of_those_names_and_takes_the_range_of_its_calls_for_its_parameters() {
     generate::check(
@@ -317,8 +317,8 @@ fn a_bound_lambda_that_reads_names_keeps_the_types_of_those_names_and_takes_the_
             let tail = "\nfn main() <console, alloc> {\n";
             let programs = [
                 format!("{head}fn run(k: 0..{}) -> 0..{} {{\n  f = fn(a) {{ a + k }}\n  {calls}\n}}\n{tail}  print(\"{{run({k})}}\")\n}}\n", k + 1, 2 * top),
-                format!("{head}{tail}  var k: 0..{} = {k}\n  f = fn(a) {{ a + k }}\n  print(\"{{{calls}}}\")\n}}\n", k + 1),
-                format!("{head}{tail}  var k = {k}\n  k = {k}\n  f = fn(a) {{ a + k }}\n  print(\"{{{calls}}}\")\n}}\n"),
+                format!("{head}{tail}  mut k: 0..{} = {k}\n  f = fn(a) {{ a + k }}\n  print(\"{{{calls}}}\")\n}}\n", k + 1),
+                format!("{head}{tail}  mut k = {k}\n  k = {k}\n  f = fn(a) {{ a + k }}\n  print(\"{{{calls}}}\")\n}}\n"),
                 format!(
                     "{head}struct Box {{\n  g: fn({low}..{}) -> 0..{top}\n}}\n\nfn make(k: 0..{}) -> Box {{\n  Box(g: fn(a) {{ a + k }})\n}}\n{tail}  b = make({k})\n  print(\"{{b.g({x}) + b.g({y})}}\")\n}}\n",
                     high + 1,

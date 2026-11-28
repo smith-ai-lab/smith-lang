@@ -153,7 +153,7 @@ fn not_opened(f: File, call: str) -> FsError <alloc> {
 // The path as the kernel reads it, ended by a zero byte, when no byte of it is
 // zero.
 fn name(path: str) -> Result[List[Byte], FsError] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..path.size {
     if path[i] == 0 { return .err(.failed((path, "a path holds a zero byte"))) }
     made = push(made, path[i])
@@ -181,9 +181,9 @@ fn put_point(made: take List[Byte], point: 0..2097152) -> List[Byte] <alloc> {
 // The path as Windows reads it: UTF-16, the low byte of a unit first, and ended
 // by a unit of zero, when no unit of it is zero.
 fn wide_name(path: str) -> Result[List[Byte], FsError] <alloc> {
-  var made: List[Byte] = []
-  var need: 0..4 = 0
-  var point: 0..2097152 = 0
+  mut made: List[Byte] = []
+  mut need: 0..4 = 0
+  mut point: 0..2097152 = 0
   loop i in 0..path.size {
     b = path[i]
     if b == 0 { return .err(.failed((path, "a path holds a zero byte"))) }
@@ -238,7 +238,7 @@ fn opened_on_windows(path: str, call: str, where: List[Byte], access: i64, how: 
 fn system_open_file(path: str) -> Result[File, FsError] <alloc, task> {
   where = try system_name(path)
   if on_windows() { return opened_on_windows(path, "open", where, 2147483648, 3) }
-  var flags: i64 = 524288
+  mut flags: i64 = 524288
   if on_macos() { flags = 16777216 }
   if __scheduled() { flags = if on_macos() { 16777220 } else { 526336 } }
   fd = __system(19, -100, where, flags, 0, 0, 0)
@@ -249,7 +249,7 @@ fn system_open_file(path: str) -> Result[File, FsError] <alloc, task> {
 fn system_create_file(path: str, executable: bool) -> Result[File, FsError] <alloc, task> {
   where = try system_name(path)
   if on_windows() { return opened_on_windows(path, "create", where, 1073741824, 2) }
-  var flags: i64 = 524865
+  mut flags: i64 = 524865
   if on_macos() { flags = 16778753 }
   if __scheduled() { flags = if on_macos() { 16778757 } else { 526913 } }
   fd = __system(19, -100, where, flags, 438, 0, 0)
@@ -318,11 +318,11 @@ fn would_block() -> i64 {
 
 fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, task> {
   if not f.opened { return .err(not_opened(f, "read")) }
-  var last: Nat = range.end
+  mut last: Nat = range.end
   asked = probe(f.handle)
   if asked == 0 - 21 { return .err(failure(f.path, "read", asked)) }
   end = end_of(f.handle)
-  var stream = false
+  mut stream = false
   if end >= 0 {
     if last > count(end) { last = count(end) }
   } else if end == no_places() {
@@ -333,13 +333,13 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
   first = range.start
   if first >= last { return .ok([]) }
   wanted = last - first
-  var made: List[Byte] = []
-  var have: Nat = 0
+  mut made: List[Byte] = []
+  mut have: Nat = 0
   loop attempt in 0..1000000 {
     if have >= wanted { break }
     left = wanted - have
     chunk: List[Byte] = __reserve(left)
-    var got: i64 = 0
+    mut got: i64 = 0
     if stream {
       got = __system(20, f.handle, chunk, left, 0, 0, 0)
     } else {
@@ -370,7 +370,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
 
 // The bytes of the list from the place `from`.
 fn tail(xs: List[Byte], from: Nat) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   if from <= xs.size {
     loop i in from..xs.size { made = push(made, xs[i]) }
   }
@@ -379,16 +379,16 @@ fn tail(xs: List[Byte], from: Nat) -> List[Byte] <alloc> {
 
 fn system_write(f: File, at: Nat, bytes: List[Byte]) -> Result[(), FsError] <alloc, task> {
   if not f.opened { return .err(not_opened(f, "write")) }
-  var done: Nat = 0
-  var stream = false
+  mut done: Nat = 0
+  mut stream = false
   // What is left to send once a write has sent only a part: the bytes are sent
   // from the list itself until then, with nothing copied.
-  var rest: List[Byte] = []
-  var whole = true
+  mut rest: List[Byte] = []
+  mut whole = true
   loop attempt in 0..1000000 {
     if done >= bytes.size { break }
     handed = if whole { bytes.size } else { rest.size }
-    var given: i64 = 0
+    mut given: i64 = 0
     match checked_add(at, done) {
       .some(place) {
         if stream {
@@ -438,7 +438,7 @@ fn found(files: List[MemoryFile], path: str) -> Option[Nat] {
 
 // The files with the one at `at` holding `bytes`, and every other as it was.
 fn holding(files: List[MemoryFile], at: Nat, bytes: List[Byte]) -> List[MemoryFile] <alloc> {
-  var made: List[MemoryFile] = []
+  mut made: List[MemoryFile] = []
   loop i in 0..files.size {
     if i == at {
       made = push(made, MemoryFile(path: files[i].path, bytes: copy(bytes)))
@@ -452,7 +452,7 @@ fn holding(files: List[MemoryFile], at: Nat, bytes: List[Byte]) -> List[MemoryFi
 // The bytes of the range that the file holds, which are fewer when it ends first.
 fn piece(bytes: List[Byte], range: Range) -> List[Byte] <alloc> {
   last = if range.end < bytes.size { range.end } else { bytes.size }
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   if range.start <= last {
     loop i in range.start..last {
       if i < bytes.size { made = push(made, bytes[i]) }
@@ -464,7 +464,7 @@ fn piece(bytes: List[Byte], range: Range) -> List[Byte] <alloc> {
 // What a file of `old` holds once `bytes` are put in it from the place `at`: the
 // bytes before the place that it did not hold are zeros.
 fn put(old: List[Byte], at: Nat, bytes: List[Byte], total: Nat) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop k in 0..total {
     if k >= at and k - at < bytes.size {
       made = push(made, bytes[k - at])
@@ -482,7 +482,7 @@ fn put(old: List[Byte], at: Nat, bytes: List[Byte], total: Nat) -> List[Byte] <a
 // a file is found by its path. A file is open by the number of its place in the
 // list, and nothing in memory is refused or fails.
 pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
-  var held = files
+  mut held = files
   fs(
     open_file: fn(path) {
       match found(held, path) {

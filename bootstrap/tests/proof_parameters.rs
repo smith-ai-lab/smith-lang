@@ -394,7 +394,7 @@ fn a_proof_parameter_is_a_fact_in_the_function_and_a_proof_to_pass_on() {
 }
 
 /// For every statement of a comparison, the proof a call gives, or is passed,
-/// is refused where the argument is a `var`, and accepted where it is a name
+/// is refused where the argument is a `mut`, and accepted where it is a name
 /// that cannot change.
 fn a_proof_of_a_statement_that_names_a_var_is_refused_with_the_name_of_the_var() {
     fn comparison(g: &mut Gen) -> (&'static str, usize, bool) {
@@ -417,7 +417,7 @@ fn a_proof_of_a_statement_that_names_a_var_is_refused_with_the_name_of_the_var()
                 "{keep}\n\nfn f(m: Nat) -> Nat {{\n  {bound}\n  match check(m {op} {n}) {{\n    .some(p) {{\n      {drop}keep({passed}, p)\n      1\n    }}\n    .none {{ 0 }}\n  }}\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{f(1)}}\")\n}}\n"
             ))
         };
-        refused(&source("var n = m", "n"), "`n`");
+        refused(&source("mut n = m", "n"), "`n`");
         assert!(
             accepted(&source("n = m", "m")),
             "{:?}",

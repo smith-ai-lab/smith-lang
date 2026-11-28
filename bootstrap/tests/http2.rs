@@ -498,7 +498,7 @@ fn written(f: Frame, expected: Slice[Byte]) <console, alloc> {
 }
 
 fn early(b: Slice[Byte]) <console, alloc> {
-  var count: Nat = 0
+  mut count: Nat = 0
   loop k in 0..b.size {
     match frame(b[0..k]) {
       .incomplete { count = wrapping_add(count, 1) }
@@ -884,13 +884,13 @@ fn show(r: Result[List[(str, str)], str]) <console, alloc> {
 }
 
 fn reference(i: Nat) -> Slice[Byte] <alloc> {
-  var l: List[Byte] = []
+  mut l: List[Byte] = []
   l = push(l, wrapping_narrow(wrapping_add(128, i)))
   freeze(l)
 }
 
 fn probe(d: take Decoder, places: Nat) -> Decoder <console, alloc> {
-  var t = d
+  mut t = d
   loop i in 0..wrapping_add(places, 1) {
     (next, r) = decode(t, reference(wrapping_add(62, i)), largest: 65536)
     t = next

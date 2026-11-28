@@ -103,7 +103,7 @@ fn a_text_counts_the_bytes_of_its_utf8_and_is_read_by_a_byte_at_each_place() {
 fn count_spaces_of_a_text_is_the_number_of_its_spaces() {
     generate::check(301, 60, text, |s| {
         let source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn count_spaces(s: str) -> u64 {{\n  var n: u64 = 0\n  loop i in 0..s.size {{\n    if s[i] == ' ' {{ n = wrapping_add(n, 1) }}\n  }}\n  n\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{count_spaces(\"{s}\")}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn count_spaces(s: str) -> u64 {{\n  mut n: u64 = 0\n  loop i in 0..s.size {{\n    if s[i] == ' ' {{ n = wrapping_add(n, 1) }}\n  }}\n  n\n}}\n\nfn main() <console, alloc> {{\n  print(\"{{count_spaces(\"{s}\")}}\")\n}}\n"
         );
         let spaces = s.bytes().filter(|b| *b == b' ').count();
         prints(&source, vec![spaces.to_string()]);
@@ -174,7 +174,7 @@ fn utf8_gives_the_text_of_valid_bytes_and_the_first_place_that_is_not(part: u64)
 }
 
 fn the_examples_of_the_page_on_text_hold() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze)\nuse std.utf8 (Utf8Error, utf8)\n\nfn count_spaces(s: str) -> u64 {\n  var n: u64 = 0\n  loop i in 0..s.size {\n    if s[i] == ' ' { n = wrapping_add(n, 1) }\n  }\n  n\n}\n\nfn show(r: Result[str, Utf8Error]) <console, alloc> {\n  match r {\n    .ok(t) { print(\"ok {t}\") }\n    .err(e) { print(\"err {e.at}\") }\n  }\n}\n\nfn main() <console, alloc> {\n  print(\"{count_spaces(\"a b c\")}\")\n  print(\"{\"é\".size}\")\n  show(utf8(\"hi\"))\n  b: List[Byte] = [255, 104]\n  show(utf8(freeze(b)))\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze)\nuse std.utf8 (Utf8Error, utf8)\n\nfn count_spaces(s: str) -> u64 {\n  mut n: u64 = 0\n  loop i in 0..s.size {\n    if s[i] == ' ' { n = wrapping_add(n, 1) }\n  }\n  n\n}\n\nfn show(r: Result[str, Utf8Error]) <console, alloc> {\n  match r {\n    .ok(t) { print(\"ok {t}\") }\n    .err(e) { print(\"err {e.at}\") }\n  }\n}\n\nfn main() <console, alloc> {\n  print(\"{count_spaces(\"a b c\")}\")\n  print(\"{\"é\".size}\")\n  show(utf8(\"hi\"))\n  b: List[Byte] = [255, 104]\n  show(utf8(freeze(b)))\n}\n";
     prints(
         source,
         ["2", "2", "ok hi", "err 0"].map(String::from).to_vec(),
@@ -234,7 +234,7 @@ fn costs(source: &str) -> (usize, usize, usize) {
 fn the_size_and_an_index_of_a_text_cost_what_they_cost_on_a_list() {
     let of = |ty: &str, arg: &str| {
         format!(
-            "use std.int (wrapping_add)\n\nfn total(xs: {ty}) -> Byte {{\n  var sum: Byte = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  total({arg})\n}}\n"
+            "use std.int (wrapping_add)\n\nfn total(xs: {ty}) -> Byte {{\n  mut sum: Byte = 0\n  loop i in 0..xs.size {{ sum = wrapping_add(sum, xs[i]) }}\n  sum\n}}\n\nfn main() <alloc> {{\n  total({arg})\n}}\n"
         )
     };
     let list = costs(&of("List[Byte]", "[1, 2, 3]"));
