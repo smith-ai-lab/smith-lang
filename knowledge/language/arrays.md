@@ -7,7 +7,8 @@ built:
   - "the `size` of a `List` and of a `str`, a `Nat`, which a program writes as a parameter, a result, a field, and inside another type, and an arithmetic on a `Nat` that `arith` proves fits"
   - "an array of a size written as a number, `[3]f32`, as a parameter, a result, a binding, a `mut`, a field, a case, a tuple, and an element of a list, written as `[1.0, 2.0, 3.0]` where it is expected, which is the same type as another exactly when the size and the element are, and refused when the number of elements written is not the size; its elements are read and assigned at any index that `arith` proves below the size, and a `loop` runs over its elements in order, all held in place in the frame of the function, so no memory is asked for"
   - "a pattern in brackets on a `List`, as [Patterns in brackets](array-patterns.md) says, and not on an array"
-  - "not a size that is a name, a matrix, or arithmetic on sizes"
+  - "a size that is a whole number parameter in brackets after the name of a function or a struct, `[n]f32` with `[n: Nat]`, which a call settles from an argument or from the type the call must give, as [A whole number a call leaves out](inference.md#a-whole-number-a-call-leaves-out) says, and a size written as `+`, `-` and `*` of such sizes and numbers, in brackets or not, as `[n + w - 1]f32`, worked out exactly and refused where it is below zero; the item is checked and built once for each choice of sizes, as if each size were written as a number there, so two sizes are the same exactly when their numbers are, and a read or a write is refused at an index `arith` does not prove below the size"
+  - "not a size that is an ordinary parameter, a binding, or a field, a size that uses an operation but `+`, `-` and `*`, or a matrix"
 ---
 
 # Arrays and sizes

@@ -5,7 +5,8 @@ description: A for describes an array by the value at every index, and each inde
 status: partial
 built:
   - "`for i { e }` with one index whose size is a number, which it takes from each array that is a name read at the index alone, `a[i]`, and from the type the `for` is written for, as a result, an argument, or a binding that states its type; it is refused when two of these differ or none gives a size, the index is the range below the size, so `arith` proves a read at it or at arithmetic on it, `x[i + 1]`, which gives it no size, the block is refused when it needs an effect but `alloc`, and the array is held in the frame, so no memory is asked for"
-  - "not a size that is a name, several indices, a block that assigns a `mut` outside it, or elements without `Copy`"
+  - "an index whose size is a whole number parameter, as in `product`, taken from the arrays it reads and the type the `for` is written for in each copy of the function, as for a size written as a number"
+  - "not a size known only when the program runs, several indices, a block that assigns a `mut` outside it, or elements without `Copy`"
 ---
 
 # `for`

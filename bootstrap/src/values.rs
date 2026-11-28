@@ -53,11 +53,15 @@ pub(crate) struct Param {
 }
 
 /// A type as it is written in the signature of an item: a name with the types
-/// in brackets after it. A number written there is a name that is empty, which
-/// no parameter has.
+/// in brackets after it, or an array. A number written there is a name that
+/// is empty, which no parameter has.
 #[derive(Clone, Debug)]
 pub(crate) enum Shape {
     Name(String, Vec<Shape>),
+    /// An array of one size: the name of the size when it is a name alone,
+    /// and none when it is a number or arithmetic, which says no number, and
+    /// the type of its elements.
+    Array(Option<String>, Box<Shape>),
 }
 
 /// A function or a struct with whole number parameters, as it is written.
@@ -214,9 +218,34 @@ fn split_commas<'t>(tokens: &[&'t Token]) -> Vec<Vec<&'t Token>> {
 }
 
 /// The type that tokens write, when it is a name, with the types in brackets
-/// after it, and numbers.
+/// after it, and numbers, or an array of one size.
 fn shape(tokens: &[&Token]) -> Option<Shape> {
     match tokens {
+        [open, ..] if open.tok == Tok::Punct("[") => {
+            let close = 1 + tokens[1..]
+                .iter()
+                .scan(1usize, |depth, t| {
+                    match &t.tok {
+                        Tok::Punct("(" | "[") => *depth += 1,
+                        Tok::Punct(")" | "]") => *depth -= 1,
+                        _ => {}
+                    }
+                    Some(*depth)
+                })
+                .position(|depth| depth == 0)?;
+            let size = &tokens[1..close];
+            if split_commas(size).len() != 1 {
+                return None;
+            }
+            let name = match size {
+                [t] => match &t.tok {
+                    Tok::Ident(name) => Some(name.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            Some(Shape::Array(name, Box::new(shape(&tokens[close + 1..])?)))
+        }
         [t] => match &t.tok {
             Tok::Ident(name) => Some(Shape::Name(name.clone(), Vec::new())),
             Tok::Number(_) => Some(Shape::Name(String::new(), Vec::new())),
@@ -375,10 +404,6 @@ fn template_of(tokens: &[Token], errors: &mut Vec<Error>) -> Option<Template> {
         ));
         broken = true;
     }
-    for pos in array_sizes(&tokens[close + 1..], &params) {
-        errors.push(Error::unsupported(pos, "an array type"));
-        broken = true;
-    }
     let (inputs, gives) = if is_struct {
         let own = params
             .iter()
@@ -426,36 +451,6 @@ fn default_of(name: &str, kind: Kind, value: &Token) -> Result<u64, Error> {
         );
     }
     Ok(number)
-}
-
-/// Where an array type has a size that is the name of a parameter, as `[n]f32`
-/// does, which is not built.
-fn array_sizes(tokens: &[Token], params: &[Param]) -> Vec<Pos> {
-    let mut found = Vec::new();
-    for i in 1..tokens.len() {
-        let after_colon = matches!(tokens[i - 1].tok, Tok::Punct(":" | "->"));
-        if tokens[i].tok != Tok::Punct("[") || !after_colon {
-            continue;
-        }
-        let Some(close) = closing(tokens, i) else {
-            continue;
-        };
-        let inside = plain(&tokens[i + 1..close]);
-        let sizes = split_commas(&inside)
-            .iter()
-            .all(|part| matches!(part.as_slice(), [t] if matches!(t.tok, Tok::Ident(_) | Tok::Number(_))));
-        let named = inside
-            .iter()
-            .any(|t| matches!(&t.tok, Tok::Ident(n) if params.iter().any(|p| p.name == *n)));
-        let typed = matches!(
-            tokens.get(close + 1).map(|t| &t.tok),
-            Some(Tok::Ident(_) | Tok::Punct("(" | "["))
-        );
-        if sizes && named && typed {
-            found.push(tokens[i].pos);
-        }
-    }
-    found
 }
 
 /// The parameters of a function and the type it gives, as they are written

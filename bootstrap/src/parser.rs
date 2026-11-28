@@ -1955,24 +1955,17 @@ impl Parser<'_> {
         Ok((self.ty()?, Vec::new(), Vec::new()))
     }
 
-    /// Reads past an array type, which is not built, from its `[`: the sizes
-    /// in brackets and the type of its elements. The type it gives holds the
-    /// names the sizes write and the type of the elements.
+    /// Reads an array type from its `[`: the size in brackets and the type of
+    /// its elements. A size is a whole number, or `+`, `-` and `*` of whole
+    /// numbers, in brackets or not, as a size that is a name is once the copy
+    /// of the item it belongs to has the number put in; the arithmetic is
+    /// exact. Any other size is not built, and the type it gives then holds
+    /// the names the sizes write and the type of the elements.
     fn array_type(&mut self, pos: Pos) -> Result<Type, Error> {
-        if let (Tok::Number(text), Tok::Punct("]")) = (self.peek(1), self.peek(2)) {
-            let text = text.clone();
-            let length = match text.replace('_', "").parse::<u64>() {
-                Ok(length) => length,
-                Err(_) => {
-                    return Err(Error::new(
-                        pos,
-                        "the size of an array is a whole number written in decimal digits",
-                    ));
-                }
-            };
-            self.bump();
-            self.bump();
-            self.bump();
+        if let Some((length, read)) = self.array_size(pos)? {
+            for _ in 0..read {
+                self.bump();
+            }
             let element = self.ty()?;
             return Ok(Type {
                 name: ARRAY.to_string(),
@@ -2016,6 +2009,45 @@ impl Parser<'_> {
             statement: None,
             length: None,
         })
+    }
+
+    /// The size of an array type whose `[` is the token at hand, when it is
+    /// whole numbers and `+`, `-`, `*` and brackets alone, with how many tokens
+    /// the size and its `[` and `]` take.
+    fn array_size(&self, pos: Pos) -> Result<Option<(u64, usize)>, Error> {
+        let mut parts: Vec<&Tok> = Vec::new();
+        let mut depth = 0usize;
+        loop {
+            let t = self.peek(parts.len() + 1);
+            match t {
+                Tok::Punct("]") if depth == 0 => break,
+                Tok::Punct("(") => depth += 1,
+                Tok::Punct(")") if depth > 0 => depth -= 1,
+                Tok::Number(_) | Tok::Punct("+" | "-" | "*") => {}
+                _ => return Ok(None),
+            }
+            parts.push(t);
+        }
+        let mut at = 0;
+        let value = match size_sum(&parts, &mut at) {
+            Ok(value) if at == parts.len() => value,
+            Ok(_) | Err(None) => return Ok(None),
+            Err(Some(message)) => return Err(Error::new(pos, message)),
+        };
+        let written = written_size(&parts);
+        match u64::try_from(value) {
+            Ok(length) => Ok(Some((length, parts.len() + 2))),
+            Err(_) if value < 0 => Err(Error::new(
+                pos,
+                format!(
+                    "the size of an array is a `Nat`, and `{written}` is {value}, which is below zero"
+                ),
+            )),
+            Err(_) => Err(Error::new(
+                pos,
+                format!("the size `{written}` needs more than 64 bits, which is not built yet"),
+            )),
+        }
     }
 
     /// Parses a type: a name, and the types in brackets after it, if any.
@@ -3177,4 +3209,79 @@ fn writes_float(token: &Token) -> bool {
         }),
         _ => false,
     }
+}
+
+/// What the size of an array type is from `at` on: products joined by `+` and
+/// `-`, worked out exactly. It is `Err(None)` where the tokens are not such a
+/// size, and an error where a number in it is not written in decimal digits or
+/// what is worked out is too great to hold.
+fn size_sum(parts: &[&Tok], at: &mut usize) -> Result<i128, Option<String>> {
+    let mut value = size_product(parts, at)?;
+    while let Some(Tok::Punct(op @ ("+" | "-"))) = parts.get(*at) {
+        *at += 1;
+        let next = size_product(parts, at)?;
+        value = match *op {
+            "+" => value.checked_add(next),
+            _ => value.checked_sub(next),
+        }
+        .ok_or_else(too_great)?;
+    }
+    Ok(value)
+}
+
+fn size_product(parts: &[&Tok], at: &mut usize) -> Result<i128, Option<String>> {
+    let mut value = size_atom(parts, at)?;
+    while let Some(Tok::Punct("*")) = parts.get(*at) {
+        *at += 1;
+        let next = size_atom(parts, at)?;
+        value = value.checked_mul(next).ok_or_else(too_great)?;
+    }
+    Ok(value)
+}
+
+fn size_atom(parts: &[&Tok], at: &mut usize) -> Result<i128, Option<String>> {
+    match parts.get(*at) {
+        Some(Tok::Number(text)) => {
+            *at += 1;
+            let digits = text.replace('_', "");
+            if !digits.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(Some(
+                    "the size of an array is a whole number written in decimal digits".to_string(),
+                ));
+            }
+            digits.parse::<i128>().map_err(|_| too_great())
+        }
+        Some(Tok::Punct("(")) => {
+            *at += 1;
+            let value = size_sum(parts, at)?;
+            if parts.get(*at) != Some(&&Tok::Punct(")")) {
+                return Err(None);
+            }
+            *at += 1;
+            Ok(value)
+        }
+        _ => Err(None),
+    }
+}
+
+fn too_great() -> Option<String> {
+    Some("the size of an array needs more than 64 bits, which is not built yet".to_string())
+}
+
+/// How the size of an array type is written.
+fn written_size(parts: &[&Tok]) -> String {
+    let mut out = String::new();
+    for t in parts {
+        match t {
+            Tok::Number(text) => out.push_str(text),
+            Tok::Punct(p @ ("(" | ")")) => out.push_str(p),
+            Tok::Punct(p) => {
+                out.push(' ');
+                out.push_str(p);
+                out.push(' ');
+            }
+            _ => {}
+        }
+    }
+    out
 }
