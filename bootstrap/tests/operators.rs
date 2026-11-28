@@ -14,7 +14,7 @@ use smith::{check, lower};
 use crate::Test;
 use crate::contracts::near;
 use crate::generate::{self, Gen};
-use crate::numbers::{INTS, with_header};
+use crate::numbers::{INTS, Int, with_header};
 
 pub const ONCE: &[Test] = &[
     (
@@ -56,6 +56,10 @@ pub const ONCE: &[Test] = &[
     (
         "a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds_part_3_of_3",
         || a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(2),
+    ),
+    (
+        "the_least_number_by_minus_one_a_divisor_of_zero_and_a_plain_pair_divide_exactly_where_valid_holds",
+        the_least_number_by_minus_one_a_divisor_of_zero_and_a_plain_pair_divide_exactly_where_valid_holds,
     ),
 ];
 
@@ -289,6 +293,8 @@ struct Divided {
     beyond: usize,
     /// The answer, where `valid` holds.
     answer: Option<i128>,
+    /// A program that prints `valid` of the two numbers, run and not proven.
+    asked: String,
 }
 
 /// A function that divides, or takes what is left over, of two numbers of a
@@ -304,6 +310,12 @@ fn divided(g: &mut Gen) -> Divided {
         1 => (ty.min(), (-1).max(ty.min())),
         _ => (near(g, ty), near(g, ty)),
     };
+    division(ty, quotient, (a, b))
+}
+
+/// The function over `/`, when `quotient`, or `%` of type `ty` and its call
+/// with `a` and `b`, as `divided` says.
+fn division(ty: Int, quotient: bool, (a, b): (i128, i128)) -> Divided {
     // The divisor is not zero, and the least number is not divided by -1
     // where the quotient is asked for or worked out at 64 bits.
     let least_by_minus_one = ty.signed && a == ty.min() && b == -1;
@@ -328,6 +340,9 @@ fn divided(g: &mut Gen) -> Divided {
         // A signed `%` below 64 bits is taken to twice the size and back.
         beyond: if !quotient && ty.signed && ty.bits < 64 { 3 } else { 0 },
         answer,
+        asked: with_header(format!(
+            "fn main() <console, alloc> {{\n  x: {t} = {a}\n  y: {t} = {b}\n  print(\"{{{tr}.valid(x, y)}}\")\n}}\n"
+        )),
     }
 }
 
@@ -340,7 +355,38 @@ fn divided(g: &mut Gen) -> Divided {
 fn a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds(
     part: u64,
 ) {
-    generate::check_part(223, 240, part, 3, divided, |c| match lower(c.source.as_bytes()) {
+    generate::check_part(223, 240, part, 3, divided, divides_exactly_where_valid_holds);
+}
+
+/// For every whole number type and each of `/` and `%`, the property of
+/// `a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_valid_holds`
+/// holds of the least number by -1, of a divisor of 0, and of `7` by `2`,
+/// which a draw may miss: the least number by -1 is the one pair where `valid`
+/// of a quotient and of a remainder differ, and differ by size.
+fn the_least_number_by_minus_one_a_divisor_of_zero_and_a_plain_pair_divide_exactly_where_valid_holds()
+{
+    for ty in INTS {
+        for quotient in [true, false] {
+            for pair in [(ty.min(), (-1).max(ty.min())), (7, 0), (7, 2)] {
+                divides_exactly_where_valid_holds(&division(*ty, quotient, pair));
+            }
+        }
+    }
+}
+
+/// Whether `c` is accepted exactly where `valid` holds, prints the answer
+/// twice, and is one instruction beyond its sum as `beyond` says, and whether
+/// `valid`, run, gives what it is proven to be.
+fn divides_exactly_where_valid_holds(c: &Divided) {
+    let asked = lower(c.asked.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(
+        scalar::run(&asked),
+        Outcome {
+            stdout: format!("{}\n", c.answer.is_some()).into_bytes(),
+            status: 0
+        }
+    );
+    match lower(c.source.as_bytes()) {
         Ok(program) => {
             let answer = c.answer.expect("accepted, though `valid` does not hold");
             assert_eq!(
@@ -364,5 +410,5 @@ fn a_quotient_or_what_is_left_over_through_its_trait_is_accepted_exactly_where_v
                 "{errors:?} does not say what could not be proven"
             );
         }
-    });
+    }
 }
