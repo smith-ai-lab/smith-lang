@@ -1,0 +1,207 @@
+
+// What the program of `smith test` runs a property with, which takes a `Key`,
+// and shrinks a failure of one by. A run of a property is given a key whose
+// record is the address of a table, a list of words that `__choice` reads and
+// writes: how many entries it holds, how many it has room for, and how many
+// choices the run has drawn, and then the entries, three words each, the place
+// of a key, its choice, and the number of the draw that read it, or 0.
+
+fn child(words: Words, place: u64, record: u64) -> Key {
+  Key(a: words.first, b: words.second, place: place, record: record)
+}
+
+// How many times a property runs, each with a key of its own.
+pub fn smith_runs() -> u64 { 100 }
+
+// How many entries the table of a run has room for. A choice drawn when it is
+// full is given and not recorded, so it is never made smaller.
+fn room() -> u64 { 256 }
+
+// The greatest amount a choice is made smaller by at once.
+fn top() -> u64 { 0x8000000000000000 }
+
+// How many of the least values a choice is set to, one after another, before
+// it is made smaller by taking powers of 2 from it.
+fn least() -> u64 { 256 }
+
+// Where a property is: running from the seed, or shrinking the choices of the
+// least failure it has found, `best`, which holds the place and the choice of
+// each draw of that run in the order they were drawn. The choice at `at` is
+// set to each value `small` below `least()` and below it, from 0 up, and then
+// is made smaller by taking `power` from it, from the greatest power of 2 to 1.
+// A pass over every choice is made again while one in it made one smaller,
+// and after the last pass `best` is run once more, as the failure the run says.
+pub struct Shrink {
+  seed: u64
+  run: u64
+  failing: bool
+  best: List[u64]
+  said: str
+  at: u64
+  small: u64
+  power: u64
+  improved: bool
+  last: bool
+  ended: bool
+}
+
+// A property that has not yet run, with the seed given.
+pub fn smith_shrink(seed: u64) -> Shrink <alloc> {
+  Shrink(seed: seed, run: 0, failing: false, best: [], said: "", at: 0, small: 0, power: top(), improved: false, last: false, ended: false)
+}
+
+// Whether the property has run every time, or has shrunk its failure as far
+// as it can.
+pub fn smith_ended(s: Shrink) -> bool { s.ended }
+
+// What became of the property: the failure, with the seed, or nothing.
+pub fn smith_result(s: Shrink) -> Result[(), str] <alloc> {
+  if s.failing { .err("{s.said}\n  seed: {s.seed}") } else { .ok(()) }
+}
+
+// The key of the run the property is at, whose record is the table.
+pub fn smith_key(s: Shrink, table: List[u64]) -> Key {
+  words = threefry(Words(first: 4, second: s.run), Words(first: s.seed, second: 0))
+  child(words, 0, __address_of(table))
+}
+
+// The table the next run is given: none of its entries held while the
+// property runs from the seed, while it shrinks the choices of `best` with the
+// one at `at` set to `small`, or made smaller by `power`, and at the last the
+// choices of `best`.
+pub fn smith_table(s: Shrink) -> List[u64] <alloc> {
+  mut table: List[u64] = []
+  held: u64 = if s.failing { s.best.size / 2 } else { 0 }
+  table = push(take table, held)
+  table = push(take table, room())
+  table = push(take table, 0)
+  if s.failing {
+    mut k: u64 = 0
+    loop v in s.best {
+      odd = bit_and(k, 1) == 1
+      if odd and k / 2 == s.at and not s.last {
+        table = push(take table, if s.small < least() { s.small } else { wrapping_sub(v, s.power) })
+      } else {
+        table = push(take table, v)
+      }
+      if odd { table = push(take table, 0) }
+      k = wrapping_add(k, 1)
+    }
+  }
+  loop i in 0..768 {
+    if table.size < 771 { table = push(take table, 0) }
+  }
+  table
+}
+
+// The place and the choice of each draw the run with the table made, in the
+// order they were drawn.
+fn drawn(table: List[u64]) -> List[u64] <alloc> {
+  mut found: List[u64] = []
+  draws: u64 = if 2 < table.size { table[2] } else { 0 }
+  loop o in 0..draws {
+    order = wrapping_add(o, 1)
+    loop e in 0..256 {
+      at: u64 = 3 + e * 3
+      if at + 2 < table.size {
+        if table[at + 2] == order {
+          found = push(take found, table[at])
+          found = push(take found, table[at + 1])
+        }
+      }
+    }
+  }
+  found
+}
+
+// Whether the choices of `a` come before those of `b`: fewer of them, or as
+// many with the first that differs less.
+fn less(a: List[u64], b: List[u64]) -> bool {
+  if a.size != b.size { return a.size < b.size }
+  loop i in 0..a.size {
+    if i < b.size {
+      if a[i] != b[i] { return a[i] < b[i] }
+    }
+  }
+  false
+}
+
+// The choice at `at` of the pairs, or 0 past the last.
+fn choice_at(pairs: List[u64], at: u64) -> u64 {
+  k = wrapping_add(wrapping_mul(at, 2), 1)
+  if k < pairs.size { pairs[k] } else { 0 }
+}
+
+// What a run with the table gave, which says nothing when it passed, and the
+// property after it. A failure whose choices come before those of `best` is
+// the new `best`: one found by a value below `least()` is the least of them,
+// so the next choice is tried, and one found by taking `power` is tried again.
+pub fn smith_saw(s: Shrink, table: List[u64], said: str) -> Shrink <alloc> {
+  if s.ended { return Shrink(seed: s.seed, run: s.run, failing: s.failing, best: copy(s.best), said: s.said, at: s.at, small: s.small, power: s.power, improved: s.improved, last: false, ended: true) }
+  if s.last { return Shrink(seed: s.seed, run: s.run, failing: true, best: copy(s.best), said: if said.size > 0 { said } else { s.said }, at: s.at, small: s.small, power: s.power, improved: false, last: false, ended: true) }
+  if not s.failing {
+    if said.size > 0 {
+      return settled(s.seed, s.run, drawn(table), said, 0, 0, top(), false)
+    }
+    run = wrapping_add(s.run, 1)
+    return Shrink(seed: s.seed, run: run, failing: false, best: [], said: "", at: 0, small: 0, power: top(), improved: false, last: false, ended: run >= smith_runs())
+  }
+  made = drawn(table)
+  if said.size > 0 and less(made, s.best) {
+    if s.small < least() {
+      return settled(s.seed, s.run, take made, said, wrapping_add(s.at, 1), 0, top(), true)
+    }
+    return settled(s.seed, s.run, take made, said, s.at, s.small, s.power, true)
+  }
+  if s.small < least() {
+    return settled(s.seed, s.run, copy(s.best), s.said, s.at, wrapping_add(s.small, 1), s.power, s.improved)
+  }
+  next = shift_right(s.power, 1)
+  if next == 0 {
+    settled(s.seed, s.run, copy(s.best), s.said, wrapping_add(s.at, 1), 0, top(), s.improved)
+  } else {
+    settled(s.seed, s.run, copy(s.best), s.said, s.at, least(), next, s.improved)
+  }
+}
+
+// The property shrinking `best`, at the first try from `at`, `small`, and
+// `power` on that gives a smaller choice: a value below the choice, or a
+// power no greater than it. After the last choice, a pass starts again from
+// the first if one in it made a choice smaller, and the shrinking has ended
+// if none did.
+fn settled(seed: u64, run: u64, best: take List[u64], said: str, from: u64, small: u64, power: u64, improved: bool) -> Shrink <alloc> {
+  pairs: u64 = best.size / 2
+  mut at = from
+  mut value = small
+  mut by = power
+  mut again = improved
+  mut last = false
+  loop i in 0..100000 {
+    if at >= pairs {
+      if again {
+        at = 0
+        value = 0
+        by = top()
+        again = false
+      } else {
+        last = true
+        break
+      }
+    }
+    choice = choice_at(best, at)
+    if value < least() {
+      if value < choice { break }
+      value = least()
+    }
+    if value >= least() {
+      if choice >= by { break }
+      by = shift_right(by, 1)
+      if by == 0 {
+        by = top()
+        value = 0
+        at = wrapping_add(at, 1)
+      }
+    }
+  }
+  Shrink(seed: seed, run: run, failing: true, best: best, said: said, at: at, small: value, power: by, improved: again, last: last, ended: false)
+}

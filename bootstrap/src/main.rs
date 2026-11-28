@@ -20,7 +20,7 @@ const USAGE: &str =
        smith [--timings] <task> [--<flag> <value>...]
        smith [--timings] run [--target <target>] [<file>.smith [<word>...]]
        smith [--timings] check [<file>.smith]
-       smith [--timings] test [<file>_test.smith] [--name <text>]
+       smith [--timings] test [<file>_test.smith] [--name <text>] [--seed <n>]
        smith [--timings] --watch <command>
        smith --version";
 
@@ -273,7 +273,8 @@ fn check_reading(
 /// refused.
 fn test(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
     let root = std::env::current_dir().map_err(|e| format!("cannot find this folder: {e}"))?;
-    let (file, name) = tests_chosen(args, &root)?;
+    let Chosen { file, name, seed } = tests_chosen(args, &root)?;
+    let seed = seed.unwrap_or_else(fresh_seed);
     let found = match file {
         Some(file) => vec![file],
         None => {
@@ -284,7 +285,7 @@ fn test(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
         }
     };
     let folder = std::env::temp_dir().join(format!("smith-test-{}", std::process::id()));
-    let ran = test_in(&found, name.as_deref(), &root, &folder, timings);
+    let ran = test_in(&found, name.as_deref(), seed, &root, &folder, timings);
     let _ = std::fs::remove_dir_all(&folder);
     let ran = ran?;
     println!("{} passed, {} failed", ran.passed, ran.failed);
@@ -306,14 +307,26 @@ fn test(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
 /// How many of the slowest tests a run of `smith test` ends by listing.
 const SLOWEST: usize = 5;
 
-/// The file of tests and the text of `--name` that `smith test` is given,
-/// each when it is. The file is given by its path from the folder, as a run
-/// names it.
-fn tests_chosen(
-    args: &[OsString],
-    root: &Path,
-) -> Result<(Option<String>, Option<String>), String> {
-    let (mut file, mut name) = (None, None);
+/// The seed of a run of `smith test` that is given none, which differs from
+/// one run to the next, so that the properties are given other keys.
+fn fresh_seed() -> u64 {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    (now as u64) ^ u64::from(std::process::id()).rotate_left(32)
+}
+
+/// What `smith test` is given, each when it is: the file of tests, by its path
+/// from the folder, as a run names it, the text of `--name`, and the seed of
+/// `--seed`.
+struct Chosen {
+    file: Option<String>,
+    name: Option<String>,
+    seed: Option<u64>,
+}
+
+fn tests_chosen(args: &[OsString], root: &Path) -> Result<Chosen, String> {
+    let (mut file, mut name, mut seed) = (None, None, None);
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         let arg = text(arg)?;
@@ -328,9 +341,19 @@ fn tests_chosen(
                 };
                 name = Some(text(value)?.to_string());
             }
+            "--seed" if seed.is_some() => return Err("`--seed` is given twice".to_string()),
+            "--seed" => {
+                let value = args.next().map(|v| text(v)).transpose()?;
+                let Some(n) = value.and_then(|v| v.parse().ok()) else {
+                    return Err(format!(
+                        "`--seed` is followed by the seed of a run, a whole number below 2^64\n{USAGE}"
+                    ));
+                };
+                seed = Some(n);
+            }
             _ if arg.starts_with('-') => {
                 return Err(format!(
-                    "unknown flag `{arg}`; the flag of `smith test` is --name\n{USAGE}"
+                    "unknown flag `{arg}`; the flags of `smith test` are --name and --seed\n{USAGE}"
                 ));
             }
             _ if file.is_some() => {
@@ -339,7 +362,7 @@ fn tests_chosen(
             _ => file = Some(test_file(arg, root)?),
         }
     }
-    Ok((file, name))
+    Ok(Chosen { file, name, seed })
 }
 
 /// The path from the folder of a file of tests that `smith test` is given.
@@ -399,6 +422,7 @@ struct TestFile {
 fn test_in(
     found: &[String],
     name: Option<&str>,
+    seed: u64,
     root: &Path,
     folder: &Path,
     timings: bool,
@@ -466,17 +490,11 @@ fn test_in(
                 }
             })
             .collect();
-        let program = smith::testing::program(&shown, width);
+        let program = smith::testing::program(&shown, width, seed);
         let mut each = Files::at(root);
         each.written = written;
-        let built = smith::compile_project_files_timed(
-            program.as_bytes(),
-            &each.project(),
-            target,
-            false,
-            false,
-            &mut stages,
-        );
+        let built =
+            smith::compile_tests_timed(program.as_bytes(), &each.project(), target, &mut stages);
         let errors = match built {
             Ok(built) => break built,
             Err(errors) => errors,
@@ -532,11 +550,16 @@ fn test_in(
     std::fs::create_dir_all(folder)
         .and_then(|()| write_executable(&executable, &built.executable, true))
         .map_err(|e| format!("{}: {e}", executable.display()))?;
-    let named: BTreeMap<usize, String> = (files.iter())
+    let named: BTreeMap<usize, (String, bool)> = (files.iter())
         .flat_map(|f| {
-            f.chosen
-                .iter()
-                .map(|(k, n)| (*k, format!("{} {n}", f.path)))
+            f.chosen.iter().map(|(k, n)| {
+                let property = f
+                    .tests
+                    .tests
+                    .iter()
+                    .any(|t| &t.name == n && t.is_property());
+                (*k, (format!("{} {n}", f.path), property))
+            })
         })
         .collect();
     run_tests(&executable, &named, &mut ran)?;
@@ -549,7 +572,7 @@ fn test_in(
 /// took the time from the record that it began to the one that it is done.
 fn run_tests(
     executable: &Path,
-    named: &BTreeMap<usize, String>,
+    named: &BTreeMap<usize, (String, bool)>,
     ran: &mut Ran,
 ) -> Result<(), String> {
     use std::io::{BufRead, Read, Write};
@@ -574,7 +597,7 @@ fn run_tests(
             continue;
         };
         let words: Vec<&str> = record.split(' ').collect();
-        let Some((k, test)) = (words.get(1))
+        let Some((k, (test, property))) = (words.get(1))
             .and_then(|k| k.parse().ok())
             .and_then(|k: usize| named.get_key_value(&k))
         else {
@@ -591,6 +614,10 @@ fn run_tests(
                     ran.times.push((ms, test.clone()));
                 }
                 continue;
+            }
+            "passed" if *property => {
+                println!("passed {test} ({} runs)", smith::testing::RUNS);
+                ran.passed += 1;
             }
             "passed" => {
                 println!("passed {test}");
@@ -618,7 +645,7 @@ fn run_tests(
         seen.insert(*k);
     }
     child.wait().map_err(failed)?;
-    for (k, test) in named {
+    for (k, (test, _)) in named {
         if !seen.contains(k) {
             println!("failed {test}");
             eprintln!("{test}: the test did not end, as the run of the tests ended first");

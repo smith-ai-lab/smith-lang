@@ -26,11 +26,25 @@ pub fn is_test_file(name: &str) -> bool {
         .is_some_and(|stem| !stem.is_empty() && !stem.contains('.'))
 }
 
-/// A test of a file: its name and the effects it lists.
+/// A test of a file: its name, the effects it lists, and, for a property,
+/// the name the file gives `Key`, which it takes.
 pub struct Test {
     pub name: String,
     effects: Vec<String>,
+    key: Option<String>,
 }
+
+impl Test {
+    /// Whether the test is a property: one that takes a `Key`, and runs
+    /// `RUNS` times, each with a key of its own.
+    pub fn is_property(&self) -> bool {
+        self.key.is_some()
+    }
+}
+
+/// How many times a property runs, each with a key of its own, which is what
+/// `smith_runs` of `std.random`, as `smith test` builds it, gives.
+pub const RUNS: usize = 100;
 
 /// The tests of a file, and the `use` lines of the effects they list.
 pub struct Tests {
@@ -55,6 +69,7 @@ pub fn read(source: &str) -> Result<Tests, Vec<Error>> {
         });
     };
     let failed = failed_name(&file);
+    let key = listed(&file, &["std", "random"], "Key").unwrap_or_else(|| "Key".to_string());
     let mut tests = Vec::new();
     let mut errors = Vec::new();
     for f in file
@@ -62,22 +77,30 @@ pub fn read(source: &str) -> Result<Tests, Vec<Error>> {
         .iter()
         .filter(|f| f.name.starts_with("test_"))
     {
-        if !f.params.is_empty() || !gives_result(f, &failed) {
+        let takes_key = match f.params.as_slice() {
+            [] => Some(false),
+            [p] if p.take && p.ty.name == key && p.ty.args.is_empty() && !p.ty.function => {
+                Some(true)
+            }
+            _ => None,
+        };
+        let (Some(takes_key), true) = (takes_key, gives_result(f, &failed)) else {
             errors.push(
                 Error::new(
                     f.pos,
                     format!(
-                        "`{}` is named as a test, and a test takes nothing and gives `Result[(), Failed]`",
+                        "`{}` is named as a test, and a test takes nothing, or a `Key` it takes, and gives `Result[(), Failed]`",
                         f.name
                     ),
                 )
                 .with_fix(format!("write `fn {}() -> Result[(), Failed]`", f.name)),
             );
             continue;
-        }
+        };
         tests.push(Test {
             name: f.name.clone(),
             effects: f.effects.iter().map(|(e, _)| e.clone()).collect(),
+            key: takes_key.then(|| key.clone()),
         });
     }
     let listed: Vec<&String> = tests.iter().flat_map(|t| &t.effects).collect();
@@ -109,15 +132,16 @@ pub fn read(source: &str) -> Result<Tests, Vec<Error>> {
 /// The name the file gives `Failed` of `std.test`, which is `Failed` when it
 /// does not list it, as the checker then says.
 fn failed_name(file: &parser::File) -> String {
-    listed_failed(file).unwrap_or_else(|| "Failed".to_string())
+    listed(file, &["std", "test"], "Failed").unwrap_or_else(|| "Failed".to_string())
 }
 
-fn listed_failed(file: &parser::File) -> Option<String> {
+/// The name the file gives `name` of the module, when a `use` lists it.
+fn listed(file: &parser::File, of: &[&str], name: &str) -> Option<String> {
     let u = file.uses.iter().find(|u| {
         let module: Vec<&str> = u.module.iter().map(|(n, _)| n.as_str()).collect();
-        module == ["std", "test"]
+        module == of
     })?;
-    let listed = u.names.iter().find(|n| n.name == "Failed")?;
+    let listed = u.names.iter().find(|n| n.name == name)?;
     Some(
         listed
             .alias
@@ -167,9 +191,14 @@ impl Tests {
             t.push('\n');
         }
         for (k, name) in chosen {
-            let effects = with_alloc(&self.test(name).effects);
+            let test = self.test(name);
+            let effects = with_alloc(&test.effects);
+            let (param, arg) = match &test.key {
+                Some(key) => (format!("smith_key: take {key}"), "take smith_key"),
+                None => (String::new(), ""),
+            };
             t.push_str(&format!(
-                "\npub fn smith_test_{k}() -> Result[(), str] <{}> {{\n  match {name}() {{\n    .ok(smith_test_passed) {{ .ok(()) }}\n    .err(smith_test_failed) {{\n      smith_test_sides = match smith_test_failed.sides {{\n        .some(smith_test_two) {{ \"\\n  left:  {{smith_test_two.left}}\\n  right: {{smith_test_two.right}}\" }}\n        .none {{ \"\" }}\n      }}\n      .err(\"{{smith_test_failed.path}}:{{smith_test_failed.line}}:{{smith_test_failed.column}}: expected {{smith_test_failed.check}}{{smith_test_sides}}\")\n    }}\n  }}\n}}\n",
+                "\npub fn smith_test_{k}({param}) -> Result[(), str] <{}> {{\n  match {name}({arg}) {{\n    .ok(smith_test_passed) {{ .ok(()) }}\n    .err(smith_test_failed) {{\n      smith_test_sides = match smith_test_failed.sides {{\n        .some(smith_test_two) {{ \"\\n  left:  {{smith_test_two.left}}\\n  right: {{smith_test_two.right}}\" }}\n        .none {{ \"\" }}\n      }}\n      .err(\"{{smith_test_failed.path}}:{{smith_test_failed.line}}:{{smith_test_failed.column}}: expected {{smith_test_failed.check}}{{smith_test_sides}}\")\n    }}\n  }}\n}}\n",
                 effects.join(", ")
             ));
         }
@@ -192,6 +221,16 @@ const OWN: &[(&str, &[&str])] = &[
     ("std.task", &["Failure", "outcome", "spawn", "tasks"]),
 ];
 
+/// The names of `std.random` that the program runs a property with.
+const PROPERTY: &[&str] = &[
+    "smith_ended",
+    "smith_key",
+    "smith_result",
+    "smith_saw",
+    "smith_shrink",
+    "smith_table",
+];
+
 /// The program that runs the tests chosen of the files, `width` at a time,
 /// as tasks of a group, and prints records of each, which say:
 ///
@@ -203,7 +242,10 @@ const OWN: &[(&str, &[&str])] = &[
 ///   many bytes, and a line break
 /// - `@smith-test ended <k> <failure>`, when the task ended by a failure of
 ///   its own, which is `out_of_memory` or `refused_write`
-pub fn program(files: &[File], width: usize) -> String {
+///
+/// A property runs from `seed`, `RUNS` times or until it fails, and its
+/// failure is shrunk, as `knowledge/language/properties.md` says.
+pub fn program(files: &[File], width: usize, seed: u64) -> String {
     let width = width.max(1);
     // One `use` for each module, which the program's own names and the
     // effects of the tests are listed in together.
@@ -226,6 +268,23 @@ pub fn program(files: &[File], width: usize) -> String {
         }
     }
     let mut effects = vec!["alloc".to_string(), "console".to_string()];
+    // What runs each property, by its number.
+    let mut properties = String::new();
+    for file in files {
+        for (k, name) in file.chosen {
+            let test = file.tests.test(name);
+            if !test.is_property() {
+                continue;
+            }
+            for name in PROPERTY {
+                add("std.random", (*name).to_string());
+            }
+            properties.push_str(&format!(
+                "\nfn smith_property_{k}() -> Result[(), str] <{}> {{\n  mut smith_state = smith_shrink({seed})\n  loop smith_round in 0..1000000 {{\n    if smith_ended(smith_state) {{ break }}\n    smith_tape = smith_table(smith_state)\n    smith_said = match smith_test_{k}(smith_key(smith_state, smith_tape)) {{\n      .ok(smith_passed) {{ \"\" }}\n      .err(smith_text) {{ smith_text }}\n    }}\n    smith_state = smith_saw(smith_state, smith_tape, smith_said)\n  }}\n  smith_result(smith_state)\n}}\n",
+                with_alloc(&test.effects).join(", ")
+            ));
+        }
+    }
     for file in files {
         let ks: Vec<String> = (file.chosen.iter())
             .map(|(k, _)| format!("smith_test_{k}"))
@@ -274,21 +333,23 @@ pub fn program(files: &[File], width: usize) -> String {
     }
     let effects = effects.join(", ");
     t.push_str(SAID);
-    let all: Vec<usize> = files
+    t.push_str(&properties);
+    let all: Vec<(usize, bool)> = files
         .iter()
-        .flat_map(|f| f.chosen.iter().map(|(k, _)| *k))
+        .flat_map(|f| (f.chosen.iter()).map(|(k, name)| (*k, f.tests.test(name).is_property())))
         .collect();
-    let waves: Vec<&[usize]> = all.chunks(width).collect();
+    let waves: Vec<&[(usize, bool)]> = all.chunks(width).collect();
     for (w, wave) in waves.iter().enumerate() {
         t.push_str(&format!(
             "\nfn smith_test_wave_{w}() <{effects}> {{\n  with tasks()\n"
         ));
-        for k in *wave {
+        for (k, property) in *wave {
+            let runs = if *property { "property" } else { "test" };
             t.push_str(&format!(
-                "  smith_test_task_{k} = spawn {{ smith_test_done(smith_test_began({k}), smith_test_{k}()) }}\n"
+                "  smith_test_task_{k} = spawn {{ smith_test_done(smith_test_began({k}), smith_{runs}_{k}()) }}\n"
             ));
         }
-        for k in *wave {
+        for (k, _) in *wave {
             t.push_str(&format!(
                 "  smith_test_report({k}, outcome(take smith_test_task_{k}))\n"
             ));
