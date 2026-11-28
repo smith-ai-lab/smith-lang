@@ -119,6 +119,7 @@ impl Block {
                 pos: w.pos,
                 generics: Vec::new(),
                 types: w.params.iter().map(|_| None).collect(),
+                mutable: w.params.iter().map(|_| false).collect(),
                 params: w.params,
                 result: None,
                 body: std::mem::take(&mut self.inner),

@@ -762,6 +762,11 @@ impl<'a> Checker<'a> {
                 self.lambda_from.insert(body.names.len(), calls.clone());
             }
             body.names.push((name.clone(), ty.clone()));
+            // A parameter the lambda changes for its caller is assigned as a
+            // `mut` is.
+            if l.mutable.get(i) == Some(&true) {
+                body.vars.push(name.clone());
+            }
         }
         // A block whose type is not settled by the call it is passed to is
         // checked once to find what it gives, and again with that settled, so
