@@ -5,11 +5,12 @@
 //! its type. A range that holds a number below 0 is taken only where the
 //! number is shown not to be.
 
-use smith::scalar;
+use smith::scalar::{self, Outcome};
 use smith::{check, lower};
 
 use crate::Test;
 use crate::generate::{self, Gen};
+use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
     (
@@ -24,7 +25,16 @@ pub const ONCE: &[Test] = &[
         "a_range_below_zero_is_an_end_only_where_it_is_shown_not_below_zero",
         a_range_below_zero_is_an_end_only_where_it_is_shown_not_below_zero,
     ),
+    (
+        "a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_as_a_nat_counter",
+        a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_as_a_nat_counter,
+    ),
 ];
+
+pub const MACHINE: &[Test] = &[(
+    "a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_on_every_executable",
+    a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_on_every_executable,
+)];
 
 fn output_of(source: &str) -> Vec<u8> {
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
@@ -157,4 +167,53 @@ fn main() {{
             assert!(check(checked.as_bytes()).is_ok(), "{:?} for {checked}", check(checked.as_bytes()));
         },
     );
+}
+
+/// A program that counts the passes of a `loop` from `value`, of the range
+/// `low..high` that a byte holds, up to `past`, which no byte holds, and
+/// prints them, with what it should print. A counter kept in a byte would
+/// wrap and never reach `past`, so the loop leaves once it has counted every
+/// pass the range allows, which a counter that counts right never reaches
+/// before its last pass, and the program ends either way.
+fn passes_past_a_byte(g: &mut Gen) -> (String, String) {
+    let low = g.below(250);
+    let high = low + 2 + g.below(256 - low - 1);
+    let value = low + 1 + g.below(high - low - 1);
+    let past = 256 + g.below(200);
+    let most = past - low;
+    let source = format!(
+        "use std.console (console, print)
+
+fn passes(b: {low}..{high}) -> Nat {{
+  mut n = 0
+  loop i in b..{past} {{
+    if n == {most} {{ break }}
+    n = n + 1
+  }}
+  n
+}}
+
+fn main() <console, alloc> {{
+  print(\"{{passes({value})}}\")
+}}
+"
+    );
+    (source, format!("{}\n", past - value))
+}
+
+fn a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_as_a_nat_counter() {
+    generate::check(1263, 4, passes_past_a_byte, |(source, said)| {
+        assert_eq!(String::from_utf8(output_of(source)).unwrap(), *said, "for {source}");
+    });
+}
+
+fn a_loop_from_a_number_of_a_byte_to_a_number_past_it_runs_as_many_passes_on_every_executable() {
+    let (source, said) = generate::sample(1263, 0, passes_past_a_byte);
+    let said = Outcome {
+        stdout: said.into_bytes(),
+        status: 0,
+    };
+    for target in runnable() {
+        runs_as(source.as_bytes(), target, &said);
+    }
 }
