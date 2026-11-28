@@ -2,13 +2,13 @@
 type: specification
 title: Float functions
 description: The functions of std.float: sqrt, exp, ln, sin, and cos, each rounded once, and floor, ceil, trunc, and round, which round a float to a whole number that is still a float.
-status: partial
+status: built
 built:
   - "`sqrt` of an `f32` and an `f64`, on every target, as one instruction of the form that each chip has"
   - "`exp` of an `f32` and an `f64`, correctly rounded, on every target and in the evaluator: by a fast way that works the result out to about 20 bits more than a float has and is sure of the nearest float for all but about 1 in 300,000 of the floats of 64 bits and 1 in 10^13 of those of 32, and by the exact way, in 256-bit fixed point, for those and for the floats that have no normal result, with no host libm; measured at about 25 nanoseconds a call on x86-64 Linux against the host's 6, about 4 times, where the exact way alone is about 3 microseconds"
   - "`ln` of an `f32` and an `f64`, correctly rounded, on every target and in the evaluator, by one exact path in the same 256-bit fixed point, the only path; measured at about 6.1 microseconds a call on x86-64 Linux, about 870 times the 7 nanoseconds of the host's `ln`, and a fast path that gives the same bits is still to be built"
   - "`sin` and `cos` of an `f32` and an `f64`, correctly rounded for a float of any size, on every target and in the evaluator, by one exact path in the same 256-bit fixed point, the only path; measured at about 7 microseconds a call on x86-64 Linux, about 430 times the 16 nanoseconds of the host's `sin` and about 650 times the 11 of its `cos`, and a fast path that gives the same bits is still to be built"
-  - "not `floor`, `ceil`, `trunc`, or `round`"
+  - "`floor`, `ceil`, `trunc`, and `round` of an `f32` and an `f64`, on every target and in the evaluator, each as one instruction of the form that each chip has: `roundss` or `roundsd` on x86-64, `frintm`, `frintp`, `frintz`, and `frintn` on arm64, and `floor`, `ceil`, `trunc`, and `nearest` in WebAssembly"
 ---
 
 # Float functions
@@ -37,7 +37,7 @@ fn hypotenuse(a: f64, b: f64) -> f64 { sqrt(a * a + b * b) }
 
 ## Rounding to a whole number
 
-The four functions that round a float Each takes a float of any float type and gives a float of the same type that holds a whole number. A float becomes a value of a range through `narrow` or `clamp`, as [A float entering a range](../language/arithmetic.md#a-float-entering-a-range) says, and these say which way it is rounded first.
+The four functions that round a float each take a float of any float type and gives a float of the same type that holds a whole number. A float becomes a value of a range through `narrow` or `clamp`, as [A float entering a range](../language/arithmetic.md#a-float-entering-a-range) says, and these say which way it is rounded first.
 
 ```
 use std.float (floor)
