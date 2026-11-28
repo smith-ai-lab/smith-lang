@@ -4109,12 +4109,35 @@ impl<'a> Checker<'a> {
             ));
         }
         if changed {
+            // A value bound in an arm is gone after it, but what the arm knew
+            // of it may tie what is still in scope. Each is a variable of its
+            // own from here on, with the range of its type, so a fact about
+            // it says that some such value was so, and a name bound later at
+            // its place is not taken for it. A product or an atom of one is
+            // forgotten, as it has no range to give a variable.
+            let mut gone: HashMap<usize, Option<usize>> = HashMap::new();
             for and in &mut ands {
-                and.retain(|f| {
+                let mut kept = Vec::new();
+                for f in and.drain(..) {
                     let mut ids = Vec::new();
-                    collect(f, &mut ids);
-                    !ids.iter().any(|&i| is_local(&facts.keys, i, outer))
-                });
+                    collect(&f, &mut ids);
+                    ids.sort_unstable();
+                    ids.dedup();
+                    ids.retain(|&i| is_local(&facts.keys, i, outer));
+                    let mut f = Some(f);
+                    for i in ids {
+                        let to = *gone.entry(i).or_insert_with(|| match facts.keys[i] {
+                            Key::Name(_, lo, hi) | Key::Field(_, lo, hi) => {
+                                facts.fresh += 1;
+                                Some(facts.id(Key::Fresh(facts.fresh, lo, hi)))
+                            }
+                            _ => None,
+                        });
+                        f = f.zip(to).map(|(g, to)| renamed(&g, i, to));
+                    }
+                    kept.extend(f);
+                }
+                *and = kept;
             }
             if !ands.iter().any(Vec::is_empty) {
                 let mut sides: Vec<Formula> = ands.into_iter().map(Formula::And).collect();
