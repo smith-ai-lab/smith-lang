@@ -1,5 +1,4 @@
 use std.html (Html)
-use std.int (checked_add)
 use std.json (to_json)
 use std.list (append, freeze, push)
 use std.serialize (Serialize)

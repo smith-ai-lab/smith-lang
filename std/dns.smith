@@ -1,5 +1,5 @@
 use std.bits (bit_and, shift_right, u16)
-use std.int (checked_add, checked_mul, narrow, saturating_add)
+use std.int (narrow, saturating_add)
 use std.list (append, copy, push)
 
 // The messages of the domain name system, as RFC 1035 writes them, and the
@@ -225,8 +225,9 @@ pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
     c = host[i]
     if c >= 48 and c <= 57 {
       wide: Nat = c - 48
-      current = try checked_add(try checked_mul(current, 10), wide)
-      digits = try checked_add(digits, 1)
+      if current > (18446744073709551615 - wide) / 10 or digits == 18446744073709551615 { return .none }
+      current = current * 10 + wide
+      digits = digits + 1
       if current > 255 { return .none }
     } else if c == 46 {
       if digits == 0 { return .none }
@@ -277,8 +278,9 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
       d = try hex_digit(c)
       if digits == 4 { return .none }
       wide: Nat = d
-      current = try checked_add(try checked_mul(current, 16), wide)
-      digits = try checked_add(digits, 1)
+      if current > (18446744073709551615 - wide) / 16 or digits == 18446744073709551615 { return .none }
+      current = current * 16 + wide
+      digits = digits + 1
     }
   }
   if digits > 0 {
@@ -388,7 +390,8 @@ fn number_after(word: List[Byte], from: Nat) -> Option[Nat] {
     c = word[i]
     if c < '0' or c > '9' { return .none }
     wide: Nat = c - 48
-    n = try checked_add(try checked_mul(n, 10), wide)
+    if n > (18446744073709551615 - wide) / 10 { return .none }
+    n = n * 10 + wide
   }
   .some(n)
 }

@@ -577,14 +577,9 @@ fn operations(ty: &str) -> Vec<(String, String, String)> {
         let body = format!("a {op} b");
         all.push((name.to_string(), "bool".to_string(), body));
     }
-    for kind in ["wrapping", "saturating", "checked"] {
+    for kind in ["wrapping", "saturating"] {
         for op in ["add", "sub", "mul"] {
-            let gives = if kind == "checked" {
-                format!("Option[{ty}]")
-            } else {
-                ty.to_string()
-            };
-            all.push((format!("{kind}_{op}"), gives, format!("{kind}_{op}(a, b)")));
+            all.push((format!("{kind}_{op}"), ty.to_string(), format!("{kind}_{op}(a, b)")));
         }
     }
     all
@@ -643,11 +638,8 @@ fn every_operation_on_numbers_gives_what_arithmetic_on_128_bits_gives() {
                     } else {
                         let (kind, op) = name.split_once('_').unwrap();
                         let expected = numbers::arithmetic(kind, op, *int, a, b);
-                        let got = match (kind, &given[..]) {
-                            // The case `some` is the first of an `Option`.
-                            ("checked", [0, n]) => format!(".some({})", number_of(*int, *n)),
-                            ("checked", _) => ".none".to_string(),
-                            (_, [n]) => number_of(*int, *n).to_string(),
+                        let got = match &given[..] {
+                            [n] => number_of(*int, *n).to_string(),
                             _ => panic!("{given:?}"),
                         };
                         (expected, got)

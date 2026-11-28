@@ -4631,7 +4631,7 @@ impl<'l, 'a> Resolver<'l, 'a> {
                     found
                         .functions
                         .iter()
-                        .filter(|f| is_wrapper(f))
+                        .filter(|f| is_wrapper(f) && !of_no_trait(f))
                         .map(|f| f.name.clone()),
                 );
             }
@@ -5133,16 +5133,27 @@ fn is_wrapper(f: &Arc<Function>) -> bool {
         }))
 }
 
+/// Whether a function is named as one that the compiler lowers at the call,
+/// and no trait of the prelude's numbers has it.
+fn of_no_trait(f: &Function) -> bool {
+    to_scalar::numbers_and_operators::number_named(&f.name).is_some()
+        && !PRELUDE_NUMERIC
+            .iter()
+            .any(|n| n.names.contains(&f.name.as_str()))
+}
+
 /// Whether the compiler holds the item of a module already, and builds it
 /// itself: a function whose body is one call of a function the compiler
 /// builds with its parameters, in order, and a type or a trait the prelude defines. The module's source
 /// names these, and the compiler supplies them as it did before the bodies
-/// of a module were compiled.
+/// of a module were compiled. A `saturating_` function is the module's own,
+/// as no trait of the prelude has it, and is lowered at the call as the
+/// functions of `Wrapping` are.
 fn held_by_the_compiler(module: &File) -> HashSet<&str> {
     (module
         .functions
         .iter()
-        .filter(|f| is_wrapper(f))
+        .filter(|f| is_wrapper(f) && !of_no_trait(f))
         .map(|f| f.name.as_str()))
     .chain(
         (module.structs.iter().map(|s| s.name.as_str()))

@@ -1,6 +1,5 @@
 use std.bits (u64)
 use std.console (console, print)
-use std.int (checked_rem)
 use std.list (push)
 use std.task (join, outcome, spawn, task, tasks)
 
@@ -9,10 +8,7 @@ fn eat() -> u64 <alloc, console> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     r: u64 = i
-    match checked_rem(r, 1000) {
-      .some(m) { if m == 0 { print("{r}") } }
-      .none { }
-    }
+    if r % 1000 == 0 { print("{r}") }
     xs = push(take xs, i)
   }
   0

@@ -16,7 +16,6 @@ built:
 `std.mcp` makes a program a server of the Model Context Protocol. A tool is a plain function. Its name is the function's name, its description is the comment on the function, and the schema of its input is made from its parameters.
 
 ```
-use std.int (checked_div)
 use std.mcp (mcp, messages, tool)
 
 // Divides one whole number by another.
@@ -28,11 +27,10 @@ fn divide(
 ) -> Result[Int, str] {
   if b == 0 {
     .err("b is zero")
+  } else if a == -9223372036854775808 and b == -1 {
+    .err("the quotient does not fit")
   } else {
-    match checked_div(a, b) {
-      .some(q) { .ok(q) }
-      .none { .err("the quotient does not fit") }
-    }
+    .ok(a / b)
   }
 }
 

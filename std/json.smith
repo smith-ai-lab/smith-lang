@@ -1,6 +1,6 @@
 use std.bits (bit_and, bit_not, bit_or, shift_right, u32, u64)
 use std.deserialize (Deserialize, Problem, ReadError, Reader, fail, read)
-use std.int (checked_add, checked_mul, saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_shift_left, wrapping_sub)
+use std.int (saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_shift_left, wrapping_sub)
 use std.list (freeze, push)
 use std.serialize (Serialize, Writer, write)
 use std.text (Text, append, append_ascii, finish, text)
@@ -643,15 +643,8 @@ fn magnitude(b: Slice[Byte], from: Nat, end: Nat) -> Option[u64] {
     loop i in from..end {
       if i < b.size {
         d: u64 = wrapping_sub(b[i], '0')
-        match checked_mul(m, 10) {
-          .some(t) {
-            match checked_add(t, d) {
-              .some(v) { m = v }
-              .none { return Option.none }
-            }
-          }
-          .none { return Option.none }
-        }
+        if m > (18446744073709551615 - d) / 10 { return Option.none }
+        m = m * 10 + d
       }
     }
   }
