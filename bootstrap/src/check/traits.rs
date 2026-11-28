@@ -142,7 +142,19 @@ fn overlap(a: &Ty, b: &Ty, sol: &mut Vec<Option<Ty>>) -> bool {
             x.len() == y.len() && x.iter().zip(&y).all(|(a, b)| overlap(a, b, sol))
         }
         (Ty::Unknown, _) | (_, Ty::Unknown) => true,
+        // Two sizes are kept apart, so an implementation for each may hold
+        // the same numbers, and a range uses the one of the size it is kept at.
+        (Ty::Int(x), Ty::Int(y)) => x == y || (!(x.is_size() && y.is_size()) && x.meets(y)),
         (a, b) => a == b,
+    }
+}
+
+/// Whether the type of an implementation fits the type it is looked up for,
+/// filling in `sol`: a range fits a range that it holds.
+fn fits(pattern: &Ty, given: &Ty, sol: &mut [Option<Ty>]) -> bool {
+    match (pattern, given) {
+        (Ty::Int(held), Ty::Int(r)) => held.holds(*r),
+        _ => unify(pattern, given, sol),
     }
 }
 
@@ -780,7 +792,7 @@ impl<'a> Defs<'a> {
             // A type that holds itself through a `List` is given a trait when
             // its parts are, itself among them, as the trait is a function
             // that calls itself.
-            return match self.given_parts(k, &self.kept_at_size(k, &key.1)) {
+            return match self.given_parts(k, &key.1) {
                 Some(_) => Found::Yes(types.to_vec(), By::Given),
                 None => Found::No,
             };
@@ -791,26 +803,18 @@ impl<'a> Defs<'a> {
         found
     }
 
-    /// The types of trait `k` as its implementations are written for them.
-    /// `Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` are written once for every range,
-    /// which is the implementation of the size it is kept at, so a range is
-    /// the size it is kept at wherever one of these is looked up.
-    fn kept_at_size(&self, k: usize, types: &[Ty]) -> Vec<Ty> {
-        let by_size =
-            k == self.eq || k == self.ord() || k == self.fmt || k == self.repr || k == self.hash();
-        // `Eq`, `Ord`, and `Fmt` of a range of more than 64 bits are the
-        // comparison of two numbers and the digits of one, which are lowered where
-        // they are written and never call the implementation, so the
-        // implementation of the size of its sign stands for it; the others have
-        // none for such a range.
+    /// `Eq`, `Ord`, and `Fmt` of a range of more than 64 bits, for which no
+    /// implementation can be written, are the comparison of two numbers and
+    /// the digits of one, which are lowered where they are written and never
+    /// call the implementation, so the implementation of the 64 bits of its
+    /// sign stands for it.
+    fn wide_at_64(&self, k: usize, types: &[Ty]) -> Vec<Ty> {
         let compared = k == self.eq || k == self.ord() || k == self.fmt;
-        types
-            .iter()
+        (types.iter())
             .map(|t| match t {
                 Ty::Int(r) if r.wide() && compared => {
                     Ty::Int(if r.signed() { Int::I64 } else { Int::U64 })
                 }
-                Ty::Int(r) if by_size => Ty::Int(r.holder()),
                 other => other.clone(),
             })
             .collect()
@@ -823,8 +827,8 @@ impl<'a> Defs<'a> {
         scope: &Scope,
         stack: &mut Vec<(usize, Vec<Ty>)>,
     ) -> Found {
-        let kept = self.kept_at_size(k, types);
-        let types = &kept[..];
+        let wide = self.wide_at_64(k, types);
+        let types = &wide[..];
         let mut found: Vec<(usize, Vec<Ty>, Vec<Ty>)> = Vec::new();
         'impls: for &i in &self.impls_of[k] {
             let Some(info) = &self.impls[i] else {
@@ -834,10 +838,10 @@ impl<'a> Defs<'a> {
                 continue;
             }
             let mut sol = vec![None; info.scope.names.len()];
-            let fits = (info.args.iter().zip(types).zip(&self.outs[k]))
+            let fit = (info.args.iter().zip(types).zip(&self.outs[k]))
                 .filter(|(_, out)| !**out)
-                .all(|((pattern, given), _)| unify(pattern, given, &mut sol));
-            if !fits {
+                .all(|((pattern, given), _)| fits(pattern, given, &mut sol));
+            if !fit {
                 continue;
             }
             let Some(sol) = sol.into_iter().collect::<Option<Vec<Ty>>>() else {
@@ -858,6 +862,26 @@ impl<'a> Defs<'a> {
             found.push((i, all, sol));
         }
         if found.len() > 1 {
+            // Of implementations for sizes that all hold a range, the one for
+            // the size it is kept at is used.
+            let at_size = found.iter().position(|(i, ..)| {
+                let written = &self.impls[*i].as_ref().expect("found").args;
+                let pairs: Vec<(&Ty, &Ty)> = (written.iter().zip(types).zip(&self.outs[k]))
+                    .filter(|(_, out)| !**out)
+                    .map(|((t, given), _)| (t, given))
+                    .collect();
+                pairs
+                    .iter()
+                    .any(|pair| matches!(pair, (Ty::Int(_), Ty::Int(_))))
+                    && pairs.iter().all(|pair| match pair {
+                        (Ty::Int(t), Ty::Int(r)) => *t == r.holder(),
+                        (t, given) => t == given,
+                    })
+            });
+            if let Some(a) = at_size {
+                let (i, all, sol) = found.swap_remove(a);
+                return Found::Yes(all, By::Impl(i, sol));
+            }
             // Of impls that all fit, the one that is for fewer types than
             // each of the others, and is written in the module of its trait
             // or of one of its types, is the one that is used.
@@ -1391,10 +1415,10 @@ impl<'a> Defs<'a> {
                 continue;
             }
             let mut sol = vec![None; info.scope.names.len()];
-            let fits = (info.args.iter().zip(types).zip(&self.outs[k]))
+            let fit = (info.args.iter().zip(types).zip(&self.outs[k]))
                 .filter(|(_, out)| !**out)
-                .all(|((pattern, given), _)| unify(pattern, given, &mut sol));
-            if fits {
+                .all(|((pattern, given), _)| fits(pattern, given, &mut sol));
+            if fit {
                 return Some(info.args.iter().map(|t| t.solved(&sol)).collect());
             }
         }
@@ -1427,10 +1451,12 @@ impl<'a> Defs<'a> {
             // The types that are `out` follow from the others, so they are not
             // compared: a bound that names one type leaves them as that type.
             Found::Yes(all, by) => {
-                let kept = self.kept_at_size(k, types);
-                let same = (all.iter().zip(&kept).zip(&self.outs[k]))
+                let wide = self.wide_at_64(k, types);
+                let same = (all.iter().zip(&wide).zip(&self.outs[k]))
                     .filter(|(_, out)| !**out)
-                    .all(|((a, b), _)| a == b);
+                    .all(|((a, b), _)| {
+                        a == b || matches!((a, b), (Ty::Int(x), Ty::Int(y)) if x.holds(*y))
+                    });
                 if same { Found::Yes(all, by) } else { Found::No }
             }
             other => other,
@@ -1665,13 +1691,32 @@ impl<'a> Checker<'a> {
             }
         }
         if chosen && !info.chosen {
-            self.errors.push(Error::new(
-                im.pos,
-                format!(
-                    "`{name}` is already implemented for {}",
-                    defs.types_of(k, &info.args, &info.scope)
-                ),
-            ));
+            let mine = defs.types_of(k, &info.args, &info.scope);
+            // An earlier implementation for a range that this one's overlaps
+            // is named, with how the two stand.
+            let earlier = (defs.impls_of[k].iter())
+                .take_while(|&&j| j != i)
+                .filter_map(|&j| defs.impls[j].as_ref())
+                .find(|e| {
+                    let by_range = (e.args.iter().zip(&info.args))
+                        .all(|(a, b)| a == b || matches!((a, b), (Ty::Int(_), Ty::Int(_))));
+                    e.chosen && e.args != info.args && by_range && overlaps(&defs.outs[k], e, info)
+                });
+            let text = match earlier {
+                Some(e) => {
+                    let inside = (e.args.iter().zip(&info.args)).all(|(a, b)| match (a, b) {
+                        (Ty::Int(a), Ty::Int(b)) => a.holds(*b),
+                        (a, b) => a == b,
+                    });
+                    let stands = if inside { "is inside" } else { "overlaps" };
+                    format!(
+                        "`{name}` is already implemented for {}, which {mine} {stands}",
+                        defs.types_of(k, &e.args, &e.scope)
+                    )
+                }
+                None => format!("`{name}` is already implemented for {mine}"),
+            };
+            self.errors.push(Error::new(im.pos, text));
         }
         for (j, f) in im.functions.iter().enumerate() {
             if im.functions[..j].iter().any(|g| g.name == f.name) {

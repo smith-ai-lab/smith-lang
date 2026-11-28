@@ -188,6 +188,28 @@ impl Int {
         holder.min <= self.min && !holder.top().less(self.top())
     }
 
+    /// Whether some number is in both ranges.
+    pub(super) fn meets(self, other: Int) -> bool {
+        let low = if self.bottom().less(other.bottom()) {
+            other
+        } else {
+            self
+        }
+        .bottom();
+        let high = if self.top().less(other.top()) {
+            self
+        } else {
+            other
+        }
+        .top();
+        !high.less(low)
+    }
+
+    /// Whether the range is one of the sizes, as `u8` is.
+    pub(super) fn is_size(self) -> bool {
+        self.size_name().is_some()
+    }
+
     /// Whether a number of the range needs more than 64 bits.
     pub(super) fn wide(self) -> bool {
         self.bits() > 64
