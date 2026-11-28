@@ -32,6 +32,7 @@ mod frames;
 mod functions_calls_and_lambdas;
 mod lists_and_text;
 pub(super) mod numbers_and_operators;
+mod top_values;
 mod traits;
 
 use super::lists_and_text::as_list;
@@ -56,6 +57,13 @@ fn spaceless(name: String) -> String {
 
 /// The program that `start` runs, in the scalar form.
 pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec<Error>> {
+    lower_with(typed, start, true)
+}
+
+/// The program that `start` runs, in the scalar form, with the stacks of tasks
+/// and of `alloc` passed when `tasks` says so. A program without them is one
+/// the evaluator runs from `start`, which then gives what it gives.
+fn lower_with(typed: &Typed, start: Instance, tasks: bool) -> Result<form::Program, Vec<Error>> {
     // A `main` that takes the words it was started with is called by the
     // runtime's `Start`, which the system's start-up code calls.
     let takes = !typed.defs.view(start.template).params.is_empty();
@@ -84,6 +92,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
         through: None,
         through_scheduled: false,
         errors: Vec::new(),
+        worked: Map::default(),
     };
     lowering.add(Body::Copy(start));
     if takes {
@@ -136,6 +145,7 @@ pub(super) fn lower(typed: &Typed, start: Instance) -> Result<form::Program, Vec
     // whether it waits or not, once the functions that call themselves have a
     // stack of their own.
     match form::suspend_frames(form::recur(program), &frames) {
+        Ok(suspended) if !tasks => Ok(suspended.program),
         Ok(suspended) => {
             let roots: Vec<(usize, u64)> = (suspended.tasks.iter())
                 .filter_map(|t| t.stack_at.map(|at| (t.poll, at)))
@@ -214,6 +224,9 @@ struct Lowering<'a> {
     through_scheduled: bool,
     /// What is not built yet and a program uses.
     errors: Vec<Error>,
+    /// What each value at the top level that the program reads was worked out
+    /// to be.
+    worked: Map<Instance, top_values::Fixed>,
     /// The place of each function of the runtime, which are few: a kind of
     /// them has no hash, as it is defined where the runtime is.
     runtimes: Vec<(Runtime, usize)>,
@@ -2413,6 +2426,12 @@ impl<'a> Lowering<'a> {
                     )
                     .expect("checked");
                     self.number_call(out, expr, call, named, &places, env)
+                }
+                Callee::Run(instance, gives)
+                    if matches!(instance.template, Template::Free(f)
+                        if crate::parser::value_name(&defs.file.functions[f].name).is_some()) =>
+                {
+                    self.read_value(out, &instance, &gives)
                 }
                 Callee::Run(instance, gives) if defs.is_operation_of(&instance) => {
                     self.operation_call(out, call, instance, gives, env)

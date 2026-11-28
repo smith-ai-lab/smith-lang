@@ -2376,6 +2376,10 @@ fn written_with(s: &dyn Fn(&str) -> Option<String>, e: &Expr) -> String {
             out
         }
         Expr::Name { name, .. } => s(name).unwrap_or_else(|| name.clone()),
+        // A read of a value at the top level is written as its name.
+        Expr::Call(call) if let Some(name) = crate::parser::value_name(&call.callee) => {
+            name.to_string()
+        }
         Expr::Call(call) => {
             let args: Vec<String> = (call.args.iter())
                 .filter(|a| !a.after)
@@ -3415,10 +3419,11 @@ fn unused_effect_warnings(
 /// check of the library, at everything in it.
 fn roots_of(file: &File, start_at: usize, whole: bool) -> Vec<Item> {
     let mut roots = vec![Item::Fn(start_at)];
-    // A proof function is called by no code, so nothing reaches it.
+    // A proof function is called by no code, so nothing reaches it, and a
+    // value at the top level is checked whether or not a function reads it.
     roots.extend(
         (file.functions.iter().enumerate())
-            .filter(|(_, f)| is_proof(f))
+            .filter(|(_, f)| is_proof(f) || crate::parser::value_name(&f.name).is_some())
             .map(|(i, _)| Item::Fn(i)),
     );
     if whole {
@@ -9082,6 +9087,23 @@ impl<'a> Checker<'a> {
             None => Want::Unused,
         };
         match (self.block(&mut body, &f.body, &want), &view.result) {
+            // A value at the top level that states no type is refused, with
+            // the type its value has.
+            (end, None) if let Some(name) = crate::parser::value_name(&f.name) => {
+                let ty = match end {
+                    End::Value(gives, _) if !gives.unknown() => defs.text(&gives, view.scope),
+                    _ => "T".to_string(),
+                };
+                self.errors.push(
+                    Error::new(
+                        f.pos,
+                        format!("a value at the top level states its type, and `{name}` does not"),
+                    )
+                    .with_fix(format!(
+                        "write its type after the name: `{name}: {ty} = ...`"
+                    )),
+                );
+            }
             _ if proof::ends_in_exit(&f.body) => {}
             (End::Empty | End::Binding(_), Some(_)) if view.gives == Ty::Nothing => {}
             (End::Empty, Some(t)) => {

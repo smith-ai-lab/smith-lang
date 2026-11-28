@@ -711,6 +711,29 @@ impl<'a> Checker<'a> {
     /// a listed effect with no such name may be it misspelt. A default lists
     /// none, so each thing in it that needs one is reported.
     pub(super) fn needs(&mut self, body: &mut Body, effect: &str, pos: Pos, what: &str) {
+        // A value at the top level is worked out when the program is built, by
+        // the compiler, which gives the memory of what it writes itself.
+        if let Some(f) = body.f
+            && let Some(name) = crate::parser::value_name(&f.name)
+        {
+            let called = what.starts_with('`');
+            if (written_name(effect) == "alloc" && !called) || !body.missing.is_empty() {
+                return;
+            }
+            body.missing.push(effect.to_string());
+            self.errors.push(
+                Error::new(
+                    f.pos,
+                    format!(
+                        "`{name}` is worked out when the program is built, so it carries no effect, and {what} at line {} needs the `{}` effect",
+                        pos.line,
+                        written_name(effect)
+                    ),
+                )
+                .with_fix("do it in `main`, which lists its effects"),
+            );
+            return;
+        }
         // The rounds of a `for` have no order, and an effect has one.
         if self.fors > 0 && written_name(effect) != "alloc" {
             self.errors.push(
