@@ -2,14 +2,14 @@
 //! gives, at the edge, what the arithmetic of Rust on 128 bits says it must:
 //! the greatest value that fits is taken as it is, and the next is refused, as
 //! when the library called a `checked_` function there. The values are drawn
-//! near the edge, the edge itself and the value after it always among them,
-//! and the programs are run in the evaluator.
+//! near the edge, the edge itself and the value after it always among them.
 
 use smith::lower;
 use smith::scalar;
 
 use crate::Test;
 use crate::generate::{self, Gen};
+use crate::targets::{runnable, runs_as};
 
 pub const ONCE: &[Test] = &[
     (
@@ -29,6 +29,11 @@ pub const ONCE: &[Test] = &[
         a_chunk_of_http1_whose_end_is_near_the_greatest_nat_is_refused_exactly_when_it_does_not_fit,
     ),
 ];
+
+pub const MACHINE: &[Test] = &[(
+    "every_executable_reads_the_numbers_near_the_greatest_nat_as_the_evaluator_does",
+    every_executable_reads_the_numbers_near_the_greatest_nat_as_the_evaluator_does,
+)];
 
 /// The greatest `Nat`, and `u64`.
 const GREATEST: u128 = u64::MAX as u128;
@@ -163,6 +168,26 @@ fn a_chunk_of_http1_whose_end_is_near_the_greatest_nat_is_refused_exactly_when_i
         |values| {
             let (source, said) = chunks(values);
             assert_eq!(printed(&source), said, "{source}");
+        },
+    );
+}
+
+/// Each of the programs above, in each executable this machine runs.
+fn every_executable_reads_the_numbers_near_the_greatest_nat_as_the_evaluator_does() {
+    let targets = runnable();
+    generate::check(
+        5705,
+        1,
+        |g| (near(g, GREATEST), near(g, LAST_CHUNK)),
+        |(values, ends)| {
+            for (source, said) in [json(values), dns(values), lengths(values), chunks(ends)] {
+                let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+                let out = scalar::run(&scalar::passes(&program));
+                assert_eq!(String::from_utf8(out.stdout.clone()).expect("text"), said, "{source}");
+                for &target in &targets {
+                    runs_as(source.as_bytes(), target, &out);
+                }
+            }
         },
     );
 }
