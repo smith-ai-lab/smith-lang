@@ -190,7 +190,7 @@ fn run() -> str {
   y = "b"
   ```
 
-  This is refused: "`y` is not a `var`, so it cannot be assigned to".
+  This is refused: "`y` is not a `mut`, so it cannot be assigned to".
 
 The lambda is inlined and cannot escape, so `with` costs nothing at run time.
 

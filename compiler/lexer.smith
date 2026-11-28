@@ -47,7 +47,6 @@ enum Keyword {
   kw_trait
   kw_try
   kw_use
-  kw_var
   kw_with
   kw_without
 }
@@ -179,7 +178,7 @@ fn text_from(bytes: take List[Byte]) -> str {
 
 fn starts_with(src: List[Byte], at: Nat, p: List[Byte]) -> bool {
   if at <= src.size and p.size <= src.size - at {
-    var same = true
+    mut same = true
     loop i in 0..p.size {
       if src[at + i] != p[i] { same = false }
     }
@@ -190,7 +189,7 @@ fn starts_with(src: List[Byte], at: Nat, p: List[Byte]) -> bool {
 }
 
 fn index_of(text: List[Byte], target: Byte) -> Option[Nat] {
-  var found: Option[Nat] = .none
+  mut found: Option[Nat] = .none
   loop i in 0..text.size {
     if found == .none and text[i] == target { found = .some(i) }
   }
@@ -320,9 +319,9 @@ fn advance(pos: Pos, b: Byte) -> Pos {
 // The mistakes of the text itself: a carriage return, and bytes that are not
 // UTF-8. A file that has one is not read further.
 fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
-  var errors: List[LexError] = []
-  var pos = Pos(line: 1, col: 1)
-  var i: Nat = 0
+  mut errors: List[LexError] = []
+  mut pos = Pos(line: 1, col: 1)
+  mut i: Nat = 0
   loop round in 0..src.size {
     if i < src.size {
       b = src[i]
@@ -346,7 +345,7 @@ fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
 // ---- tokens so far ----
 
 fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer <alloc> {
-  var next = lx
+  mut next = lx
   next.errors = push(next.errors, LexError(pos: pos, message: message))
   next
 }
@@ -372,7 +371,7 @@ fn is_pipe(tok: Tok) -> bool {
 
 // The line breaks that wait are tokens now.
 fn flush(lx: take Lexer) -> Lexer <alloc> {
-  var next = lx
+  mut next = lx
   waiting = next.pending
   next.pending = []
   loop i in 0..waiting.size {
@@ -384,7 +383,7 @@ fn flush(lx: take Lexer) -> Lexer <alloc> {
 // A line that starts with `|>` goes on from the line before, so the line breaks
 // that wait are not tokens when one is read.
 fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer <alloc> {
-  var next = lx
+  mut next = lx
   next.line_has_token = not is_newline(tok)
   if is_newline(tok) {
     next.pending = push(next.pending, pos)
@@ -400,7 +399,7 @@ fn bump(lx: take Lexer) -> Lexer {
   if lx.at < lx.src.size {
     b = lx.src[lx.at]
     after = lx.at + 1
-    var next = lx
+    mut next = lx
     next.at = after
     next.pos = advance(next.pos, b)
     next
@@ -411,7 +410,7 @@ fn bump(lx: take Lexer) -> Lexer {
 
 // Reads the whole character that starts here, however many bytes it has.
 fn bump_char(lx: take Lexer) -> Lexer {
-  var next = bump(lx)
+  mut next = bump(lx)
   loop round in 0..4 {
     match byte_at(next.src, next.at) {
       .some(b) { if is_continuation(b) { next = bump(next) } }
@@ -424,7 +423,7 @@ fn bump_char(lx: take Lexer) -> Lexer {
 // Where the character that starts at `at` ends, which is where `bump_char`
 // would leave a lexer that was there.
 fn char_end(src: List[Byte], at: Nat) -> Nat {
-  var i = at
+  mut i = at
   if i < src.size { i = i + 1 }
   loop round in 0..4 {
     match byte_at(src, i) {
@@ -437,7 +436,7 @@ fn char_end(src: List[Byte], at: Nat) -> Nat {
 
 fn take_while_word(lx: take Lexer) -> Lexer {
   rounds = lx.src.size
-  var next = lx
+  mut next = lx
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
       .some(b) { if is_word_byte(b) { next = bump(next) } else { break } }
@@ -506,8 +505,6 @@ fn keyword_of(word: str) -> Option[Keyword] {
     .some(.kw_try)
   } else if word == "use" {
     .some(.kw_use)
-  } else if word == "var" {
-    .some(.kw_var)
   } else if word == "with" {
     .some(.kw_with)
   } else if word == "without" {
@@ -529,7 +526,7 @@ fn word(lx: take Lexer, start: Pos) -> Lexer <alloc> {
 }
 
 fn comment(lx: take Lexer, start: Pos) -> Lexer <alloc> {
-  var next = if lx.line_has_token { error_at(lx, start, "a comment must stand on its own line") } else { lx }
+  mut next = if lx.line_has_token { error_at(lx, start, "a comment must stand on its own line") } else { lx }
   rounds = next.src.size
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
@@ -545,9 +542,9 @@ fn comment(lx: take Lexer, start: Pos) -> Lexer <alloc> {
 // Why a run of digits of a base is not written as the lexical rules say, or
 // none when it is: at least one digit, and an `_` only between two digits.
 fn digits(text: Slice[Byte], base: Byte, name: str) -> Option[str] <alloc> {
-  var why: Option[str] = .none
-  var failed = false
-  var previous: Byte = 0
+  mut why: Option[str] = .none
+  mut failed = false
+  mut previous: Byte = 0
   if text.size == 0 {
     failed = true
     why = .some("{name} digits are needed here")
@@ -624,7 +621,7 @@ fn check_number(text: str) -> Option[str] <alloc> {
       .none
     }
     third = if mantissa_end < text.size {
-      var from = mantissa_end + 1
+      mut from = mantissa_end + 1
       loop i in from..text.size {
         if text[i] == '+' or text[i] == '-' { from = i + 1 } else { break }
       }
@@ -638,7 +635,7 @@ fn check_number(text: str) -> Option[str] <alloc> {
 
 fn number(lx: take Lexer, start: Pos) -> Lexer <alloc> {
   from = lx.at
-  var next = take_while_word(lx)
+  mut next = take_while_word(lx)
   if byte_at(next.src, next.at) == .some('.') {
     match byte_after(next.src, next.at) {
       .some(d) { if is_digit(d) { next = take_while_word(bump(next)) } }
@@ -803,7 +800,7 @@ fn punct(lx: take Lexer, start: Pos) -> Lexer <alloc> {
       error_at(after, start, "unexpected character {shown}")
     }
     .some((p, width)) {
-      var next = lx
+      mut next = lx
       loop i in 0..width { next = bump(next) }
       push_token(next, .punct(p), start)
     }
@@ -824,10 +821,10 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
   decreases fuel
 {
   rounds = lx.src.size
-  var next = bump(lx)
-  var pieces: List[Piece] = []
-  var value: List[Byte] = []
-  var interpolated = false
+  mut next = bump(lx)
+  mut pieces: List[Piece] = []
+  mut value: List[Byte] = []
+  mut interpolated = false
   loop round in 0..rounds {
     at = next.pos
     match byte_at(next.src, next.at) {
@@ -895,7 +892,7 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
 
 // Whether a token of the list is a string.
 fn has_string(tokens: List[Token]) -> bool {
-  var found = false
+  mut found = false
   loop i in 0..tokens.size {
     match tokens[i].tok {
       .string(b) { found = true }
@@ -917,13 +914,13 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
   decreases fuel
 {
   rounds = lx.src.size
-  var next = lx
+  mut next = lx
   outside = next.tokens
   waiting = next.pending
   next.tokens = []
   next.pending = []
-  var depth: Nat = 0
-  var closed = false
+  mut depth: Nat = 0
+  mut closed = false
   loop round in 0..rounds {
     at = next.pos
     match byte_at(next.src, next.at) {
@@ -983,7 +980,7 @@ fn token(lx: take Lexer, start: Pos, c: Byte, fuel: u64) -> Lexer <alloc>
 fn run(lx: take Lexer) -> Lexer <alloc> {
   rounds = lx.src.size
   fuel = saturating_add(saturating_mul(rounds, 3), 3)
-  var next = lx
+  mut next = lx
   loop round in 0..rounds {
     match byte_at(next.src, next.at) {
       .none { break }

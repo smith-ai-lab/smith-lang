@@ -174,14 +174,14 @@ fn looped_source(cases: &[Looped]) -> String {
         ));
     }
     with_header(format!(
-        "fn find(xs: List[i32], k: i32) -> bool {{\n  var found = false\n  var last: i32 = 0\n  loop v in xs {{\n    last = v\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
-fn first_at(n: u64, k: u64) -> u64 {{\n  var hit: u64 = 0\n  loop i in 0..n {{\n    if i == k {{\n      hit = i + 1\n      break\n    }}\n  }}\n  hit\n}}\n\n\
+        "fn find(xs: List[i32], k: i32) -> bool {{\n  mut found = false\n  mut last: i32 = 0\n  loop v in xs {{\n    last = v\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
+fn first_at(n: u64, k: u64) -> u64 {{\n  mut hit: u64 = 0\n  loop i in 0..n {{\n    if i == k {{\n      hit = i + 1\n      break\n    }}\n  }}\n  hit\n}}\n\n\
 fn main() <console, alloc> {{\n{main}}}\n"
     ))
 }
 
 /// For every loop over a list that stops at a `break`, and over a range that
-/// does, the kernel hands the `var`s from round to round and gives what the
+/// does, the kernel hands the `mut`s from round to round and gives what the
 /// program prints.
 fn the_kernel_works_a_loop_out_round_by_round_to_what_the_program_prints() {
     generate::check(131, 150 / BATCH as u64, looped, |p| {
@@ -267,7 +267,7 @@ fn needs_source(cases: &[&Need]) -> String {
         .map(|c| format!("  print(\"{{{}}}\")\n", c.call()))
         .collect();
     with_header(format!(
-        "fn has(xs: List[i32], k: i32) -> bool {{\n  var found = false\n  loop v in xs {{\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
+        "fn has(xs: List[i32], k: i32) -> bool {{\n  mut found = false\n  loop v in xs {{\n    if v == k {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
 fn pick(xs: List[i32], k: i32) -> i32\n  requires has(xs, k)\n{{\n  k\n}}\n\n\
 fn main() <console, alloc> {{\n{prints}}}\n"
     ))
@@ -315,7 +315,7 @@ fn a_requires_over_arguments_written_out_is_proven_by_working_it_out() {
 /// and the limit named, and never takes it for proven.
 fn a_predicate_that_does_not_end_within_the_steps_fails_naming_the_call_and_the_limit() {
     let source = with_header(
-        "fn late(n: u64, k: u64) -> bool {\n  var found = false\n  loop i in 0..n {\n    if i == k {\n      found = true\n      break\n    }\n  }\n  found\n}\n\nfn go(n: u64, k: u64) -> u64\n  requires late(n, k)\n{\n  k\n}\n\nfn main() <console, alloc> {\n  print(\"{go(100000000000, 99999999999)}\")\n}\n"
+        "fn late(n: u64, k: u64) -> bool {\n  mut found = false\n  loop i in 0..n {\n    if i == k {\n      found = true\n      break\n    }\n  }\n  found\n}\n\nfn go(n: u64, k: u64) -> u64\n  requires late(n, k)\n{\n  k\n}\n\nfn main() <console, alloc> {\n  print(\"{go(100000000000, 99999999999)}\")\n}\n"
             .to_string(),
     );
     let errors = smith::check(source.as_bytes()).expect_err("refused");
@@ -363,8 +363,8 @@ fn texts_source(cases: &[Text]) -> String {
         ));
     }
     with_header(format!(
-        "fn first_index(xs: List[i32], k: i32) -> u64 {{\n  var hit: u64 = 0\n  loop i in 0..xs.size {{\n    if xs[i] == k {{\n      hit = i\n      break\n    }}\n  }}\n  hit\n}}\n\n\
-fn has_byte(t: str, b: Byte) -> bool {{\n  var found = false\n  loop c in t {{\n    if c == b {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
+        "fn first_index(xs: List[i32], k: i32) -> u64 {{\n  mut hit: u64 = 0\n  loop i in 0..xs.size {{\n    if xs[i] == k {{\n      hit = i\n      break\n    }}\n  }}\n  hit\n}}\n\n\
+fn has_byte(t: str, b: Byte) -> bool {{\n  mut found = false\n  loop c in t {{\n    if c == b {{\n      found = true\n      break\n    }}\n  }}\n  found\n}}\n\n\
 fn length(t: str) -> u64 {{ t.size }}\n\n\
 fn main() <console, alloc> {{\n{main}}}\n"
     ))

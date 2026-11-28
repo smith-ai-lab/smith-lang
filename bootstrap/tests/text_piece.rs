@@ -231,7 +231,7 @@ fn spaced(g: &mut Gen) -> Vec<u8> {
 fn a_place_that_an_ensures_promises_and_an_invariant_keeps_cuts_a_text_there() {
     generate::check(77804, 3, spaced, |bytes| {
         let source = format!(
-            "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn space(s: str) -> at: Nat\n  ensures at <= s.size\n  ensures boundary(s, at)\n{{\n  var found = s.size\n  loop i in 0..s.size\n    invariant found <= s.size\n    invariant boundary(s, found)\n  {{\n    if found == s.size and s[i] == 32 {{\n      found = i\n    }}\n  }}\n  found\n}}\n\nfn main() <console, alloc> {{\n  match utf8(freeze({})) {{\n    .ok(t) {{\n      at = space(t)\n      print(t[..at])\n      print(t[at..])\n    }}\n    .err(e) {{ print(\"bad\") }}\n  }}\n}}\n",
+            "use std.console (console, print)\nuse std.list (freeze)\nuse std.utf8 (utf8)\n\nfn space(s: str) -> at: Nat\n  ensures at <= s.size\n  ensures boundary(s, at)\n{{\n  mut found = s.size\n  loop i in 0..s.size\n    invariant found <= s.size\n    invariant boundary(s, found)\n  {{\n    if found == s.size and s[i] == 32 {{\n      found = i\n    }}\n  }}\n  found\n}}\n\nfn main() <console, alloc> {{\n  match utf8(freeze({})) {{\n    .ok(t) {{\n      at = space(t)\n      print(t[..at])\n      print(t[at..])\n    }}\n    .err(e) {{ print(\"bad\") }}\n  }}\n}}\n",
             written(bytes)
         );
         let at = bytes.iter().position(|b| *b == b' ').unwrap_or(bytes.len());

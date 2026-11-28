@@ -63,7 +63,7 @@ const PLACES: [Place; 3] = [Place::Function, Place::Lambda, Place::Loop];
 #[derive(Clone, Debug)]
 struct Leaf {
     name: String,
-    /// Whether the name is marked `var`.
+    /// Whether the name is marked `mut`.
     var: bool,
     /// Whether the leaf is a `Key`, which has no `Copy`, and not an `i32`.
     key: bool,
@@ -106,7 +106,7 @@ impl Shape {
 
     fn pattern(&self) -> String {
         match self {
-            Shape::Leaf(l) if l.var => format!("var {}", l.name),
+            Shape::Leaf(l) if l.var => format!("mut {}", l.name),
             Shape::Leaf(l) => l.name.clone(),
             Shape::Tuple(items) => {
                 let items: Vec<String> = items.iter().map(Shape::pattern).collect();
@@ -127,7 +127,7 @@ impl Shape {
     }
 
     /// What the body gives: the sum of every read of every name, and for a
-    /// `var` the amount the body added to it first.
+    /// `mut` the amount the body added to it first.
     fn sum(&self) -> i32 {
         self.all()
             .iter()
@@ -200,7 +200,7 @@ fn revalue(g: &mut Gen, s: &Shape) -> Shape {
 const KEY: &str = "struct Key {\n  secret: i32\n}\n\nwithout Copy for Key\n\nfn eat(k: take Key) -> i32 { 3 }\n\n";
 
 /// What the body of the place says first and then gives: the lines that
-/// change each `var`, and the sum of the reads.
+/// change each `mut`, and the sum of the reads.
 fn body(s: &Shape) -> (Vec<String>, String) {
     let bumps = (s.all().iter().filter(|l| l.var))
         .map(|l| format!("{n} = wrapping_add({n}, {BUMP})", n = l.name))
@@ -264,7 +264,7 @@ fn program(place: Place, (s, given): (&Shape, &Shape), other: &Shape, written_ou
         }
         Place::Loop => {
             out.push_str(&format!(
-                "fn total(xs: List[{ty}]) -> i32 {{\n  var sum = 0\n  loop {head} in xs {{\n{first}{}    sum = wrapping_add(sum, {sum})\n  }}\n  sum\n}}\n\nfn main() <console, alloc> {{\n  xs: List[{ty}] = [{}, {}]\n  print(\"{{total(xs)}}\")\n}}\n",
+                "fn total(xs: List[{ty}]) -> i32 {{\n  mut sum = 0\n  loop {head} in xs {{\n{first}{}    sum = wrapping_add(sum, {sum})\n  }}\n  sum\n}}\n\nfn main() <console, alloc> {{\n  xs: List[{ty}] = [{}, {}]\n  print(\"{{total(xs)}}\")\n}}\n",
                 lines("    "),
                 given.value(),
                 other.value()
@@ -322,7 +322,7 @@ fn without_places(messages: Vec<String>) -> Vec<String> {
 }
 
 fn the_examples_of_the_page_on_tuples_for_a_parameter_and_a_loop_give_what_it_says() {
-    let source = "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn first((n, s): (i32, str)) -> i32 { n }\n\nfn total(pairs: List[(str, i32)]) -> i32 {\n  var sum = 0\n  loop (name, count) in pairs { sum = wrapping_add(sum, count) }\n  sum\n}\n\nfn main() <console, alloc> {\n  pairs: List[(str, i32)] = [(\"a\", 4), (\"b\", 5)]\n  print(\"{first((7, \"x\"))}\")\n  print(\"{total(pairs)}\")\n}\n";
+    let source = "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nfn first((n, s): (i32, str)) -> i32 { n }\n\nfn total(pairs: List[(str, i32)]) -> i32 {\n  mut sum = 0\n  loop (name, count) in pairs { sum = wrapping_add(sum, count) }\n  sum\n}\n\nfn main() <console, alloc> {\n  pairs: List[(str, i32)] = [(\"a\", 4), (\"b\", 5)]\n  print(\"{first((7, \"x\"))}\")\n  print(\"{total(pairs)}\")\n}\n";
     assert_eq!(
         run(source),
         Outcome {
@@ -333,7 +333,7 @@ fn the_examples_of_the_page_on_tuples_for_a_parameter_and_a_loop_give_what_it_sa
     );
 }
 
-/// For every place, depth of nesting, and mark of `var`, the program prints
+/// For every place, depth of nesting, and mark of `mut`, the program prints
 /// what the sum of the values is, and what its written-out form prints.
 fn a_pattern_where_a_name_is_introduced_does_what_the_binding_of_it_on_the_first_line_does(part: u64) {
     generate::check_part(101, 24, part, 2,
@@ -591,7 +591,7 @@ impl Param {
     }
 }
 
-/// The shape with each name given the prefix, and no `var`.
+/// The shape with each name given the prefix, and no `mut`.
 fn prefixed(s: &Shape, prefix: &str) -> Shape {
     match s {
         Shape::Leaf(l) => Shape::Leaf(Leaf {

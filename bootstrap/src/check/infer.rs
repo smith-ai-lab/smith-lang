@@ -1,23 +1,23 @@
-//! The range of a `var` with no stated type, which is the smallest that holds
+//! The range of a `mut` with no stated type, which is the smallest that holds
 //! every value the body gives it.
 //!
-//! The body of a function that has such a `var` is looked at again and again,
-//! with the errors thrown away, until the range of each `var` is the one that
-//! every value it is given needs. A `var` whose value is read where it is not
+//! The body of a function that has such a `mut` is looked at again and again,
+//! with the errors thrown away, until the range of each `mut` is the one that
+//! every value it is given needs. A `mut` whose value is read where it is not
 //! known, after an `if` or in a loop, is read as the range it has so far, so a
-//! value that depends on the `var` itself through a branch or a loop makes it
+//! value that depends on the `mut` itself through a branch or a loop makes it
 //! grow at every look, and is refused when it has not stopped growing by the
 //! last. Code with no branch is solved in order: each assignment gives the
-//! `var` the range of its value, and the next line reads that range.
+//! `mut` the range of its value, and the next line reads that range.
 //!
-//! A `var` that starts as a number written out, and that is given itself plus
+//! A `mut` that starts as a number written out, and that is given itself plus
 //! a value or itself less a value, is solved by linear templates over the count
 //! of times each such assignment runs, which is the product of the rounds of
 //! the loops around it, as `templates` says. Its range is the range of what it
 //! starts as and is otherwise given, widened by what those runs add or take
 //! away, and is refused where that is not within 64 bits.
 //!
-//! The look that is kept gives each such `var` its range as if it were
+//! The look that is kept gives each such `mut` its range as if it were
 //! written, so what `arith` proves, and what is built, is what stating that
 //! range gives.
 
@@ -30,7 +30,7 @@ use super::{
 use crate::diag::{Error, Pos};
 use crate::parser::{ArithOp, Call, Expr, Over, Range, Stmt};
 
-/// What is learned of the `var`s while their ranges are solved, by the place
+/// What is learned of the `mut`s while their ranges are solved, by the place
 /// of the statement that defines each.
 #[derive(Default)]
 pub(super) struct Solve {
@@ -41,18 +41,18 @@ pub(super) struct Solve {
     /// The values each was given: the place of the statement, how it is
     /// written, and its range.
     pub(super) given: HashMap<Pos, Vec<(Pos, String, Int)>>,
-    /// The `var`s that were given a value in a loop.
+    /// The `mut`s that were given a value in a loop.
     pub(super) in_loop: HashSet<Pos>,
     /// How each is written where it is defined.
     pub(super) names: HashMap<Pos, String>,
-    /// The `var`s whose value depends on the `var` itself where nothing says
+    /// The `mut`s whose value depends on the `mut` itself where nothing says
     /// what it holds, so that nothing says what the value is.
     pub(super) stuck: HashSet<Pos>,
-    /// The `var`s first given a number written out.
+    /// The `mut`s first given a number written out.
     pub(super) written: HashSet<Pos>,
-    /// The range of the first value of each `var`.
+    /// The range of the first value of each `mut`.
     pub(super) first: HashMap<Pos, Int>,
-    /// The first assignment of each `var` in `stuck` that reads it.
+    /// The first assignment of each `mut` in `stuck` that reads it.
     pub(super) stuck_at: HashMap<Pos, Pos>,
     /// The element type each list or option that is written with nothing to
     /// say it had at the end of the look before, and what it has from what it
@@ -69,12 +69,12 @@ pub(super) struct Solve {
     pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
     /// How many rounds each `loop` has, by its place.
     pub(super) passes: HashMap<Pos, Passes>,
-    /// How many `loop`s were around each `var` where it is defined.
+    /// How many `loop`s were around each `mut` where it is defined.
     pub(super) depth: HashMap<Pos, usize>,
-    /// What each `var` that starts as a number written out is given by
+    /// What each `mut` that starts as a number written out is given by
     /// adding to itself or taking from itself, which a template solves.
     pub(super) adds: HashMap<Pos, Vec<Add>>,
-    /// The `var`s whose adds do not make a range of 64 bits or less, with
+    /// The `mut`s whose adds do not make a range of 64 bits or less, with
     /// the one that does not.
     pub(super) unbounded: HashMap<Pos, Unbounded>,
 }
@@ -83,7 +83,7 @@ pub(super) struct Solve {
 /// when the program is built.
 pub(super) type Passes = (u128, Option<u128>);
 
-/// One assignment of a `var` that adds a value to itself, or takes it away.
+/// One assignment of a `mut` that adds a value to itself, or takes it away.
 #[derive(Clone, Debug)]
 pub(super) struct Add {
     pub(super) pos: Pos,
@@ -91,13 +91,13 @@ pub(super) struct Add {
     /// The range of what one pass adds.
     pub(super) low: i128,
     pub(super) high: i128,
-    /// How many times at most it runs while the `var` lives, if that is known.
+    /// How many times at most it runs while the `mut` lives, if that is known.
     pub(super) times: Option<u128>,
     /// Whether it takes away, and does not add.
     pub(super) takes: bool,
 }
 
-/// What stops the range of a `var` that adds to itself from being one.
+/// What stops the range of a `mut` that adds to itself from being one.
 #[derive(Clone, Debug)]
 pub(super) struct Unbounded {
     pub(super) add: Add,
@@ -128,16 +128,16 @@ impl Solve {
 /// What the last solved look left, which the look that is kept reads.
 #[derive(Default)]
 pub(super) struct Solved {
-    /// The range of each `var`.
+    /// The range of each `mut`.
     pub(super) ranges: HashMap<Pos, Int>,
-    /// The values each `var` was given.
+    /// The values each `mut` was given.
     pub(super) given: HashMap<Pos, Vec<(Pos, String, Int)>>,
-    /// The range of the first use that needs less than a `var` has.
+    /// The range of the first use that needs less than a `mut` has.
     pub(super) needs: HashMap<Pos, Int>,
-    /// The `var`s that are refused for being changed by themselves, which the
+    /// The `mut`s that are refused for being changed by themselves, which the
     /// look that is kept does not check against a range.
     pub(super) refused: HashSet<Pos>,
-    /// The `var`s whose range a template gave, whose assignments that add to
+    /// The `mut`s whose range a template gave, whose assignments that add to
     /// themselves the look that is kept does not check against it, as the
     /// count of passes is what shows that they fit.
     pub(super) templated: HashSet<Pos>,
@@ -147,7 +147,7 @@ pub(super) struct Solved {
     pub(super) put: HashMap<Pos, Vec<(Pos, String)>>,
 }
 
-/// Whether a block, or one inside it, defines a `var` with no type written.
+/// Whether a block, or one inside it, defines a `mut` with no type written.
 pub(super) fn has_inferred(stmts: &[Stmt]) -> bool {
     statements(stmts).into_iter().any(|s| {
         matches!(
@@ -191,7 +191,7 @@ fn joined(a: &Ty, b: &Ty) -> Option<Ty> {
     }
 }
 
-/// The names that a pattern gives a value, which a `var` with no type written
+/// The names that a pattern gives a value, which a `mut` with no type written
 /// is not solved for, as what a pattern gives is not read from its parts.
 pub(super) fn patterned(stmts: &[Stmt]) -> HashSet<String> {
     statements(stmts)
@@ -221,13 +221,13 @@ fn literal(value: &Expr) -> Option<Int> {
 }
 
 impl<'a> Checker<'a> {
-    /// Whether a `var` with no type written takes its range from what it is
+    /// Whether a `mut` with no type written takes its range from what it is
     /// given, in the body being checked.
     pub(super) fn infers(&self, body: &Body<'a>, name: &str) -> bool {
         self.infer_on && !matches!(body.numbers, Numbers::Off) && !self.patterned.contains(name)
     }
 
-    /// Checks the value a `var` with no type written is first given, and
+    /// Checks the value a `mut` with no type written is first given, and
     /// gives the type it has: the range that holds every value it is given.
     /// The range of the value itself is the second part, for the places that
     /// need it.
@@ -246,7 +246,7 @@ impl<'a> Checker<'a> {
             return (gives, None);
         };
         if self.solve.is_none() && self.solved.refused.contains(&pos) {
-            // The refusal is said, and what the `var` holds is not looked at again.
+            // The refusal is said, and what the `mut` holds is not looked at again.
             return (Ty::Unknown, None);
         }
         let text = written_expr(value);
@@ -443,7 +443,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Checks `name = value`, where `name` is a `var` whose range is solved:
+    /// Checks `name = value`, where `name` is a `mut` whose range is solved:
     /// the value gives it its range so far and the next line reads it.
     pub(super) fn infer_assign(
         &mut self,
@@ -489,8 +489,8 @@ impl<'a> Checker<'a> {
         let (_, read_itself) = self.assigning.take().expect("assigning");
         let looped = body.loops > 0 || body.outer_loops > 0;
         let counted = !matches!(body.numbers, Numbers::Finding(_));
-        // What a value that reads the `var` gives is a bound only where the
-        // `var` was first given a number written out, as there is nothing
+        // What a value that reads the `mut` gives is a bound only where the
+        // `mut` was first given a number written out, as there is nothing
         // else to say what it holds.
         let written = self
             .solve
@@ -524,8 +524,8 @@ impl<'a> Checker<'a> {
             }
             gives => {
                 if read_itself && counted {
-                    // The value depends on the `var` itself only where it would be
-                    // known if the `var` had the range it has so far. Where it is
+                    // The value depends on the `mut` itself only where it would be
+                    // known if the `mut` had the range it has so far. Where it is
                     // not, something else in it is already refused.
                     let before = self.errors.len();
                     let known = self.expr(body, value, &Want::Any);
@@ -542,7 +542,7 @@ impl<'a> Checker<'a> {
                     body.facts.unset_step(at);
                 } else if !matches!(gives, Ty::Flex(_)) {
                     // A number that its uses have not decided is decided by them,
-                    // and not by the range this `var` has so far.
+                    // and not by the range this `mut` has so far.
                     let needed = body.names[at].1.clone();
                     self.expect(body, value, &gives, &needed);
                 }
@@ -551,7 +551,7 @@ impl<'a> Checker<'a> {
         self.assign(body, at, value);
     }
 
-    /// The range the `var` at `at` holds where it is read, while ranges are
+    /// The range the `mut` at `at` holds where it is read, while ranges are
     /// solved: what the last assignment gave it, where nothing lies between,
     /// and otherwise what it has been given so far.
     pub(super) fn read_inferred(&mut self, body: &Body<'a>, at: usize) -> Option<Ty> {
@@ -563,7 +563,7 @@ impl<'a> Checker<'a> {
         if kept && let Some(held) = body.facts.step(at) {
             return Some(Ty::Int(held));
         }
-        // Where the `var` is read to give itself a value, and nothing says
+        // Where the `mut` is read to give itself a value, and nothing says
         // what it holds, what it holds is not known: another value in the
         // same call, or in the operator, says the type, and none refuses it.
         if let Some((assigning, _)) = self.assigning.as_mut()
@@ -579,7 +579,7 @@ impl<'a> Checker<'a> {
         Some(Ty::Int(so_far.hull(before).unwrap_or(*so_far)))
     }
 
-    /// Notes that a use needs `needed` of the `var` named by `value`.
+    /// Notes that a use needs `needed` of the `mut` named by `value`.
     pub(super) fn note_need(&mut self, body: &Body<'a>, value: &Expr, needed: Int) {
         if self.solve.is_none() {
             return;
@@ -595,7 +595,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// Says, in the error at `from`, which range a `var` was inferred to
+    /// Says, in the error at `from`, which range a `mut` was inferred to
     /// have, from what, and what the use needs.
     pub(super) fn explain_inferred(
         &mut self,
@@ -748,7 +748,7 @@ impl<'a> Checker<'a> {
     }
 
     /// Checks `name = name + e`, `name = e + name`, and `name = name - e`,
-    /// where `name` is a `var` that starts as a number written out, and notes
+    /// where `name` is a `mut` that starts as a number written out, and notes
     /// what one pass adds, which `templates` turns into a range. Where `e`
     /// reads `name`, or its range is not known, this is not such a value.
     fn self_add(
@@ -829,7 +829,7 @@ impl<'a> Checker<'a> {
         true
     }
 
-    /// The range of each `var` that adds to itself: the range that holds what
+    /// The range of each `mut` that adds to itself: the range that holds what
     /// it starts as and what it is given otherwise, and then, for each add,
     /// at most as many times as it runs, the least and the greatest of what
     /// they come to. This is the linear template `start + passes * low <= x`
@@ -839,7 +839,7 @@ impl<'a> Checker<'a> {
         let defs: Vec<Pos> = solve.adds.keys().copied().collect();
         for def in defs {
             let adds = solve.adds[&def].clone();
-            // A `var` that is given nothing but what it starts as, and adds to
+            // A `mut` that is given nothing but what it starts as, and adds to
             // itself, is solved from the net change of each pass of each loop
             // around the adds, in the order the body is read. Otherwise each
             // add counts for itself, as often as it runs.
@@ -912,7 +912,7 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// The error for a `var` that adds to itself in a loop, where what it
+    /// The error for a `mut` that adds to itself in a loop, where what it
     /// comes to is not a range of 64 bits or less.
     pub(super) fn not_finite(&self, def: Pos, solve: &Solve) -> Error {
         let name = solve.names.get(&def).map_or("it", |n| n.as_str());
@@ -947,7 +947,7 @@ impl<'a> Checker<'a> {
         ))
     }
 
-    /// The error for a `var` that is changed by itself, so that its range has
+    /// The error for a `mut` that is changed by itself, so that its range has
     /// not stopped growing.
     pub(super) fn grows_by_itself(&self, def: Pos, solve: &Solve) -> Error {
         let name = solve.names.get(&def).map_or("it", |n| n.as_str());
@@ -970,12 +970,12 @@ impl<'a> Checker<'a> {
             format!("`{name}` is changed by itself {place}, so its range is not inferred",),
         )
         .with_fix(format!(
-            "state the range, as `var {name}: {range} = {first}`"
+            "state the range, as `mut {name}: {range} = {first}`"
         ))
     }
 }
 
-/// What a block does to a `var` that it adds to and takes from: the least and
+/// What a block does to a `mut` that it adds to and takes from: the least and
 /// the greatest change it can end with, and the least and the greatest that
 /// any part of it, from its start, has made at any point.
 #[derive(Clone, Copy, Debug)]
@@ -999,7 +999,7 @@ impl Effect {
         breaks: false,
     };
 
-    /// One assignment that changes the `var` by `low..=high`, which may run
+    /// One assignment that changes the `mut` by `low..=high`, which may run
     /// or not.
     fn add(low: i128, high: i128) -> Effect {
         Effect {
@@ -1066,7 +1066,7 @@ impl Effect {
     }
 }
 
-/// Reads what a body does to the `var` `name`, from the statements that come
+/// Reads what a body does to the `mut` `name`, from the statements that come
 /// after the one that defines it.
 struct Walk<'s> {
     name: &'s str,
@@ -1076,7 +1076,7 @@ struct Walk<'s> {
 
 impl Walk<'_> {
     /// What the statements do, one after another, or none where a number grew
-    /// too large or the `var` is given a value other than itself changed.
+    /// too large or the `mut` is given a value other than itself changed.
     fn block(&self, stmts: &[Stmt]) -> Option<Option<Effect>> {
         let mut all = Effect::NONE;
         for stmt in stmts {
@@ -1135,7 +1135,7 @@ impl Walk<'_> {
     }
 }
 
-/// The statements that follow the one at `def`, which defines a `var`, in the
+/// The statements that follow the one at `def`, which defines a `mut`, in the
 /// block that holds it.
 fn after_define(body: &[Stmt], def: Pos) -> Option<&[Stmt]> {
     for (i, stmt) in body.iter().enumerate() {

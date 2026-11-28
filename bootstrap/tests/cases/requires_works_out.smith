@@ -2,7 +2,7 @@ use std.bits (i32)
 use std.console (console, print)
 
 fn has(xs: List[i32], k: i32) -> bool {
-  var found = false
+  mut found = false
   loop v in xs {
     if v == k {
       found = true

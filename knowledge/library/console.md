@@ -62,7 +62,7 @@ use std.console (console, input)
 use std.list (push)
 
 fn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {
-  var seen: List[str] = []
+  mut seen: List[str] = []
   r = console(
     print: fn(text, end, to) {
       match to {

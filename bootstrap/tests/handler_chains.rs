@@ -259,7 +259,7 @@ enum Route {
     /// The page that `render` of `std.html` makes, whose handler keeps the text
     /// it writes in its state, of a heading with the word.
     Page(String),
-    /// The words a handler of the test keeps in a `var` as they are said, one
+    /// The words a handler of the test keeps in a `mut` as they are said, one
     /// after another, given as text.
     Noted(Vec<String>),
 }
@@ -379,7 +379,7 @@ fn page() -> Html <alloc> {{
 }}
 
 fn noted(body: fn() <note>) -> str <alloc> {{
-  var said = \"\"
+  mut said = \"\"
   note(say: fn(t) {{ said = \"{{said}}{{t}}\" }}, body: body)
   said
 }}
@@ -425,7 +425,7 @@ use std.net (Chunk, connection, handle, listener, net, release)
 {uses}
 {functions}{app}// The bytes of the text, with each line ended as HTTP ends one.
 fn listed(t: str) -> List[Byte] <alloc> {{
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..t.size {{
     if t.bytes[i] == 10 {{ made = push(made, 13) }}
     made = push(made, t.bytes[i])
@@ -434,9 +434,9 @@ fn listed(t: str) -> List[Byte] <alloc> {{
 }}
 
 fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
-  var accepted: u64 = 0
-  var asked: List[u64] = []
-  var kept: List[List[Byte]] = []
+  mut accepted: u64 = 0
+  mut asked: List[u64] = []
+  mut kept: List[List[Byte]] = []
   result = net(
     listen_on: fn(host, port) {{ .ok(listener(1)) }},
     accept: fn(l) {{
@@ -450,7 +450,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
     stop: fn(l) {{ n = release(l) }},
     connect_to: fn(host, port) {{ .err(.refused(host)) }},
     read: fn(c, most) {{
-      var seen = false
+      mut seen = false
       loop i in 0..asked.size {{ if asked[i] == handle(c) {{ seen = true }} }}
       if seen {{
         .ok(.ended)
@@ -467,7 +467,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
       }}
     }},
     write: fn(c, bytes) {{
-      var copied: List[Byte] = []
+      mut copied: List[Byte] = []
       loop i in 0..bytes.size {{ copied = push(copied, bytes[i]) }}
       kept = push(kept, copied)
       .ok(())
@@ -492,7 +492,7 @@ fn main() <console, alloc, diverge> {{
   print(\"{{writes.size}}\")
   loop i in 0..writes.size {{
     inner = writes[i]
-    var line = \"\"
+    mut line = \"\"
     loop j in 0..inner.size {{ line = \"{{line}}{{inner[j]}} \" }}
     print(line)
   }}

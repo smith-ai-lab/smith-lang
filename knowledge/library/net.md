@@ -196,7 +196,7 @@ fn one_client[T](body: fn() -> T <net>) -> T <alloc> {
 }
 ```
 
-Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gives `.ended`, which is a connection the other side has finished with. A handler may keep what `write` is given in a `var`, as [Handlers](../language/handlers.md#a-handler-that-keeps-state) says.
+Under `one_client`, `accept` gives a connection whose handle is 2, and `read` gives `.ended`, which is a connection the other side has finished with. A handler may keep what `write` is given in a `mut`, as [Handlers](../language/handlers.md#a-handler-that-keeps-state) says.
 
 - **A number the system did not open reaches nothing.** The system's handler answers `listen`, `accept`, `read`, `write`, `send`, and `receive` with `failed`, whose message says the handle is not one the system opened, when it is given a value that `listener`, `connection`, or `socket` made, and makes no system call with it. `stop`, `close`, and `unbind` end such a value and close nothing. A program that makes `connection(1)` and writes to it writes nothing to standard output, under any handler.
 - **A value the system opened is not made again.** `handle` gives its number, and `connection` of that number is a value the system did not open.

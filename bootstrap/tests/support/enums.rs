@@ -9,7 +9,7 @@
 //! when some case is left out. `main` builds cases, with a leading dot where
 //! the type is known and in full elsewhere, passes them to the functions,
 //! binds them, and takes them apart with `match` as a statement and as an
-//! expression, assigning to a `var` in the blocks of a `match`.
+//! expression, assigning to a `mut` in the blocks of a `match`.
 //!
 //! The generator first builds a model of the program and works out from it
 //! what the program prints. Then it writes the model out twice: as built,
@@ -958,7 +958,7 @@ impl Writer<'_> {
                     self.expr(e, indent);
                 }
                 Stmt::Var(name, e) => {
-                    self.push(&format!("var {name} = "));
+                    self.push(&format!("mut {name} = "));
                     self.expr(e, indent);
                 }
                 Stmt::Assign(name, e) => {

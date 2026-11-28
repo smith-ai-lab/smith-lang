@@ -4,7 +4,7 @@ title: Values used exactly once
 description: A value with neither Copy nor Discard must be taken exactly once on every path, which is how a resource such as a file or a transaction is checked.
 status: partial
 built:
-  - "a value of a type without `Discard`, held by a parameter marked `take`, a binding, or a `var`, is refused where a path drops it: at the end of the function, on one branch of an `if` or a `match`, before a `return` or a `try` that leaves, in a loop with `break`, and when a `var` is assigned again"
+  - "a value of a type without `Discard`, held by a parameter marked `take`, a binding, or a `mut`, is refused where a path drops it: at the end of the function, on one branch of an `if` or a `match`, before a `return` or a `try` that leaves, in a loop with `break`, and when a `mut` is assigned again"
   - "a struct, a tuple, an enum, and a list that holds a value without `Discard` has no `Discard`, and a value of one is taken apart or given on as any other is"
   - "reading a value, lending it, and reading a field of it take nothing, and a value given away twice is refused at the second use"
   - "a part of a value that is taken leaves each other part without `Discard` to be taken, on every path, for a struct, one in a struct, and a tuple taken apart"
@@ -98,11 +98,11 @@ fn early(db: Db) -> Result[(), DbError] <net> {
 }
 ```
 
-A `var` that holds such a value is taken before it is assigned again, as the assignment drops the value it held, and before it goes out of scope.
+A `mut` that holds such a value is taken before it is assigned again, as the assignment drops the value it held, and before it goes out of scope.
 
 ```
 fn replaced(db: Db) -> Result[(), DbError] <net> {
-  var t = begin(db)
+  mut t = begin(db)
   debit(t, 100)
   t = begin(db)
   commit(t)

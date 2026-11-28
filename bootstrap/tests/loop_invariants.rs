@@ -3,7 +3,7 @@
 //! that each pass keeps it, uses it inside the loop, and, where no `break` ends
 //! the loop, after it.
 //!
-//! Every generator knows the values its loop gives the `var`, so whether an
+//! Every generator knows the values its loop gives the `mut`, so whether an
 //! invariant is true, and where it stops being, comes from there and shares
 //! nothing with the compiler.
 
@@ -83,7 +83,7 @@ fn line_of(source: &str, text: &str) -> usize {
         + 1
 }
 
-/// A loop that gives a `var` the same step in each of its passes.
+/// A loop that gives a `mut` the same step in each of its passes.
 #[derive(Debug)]
 struct Steps {
     start: i128,
@@ -100,12 +100,12 @@ fn steps(g: &mut Gen) -> Steps {
 }
 
 impl Steps {
-    /// What the `var` is after the last pass.
+    /// What the `mut` is after the last pass.
     fn last(&self) -> i128 {
         self.start + self.step * self.passes
     }
 
-    /// The program: the `var` is given the range that holds it, or none, the
+    /// The program: the `mut` is given the range that holds it, or none, the
     /// head of the loop is `head`, and the result is a range that holds it.
     fn source(&self, range: bool, head: &str) -> String {
         let declared = if range {
@@ -114,7 +114,7 @@ impl Steps {
             String::new()
         };
         with_header(format!(
-            "fn f() -> 0..{} {{\n  var acc{declared} = {}\n  loop i in 0..{}{head} {{\n    acc = acc + {}\n  }}\n  acc\n}}\n\n\
+            "fn f() -> 0..{} {{\n  mut acc{declared} = {}\n  loop i in 0..{}{head} {{\n    acc = acc + {}\n  }}\n  acc\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n",
             self.last() + 1,
             self.start,
@@ -125,7 +125,7 @@ impl Steps {
 }
 
 /// An invariant that is true is accepted where no range is written for the
-/// `var` and nothing but the invariant proves each pass fits it, it prints
+/// `mut` and nothing but the invariant proves each pass fits it, it prints
 /// what the loop gives, and its executable is that of the program that has the
 /// range inferred and no invariant, on two targets.
 fn an_invariant_that_holds_is_accepted_and_the_program_is_the_one_that_states_the_range_with_none(part: u64) {
@@ -201,7 +201,7 @@ fn an_invariant_gives_the_range_after_the_loop_unless_a_break_can_end_it() {
         let top = s.step * 9;
         let program = |bound: i128, extra: &str| {
             with_header(format!(
-                "fn f(n: 0..10) -> 0..{bound} {{\n  var acc: 0..1000 = 0\n  \
+                "fn f(n: 0..10) -> 0..{bound} {{\n  mut acc: 0..1000 = 0\n  \
                  loop i in 0..n invariant acc == {} * i {{\n{extra}    acc = acc + {}\n  }}\n  acc\n}}\n\n\
                  fn main() <console, alloc> {{\n  print(\"{{f({})}}\")\n}}\n",
                 s.step, s.step, s.passes
@@ -237,7 +237,7 @@ fn the_invariant_must_hold_where_the_counter_is_the_end_of_the_range_and_before_
  {
     let program = |head: &str| {
         with_header(format!(
-            "fn f() -> 0..257 {{\n  var acc: 0..257 = 0\n  loop i in 0..256 {head} {{\n    acc = acc + 1\n  }}\n  acc\n}}\n\n\
+            "fn f() -> 0..257 {{\n  mut acc: 0..257 = 0\n  loop i in 0..256 {head} {{\n    acc = acc + 1\n  }}\n  acc\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n"
         ))
     };
@@ -258,7 +258,7 @@ fn the_invariant_must_hold_where_the_counter_is_the_end_of_the_range_and_before_
     // runs none, so the invariant holds after it as it did before it.
     let zero = |held: i128| {
         with_header(format!(
-            "fn f() -> 0..3 {{\n  var acc: 0..3 = 0\n  loop i in 2..2 invariant acc == {held} {{\n    acc = 2\n  }}\n  acc\n}}\n\n\
+            "fn f() -> 0..3 {{\n  mut acc: 0..3 = 0\n  loop i in 2..2 invariant acc == {held} {{\n    acc = 2\n  }}\n  acc\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f()}}\")\n}}\n"
         ))
     };
@@ -281,7 +281,7 @@ fn the_invariant_must_hold_where_the_counter_is_the_end_of_the_range_and_before_
 fn an_invariant_of_a_loop_over_a_list_is_about_the_names_outside_it_and_holds_after_it() {
     let program = |head: &str| {
         with_header(format!(
-            "fn f(xs: List[Byte]) -> Nat {{\n  var a = 0\n  var b = 0\n  loop v in xs {head} {{\n    a = a + 1\n    b = b + 1\n  }}\n  a - b\n}}\n\n\
+            "fn f(xs: List[Byte]) -> Nat {{\n  mut a = 0\n  mut b = 0\n  loop v in xs {head} {{\n    a = a + 1\n    b = b + 1\n  }}\n  a - b\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{f([1, 2, 3])}}\")\n}}\n"
         ))
     };
@@ -308,7 +308,7 @@ fn an_invariant_of_a_loop_over_a_list_is_about_the_names_outside_it_and_holds_af
 fn an_invariant_ties_two_names_that_no_template_ties() {
     let program = |head: &str| {
         with_header(format!(
-            "fn gap() -> Nat {{\n  var a: 0..11 = 0\n  var b: 0..11 = 0\n  loop i in 0..10 {head} {{\n    a = a + 1\n    b = b + 1\n  }}\n  a - b\n}}\n\n\
+            "fn gap() -> Nat {{\n  mut a: 0..11 = 0\n  mut b: 0..11 = 0\n  loop i in 0..10 {head} {{\n    a = a + 1\n    b = b + 1\n  }}\n  a - b\n}}\n\n\
              fn main() <console, alloc> {{\n  print(\"{{gap()}}\")\n}}\n"
         ))
     };
@@ -327,7 +327,7 @@ fn an_invariant_ties_two_names_that_no_template_ties() {
 /// line of its own.
 fn an_invariant_on_its_own_line_and_two_of_them_are_read() {
     let source = with_header(
-        "fn gap() -> Nat {\n  var a: 0..11 = 0\n  var b: 0..11 = 0\n  loop i in 0..10\n    invariant a == i\n    invariant b == a\n  {\n    a = a + 1\n    b = b + 1\n  }\n  a - b\n}\n\n\
+        "fn gap() -> Nat {\n  mut a: 0..11 = 0\n  mut b: 0..11 = 0\n  loop i in 0..10\n    invariant a == i\n    invariant b == a\n  {\n    a = a + 1\n    b = b + 1\n  }\n  a - b\n}\n\n\
          fn main() <console, alloc> {\n  print(\"{gap()}\")\n}\n"
             .to_string(),
     );

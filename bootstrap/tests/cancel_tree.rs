@@ -390,7 +390,7 @@ fn functions(n: &Node, k: &mut usize, out: &mut String, fails: Option<(usize, us
         }
         body += &format!("  test_ready({})\n", s.wait);
     }
-    body += "  var total: u64 = 0\n";
+    body += "  mut total: u64 = 0\n";
     for i in joins {
         // A child that failed gives no value, and its parent goes on.
         body += &format!(
@@ -430,7 +430,7 @@ use std.task (join, outcome, spawn, task, test_ready, test_ready_by, test_schedu
 
 // Asks for more memory than the system gives, so that the task that calls it ends.
 fn eat() -> u64 <alloc> {{
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
     xs = push(xs, i)
   }}

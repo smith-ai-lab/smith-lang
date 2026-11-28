@@ -1,4 +1,4 @@
-//! A handler keeps its state in a `var` that its function assigns, and the
+//! A handler keeps its state in a `mut` that its function assigns, and the
 //! state goes where the code that asks goes: to the code under `with`, to a
 //! function that carries the effect and is built for the handler, to the
 //! functions that one calls, and through a `loop`, and what each gave is
@@ -84,7 +84,7 @@ fn body(items: &[Item]) -> String {
             Item::Call(k) => text += &format!("  a{i} = run{k}()\n"),
             Item::Rounds(n) => {
                 text += &format!(
-                    "  var a{i}: i32 = 0\n  loop j{i} in 0..{n} {{\n    a{i} = wrapping_add(a{i}, tick())\n  }}\n"
+                    "  mut a{i}: i32 = 0\n  loop j{i} in 0..{n} {{\n    a{i} = wrapping_add(a{i}, tick())\n  }}\n"
                 );
             }
         }
@@ -102,7 +102,7 @@ impl Program {
         let mut text = String::from(
             "use std.bits (i32)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\n\
              effect fx {\n  fn tick() -> i32\n}\n\n\
-             fn counter[T](start: i32, step: i32, body: fn() -> T <fx>) -> T {\n  var n: i32 = start\n  \
+             fn counter[T](start: i32, step: i32, body: fn() -> T <fx>) -> T {\n  mut n: i32 = start\n  \
              fx(\n    tick: {\n      n = wrapping_add(n, step)\n      n\n    },\n    body: body,\n  )\n}\n\n",
         );
         for (k, items) in self.functions.iter().enumerate() {

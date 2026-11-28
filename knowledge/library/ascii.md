@@ -22,7 +22,7 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn digits(s: str) -> u64 {
-  var n: u64 = 0
+  mut n: u64 = 0
   loop i in 0..s.size {
     if is_digit(s[i]) { n = wrapping_add(n, 1) }
   }

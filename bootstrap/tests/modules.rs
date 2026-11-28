@@ -284,7 +284,7 @@ fn placed(m: &Mistake) -> Placed {
             plain(main, pos_after(&before), "S0")
         }
         6 => {
-            let before = format!("{pad}{head}fn main() <console> {{\n  var s = make0(1)\n  s.");
+            let before = format!("{pad}{head}fn main() <console> {{\n  mut s = make0(1)\n  s.");
             let main = format!("{before}b = 3\n  print(\"x\")\n}}\n");
             plain(main, pos_after(&before), "`b`")
         }

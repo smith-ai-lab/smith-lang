@@ -217,7 +217,7 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
 }
 
 const LIST: &str = "fn hold_list(n: u64) -> List[Connection] <net, task, alloc> {
-  var cs: List[Connection] = []
+  mut cs: List[Connection] = []
   cs = push(cs, connection(n))
   cs = push(cs, connection(wrapping_add(n, 1)))
   test_ready(n)

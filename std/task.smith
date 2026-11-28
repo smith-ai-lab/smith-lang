@@ -226,8 +226,8 @@ fn has_failed(n: u64) -> bool { bits(n, 128) != 0 }
 // Whether a task of the chain that begins at `first` waits for the task, which
 // then keeps its frame, since the one that waits reads it ended from there.
 fn is_waited_for(first: u64, n: u64) -> bool {
-  var found = false
-  var at = first
+  mut found = false
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_task(at) and on(at) == n { found = true }
@@ -241,8 +241,8 @@ fn is_waited_for(first: u64, n: u64) -> bool {
 // the handle is dropped, and takes each out of the chain that begins at
 // `first`. It gives where the chain begins now.
 fn reap(first: u64) -> u64 {
-  var head = first
-  var at = first
+  mut head = first
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     next = after(at)
@@ -258,8 +258,8 @@ fn reap(first: u64) -> u64 {
 // The first task of the chain that begins at `first` that has not ended and is
 // not `except`, or none.
 fn pending(first: u64, except: u64) -> u64 {
-  var at = first
-  var found: u64 = 0
+  mut at = first
+  mut found: u64 = 0
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if not has_ended(at) and at != except {
@@ -276,7 +276,7 @@ fn pending(first: u64, except: u64) -> u64 {
 // ended or waits, go back to the pool. The chain goes from the task started last
 // to the one started first, so a child is ended before the task that started it.
 fn cancel_rest(first: u64, root: u64) {
-  var at = first
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     next = after(at)
@@ -298,7 +298,7 @@ fn enter(n: u64, first: u64) -> u64 {
 // chain begins now.
 fn leave(first: u64, n: u64) -> u64 {
   if first == n { return after(n) }
-  var at = first
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if after(at) == n {
@@ -320,8 +320,8 @@ fn runnable(n: u64) -> bool {
 }
 
 fn count_runnable(first: u64) -> u64 {
-  var count: u64 = 0
-  var at = first
+  mut count: u64 = 0
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if runnable(at) { count = wrapping_add(count, 1) }
@@ -331,9 +331,9 @@ fn count_runnable(first: u64) -> u64 {
 }
 
 fn nth_runnable(first: u64, k: u64) -> u64 {
-  var seen: u64 = 0
-  var found: u64 = 0
-  var at = first
+  mut seen: u64 = 0
+  mut found: u64 = 0
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if runnable(at) {
@@ -348,15 +348,15 @@ fn nth_runnable(first: u64, k: u64) -> u64 {
 // The task stops waiting for a descriptor and for a time, whichever it waited
 // for, and is told whether its time came.
 fn woken_by(n: u64, time: bool) {
-  var made = wrapping_sub(wrapping_sub(wrapping_sub(state(n), bits(n, 4)), bits(n, 16)), bits(n, 32))
+  mut made = wrapping_sub(wrapping_sub(wrapping_sub(state(n), bits(n, 4)), bits(n, 16)), bits(n, 32))
   if time { made = wrapping_add(made, 32) }
   __set_word(n, 1, made)
 }
 
 // Wakes the tasks that wait for the descriptor, and gives how many there were.
 fn wake(first: u64, fd: u64) -> u64 {
-  var woken: u64 = 0
-  var at = first
+  mut woken: u64 = 0
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_descriptor(at) and on(at) == fd {
@@ -370,8 +370,8 @@ fn wake(first: u64, fd: u64) -> u64 {
 
 // Whether a task waits for a time.
 fn has_timers(first: u64) -> bool {
-  var found = false
-  var at = first
+  mut found = false
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_time(at) { found = true }
@@ -382,8 +382,8 @@ fn has_timers(first: u64) -> bool {
 
 // Whether a task waits for the descriptor.
 fn has_waiter(first: u64, fd: u64) -> bool {
-  var found = false
-  var at = first
+  mut found = false
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_descriptor(at) and on(at) == fd { found = true }
@@ -413,8 +413,8 @@ fn ms_left(deadline: u64, now: u64) -> u64 {
 // Wakes the tasks whose time has come, as `moment` says, and gives how many of
 // them were waiting for a descriptor too.
 fn expire(first: u64, moment: u64) -> u64 {
-  var woken: u64 = 0
-  var at = first
+  mut woken: u64 = 0
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_time(at) and ms_left(deadline(at), moment) == 0 {
@@ -430,8 +430,8 @@ fn expire(first: u64, moment: u64) -> u64 {
 // none, which is 0, when none waits for one. A time that has come is not one,
 // since `expire` wakes it.
 fn nearest(first: u64, moment: u64) -> u64 {
-  var found: u64 = 0
-  var at = first
+  mut found: u64 = 0
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if waits_for_time(at) {
@@ -479,7 +479,7 @@ fn runs_again(n: u64) {
 // Asks every task of the chain that begins at `first` that has not ended, but the
 // one the block is of, to end.
 fn ask_rest(first: u64, root: u64) {
-  var at = first
+  mut at = first
   loop round in 0..9223372036854775807 {
     if at == 0 { break }
     if at != root and not has_ended(at) and not is_cancelled(at) {
@@ -504,13 +504,13 @@ pub fn test_scheduler[T](seed: u64, body: take fn() -> T <task>) -> T <diverge> 
 // a task waits for it, and a task that waits for a handle that is not in `ready`
 // waits for ever, which ends the program as every task waiting does.
 pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() -> T <task>) -> T <diverge> {
-  var first: u64 = 0
-  var anchor: u64 = 0
-  var next: u64 = 0
-  var rng: u64 = seed
-  var current: u64 = 0
-  var clock: u64 = 0
-  var by: u64 = 0
+  mut first: u64 = 0
+  mut anchor: u64 = 0
+  mut next: u64 = 0
+  mut rng: u64 = seed
+  mut current: u64 = 0
+  mut clock: u64 = 0
+  mut by: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -555,7 +555,7 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
       loop {
         if has_ended(top) { break }
         first = reap(first)
-        var many = count_runnable(first)
+        mut many = count_runnable(first)
         if many == 0 {
           // Nothing can run: a handle of `ready` becomes ready, when a task that
           // waits for a time has none to wait for, and otherwise the time of the
@@ -691,9 +691,9 @@ fn le32(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
 // is the same twelve bytes of data on every machine that has `epoll`, since the
 // descriptor is written where each machine reads it.
 fn register(ep: i64, fd: u64, write: bool) -> i64 <alloc> {
-  var events: u64 = 1073741825
+  mut events: u64 = 1073741825
   if write { events = 1073741828 }
-  var event: List[Byte] = []
+  mut event: List[Byte] = []
   event = le32(event, events)
   event = le32(event, fd)
   event = le32(event, fd)
@@ -718,8 +718,8 @@ fn le64(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
 
 // The number that the eight bytes from `at` are, the low one first.
 fn word64(bytes: List[Byte], at: Nat) -> u64 {
-  var n: u64 = 0
-  var scale: u64 = 1
+  mut n: u64 = 0
+  mut scale: u64 = 1
   loop i in 0..bytes.size {
     if i >= at and i < at + 8 {
       wide: u64 = bytes[i]
@@ -733,9 +733,9 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
 // The milliseconds the clock of the system says, which only goes forward: the
 // monotonic clock, 1 on Linux and 6 on macOS.
 fn read_clock() -> u64 <alloc> {
-  var stamp: List[Byte] = []
+  mut stamp: List[Byte] = []
   stamp = le64(le64(stamp, 0), 0)
-  var clock: i64 = 1
+  mut clock: i64 = 1
   if on_macos() { clock = 6 }
   _ = __system(18, clock, stamp, 0, 0, 0, 0)
   seconds = word64(stamp, 0)
@@ -769,9 +769,9 @@ fn make_queue() -> i64 {
 // `kevent` of 32 bytes, which is the descriptor, the filter (-1 to read and -2 to
 // write), the flags that add it and drop it once it has said so, and zeros.
 fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 <alloc> {
-  var word: u64 = 1179647
+  mut word: u64 = 1179647
   if write { word = 1179646 }
-  var change: List[Byte] = []
+  mut change: List[Byte] = []
   change = le32(change, fd)
   change = le32(change, 0)
   change = le32(change, word)
@@ -787,13 +787,13 @@ fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 <alloc> {
 // negative, and none when it says nothing.
 fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
   buffer: List[Byte] = __reserve(32)
-  var got: i64 = 0
+  mut got: i64 = 0
   if time < 0 {
     got = __system(17, kq, 0, 0, buffer, 1, 0)
   } else {
     // The time to wait is a pair of numbers, the seconds and the nanoseconds.
     ms: u64 = wrapping_narrow(time)
-    var limit: List[Byte] = []
+    mut limit: List[Byte] = []
     limit = le64(limit, ms / 1000)
     limit = le64(limit, (ms % 1000) * 1000000)
     got = __system(17, kq, 0, 0, buffer, 1, limit)
@@ -838,13 +838,13 @@ fn ready_descriptor(ep: i64, time: i64) -> Option[u64] <alloc> {
 // group waits for the system, in `epoll` or in `kqueue`, for a descriptor to be ready. It holds
 // numbers and nothing else, as every scheduler does.
 fn group[T](body: take fn() -> T <task>) -> T <alloc> {
-  var first: u64 = 0
-  var anchor: u64 = 0
-  var parked: u64 = 0
-  var ep: i64 = -1
-  var turn: u64 = 0
-  var current: u64 = 0
-  var by: u64 = 0
+  mut first: u64 = 0
+  mut anchor: u64 = 0
+  mut parked: u64 = 0
+  mut ep: i64 = -1
+  mut turn: u64 = 0
+  mut current: u64 = 0
+  mut by: u64 = 0
   task(
     start: fn(work) {
       n = enter(__address(work), first)
@@ -894,19 +894,19 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
         // so that a time that comes between two reads is neither missed by the one
         // nor counted as left by the other.
         timers = has_timers(first)
-        var moment: u64 = 0
+        mut moment: u64 = 0
         if timers {
           moment = read_clock()
           parked = wrapping_sub(parked, expire(first, moment))
         }
-        var many = count_runnable(first)
-        var soon: u64 = 0
+        mut many = count_runnable(first)
+        mut soon: u64 = 0
         if timers and many == 0 { soon = nearest(first, moment) }
         if parked > 0 or soon > 0 {
           // The system's queue is asked what is ready, and when nothing can run it
           // is waited in until the nearest time that a task waits for, or for ever
           // when none waits for one.
-          var time: i64 = 0
+          mut time: i64 = 0
           if many == 0 {
             time = -1
             if soon > 0 {

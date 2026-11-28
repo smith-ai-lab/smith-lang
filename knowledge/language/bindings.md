@@ -78,9 +78,9 @@ fn main() <console> {
 }
 ```
 
-This gives "`word` is not a `var`, so it cannot be assigned to", with the fix "declare it with `var`: write `var word` where it is defined". A name that does change is a [`var`](var.md).
+This gives "`word` is not a `mut`, so it cannot be assigned to", with the fix "declare it with `mut`: write `mut word` where it is defined". A name that does change is a [`mut`](mut.md).
 
-A parameter is a name too. Assigning to one gives the same message, with the fix "declare a `var` that starts as the parameter, as in `var new_name = name`".
+A parameter is a name too. Assigning to one gives the same message, with the fix "declare a `mut` that starts as the parameter, as in `mut new_name = name`".
 
 ```
 fn shout(word: str) -> str {
@@ -126,7 +126,7 @@ use std.bits (u64)
 use std.int (wrapping_add)
 
 fn both(xs: List[u64], ys: List[u64]) -> u64 {
-  var total: u64 = 0
+  mut total: u64 = 0
   loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }
   loop i in 0..ys.size { total = wrapping_add(total, ys[i]) }
   total
@@ -197,4 +197,4 @@ A block whose value is not read ends in `()`, so that what it gives is not throw
 | `x: T = e` | The same, with its type stated |
 | `_ = e` | `e` is run and its value thrown away |
 
-Next: [Mutable locals](var.md)
+Next: [Mutable locals](mut.md)

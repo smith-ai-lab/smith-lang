@@ -7,7 +7,7 @@ pub fn append[T](a: take List[T], b: List[T]) -> List[T] <alloc> {
 }
 
 pub fn copy[T: Copy](list: List[T]) -> List[T] <alloc> {
-  var made: List[T] = []
+  mut made: List[T] = []
   loop x in list { made = push(made, x) }
   made
 }

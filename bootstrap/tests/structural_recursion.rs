@@ -71,7 +71,7 @@ fn a_walk_into_a_slice_and_into_a_tree_needs_no_decreases() {
          fn total(xs: Slice[u64]) -> u64 <alloc> {{\n  \
          if xs.size == 0 {{ 0 }} else {{ wrapping_add(xs[0], total(xs[1..])) }}\n}}\n\n\
          fn count(n: Node) -> u64 <alloc> {{\n  \
-         var c: u64 = 1\n  loop k in n.kids {{ c = wrapping_add(c, count(k)) }}\n  c\n}}\n\n\
+         mut c: u64 = 1\n  loop k in n.kids {{ c = wrapping_add(c, count(k)) }}\n  c\n}}\n\n\
          fn main() <console, alloc> {{\n  \
          print(\"{{total([4, 9, 6])}}\")\n  \
          print(\"{{count(Node(value: 0, kids: [Node(value: 1, kids: []), Node(value: 2, kids: [])]))}}\")\n}}\n"
@@ -108,7 +108,7 @@ fn walk(root: &str, levels: usize, at: usize, inner: &dyn Fn(&str) -> String) ->
     let (n, s, k) = (format!("n{at}"), format!("s{at}"), format!("k{at}"));
     let below = walk(&k, levels - 1, at + 1, inner);
     format!(
-        "match {root} {{\n.leaf(v{at}) {{ v{at} }}\n.node({n}) {{\nvar {s} = {n}.value\n\
+        "match {root} {{\n.leaf(v{at}) {{ v{at} }}\n.node({n}) {{\nmut {s} = {n}.value\n\
          loop {k} in {n}.forest.trees {{\nx{at} = {below}\n{s} = wrapping_add({s}, x{at})\n}}\n{s}\n}}\n}}"
     )
 }
@@ -224,7 +224,7 @@ fn circle(g: &mut Gen) -> (String, bool) {
     let source = format!(
         "{HEADER}{TREE}fn f(a: Tree, b: Tree) -> u64 <alloc> {{\n  \
          match {walked_f} {{\n    .leaf(v) {{ v }}\n    .node(n) {{ {into_g} }}\n  }}\n}}\n\n\
-         fn g(a: Node, b: Node) -> u64 <alloc> {{\n  var s = {walked_g}.value\n  \
+         fn g(a: Node, b: Node) -> u64 <alloc> {{\n  mut s = {walked_g}.value\n  \
          loop k in {walked_g}.forest.trees {{ s = wrapping_add(s, {into_f}) }}\n  s\n}}\n\n\
          fn main() <console, alloc> {{\n  t = Tree.leaf(1)\n  print(\"{{f(t, t)}}\")\n}}\n",
         walked_f = names[pf],
@@ -284,7 +284,7 @@ fn deep(walk: Walk) -> impl Fn(&mut Gen) -> Deep {
 /// tree and the circle are held to.
 const SUM_FUEL: &str = "fn sum_fuel(t: Tree, fuel: u64) -> u64 <alloc>\n  decreases fuel\n{\n  \
      if fuel == 0 {\n    0\n  } else {\n    match t {\n      .leaf(v) { v }\n      .node(n) {\n        \
-     var s = n.value\n        loop k in n.forest.trees {\n          \
+     mut s = n.value\n        loop k in n.forest.trees {\n          \
      s = wrapping_add(s, sum_fuel(k, fuel - 1))\n        }\n        s\n      }\n    }\n  }\n}\n\n";
 
 impl Deep {
@@ -317,7 +317,7 @@ impl Deep {
             Walk::Tree => (
                 format!(
                     "fn sum(t: Tree) -> u64 <alloc> {{\n  match t {{\n    .leaf(v) {{ v }}\n    .node(n) {{\n      \
-                     var s = n.value\n      loop k in n.forest.trees {{ s = wrapping_add(s, sum(k)) }}\n      s\n    }}\n  }}\n}}\n\n{SUM_FUEL}"
+                     mut s = n.value\n      loop k in n.forest.trees {{ s = wrapping_add(s, sum(k)) }}\n      s\n    }}\n  }}\n}}\n\n{SUM_FUEL}"
                 ),
                 true,
                 format!("{{sum(t)}} {{sum_fuel(t, {fuel})}}"),
@@ -325,7 +325,7 @@ impl Deep {
             Walk::Circle => (
                 format!(
                     "fn odd(t: Tree) -> u64 <alloc> {{\n  match t {{\n    .leaf(v) {{ v }}\n    .node(n) {{ even(n) }}\n  }}\n}}\n\n\
-                     fn even(n: Node) -> u64 <alloc> {{\n  var s = n.value\n  \
+                     fn even(n: Node) -> u64 <alloc> {{\n  mut s = n.value\n  \
                      loop k in n.forest.trees {{ s = wrapping_add(s, odd(k)) }}\n  s\n}}\n\n{SUM_FUEL}"
                 ),
                 true,
@@ -344,14 +344,14 @@ impl Deep {
         let (types, made, kept) = match build {
             true => (
                 TREE,
-                "var t = Tree.leaf(1)",
+                "mut t = Tree.leaf(1)",
                 format!(
                     "if level % {every} == 0 {{\n      \
                      t = .node(Node(value: v, forest: Forest(trees: [t, .leaf(level)])))\n    \
                      }} else {{\n      t = .node(Node(value: v, forest: Forest(trees: [t])))\n    }}"
                 ),
             ),
-            false => ("", "var xs: List[u64] = []", "xs = push(xs, v)".to_string()),
+            false => ("", "mut xs: List[u64] = []", "xs = push(xs, v)".to_string()),
         };
         let frozen = if build { "" } else { "s = freeze(xs)\n  " };
         format!(

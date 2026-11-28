@@ -37,7 +37,7 @@ fn twice(body: fn()) {
 fn apply(text: str, f: fn(str) -> str) -> str { f(text) }
 
 fn main() <console> {
-  var note = "a"
+  mut note = "a"
   say("")
   u19 = name_of(Cat(name: ""))
   u20 = cat_of("")
@@ -73,7 +73,7 @@ fn h0[T](p0: T; f0: fn(Pet) -> Cat, f1: fn(str) -> Cat) -> Pet <console> {
 }
 
 fn h1[T](p0: T; f0: fn(Cat) -> Pet, f1: fn(str) -> Cat) -> str <console> {
-  var v8 = ""
+  mut v8 = ""
   v9 = f0(f1(""))
   v15 = f1(h2(Cat(name: "a"), f0: fn(a10, a11, a12) {
     print("")

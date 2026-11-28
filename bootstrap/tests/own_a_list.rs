@@ -2,7 +2,7 @@
 //! writes in place while the memory has room, and a list is duplicated only
 //! where `copy` is written.
 //!
-//! The generator holds lists in a `var`, in the field of a struct, in a tuple,
+//! The generator holds lists in a `mut`, in the field of a struct, in a tuple,
 //! in an enum, deep inside several of them, and in a list of lists, grows them
 //! through functions that take and return them, and reads every list after
 //! every push. A model of plain vectors says what is read, how many times the
@@ -61,9 +61,9 @@ fn ceil_log2(n: usize) -> u32 {
 /// Where a list is held, which is what the generator varies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
-    /// A `var` of the list.
+    /// A `mut` of the list.
     Plain,
-    /// The field of a struct in a `var`, pushed to where it is or through a
+    /// The field of a struct in a `mut`, pushed to where it is or through a
     /// function.
     Field,
     /// The first part of a tuple.
@@ -248,7 +248,7 @@ fn dpush(d: take Deep, v: {e}) -> Deep <alloc> {
 }
 
 fn fresh(a: {e}, b: {e}) -> List[{e}] <alloc> {
-  var xs: List[{e}] = []
+  mut xs: List[{e}] = []
   xs = push(xs, a)
   push(xs, b)
 }
@@ -257,12 +257,12 @@ fn fresh(a: {e}, b: {e}) -> List[{e}] <alloc> {
 
 fn declare(k: Kind, h: usize) -> String {
     match k {
-        Kind::Plain => format!("  var h{h}: List[{{e}}] = []\n"),
-        Kind::Field => format!("  var h{h}: W = W(xs: [])\n"),
-        Kind::Tuple => format!("  var h{h}: (List[{{e}}], Byte) = ([], 7)\n"),
-        Kind::Enum => format!("  var h{h}: E = E.empty\n"),
-        Kind::Deep => format!("  var h{h}: Deep = Deep(inner: (W(xs: []), 1))\n"),
-        Kind::Lists => format!("  var h{h}: List[List[{{e}}]] = []\n"),
+        Kind::Plain => format!("  mut h{h}: List[{{e}}] = []\n"),
+        Kind::Field => format!("  mut h{h}: W = W(xs: [])\n"),
+        Kind::Tuple => format!("  mut h{h}: (List[{{e}}], Byte) = ([], 7)\n"),
+        Kind::Enum => format!("  mut h{h}: E = E.empty\n"),
+        Kind::Deep => format!("  mut h{h}: Deep = Deep(inner: (W(xs: []), 1))\n"),
+        Kind::Lists => format!("  mut h{h}: List[List[{{e}}]] = []\n"),
     }
 }
 
@@ -405,7 +405,7 @@ fn reading_a_list_asks_for_no_memory_and_moves_no_bytes() {
         for n in [0usize, 1, 3, 4, 9] {
             let program = |reads: &str| {
                 format!(
-                    "fn total(xs: List[{t}]) -> {t} {{\n  var sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  var xs: List[{t}] = []\n  loop i in 0..{n} {{ xs = push(xs, 1) }}\n{reads}}}\n"
+                    "fn total(xs: List[{t}]) -> {t} {{\n  mut sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = []\n  loop i in 0..{n} {{ xs = push(xs, 1) }}\n{reads}}}\n"
                 )
             };
             let reads = "  a = xs.size\n  b = first(xs)\n  c = total(xs)\n  loop i in 0..xs.size { d = xs[i] }\n  if 0 < a { print(\"read\") }\n  if 0 < wrapping_add(b, c) { print(\"read\") }\n";
@@ -527,7 +527,7 @@ fn copy_gives_a_new_list_of_the_same_elements_and_asks_for_alloc() {
         let t = ELEMS[*elem].0;
         let written: Vec<String> = items.iter().map(u64::to_string).collect();
         let source = format!(
-            "use std.list (copy)\n\nfn dump(xs: List[{t}]) <console, alloc> {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  var xs: List[{t}] = [{}]\n  var ys = copy(xs)\n  dump(ys)\n  ys = push(ys, {to_copy})\n  xs = push(xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
+            "use std.list (copy)\n\nfn dump(xs: List[{t}]) <console, alloc> {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = [{}]\n  mut ys = copy(xs)\n  dump(ys)\n  ys = push(ys, {to_copy})\n  xs = push(xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
             written.join(", ")
         );
         let mut lines = Vec::new();

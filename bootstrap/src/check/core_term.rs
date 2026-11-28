@@ -89,7 +89,7 @@ impl<'a> Typed<'a> {
     }
 
     /// The statements of a block: names given values, and then the value it
-    /// gives. A name that is a `var` of a block around this one is not
+    /// gives. A name that is a `mut` of a block around this one is not
     /// given a value here, as no node assigns.
     fn core_block(&self, stmts: &[Stmt]) -> Option<Term> {
         let mark = self.core_vars.borrow().len();
@@ -98,14 +98,14 @@ impl<'a> Typed<'a> {
         term
     }
 
-    /// The statements of a block, where `own` are the `var`s it may give a
+    /// The statements of a block, where `own` are the `mut`s it may give a
     /// value to again, as a name is bound again.
     fn core_stmts(&self, stmts: &[Stmt], own: &mut Vec<String>) -> Option<Term> {
         match stmts {
             [Stmt::Expr(e)] => self.core_expr(e),
             [Stmt::Expr(Expr::Loop(l)), rest @ ..] if !rest.is_empty() => {
                 let (looped, names) = self.core_loop(l)?;
-                // The loop gives the values the `var`s it assigns end with.
+                // The loop gives the values the `mut`s it assigns end with.
                 let rest = self.core_stmts(rest, own)?;
                 let ty = rest.ty.clone();
                 let pos = looped.pos;
@@ -182,7 +182,7 @@ impl<'a> Typed<'a> {
         }
     }
 
-    /// A `loop`, and the `var`s it assigns, in the order they are declared,
+    /// A `loop`, and the `mut`s it assigns, in the order they are declared,
     /// with their types, which are the state it hands from round to round.
     fn core_loop(&self, l: &crate::parser::Loop) -> Option<(Term, Vec<(String, core::Type)>)> {
         let (source, counter) = match (&l.range, &l.over) {
@@ -232,7 +232,7 @@ impl<'a> Typed<'a> {
         ))
     }
 
-    /// The statements of a round: each `var` of the state it gives a value
+    /// The statements of a round: each `mut` of the state it gives a value
     /// is bound again, and the round ends in a `Next`, or in a `Done` where
     /// an `if` with no `else` ends in `break`.
     fn core_round(&self, stmts: &[Stmt], state: &[(String, core::Type)], pos: Pos) -> Option<Term> {
@@ -779,7 +779,7 @@ impl<'a> Typed<'a> {
 }
 
 /// The names a block gives a value to again, where it is an assignment of a
-/// `var` that the block does not declare, at the top of the block and in an
+/// `mut` that the block does not declare, at the top of the block and in an
 /// `if` with no `else` that is there.
 fn assigned_in(stmts: &[Stmt]) -> Vec<String> {
     let mut found = Vec::new();

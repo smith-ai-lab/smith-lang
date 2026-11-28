@@ -18,7 +18,7 @@ fn lexer() -> &'static str {
 /// a line `input`.
 const DRIVER: &str = r#"
 fn show(s: str) -> str <alloc> {
-  var joined: str = ""
+  mut joined: str = ""
   loop i in 0..s.size {
     if i == 0 { joined = "{s[i]}" } else { joined = "{joined},{s[i]}" }
   }
@@ -56,9 +56,8 @@ fn keyword_place(k: Keyword) -> Nat {
     .kw_trait { 26 }
     .kw_try { 27 }
     .kw_use { 28 }
-    .kw_var { 29 }
-    .kw_with { 30 }
-    .kw_without { 31 }
+    .kw_with { 29 }
+    .kw_without { 30 }
   }
 }
 

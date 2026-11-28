@@ -356,14 +356,14 @@ fn tried(name: &str, min: i128, max: i128, signed: bool, g: &mut Gen) -> Vec<i12
 /// short. It also gives what Rust says each prints.
 fn answers(name: &str, min: i128, max: i128, signed: bool, g: &mut Gen) -> (String, String) {
     let values = tried(name, min, max, signed, g);
-    let mut source = format!("fn code(a: {name}, b: {name}) -> u64 {{\n  var r: u64 = 0\n");
+    let mut source = format!("fn code(a: {name}, b: {name}) -> u64 {{\n  mut r: u64 = 0\n");
     for (k, (op, _)) in OPS.iter().enumerate() {
         source += &format!("  if a {op} b {{ r = wrapping_add(r, {}) }}\n", 1 << k);
     }
     source += "  r\n}\n";
     if name != "bool" {
         source += &format!(
-            "fn count(a: {name}, b: {name}) -> Nat <diverge> {{\n  var n: Nat = 0\n  if a <= b {{\n    loop k in a..b {{ n = saturating_add(n, 1) }}\n  }}\n  var i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
+            "fn count(a: {name}, b: {name}) -> Nat <diverge> {{\n  mut n: Nat = 0\n  if a <= b {{\n    loop k in a..b {{ n = saturating_add(n, 1) }}\n  }}\n  mut i: {name} = a\n  loop {{\n    if i >= b {{ break }}\n    i = wrapping_add(i, 1)\n    n = saturating_add(n, 1)\n  }}\n  n\n}}\n"
         );
     }
     let list: Vec<String> = values.iter().map(|&v| literal(name, v)).collect();

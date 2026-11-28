@@ -9,7 +9,7 @@ fn main() <console, alloc> {
   print("{double(x)}")
   y = 10
   print("hello {y} {20}")
-  var total = 1
+  mut total = 1
   total = double_i16(total)
   print("{total}")
 }

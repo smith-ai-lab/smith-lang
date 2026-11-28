@@ -29,7 +29,7 @@ fn two_readings() -> (u64, u64) {
 
 ## One operation at a time
 
-Several tasks may call one handler. Its operations run one at a time, so the handler's `var`s are never assigned by two tasks at once. Here `fake_clock` adds one to `ticks` for each reading, and two tasks never read the same `ticks`: `two_readings()` is `(1, 2)` or `(2, 1)`, and never `(1, 1)`.
+Several tasks may call one handler. Its operations run one at a time, so the handler's `mut`s are never assigned by two tasks at once. Here `fake_clock` adds one to `ticks` for each reading, and two tasks never read the same `ticks`: `two_readings()` is `(1, 2)` or `(2, 1)`, and never `(1, 1)`.
 
 Each operation sees the handler's state whole and leaves it whole, as a read or a write does on a real file system.
 

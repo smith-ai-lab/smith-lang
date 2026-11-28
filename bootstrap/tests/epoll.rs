@@ -40,7 +40,7 @@ use std.net (Connection, NetError, accept, close, listen, net, read, write)
 use std.task (join, spawn, tasks)
 
 fn turn(c: take Connection) -> u64 <net, alloc> {
-  var size: u64 = 0
+  mut size: u64 = 0
   match read(c, 64) {
     .ok(.bytes(chunk)) {
       size = chunk.bytes.size
@@ -92,7 +92,7 @@ use std.net (Connection, NetError, accept, close, listen, net, read, write)
 use std.task (join, spawn, task, tasks)
 
 fn turn(c: take Connection) -> u64 <net, alloc> {
-  var size: u64 = 0
+  mut size: u64 = 0
   match read(c, 64) {
     .ok(.bytes(chunk)) {
       size = chunk.bytes.size

@@ -312,7 +312,7 @@ fn show(b: Slice[Byte]) <console, alloc> {
         match children(v) {
           .err(e) { print(\"{head} kids-err\") }
           .ok(cs) {
-            var items = \"\"
+            mut items = \"\"
             loop i in 0..cs.size {
               c = cs[i]
               sub = if holds(c.tag) { \"/{count(c)}\" } else { \"\" }

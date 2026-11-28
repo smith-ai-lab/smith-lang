@@ -1,7 +1,7 @@
 use std.console (console, print)
 
 fn main() <console> {
-  var word = "first"
+  mut word = "first"
   print(word)
   word = "second"
   print(word)

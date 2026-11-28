@@ -28,7 +28,7 @@ use std.fmt (hex)
 
 fn main() <console, entropy, alloc> {
   bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-  var line = ""
+  mut line = ""
   loop b in fill(bytes) { line = "{line}{hex(b, width: 2, upper: false)}" }
   print(line)
 }
@@ -48,7 +48,7 @@ use std.list (push)
 fn fixed[T](body: fn() -> T <entropy>) -> T <alloc> {
   entropy(
     fill: fn(bytes) {
-      var made: List[Byte] = []
+      mut made: List[Byte] = []
       loop i in 0..bytes.size { made = push(made, 171) }
       made
     },

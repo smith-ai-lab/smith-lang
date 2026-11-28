@@ -259,7 +259,7 @@ fn arith_proves_a_sum_and_a_difference_of_a_nat_from_what_is_known_of_it() {
         assert_eq!(stdout(drop), "3 0\n");
         let refused = "use std.console (console, print)\n\nfn drop(n: Nat, k: Nat) -> Nat { n - k }\n\nfn main() <console, alloc> {\n  print(\"{drop(5, 2)}\")\n}\n";
         assert!(!compiles(refused));
-        let sizes = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs: List[Byte] = [1, 2]\n  var last: Nat = 0\n  loop i in 0..xs.size { last = i + 1 }\n  print(\"{last}\")\n}\n";
+        let sizes = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  xs: List[Byte] = [1, 2]\n  mut last: Nat = 0\n  loop i in 0..xs.size { last = i + 1 }\n  print(\"{last}\")\n}\n";
         assert_eq!(stdout(sizes), "2\n");
     });
 }

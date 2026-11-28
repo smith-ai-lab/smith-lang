@@ -1,0 +1,8 @@
+use std.console (console, print)
+
+fn main() <console, alloc> {
+  var = 2
+  mut n = var
+  n = n + var
+  print("{n}")
+}

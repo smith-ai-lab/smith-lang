@@ -519,7 +519,7 @@ use std.list (push)
 fn same[T](x: take T) -> T { x }
 
 fn total(xs: List[Nat]) -> Nat {
-  var t: Nat = 0
+  mut t: Nat = 0
   loop x in xs { t = wrapping(t, x) }
   t
 }
@@ -527,7 +527,7 @@ fn total(xs: List[Nat]) -> Nat {
 fn wrapping(a: Nat, b: Nat) -> Nat { if a > 1000 { b } else { wrapping_add(a, b) } }
 
 fn main() <console, alloc> {
-  var xs: List[Nat] = []
+  mut xs: List[Nat] = []
   loop i in 0..50 { xs = push(xs, i) }
   print("hello {same(total(xs))} {same("s")}")
 }
@@ -655,7 +655,7 @@ fn assert_written_functions_are_named(maps: &[(&'static str, String)], written: 
 /// passes fold to the constant `f3` gives, so that no instruction of it holds a
 /// line of the file, and its code is all its own: it has a `fn` line and no `at`
 /// line, as a function all of whose code is its own has none.
-const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() <console> {\n  print(f1(\"\"))\n  var x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str <console> {\n  print(first)\n  var x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  _ = f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
+const FOLDED: &str = "use std.console (console, print)\n\nstruct Name {\n  first: str\n  inner: str\n  last: str\n}\n\nfn main() <console> {\n  print(f1(\"\"))\n  mut x1: Name = Name(inner: \"hello\", first: \"a\", last: f2())\n}\n\nfn f1(first: str) -> str <console> {\n  print(first)\n  mut x2: str = Name(last: \"\", inner: first, first: \"//\").inner\n  x2 = f2()\n  x2\n}\n\nfn f2() -> str {\n  _ = f3()\n  x2: str = f3()\n  f3()\n}\n\nfn f3() -> str {\n  Name(last: \"aa\", inner: Name(last: \"b\", inner: \"\", first: \"\").first, first: Name(first: \"\", inner: \"\", last: \"\").first).last\n}\n";
 
 fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
     let (maps, written) = map_and_written(FOLDED.as_bytes());
@@ -674,7 +674,7 @@ fn a_function_the_passes_fold_to_constants_has_a_line_and_no_at_line() {
 /// cannot be left without its name.
 /// A text that is appended to in a function of its own, which holds the code
 /// of `<append>`.
-const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text <alloc> {\n  append(to, s)\n}\n\nfn main() <alloc, console> {\n  var w = text()\n  w = put_text(w, \"hi\")\n  w = put_text(w, \"there\")\n  w = put_text(w, \"you\")\n  w = put_text(w, \"all\")\n  print(finish(w))\n}\n";
+const APPENDED: &str = "use std.console (console, print)\nuse std.text (Text, append, finish, text)\n\nfn put_text(to: take Text, s: str) -> Text <alloc> {\n  append(to, s)\n}\n\nfn main() <alloc, console> {\n  mut w = text()\n  w = put_text(w, \"hi\")\n  w = put_text(w, \"there\")\n  w = put_text(w, \"you\")\n  w = put_text(w, \"all\")\n  print(finish(w))\n}\n";
 
 fn a_function_with_no_at_line_holds_no_place_but_its_own() {
     // A text that is appended to, in a function of its own, which holds the
@@ -734,7 +734,7 @@ fn holds_only_its_own(source: &[u8]) {
 }
 
 fn the_bytes_of_a_function_built_in_place_in_a_loop_are_no_more_than_it_compiled_alone() {
-    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn step(a: Nat, b: Nat) -> Nat { wrapping_add(a, b) }\n\nfn main() <console, alloc> {\n  var t: Nat = 0\n  loop i in 0..40 { t = step(t, i) }\n  print(\"{t}\")\n}\n";
+    let source = "use std.console (console, print)\nuse std.int (wrapping_add)\n\nfn step(a: Nat, b: Nat) -> Nat { wrapping_add(a, b) }\n\nfn main() <console, alloc> {\n  mut t: Nat = 0\n  loop i in 0..40 { t = step(t, i) }\n  print(\"{t}\")\n}\n";
     let alone = {
         let mut program = smith::lower(source.as_bytes()).expect("builds");
         // A function that is cold is never built in place of its call.

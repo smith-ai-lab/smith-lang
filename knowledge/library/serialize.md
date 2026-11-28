@@ -96,7 +96,7 @@ use std.serialize (Serialize, Writer)
 
 impl Serialize[Point] {
   fn write[W: Writer](value: Point, to: take W) -> W <alloc> {
-    var w = structure(to, "Point", 2)
+    mut w = structure(to, "Point", 2)
     w = field(w, "x")
     w = write(value.x, w)
     w = field(w, "y")

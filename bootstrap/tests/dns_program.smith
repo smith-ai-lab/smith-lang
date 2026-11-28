@@ -11,7 +11,7 @@ use std.time (sleep, time)
 
 // The bytes of an address, each as a number and a dot after it but the last.
 fn written(address: List[Byte]) -> str <alloc> {
-  var line = ""
+  mut line = ""
   loop i in 0..address.size {
     if i > 0 { line = "{line}." }
     line = "{line}{address[i]}"
@@ -22,8 +22,8 @@ fn written(address: List[Byte]) -> str <alloc> {
 // The bytes that a test gives for the ids of the queries, which are 1, 2, 3, and
 // so on, so that the test knows each id.
 fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
-  var next: Byte = 0
+  mut made: List[Byte] = []
+  mut next: Byte = 0
   loop i in 0..bytes.size {
     next = wrapping_add(next, 1)
     made = push(made, next)

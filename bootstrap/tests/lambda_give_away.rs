@@ -181,7 +181,7 @@ const SHAPES: [Shape; 8] = [
 ];
 
 /// What a lambda does with the names around it, which are the keys `a` and
-/// `b` (0 and 1) and the `var` `n`.
+/// `b` (0 and 1) and the `mut` `n`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Op {
     Read(usize),
@@ -240,7 +240,7 @@ impl Case {
         }
     }
 
-    /// How many lines assign the `var`, the expression the lambda gives for
+    /// How many lines assign the `mut`, the expression the lambda gives for
     /// the argument `y`, and each use of a key in it, in the order written:
     /// the key, and whether it is given away.
     fn body(&self, y: &str) -> (usize, String, Vec<(usize, bool)>) {
@@ -320,7 +320,7 @@ fn program(case: &Case) -> (String, Vec<Pos>) {
         Shape::IfOne => src.push("  if c { f(7) } else { 0 }\n"),
         Shape::IfBoth => src.push("  if c { f(7) } else { f(8) }\n"),
         Shape::Loop => {
-            src.push("  var t: u64 = 0\n  loop i in 0..2 {\n    t = wrapping_add(t, ");
+            src.push("  mut t: u64 = 0\n  loop i in 0..2 {\n    t = wrapping_add(t, ");
             let call = src.mark();
             src.push("f(i))\n  }\n  t\n");
             if kind == Kind::Taken {
@@ -346,7 +346,7 @@ fn program(case: &Case) -> (String, Vec<Pos>) {
     src.push("}\n\n");
     src.push("fn user(a: take Key, b: take Key, s: take Key) -> u64 {\n");
     if case.assigns() {
-        src.push("  var n: u64 = 0\n");
+        src.push("  mut n: u64 = 0\n");
     }
     src.push("  x = lend(a)\n");
     src.push(&format!("  r = recv({}) ", case.cond));
@@ -413,7 +413,7 @@ fn in_place(case: &Case) -> (u64, String) {
     src.push(KEY);
     src.push("fn user(a: take Key, b: take Key, s: take Key) -> u64 {\n");
     if case.assigns() {
-        src.push("  var n: u64 = 0\n");
+        src.push("  mut n: u64 = 0\n");
     }
     src.push("  x = lend(a)\n");
     for (j, y) in case.calls().iter().enumerate() {

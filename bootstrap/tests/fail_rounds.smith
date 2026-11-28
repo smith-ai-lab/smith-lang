@@ -6,7 +6,7 @@ use std.task (join, outcome, spawn, task, tasks)
 
 // Pushes until the system refuses, saying how far it got every thousand.
 fn eat() -> u64 <alloc, console> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     r: u64 = i
     match checked_rem(r, 1000) {

@@ -122,8 +122,8 @@ fn a_lambda_that_reads_names_gives_what_its_body_gives_for_the_values_they_had_w
         let ran = scalar::run(&lower(bound.as_bytes()).unwrap_or_else(|e| panic!("{e:?}\n{bound}")));
         assert_eq!(ran.stdout, p.says().as_bytes(), "for\n{bound}");
     });
-    // A `var` that is assigned after the lambda is bound is not what it reads.
-    let source = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  var k: f32 = 3.0\n  \
+    // A `mut` that is assigned after the lambda is bound is not what it reads.
+    let source = "use std.console (console, print)\n\nfn main() <console, alloc> {\n  mut k: f32 = 3.0\n  \
                   f = fn(x: f32) -> f32 { x * k }\n  k = 10.0\n  print(\"{f(2.0)} {k}\")\n}\n";
     let ran = scalar::run(&lower(source.as_bytes()).expect("builds"));
     assert_eq!(ran.stdout, b"6.0 10.0\n");
@@ -151,8 +151,8 @@ fn a_lambda_that_reads_a_value_of_a_type_parameter_is_built_for_each_type() {
 fn a_lambda_that_reads_a_lent_value_or_assigns_a_name_of_its_function_is_refused_where_it_is_bound() {
     let head = "use std.console (console, print)\nuse std.bits (u8)\n\n";
     let refused = [
-        "fn kept(rate: f32) -> f32 {\n  var xs: List[f32] = [rate]\n  g = fn(i: u8) -> f32 { xs[0] }\n  xs.push(1.0)\n  g(0)\n}\n",
-        "fn kept(rate: f32) -> f32 {\n  var n: f32 = rate\n  g = fn(x: f32) -> f32 {\n    n = n + x\n    n\n  }\n  g(1.0)\n}\n",
+        "fn kept(rate: f32) -> f32 {\n  mut xs: List[f32] = [rate]\n  g = fn(i: u8) -> f32 { xs[0] }\n  xs.push(1.0)\n  g(0)\n}\n",
+        "fn kept(rate: f32) -> f32 {\n  mut n: f32 = rate\n  g = fn(x: f32) -> f32 {\n    n = n + x\n    n\n  }\n  g(1.0)\n}\n",
     ];
     for item in refused {
         let source = format!("{head}{item}\nfn main() <console> {{\n  print(\"{{kept([1.0])}}\")\n}}\n");

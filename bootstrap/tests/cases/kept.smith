@@ -6,7 +6,7 @@ struct Name {
 }
 
 fn main() <console> {
-  var name = Name(first: "Ada", last: "Byron")
+  mut name = Name(first: "Ada", last: "Byron")
   kept = name
   name.last = "Lovelace"
   print(name.last)

@@ -95,11 +95,11 @@ fn shown(b: take List[Byte]) -> str <alloc> {{
 }}
 
 fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
-  var connections: List[List[List[Byte]]] = [{listed}]
-  var script: List[List[Byte]] = []
-  var left: List[Byte] = []
-  var written: List[Byte] = []
-  var asked: u64 = 0
+  mut connections: List[List[List[Byte]]] = [{listed}]
+  mut script: List[List[Byte]] = []
+  mut left: List[Byte] = []
+  mut written: List[Byte] = []
+  mut asked: u64 = 0
   result = net(
     listen_on: fn(host, port) {{ .err(.refused(\"{{host}}:{{port}}\")) }},
     accept: fn(l) {{ .err(.refused(\"{{l.host}}:{{l.port}}\")) }},
@@ -107,7 +107,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
     connect_to: fn(host, port) {{
       if connections.size > 0 {{
         script = connections[0]
-        var tail: List[List[List[Byte]]] = []
+        mut tail: List[List[List[Byte]]] = []
         loop i in 1..connections.size {{ tail = push(tail, connections[i]) }}
         connections = tail
         left = []
@@ -121,7 +121,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
       if left.size == 0 {{
         if script.size > 0 {{
           left = copy(script[0])
-          var tail: List[List[Byte]] = []
+          mut tail: List[List[Byte]] = []
           loop i in 1..script.size {{ tail = push(tail, script[i]) }}
           script = tail
         }}
@@ -130,8 +130,8 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
         .ok(.ended)
       }} else {{
         piece = if most < left.size {{ most }} else {{ left.size }}
-        var got: List[Byte] = []
-        var rest: List[Byte] = []
+        mut got: List[Byte] = []
+        mut rest: List[Byte] = []
         loop i in 0..left.size {{
           if i < piece {{ got = push(got, left[i]) }} else {{ rest = push(rest, left[i]) }}
         }}
@@ -141,7 +141,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
       }}
     }},
     write: fn(c, data) {{
-      var made: List[Byte] = []
+      mut made: List[Byte] = []
       loop i in 0..data.size {{ made = push(made, data[i]) }}
       written = made
       print(\"request\")
@@ -283,7 +283,7 @@ fn calls(batch: &[Played]) -> String {
     let mut out = String::new();
     for (i, p) in batch.iter().enumerate() {
         out += &format!(
-            "  match get[{limit}](\"http://example.com/x{i}\") {{\n    .ok(r) {{\n      var line = \"\"\n      loop i in 0..r.headers.size {{\n        (n, v) = r.headers[i]\n        line = \"{{line}}{{n}}={{v}},\"\n      }}\n      print(\"{{r.status}} {{shown(copy(r.body.bytes))}} {{line}}\")\n    }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n",
+            "  match get[{limit}](\"http://example.com/x{i}\") {{\n    .ok(r) {{\n      mut line = \"\"\n      loop i in 0..r.headers.size {{\n        (n, v) = r.headers[i]\n        line = \"{{line}}{{n}}={{v}},\"\n      }}\n      print(\"{{r.status}} {{shown(copy(r.body.bytes))}} {{line}}\")\n    }}\n    .err(e) {{ print(\"{{e}}\") }}\n  }}\n",
             limit = p.limit
         );
     }
@@ -432,7 +432,7 @@ fn shown(b: take List[Byte]) -> str <alloc> {
 }
 
 fn listed(t: str) -> List[Byte] <alloc> {
-  var made: List[Byte] = []
+  mut made: List[Byte] = []
   loop i in 0..t.size { made = push(made, t[i]) }
   made
 }

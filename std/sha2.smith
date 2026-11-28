@@ -44,7 +44,7 @@ fn compress(h: [8]u32, m: [16]u32) -> [8]u32 {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
     0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
   ]
-  var w: [64]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut w: [64]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   loop i in 0..16 {
     w[i] = m[i]
   }
@@ -55,14 +55,14 @@ fn compress(h: [8]u32, m: [16]u32) -> [8]u32 {
     s1 = bit_xor(bit_xor(rotate_right(y, 17), rotate_right(y, 19)), shift_right(y, 10))
     w[i] = wrapping_add(wrapping_add(w[i - 16], s0), wrapping_add(w[i - 7], s1))
   }
-  var a = h[0]
-  var b = h[1]
-  var c = h[2]
-  var d = h[3]
-  var e = h[4]
-  var f = h[5]
-  var g = h[6]
-  var j = h[7]
+  mut a = h[0]
+  mut b = h[1]
+  mut c = h[2]
+  mut d = h[3]
+  mut e = h[4]
+  mut f = h[5]
+  mut g = h[6]
+  mut j = h[7]
   loop i in 0..64 {
     s1 = bit_xor(bit_xor(rotate_right(e, 6), rotate_right(e, 11)), rotate_right(e, 25))
     ch = bit_xor(bit_and(e, f), bit_and(bit_not(e), g))
@@ -88,7 +88,7 @@ fn compress(h: [8]u32, m: [16]u32) -> [8]u32 {
 fn block_of(bytes: Slice[Byte], at: Nat) -> [16]u32
   requires at + 64 <= bytes.size
 {
-  var m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   loop i in 0..16 {
     m[i] = word(bytes, at + 4 * i)
   }
@@ -98,7 +98,7 @@ fn block_of(bytes: Slice[Byte], at: Nat) -> [16]u32
 fn tail_block(tail: [128]Byte, which: Nat) -> [16]u32
   requires which < 2
 {
-  var m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut m: [16]u32 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   loop i in 0..16 {
     m[i] = tail_word(tail, which * 64 + 4 * i)
   }
@@ -106,14 +106,14 @@ fn tail_block(tail: [128]Byte, which: Nat) -> [16]u32
 }
 
 pub fn sha256(bytes: Slice[Byte]) -> [32]Byte {
-  var h: [8]u32 = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
+  mut h: [8]u32 = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
   whole = bytes.size / 64
   loop n in 0..whole {
     h = compress(h, block_of(bytes, n * 64))
   }
   rest: Nat = bytes.size % 64
   from = bytes.size - rest
-  var tail: [128]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut tail: [128]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   loop i in 0..rest {
     tail[i] = bytes[from + i]
   }
@@ -131,7 +131,7 @@ pub fn sha256(bytes: Slice[Byte]) -> [32]Byte {
     h = compress(h, tail_block(tail, 0))
     h = compress(h, tail_block(tail, 1))
   }
-  var digest: [32]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut digest: [32]Byte = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   loop i in 0..8 {
     x = h[i]
     digest[4 * i] = shift_right(x, 24)

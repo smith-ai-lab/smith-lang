@@ -42,9 +42,9 @@ struct Item {{
 }}
 
 fn main() <console, alloc> {{
-  var last: Nat = 0
+  mut last: Nat = 0
   loop k in 0..{reps} {{
-    var xs: List[Item] = []
+    mut xs: List[Item] = []
     loop i in 0..{ITEMS} {{ xs = push(xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
     {body}
   }}
@@ -237,9 +237,9 @@ struct Item {{
 }}
 
 fn main() <console, alloc> {{
-  var last: Nat = 0
+  mut last: Nat = 0
   loop k in 0..{reps} {{
-    var xs: List[Item] = []
+    mut xs: List[Item] = []
     loop i in 0..{ITEMS} {{ xs = push(xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
     t = to_json(xs)
     {body}

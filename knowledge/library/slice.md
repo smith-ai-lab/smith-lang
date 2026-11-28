@@ -25,7 +25,7 @@ use std.int (wrapping_mul)
 use std.list (freeze, push)
 
 fn evens(n: u64) -> Slice[u64] <alloc> {
-  var built: List[u64] = []
+  mut built: List[u64] = []
   loop i in 0..n { built = push(built, wrapping_mul(i, 2)) }
   freeze(built)
 }
@@ -79,7 +79,7 @@ A function that reads a run of elements and keeps none of it takes a `List[T]`, 
 
 ```
 fn total(xs: List[u64]) -> u64 {
-  var t: u64 = 0
+  mut t: u64 = 0
   loop i in 0..xs.size { t = wrapping_add(t, xs[i]) }
   t
 }

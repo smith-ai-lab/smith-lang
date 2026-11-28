@@ -48,7 +48,7 @@ use std.task (join, outcome, spawn, task, test_scheduler)
 
 // Asks for more memory than the evaluator gives, so that the task ends.
 fn eat() -> u64 <alloc> {{
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
     xs = push(xs, i)
   }}
@@ -192,7 +192,7 @@ fn a_big_literal() -> String {
 
 fn owner(n: u64) -> u64 <net, alloc> {{
   c = connection(n)
-  var kept: List[List[u64]] = []
+  mut kept: List[List[u64]] = []
   loop i in 0..9223372036854775807 {{
     kept = push(kept, big(i))
   }}

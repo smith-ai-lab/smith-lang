@@ -1,10 +1,10 @@
 ---
 type: specification
 title: Structs
-description: Structs with named fields and defaults, reading a field, assigning to a field of a var, and a definition at the top level of a file.
+description: Structs with named fields and defaults, reading a field, assigning to a field of a mut, and a definition at the top level of a file.
 status: partial
 built:
-  - "structs with fields and defaults, reading a field, and assigning to a field of a `var` with `=`"
+  - "structs with fields and defaults, reading a field, and assigning to a field of a `mut` with `=`"
   - "a struct that takes a whole number as a parameter, written `[n: Nat]` or `[n: Pos]`, which a type names with the number written out, as `Box[10]`, and whose name is a bound in the type of a field, as `0..n`, and a construction that leaves the number out, which takes it from the type it must give"
   - "a field whose type is a statement, which holds a proof, as [A struct that holds a proof](proof-fields.md) says"
   - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes a type after the name; one that states its type is not built yet"
@@ -72,16 +72,16 @@ Reading a field the struct does not have is refused the same way: `r.depth` give
 
 A struct's fields are written one to a line. `struct Rect { w: i32, h: i32 }` is refused: "expected a line break or `}`, found `,`".
 
-## Changing a field of a `var`
+## Changing a field of a `mut`
 
-A field of a [`var`](var.md) can be assigned with `=`.
+A field of a [`mut`](mut.md) can be assigned with `=`.
 
 ```
 use std.bits (i32)
 use std.console (console, print)
 
 fn widen(r: Rect, to: i32) -> Rect {
-  var wide = r
+  mut wide = r
   wide.w = to
   wide
 }
@@ -93,11 +93,11 @@ fn main() <console, alloc> {
 }
 ```
 
-This prints `3 9 4`. Nothing else can name the value a `var` holds, so the change is seen through that `var` alone: it now holds a copy of the struct with the field replaced, and `widen` leaves `r` as it was. A field of a field is assigned the same way, as `o.inner.v = 4` is for a `var` named `o`.
+This prints `3 9 4`. Nothing else can name the value a `mut` holds, so the change is seen through that `mut` alone: it now holds a copy of the struct with the field replaced, and `widen` leaves `r` as it was. A field of a field is assigned the same way, as `o.inner.v = 4` is for a `mut` named `o`.
 
-The other forms of assignment, `+=`, `-=`, `*=`, and `/=`, work on a field as they do on a `var`. With `wide.w += 2`, the field `w` of `wide` becomes the field plus 2.
+The other forms of assignment, `+=`, `-=`, `*=`, and `/=`, work on a field as they do on a `mut`. With `wide.w += 2`, the field `w` of `wide` becomes the field plus 2.
 
-A field that a [proof field](proof-fields.md#changing-a-field) or the type of another field names is not assigned: the value is built again. Assigning to a field of a name that is not a `var` is refused.
+A field that a [proof field](proof-fields.md#changing-a-field) or the type of another field names is not assigned: the value is built again. Assigning to a field of a name that is not a `mut` is refused.
 
 ```
 use std.console (console)
@@ -108,7 +108,7 @@ fn main() <console, alloc> {
 }
 ```
 
-This gives "`r` is not a `var`, so it cannot be assigned to", with the fix "declare it with `var`: write `var r` where it is defined". A value of the wrong type is refused as it is for a call: `r.w = "x"` on a `var r` gives "this gives text, where a `i32` is needed". Assigning to a field the struct does not have gives "`Rect` has no field named `depth`".
+This gives "`r` is not a `mut`, so it cannot be assigned to", with the fix "declare it with `mut`: write `mut r` where it is defined". A value of the wrong type is refused as it is for a call: `r.w = "x"` on a `mut r` gives "this gives text, where a `i32` is needed". Assigning to a field the struct does not have gives "`Rect` has no field named `depth`".
 
 ## Defaults
 
@@ -180,7 +180,7 @@ unit: Rect = Rect(w: 1, h: 1)
 
 A top-level value with no type is refused, at its name: `unit = Rect(w: 1, h: 1)` gives "a value at the top level states its type, and `unit` does not", with the fix that writes the type after the name, `unit: Rect = Rect(w: 1, h: 1)`. The compiler names the type in the fix once it builds top-level values, and until then the fix shows `T` where the type goes.
 
-A top-level value is fixed. It is worked out when the program is built and kept in the executable, so it costs nothing when the program starts, and it cannot be assigned, as no name that is not a `var` can.
+A top-level value is fixed. It is worked out when the program is built and kept in the executable, so it costs nothing when the program starts, and it cannot be assigned, as no name that is not a `mut` can.
 
 It is made of literals, structs, enums, tuples, lists, other top-level values, and calls of functions that carry no effect. A list is allowed, though building one in a function needs `alloc`, since here the compiler builds it.
 
@@ -202,7 +202,7 @@ A top-level value that needs an effect is refused: one that prints, reads a file
 | `struct S { a: T = e }` | The same, where construction may leave `a` out and it is `e` |
 | `S(a: e)` | A `S` whose field `a` is `e`, every field named |
 | `s.a` | The field `a` of `s` |
-| `s.a = e` | Replaces the field `a` of the `var` `s` |
+| `s.a = e` | Replaces the field `a` of the `mut` `s` |
 | `struct S[n: Nat] { a: 0..n }` | A struct whose field has a bound that is a whole number the type names |
 | `S[10]` | The type of that struct for `n` as 10, which is no other type |
 | `x: T = e` at the top level | A fixed value, worked out when the program is built, from what carries no effect |

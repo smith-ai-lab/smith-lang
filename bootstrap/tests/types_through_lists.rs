@@ -251,7 +251,7 @@ fn deep(depth: usize) -> Case {
     let source = format!(
         "use std.bits (u8)\nuse std.console (console, print)\n\n{}\n\
          fn chain(depth: Nat) -> Node <alloc> {{\n  \
-         var t = Node(value: 1, kids: [])\n  \
+         mut t = Node(value: 1, kids: [])\n  \
          loop i in 0..depth {{\n    t = Node(value: 2, kids: [t])\n  }}\n  t\n}}\n\n\
          fn main() <console, alloc> {{\n  \
          a = chain({depth})\n  b = chain({depth})\n  c = chain({})\n  \

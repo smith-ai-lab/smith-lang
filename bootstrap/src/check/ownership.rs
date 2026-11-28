@@ -517,7 +517,7 @@ struct Walk<'a> {
     /// How deep in the blocks, the arms, and the lambdas the walk is.
     depth: usize,
     /// Where each name that owned a value that may hold a child was bound,
-    /// for the names a `var` is assigned to again.
+    /// for the names a `mut` is assigned to again.
     bound: HashMap<String, (Pos, usize)>,
     /// The names bound to a value that holds a handle of `net`, with the type as
     /// it is written, which the exit of a task that is asked to end closes.
@@ -528,7 +528,7 @@ struct Walk<'a> {
     /// Whether the expression read next is a part of a value that is made.
     projecting: bool,
     /// The names that can be used where the walk is, with how deep each is
-    /// bound, so that a name that is bound again, as a `var` is, keeps the
+    /// bound, so that a name that is bound again, as a `mut` is, keeps the
     /// place it was bound at.
     visible: Vec<(String, usize)>,
     /// The names that were given on through the element of a loop over them.
@@ -1385,7 +1385,7 @@ impl<'a> Walk<'a> {
                     {
                         self.holding.insert(name.clone(), held);
                     }
-                    // A `var` that is bound again drops the value it held, if
+                    // A `mut` that is bound again drops the value it held, if
                     // it did not hand it on.
                     let old = (st.as_ref())
                         .and_then(|m| m.own.iter().find(|o| o.name == *name))
@@ -1874,7 +1874,7 @@ impl<'a> Walk<'a> {
                 .retain(|h| frame.outer.iter().any(|(n, p)| *n == h.name && *p == h.pos));
         }
         let mut frame = self.inside.pop().unwrap_or_default();
-        // A `var` the lambda gives away and assigns again on every path out of
+        // A `mut` the lambda gives away and assigns again on every path out of
         // it holds a value when it returns, as it did when it began: nothing
         // was given away.
         let var = |name: &str| {

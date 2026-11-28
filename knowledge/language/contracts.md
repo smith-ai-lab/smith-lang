@@ -5,7 +5,7 @@ description: requires and ensures on a function, which state what the caller owe
 status: partial
 built:
   - "`requires` and `ensures` on a function, each a comparison of whole numbers joined with `and`, `or`, and `not` over its parameters and the result's name, which `arith` proves of the arguments at every call and of what the function returns at each place it returns, and takes as facts in the other place"
-  - "what `arith` knows of a `var` of a whole number in a function, which a contract and the code around it rely on alike: at each use, the condition of each `if` around it and what it was last given, where no assignment to it lies between that and the use on any path, outside a loop as inside one"
+  - "what `arith` knows of a `mut` of a whole number in a function, which a contract and the code around it rely on alike: at each use, the condition of each `if` around it and what it was last given, where no assignment to it lies between that and the use on any path, outside a loop as inside one"
   - "`decreases` on a function, the measure that proves a function that calls itself ends, which is proven as [Termination](termination.md) says and never computed"
   - "a function that returns `bool`, carries no effect, and is one expression of comparisons joined with `and`, `or`, and `not`, or a call of another such function, as a contract: `requires f(args)` and `ensures f(args)` are proven and give facts as that expression with the arguments put in does, and a call that carries an effect is refused"
   - "a `requires` that calls a function that returns `bool` and carries no effect but `alloc`, with arguments written out whole (numbers, texts, lists and tuples of them, `true`, `false`) in the call or in a parameter of the function that was, which the kernel works out when the program is built: a call whose `requires` works out to `true` is proven, one that works out to `false` is refused with the call as written, and the comparison that gave `false` with where it is written and the numbers it compared, and one that takes more than 1000000 steps is refused naming the call and the limit; a function that only a `requires` or an `ensures` names is checked"
@@ -189,7 +189,7 @@ use std.bits (i32)
 use std.console (console, print)
 
 fn has(xs: List[i32], k: i32) -> bool {
-  var found = false
+  mut found = false
   loop v in xs {
     if v == k {
       found = true

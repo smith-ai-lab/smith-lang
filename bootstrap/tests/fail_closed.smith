@@ -16,7 +16,7 @@ fn hold(c: take Connection) <net, task, alloc> {
 // Asks for more memory, a list of numbers that grows without end, until the
 // system refuses, which ends the task and no more.
 fn eat() <alloc> {
-  var xs: List[u64] = []
+  mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
     xs = push(xs, i)
   }

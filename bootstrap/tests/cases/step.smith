@@ -3,7 +3,7 @@ use std.console (console, print)
 fn step(word: str) -> (str, str) { ("two", word) }
 
 fn main() <console> {
-  var word = "one"
+  mut word = "one"
   (word, before) = step(word)
   print(before)
   print(word)

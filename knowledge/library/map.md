@@ -14,7 +14,7 @@ A `Map[K, V]` holds values, each under a key, and finds a value by its key in a 
 
 ```
 fn ages() -> Map[str, Byte] <alloc> {
-  var m: Map[str, Byte] = []
+  mut m: Map[str, Byte] = []
   m = insert(m, "ada", 36)
   m = insert(m, "alan", 41)
   m
@@ -29,7 +29,7 @@ fn age_of(m: Map[str, Byte], name: str) -> Byte {
 ```
 
 - `[]` is the empty map where a map is expected.
-- `insert` gives a map with the value under the key, in place of any value the key had. A map is a value, as a [`List`](list.md) is: when the map it is given is a `var` that is assigned the result, as in `m = insert(m, k, v)`, the map grows in place.
+- `insert` gives a map with the value under the key, in place of any value the key had. A map is a value, as a [`List`](list.md) is: when the map it is given is a `mut` that is assigned the result, as in `m = insert(m, k, v)`, the map grows in place.
 - `m[key]` is `.some` of the value under the key, or `.none`. A map implements [`Index`](../language/indexing.md) with a `valid` that is `true`, since it answers for every key.
 - `m.size` is the number of entries.
 
@@ -37,7 +37,7 @@ A map keeps its entries in the order their keys were first added. `m.keys` and `
 
 ```
 fn oldest(m: Map[str, Byte]) -> Byte {
-  var top: Byte = 0
+  mut top: Byte = 0
   loop i in 0..m.values.size {
     if m.values[i] > top { top = m.values[i] }
   }

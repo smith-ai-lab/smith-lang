@@ -129,7 +129,7 @@ fn counting(cases: &[(usize, usize)]) -> String {
         for k in 0..spawned {
             s += &format!("  t{k} = spawn {{\n    print(\"c{k}\")\n    v: u64 = {}\n    v\n  }}\n", k + 1);
         }
-        s += "  var total: u64 = 0\n";
+        s += "  mut total: u64 = 0\n";
         for k in 0..joined {
             s += &format!("  total = wrapping_add(total, wrapping_mul(join(t{k}), {}))\n", 1000u64.pow(k as u32 % 3));
         }
@@ -204,7 +204,7 @@ fn sharing(cases: &[(u64, u64)]) -> String {
     let mut s = String::new();
     for (i, (a, b)) in cases.iter().enumerate() {
         s += &format!(
-            "fn snapshot{i}() -> u64 {{\n  var n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\n"
+            "fn snapshot{i}() -> u64 {{\n  mut n: u64 = {a}\n  with tasks()\n  t = spawn {{ wrapping_add(n, 1) }}\n  n = {b}\n  wrapping_add(n, join(t))\n}}\n\n"
         );
     }
     s += "fn twice(x: str) -> (u64, u64) {\n  with tasks()\n  ta = spawn { wrapping_add(x.size, 1) }\n  tb = spawn { wrapping_mul(x.size, 2) }\n  (join(ta), join(tb))\n}\n\nfn main() <console, alloc> {\n  (p, q) = twice(\"abc\")\n";
@@ -340,7 +340,7 @@ fn a_handler_of_task_written_in_a_program_is_refused() {
 }
 
 fn a_child_that_assigns_a_var_is_refused() {
-    let source = program("fn counted() -> u64 {\n  var n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  _ = join(t)\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{counted()}\")\n}\n");
+    let source = program("fn counted() -> u64 {\n  mut n: u64 = 0\n  with tasks()\n  t = spawn { n = 7 }\n  _ = join(t)\n  n\n}\n\nfn main() <console, alloc> {\n  print(\"{counted()}\")\n}\n");
     let errors = refused(&source);
     assert!(errors.contains("this child assigns `n`"), "{errors}");
 }
@@ -378,7 +378,7 @@ fn a_function_that_spawns_with_no_group_carries_task_and_its_caller_that_opens_o
     assert!(errors.contains("`start` needs the `task` effect"), "{errors}");
 }
 
-const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {\n  var ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T <clock>) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
+const CLOCK: &str = "effect clock {\n  fn now() -> u64\n}\n\nfn fake_clock[T](body: fn() -> T <clock>) -> T {\n  mut ticks: u64 = 0\n  clock(\n    now: {\n      ticks = wrapping_add(ticks, 1)\n      ticks\n    },\n    body: body,\n  )\n}\n\nfn fixed[T](tick: u64, body: fn() -> T <clock>) -> T {\n  clock(now: { tick }, body: body)\n}\n\n";
 
 /// The text of a program with a function for each `(children, tick)`, which
 /// starts that many children under `fixed(tick)` and gives what each read, and
@@ -391,7 +391,7 @@ fn readings(cases: &[(usize, u64)]) -> String {
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ now() }}\n");
         }
-        s += "  var all: List[u64] = []\n";
+        s += "  mut all: List[u64] = []\n";
         for k in 0..children {
             s += &format!("  all = push(all, join(t{k}))\n");
         }
@@ -452,7 +452,7 @@ fn a_child_under_a_handler_that_holds_state_reads_and_changes_it() {
 fn a_child_gives_its_memory_back_when_it_ends_and_its_result_is_built_in_its_parents() {
     let asked = |rounds: u64| {
         let source = program(&format!(
-            "fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, i)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child_sum(n: u64) -> u64 <alloc> {{\n  with tasks()\n  t = spawn {{ total(build(n)) }}\n  join(t)\n}}\n\nfn child_list(n: u64) -> List[u64] <alloc> {{\n  with tasks()\n  t = spawn {{ build(n) }}\n  join(t)\n}}\n\nfn main() <console, alloc> {{\n  var sum: u64 = 0\n  loop j in 0..{rounds} {{\n    sum = wrapping_add(sum, child_sum(50))\n  }}\n  xs = child_list(10)\n  pad = build(300)\n  print(\"{{sum}} {{total(xs)}} {{xs.size}} {{total(pad)}}\")\n}}\n"
+            "fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, i)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child_sum(n: u64) -> u64 <alloc> {{\n  with tasks()\n  t = spawn {{ total(build(n)) }}\n  join(t)\n}}\n\nfn child_list(n: u64) -> List[u64] <alloc> {{\n  with tasks()\n  t = spawn {{ build(n) }}\n  join(t)\n}}\n\nfn main() <console, alloc> {{\n  mut sum: u64 = 0\n  loop j in 0..{rounds} {{\n    sum = wrapping_add(sum, child_sum(50))\n  }}\n  xs = child_list(10)\n  pad = build(300)\n  print(\"{{sum}} {{total(xs)}} {{xs.size}} {{total(pad)}}\")\n}}\n"
         ));
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
         let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
@@ -476,11 +476,11 @@ fn every_executable_prints_what_the_evaluator_says_when_children_are_joined() {
     // one program, so that the library of tasks is lowered and built once, and
     // the executable prints what the evaluator prints for all of them.
     let draw = |g: &mut Gen| (1 + g.below(5), 1 + g.below(5));
-    let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] <alloc> {{\n  var acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  var s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\n");
+    let mut s = format!("{CLOCK}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(acc, wrapping_mul(i, 3)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\n");
     let mut main = String::new();
     for case in 0..6 {
         let (children, reads) = generate::sample(333, case, draw);
-        s += &format!("fn readings{case}() -> u64 <alloc> {{\n  with fixed(7)\n  with tasks()\n  var sum: u64 = 0\n");
+        s += &format!("fn readings{case}() -> u64 <alloc> {{\n  with fixed(7)\n  with tasks()\n  mut sum: u64 = 0\n");
         for k in 0..children {
             s += &format!("  t{k} = spawn {{ wrapping_add(now(), total(build({}))) }}\n", reads + k);
         }

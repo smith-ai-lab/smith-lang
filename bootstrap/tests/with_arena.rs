@@ -36,13 +36,13 @@ pub const MACHINE: &[Test] = &[(
 )];
 
 /// `squares` and `sum_of_squares` of `arenas.md`.
-const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  var total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
+const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  mut total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
 
 /// A server that answers `calls` requests with `handle`, as `arenas.md` writes
 /// it, and prints what the answers add up to.
 fn serving(calls: u64, n: u64) -> String {
     with_imports(&format!(
-        "{SQUARES}struct Request {{\n  n: u64\n}}\n\nstruct Response {{\n  total: u64\n  label: str\n}}\n\nfn respond(req: Request, total: u64) -> Response <alloc> {{\n  Response(total: total, label: \"n{{req.n}}\")\n}}\n\nfn handle(req: Request) -> Response {{\n  with arena()\n  respond(req, sum_of_squares(req.n))\n}}\n\nfn main() <console, alloc> {{\n  var sum = 0\n  loop i in 0..{calls} {{\n    r = handle(Request(n: {n}))\n    sum = wrapping_add(sum, r.total)\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{SQUARES}struct Request {{\n  n: u64\n}}\n\nstruct Response {{\n  total: u64\n  label: str\n}}\n\nfn respond(req: Request, total: u64) -> Response <alloc> {{\n  Response(total: total, label: \"n{{req.n}}\")\n}}\n\nfn handle(req: Request) -> Response {{\n  with arena()\n  respond(req, sum_of_squares(req.n))\n}}\n\nfn main() <console, alloc> {{\n  mut sum = 0\n  loop i in 0..{calls} {{\n    r = handle(Request(n: {n}))\n    sum = wrapping_add(sum, r.total)\n  }}\n  print(\"{{sum}}\")\n}}\n"
     ))
 }
 
@@ -104,7 +104,7 @@ struct Case {
     stdout: Vec<u8>,
 }
 
-const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  var s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  var acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
+const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  mut s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
 
 fn built(n: u64, seed: u64) -> Vec<u64> {
     (0..n)
@@ -131,7 +131,7 @@ fn returns(levels: &[Level], base: u64, k: usize, a: u64) -> Vec<u64> {
 /// The statements of level `k` below its arena.
 fn body(k: usize, l: &Level, indent: &str) -> String {
     let mut s = format!(
-        "{indent}r = f{}(a)\n{indent}t = build({}, a)\n{indent}var acc: List[u64] = copy(r)\n",
+        "{indent}r = f{}(a)\n{indent}t = build({}, a)\n{indent}mut acc: List[u64] = copy(r)\n",
         k - 1,
         l.temp
     );
@@ -195,8 +195,8 @@ fn program(g: &mut Gen) -> Case {
         for (j, seed) in calls.iter().enumerate() {
             source += &format!("  r{j} = f{depth}({seed})\n");
         }
-        // A list made in a block and kept in a `var` outside it.
-        source += "  var kept: List[u64] = []\n";
+        // A list made in a block and kept in a `mut` outside it.
+        source += "  mut kept: List[u64] = []\n";
         if arenas {
             source += &format!(
                 "  loop j in 0..{} {{\n    with arena()\n    t = build(4, j)\n    kept = copy(t)\n  }}\n",

@@ -15,7 +15,7 @@ The module `std.alloc` has one function, `arena`. The effect `alloc` is declared
 fn arena[T](body: fn() -> T <alloc>) -> T
 ```
 
-`arena` runs `body` with `alloc` handled by a fresh arena. What `body` allocates and does not hand out is freed whole when it ends, and its value is built in the memory outside, as is anything it assigns to a `var` outside it. A function that calls `arena` does not carry the `alloc` that `body` needs. It is written with [`with`](../language/with.md).
+`arena` runs `body` with `alloc` handled by a fresh arena. What `body` allocates and does not hand out is freed whole when it ends, and its value is built in the memory outside, as is anything it assigns to a `mut` outside it. A function that calls `arena` does not carry the `alloc` that `body` needs. It is written with [`with`](../language/with.md).
 
 ```
 use std.alloc (arena)

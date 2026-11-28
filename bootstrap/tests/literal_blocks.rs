@@ -276,7 +276,7 @@ impl Blocks {
 
 fn a_literal_in_a_block_takes_the_type_of_the_other_blocks_and_of_its_place() {
     // The program of the issue.
-    let issue = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  e: Byte = 110\n  var value: List[Byte] = []\n  \
+    let issue = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  e: Byte = 110\n  mut value: List[Byte] = []\n  \
         decoded = if e == 'n' { '\\n' } else { e }\n  value = push(value, decoded)\n  \
         print(\"{value.size}\")\n}\n";
     let program = lower(issue.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));

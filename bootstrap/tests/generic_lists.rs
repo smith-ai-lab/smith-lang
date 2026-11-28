@@ -127,13 +127,13 @@ fn function(k: usize, name: &str, generics: &str, t: &str, u: &str, mistake: boo
         0 => (
             format!("a: take List[{t}], b: List[{t}]"),
             format!("List[{t}]"),
-            format!("var r = a\n  loop i in 0..b.size {{ r = push(r, {push}) }}\n  r"),
+            format!("mut r = a\n  loop i in 0..b.size {{ r = push(r, {push}) }}\n  r"),
         ),
         1 => (
             format!("a: List[{t}]"),
             format!("List[{t}]"),
             format!(
-                "var r: List[{t}] = []\n  loop i in 0..a.size {{\n    r = push(r, a[i])\n    r = push(r, a[i])\n  }}\n  r"
+                "mut r: List[{t}] = []\n  loop i in 0..a.size {{\n    r = push(r, a[i])\n    r = push(r, a[i])\n  }}\n  r"
             ),
         ),
         2 => (
@@ -145,14 +145,14 @@ fn function(k: usize, name: &str, generics: &str, t: &str, u: &str, mistake: boo
             format!("a: List[{t}], y: {t}"),
             format!("List[{t}]"),
             format!(
-                "var r: List[{t}] = []\n  loop i in 0..a.size {{ if a[i] == y {{ r = push(r, a[i]) }} }}\n  r"
+                "mut r: List[{t}] = []\n  loop i in 0..a.size {{ if a[i] == y {{ r = push(r, a[i]) }} }}\n  r"
             ),
         ),
         4 => (
             format!("a: List[{t}], y: {t}"),
             format!("List[{t}]"),
             format!(
-                "var r: List[{t}] = []\n  loop i in 0..a.size {{ if a[i] < y {{ r = push(r, a[i]) }} }}\n  r"
+                "mut r: List[{t}] = []\n  loop i in 0..a.size {{ if a[i] < y {{ r = push(r, a[i]) }} }}\n  r"
             ),
         ),
         5 => (
@@ -163,13 +163,13 @@ fn function(k: usize, name: &str, generics: &str, t: &str, u: &str, mistake: boo
         6 => (
             format!("a: take List[{t}], b: List[{u}], y: {t}"),
             format!("List[{t}]"),
-            "var r = a\n  loop i in 0..b.size { r = push(r, y) }\n  r".to_string(),
+            "mut r = a\n  loop i in 0..b.size { r = push(r, y) }\n  r".to_string(),
         ),
         _ => (
             format!("a: List[{t}], b: List[{u}], y: {t}, z: {u}"),
             format!("List[{t}]"),
             format!(
-                "var r: List[{t}] = []\n  loop i in 0..a.size {{\n    if a[i] == y and b.size > 0 and b[0] == z {{ r = push(r, a[i]) }}\n  }}\n  r"
+                "mut r: List[{t}] = []\n  loop i in 0..a.size {{\n    if a[i] == y and b.size > 0 and b[0] == z {{ r = push(r, a[i]) }}\n  }}\n  r"
             ),
         ),
     };
@@ -290,7 +290,7 @@ fn stdout(source: &str) -> String {
 }
 
 fn the_generic_functions_that_take_and_give_a_list_compile_and_give_what_they_say() {
-    let append = "fn ap[T](a: take List[T], b: List[T]) -> List[T] <alloc> {\n  var r = a\n  loop i in 0..b.size { r = push(r, b[i]) }\n  r\n}\n\n";
+    let append = "fn ap[T](a: take List[T], b: List[T]) -> List[T] <alloc> {\n  mut r = a\n  loop i in 0..b.size { r = push(r, b[i]) }\n  r\n}\n\n";
     let eq = "fn e[T: Eq](x: List[T], y: T) -> bool { x.size > 0 and x[0] == y }\n\n";
     let n = "fn n[T](x: List[T]) -> Nat { x.size }\n\n";
     let main = "fn main() <console, alloc> {\n  a: List[Byte] = [1, 2]\n  b: List[Byte] = [3]\n  loop i in 0..ap(a, b).size { print(\"x\") }\n  c: List[Byte] = [5]\n  d: List[Byte] = [1, 2]\n  l: List[Byte] = ap(c, d)\n  loop i in 0..l.size { print(\"{l[i]}\") }\n  e1: List[Byte] = [7, 8]\n  e2: List[Byte] = [7]\n  print(\"{e(e1, 7)} {e(e2, 9)}\")\n  print(\"{n(\"abc\")}\")\n  f: List[Byte] = [9]\n  g: List[Byte] = ap([4, 5], f)\n  print(\"{g.size}\")\n}\n";

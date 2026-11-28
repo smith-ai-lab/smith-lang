@@ -8,7 +8,7 @@ effect log {
 }
 
 fn recording[T](body: fn() -> T <log>) -> T <alloc> {
-  var seen: List[u64] = []
+  mut seen: List[u64] = []
   log(
     note: fn(v) {
       seen = push(seen, v)
