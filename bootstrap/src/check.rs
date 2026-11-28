@@ -7667,6 +7667,7 @@ impl<'a> Checker<'a> {
             kernel_calls: Vec::new(),
             invariant: false,
             fors: 0,
+            ensuring: false,
             unused_effects: Vec::new(),
             circles: Vec::new(),
         }
@@ -7819,6 +7820,8 @@ struct Checker<'a> {
     /// How many `for`s the expression being checked is in, whose blocks may
     /// need no effect but `alloc`.
     fors: usize,
+    /// Whether an `ensures` is being checked, where `old` may be written.
+    ensuring: bool,
     /// The effects a function lists that nothing in its body needs: the place
     /// of the function, its name, the effect, where it is listed, and the
     /// signature without the effects nothing in it needs.
@@ -9338,11 +9341,12 @@ impl<'a> Checker<'a> {
                     }
                     let want = needed.clone().map_or(Want::Any, Want::Ty);
                     let gives = self.expr(body, value, &want);
-                    if let Some(needed) = needed {
-                        self.expect(body, value, &gives, &needed);
+                    if let Some(needed) = &needed {
+                        self.expect(body, value, &gives, needed);
                     }
-                    if let Some(at) = body.names.iter().position(|(n, _)| n == name) {
-                        self.assign_field(body, at);
+                    if let Some(place) = body.names.iter().position(|(n, _)| n == name) {
+                        let field = needed.as_ref().filter(|_| at.is_none());
+                        self.assign_field(body, place, fields, (field, value));
                     }
                     End::Binding(*pos)
                 }

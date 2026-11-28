@@ -13,6 +13,7 @@ use smith::{check, lower};
 use crate::Test;
 use crate::generate::{self, Gen};
 use crate::numbers::{INTS, Int, compare, with_header};
+use crate::programs::pos_after;
 
 pub const ONCE: &[Test] = &[
     (
@@ -58,6 +59,18 @@ pub const ONCE: &[Test] = &[
     (
         "contracts_add_no_instruction_to_a_program_that_compiles_without_them",
         contracts_add_no_instruction_to_a_program_that_compiles_without_them,
+    ),
+    (
+        "a_function_that_changes_a_parameter_compiles_exactly_when_what_it_does_to_it_is_what_it_ensures_of_old",
+        a_function_that_changes_a_parameter_compiles_exactly_when_what_it_does_to_it_is_what_it_ensures_of_old,
+    ),
+    (
+        "after_a_call_that_changes_a_place_what_it_ensures_of_old_is_known_so_calls_chain_exactly_as_far_as_the_requires_allows",
+        after_a_call_that_changes_a_place_what_it_ensures_of_old_is_known_so_calls_chain_exactly_as_far_as_the_requires_allows,
+    ),
+    (
+        "old_is_refused_outside_an_ensures_and_of_anything_but_a_parameter_marked_mut",
+        old_is_refused_outside_an_ensures_and_of_anything_but_a_parameter_marked_mut,
     ),
 ];
 
@@ -551,5 +564,186 @@ fn a_function_with_a_requires_is_refused_wherever_it_is_used_as_a_value() {
                 }
             }
         }
+    }
+}
+
+/// The struct the functions that change a value in place change.
+const CURSOR: &str = "struct Cursor {\n  at: Nat\n  line: Nat\n}\n\nstruct Doc {\n  cursor: Cursor\n  lines: Nat\n}\n\n";
+
+#[derive(Debug)]
+struct Changes {
+    source: String,
+    /// Whether what the function adds is what it ensures, on every way out.
+    holds: bool,
+    /// What it ensures it adds.
+    ensured: i128,
+}
+
+/// A function that adds to a parameter marked `mut`, a `Cursor` or a `Nat`,
+/// maybe leaving early by `return` between two additions, and ensures it
+/// adds a number that may or may not be what it adds on each way out.
+fn changes(g: &mut Gen) -> Changes {
+    let (first, then, ensured) = (g.below(3) as i128, g.below(3) as i128, g.below(4) as i128);
+    let early = g.one_in(2);
+    let cursor = g.one_in(2);
+    let (param, x, left) = match cursor {
+        true => ("c: mut Cursor", "c.at", "c.line == 0"),
+        false => ("n: mut Nat", "n", "n == 7"),
+    };
+    let old = if cursor { "old(c).at" } else { "old(n)" };
+    let add = |k: i128| match k {
+        0 => String::new(),
+        k => format!("  {x} = {x} + {k}\n"),
+    };
+    let mut body = add(first);
+    if early {
+        body.push_str(&format!("  if {left} {{\n    return\n  }}\n"));
+        body.push_str(&add(then));
+    }
+    let holds = first == ensured && (!early || first + then == ensured);
+    let main = match cursor {
+        true => format!(
+            "  mut c = Cursor(at: 0, line: {})\n  if c.at < 1000 {{\n    step(mut c)\n  }}\n  print(\"{{c.at}}\")\n",
+            g.below(2)
+        ),
+        false => "  mut n: Nat = 0\n  if n < 1000 {\n    step(mut n)\n  }\n  print(\"{n}\")\n".to_string(),
+    };
+    Changes {
+        source: with_header(format!(
+            "{CURSOR}fn step({param})\n  requires {x} < 1000\n  ensures {x} == {old} + {ensured}\n{{\n{body}}}\n\nfn main() <console, alloc> {{\n{main}}}\n"
+        )),
+        holds,
+        ensured,
+    }
+}
+
+/// A function that changes a parameter marked `mut` compiles exactly when
+/// what it ensures of it and of `old` of it holds at each place it returns,
+/// and the caller then sees what it ensured.
+fn a_function_that_changes_a_parameter_compiles_exactly_when_what_it_does_to_it_is_what_it_ensures_of_old()
+ {
+    generate::check(1234, 40, changes, |c| match check(c.source.as_bytes()) {
+        Ok(_) => {
+            assert!(c.holds, "accepted, though an `ensures` does not hold");
+            let printed = String::from_utf8(run(&c.source).stdout).expect("text");
+            assert_eq!(printed, format!("{}\n", c.ensured));
+        }
+        Err(errors) => {
+            assert!(!c.holds, "refused, though every `ensures` holds: {errors:?}");
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.message.contains("step") && e.message.contains("ensures")),
+                "{errors:?} does not name the `ensures` of the function"
+            );
+        }
+    });
+}
+
+#[derive(Debug)]
+struct Walk {
+    source: String,
+    /// Whether every `ensures` holds and every call's `requires` is proven.
+    fits: bool,
+    /// How many times the place is stepped.
+    steps: i128,
+}
+
+/// `step`, which ensures it adds one, called `steps` times by `walk`, which
+/// ensures it adds a number that may or may not be that, and `main`, which
+/// walks a `mut` or a field of one under a bound and steps it once more, so
+/// that each call proves its `requires` only from what the calls before it
+/// ensured.
+fn walk(g: &mut Gen) -> Walk {
+    let steps = 1 + g.below(3) as i128;
+    let ensured = steps - 1 + g.below(3) as i128;
+    let limit = 50 + g.below(5) as i128;
+    let bound = limit - steps + g.below(3) as i128;
+    let place = *g.pick(&["c", "d.cursor"]);
+    let calls = "  step(mut v)\n".repeat(steps as usize);
+    Walk {
+        source: with_header(format!(
+            "{CURSOR}fn step(c: mut Cursor)\n  requires c.at < {limit}\n  ensures c.at == old(c).at + 1\n{{\n  c.at = c.at + 1\n}}\n\n\
+             fn walk(v: mut Cursor)\n  requires v.at < {bound}\n  ensures v.at == old(v).at + {ensured}\n{{\n{calls}}}\n\n\
+             fn main() <console, alloc> {{\n  mut c = Cursor(at: 0, line: 0)\n  mut d = Doc(cursor: Cursor(at: 0, line: 0), lines: 1)\n  if {place}.at < {bound} {{\n    walk(mut {place})\n    step(mut {place})\n  }}\n  print(\"{{{place}.at}} {{c.line}} {{d.lines}}\")\n}}\n"
+        )),
+        fits: ensured == steps && bound + steps - 1 < limit,
+        steps,
+    }
+}
+
+/// After a call that changes a place, the caller knows what the function
+/// ensures, with `old` of the parameter what the place held before the call,
+/// so calls that each need room under a limit compile exactly as far as the
+/// numbers allow, and the place holds what they added.
+fn after_a_call_that_changes_a_place_what_it_ensures_of_old_is_known_so_calls_chain_exactly_as_far_as_the_requires_allows()
+ {
+    generate::check(1235, 40, walk, |c| match check(c.source.as_bytes()) {
+        Ok(_) => {
+            assert!(c.fits, "accepted, though a call can pass the limit");
+            let printed = String::from_utf8(run(&c.source).stdout).expect("text");
+            assert_eq!(printed, format!("{} 0 1\n", c.steps + 1));
+        }
+        Err(errors) => {
+            assert!(!c.fits, "refused, though the calls fit: {errors:?}");
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| e.message.contains("walk") || e.message.contains("step")),
+                "{errors:?} names neither function"
+            );
+        }
+    });
+}
+
+/// `old` written in a `requires`, in a body, of a parameter not marked `mut`,
+/// of a field, of a number, or in a function that changes nothing, is refused
+/// where it is written, each case with the `old` it is refused for, and the same function with `old` of its parameter marked `mut`
+/// in its `ensures` is not.
+fn old_is_refused_outside_an_ensures_and_of_anything_but_a_parameter_marked_mut() {
+    let accepted = "fn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n  ensures c.at == old(c).at + 1\n{\n  c.at = c.at + 1\n}\n";
+    let refused = [
+        (
+            "fn f(c: mut Cursor, k: Nat)\n  requires old(c).at < 9\n  ensures c.at == old(c).at + 1\n{\n  c.at = c.at + 1\n}\n",
+            "old(c).at < 9",
+        ),
+        (
+            "fn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n{\n  c.at = old(c).at + 1\n}\n",
+            "old(c).at + 1\n}",
+        ),
+        (
+            "fn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n  ensures c.at == old(k)\n{\n  c.at = k\n}\n",
+            "old(k)",
+        ),
+        (
+            "fn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n  ensures c.at == old(c.at) + 1\n{\n  c.at = c.at + 1\n}\n",
+            "old(c.at)",
+        ),
+        (
+            "fn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n  ensures c.at == old(c).at + old(1)\n{\n  c.at = c.at + 1\n}\n",
+            "old(1)",
+        ),
+        (
+            "fn g(k: Nat) -> r: Nat\n  ensures r == old(k)\n{\n  k\n}\n\nfn f(c: mut Cursor, k: Nat)\n  requires c.at < 9\n{\n  c.at = g(k)\n}\n",
+            "old(k)",
+        ),
+    ];
+    let program = |f: &str| {
+        with_header(format!(
+            "{CURSOR}{f}\nfn main() <console, alloc> {{\n  mut d = Doc(cursor: Cursor(at: 0, line: 0), lines: 1)\n  if d.cursor.at < 9 {{\n    f(mut d.cursor, 3)\n  }}\n  print(\"{{d.cursor.at}} {{d.lines}} {{d.cursor.line}}\")\n}}\n"
+        ))
+    };
+    let source = program(accepted);
+    assert!(check(source.as_bytes()).is_ok(), "{source}");
+    for (f, refused_at) in refused {
+        let source = program(f);
+        let at = pos_after(&source[..source.find(refused_at).expect("the `old`")]);
+        let errors = check(source.as_bytes()).expect_err(&source);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.pos == at && e.message.contains("old")),
+            "nothing about `old` at {at:?} among {errors:?} for {source}"
+        );
     }
 }

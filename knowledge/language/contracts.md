@@ -13,6 +13,7 @@ built:
   - "a comment on the line above a `requires`, which is the message of a call that fails it, with the goal that failed on a `goal:` line under it, for a `requires` of a function, of a function of a trait at a call through any `impl`, and of one that calls a function the kernel works out; a `requires` with none is refused as it was"
   - "not an argument that is a name, a call, or an operation, for the kernel to work out, and not a float"
   - "a `requires` and an `ensures` that say [`boundary(s, i)`](text.md#a-piece-of-a-text) of a text parameter, which a call proves and gives of its arguments"
+  - "an `ensures` of a function that changes its `mut` parameters and gives no result, over what they hold when it returns and `old` of each, which `arith` proves at each place it returns, from what a field of a whole number was last assigned; a call of such a function with one `mut` parameter, passed a `mut` or a field of one, knows what it ensures, with `old` of the parameter what the place held before the call; a `requires` over a field of a struct parameter, proven of the argument; and `old` refused outside an `ensures`, and of anything but the name of a `mut` parameter"
 ---
 
 # Contracts
@@ -138,7 +139,7 @@ fn clamp(x: Byte, lo: Byte, hi: Byte) -> r: Byte
 
 This is refused: "cannot prove that `lo <= r and r <= hi`, which `clamp` ensures, where `r` is `x`", with the fix "state what is needed in a `requires`, or check it first with an `if`".
 
-A signature that has an `ensures` names its result.
+A signature that gives a result and has an `ensures` names its result.
 
 A [`mut`](mut-parameters.md) parameter is named by its value when the function returns, and `old(x)` names the value it was given, so an `ensures` says what the function did to it.
 
@@ -245,5 +246,6 @@ fn apply(f: fn(Byte) -> Byte) -> Byte { f(5) }
 | `requires p` | The caller, at each call | The arguments |
 | `ensures p` | The function, where it returns | The result, by the name the signature gives it |
 | `fn f(a: T) -> r: U` | | Names the result `r`, for an `ensures` |
+| `old(x)` | | In an `ensures`, what the `mut` parameter `x` was given |
 
 Next: [Termination](termination.md)
