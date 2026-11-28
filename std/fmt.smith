@@ -1,5 +1,4 @@
 use std.bits (bit_and, shift_right, u64)
-use std.int (wrapping_add, wrapping_narrow)
 use std.list (freeze, push)
 use std.utf8 (utf8)
 
@@ -10,13 +9,13 @@ fn text(bytes: take List[Byte]) -> str {
   }
 }
 
-fn hex_digit(d: u64, upper: bool) -> Byte {
+fn hex_digit(d: 0..16, upper: bool) -> Byte {
   if d < 10 {
-    wrapping_narrow(wrapping_add(48, d))
+    48 + d
   } else if upper {
-    wrapping_narrow(wrapping_add(55, d))
+    55 + d
   } else {
-    wrapping_narrow(wrapping_add(87, d))
+    87 + d
   }
 }
 

@@ -616,7 +616,7 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
       // A task waits for the bytes until the time is gone, and the others run.
       n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
       if n == would_block() {
-        _ = wait_to_read_by(wrapping_narrow(fd), span(clamp(ms)))
+        _ = wait_to_read_by(fd, span(clamp(ms)))
         n = __system(8, fd, buffer, 4096, no_wait(), 0, 0)
         if n == would_block() { n = 0 }
       }
