@@ -1043,6 +1043,8 @@ struct Defs<'a> {
     hash: usize,
     convert: usize,
     bits: usize,
+    /// The prelude's `Wrapping`, which only a range that fills a size has.
+    wrapping: usize,
     /// The prelude's `Function`, which every function with a name is given.
     function: usize,
     /// The standard library's `Serialize` and `Writer`, which `std.serialize`
@@ -3090,6 +3092,7 @@ fn check_file(
         hash: prelude_item(&file, Kind::Trait, "Hash"),
         convert: prelude_item(&file, Kind::Trait, "Convert"),
         bits: try_prelude_trait(&file, "Bits").unwrap_or(usize::MAX),
+        wrapping: try_prelude_trait(&file, "Wrapping").unwrap_or(usize::MAX),
         function: prelude_item(&file, Kind::Trait, "Function"),
         serialize: library_item(&file, &items, "std.serialize", Kind::Trait, "Serialize"),
         writer: library_item(&file, &items, "std.serialize", Kind::Trait, "Writer"),

@@ -17,6 +17,7 @@ built:
   - "the `size` of a name as a bound, `0..xs.size` or `xs.size..256`, wherever a name is a bound, where `xs` is a `List` or a `Slice` that is a parameter or an `=` binding, and no other field and no bound that is worked out, such as `0..n + 1` or `0..g.rows`, which is refused with \"a bound is a whole number, a name, or the `size` of a name\""
   - "not the `size` of a `str` or of an array as a bound, as no fact is known of the size of a text"
   - "a `mut` with no stated type given the smallest range that holds every value it is given"
+  - "a trait implemented for a range had by every range it holds, at a call, a bound of a type parameter, and inside an `Option`, a struct, a tuple, and a `List`, a second implementation for a range that overlaps one already written refused naming it, implementations for two sizes that overlap, of which a range uses the size it is kept at, and `Wrapping` had only by a range that fills a size; `Eq`, `Ord`, and `Fmt` of a range of more than 64 bits are those of the 64 bits of its sign, as no implementation for 128 bits can be written"
 ---
 
 # Number types
@@ -163,7 +164,9 @@ The error is "`Double` is already implemented for `Byte`, which `0..100` is insi
 fn double_small(x: 0..100) -> Nat { x + x }
 ```
 
-`Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` are had by every range in this way and no other: each is written once for the sizes, and a range is held by the size it is kept at.
+`Eq`, `Ord`, `Fmt`, `Repr`, and `Hash` are had by every range in this way and no other. Each is written once for each size, as the operators are. The sizes are kept apart, so implementations for two of them may overlap, and a range uses the one for the size it is kept at.
+
+`Wrapping` is the one exception. It is had only by a range that fills a size, as [Arithmetic](arithmetic.md#wrapping) says, since wrapping is where a size wraps. So `wrapping_add` of a `0..101` is refused: "there is no implementation of `Wrapping` for `0..101`".
 
 ## Three names
 

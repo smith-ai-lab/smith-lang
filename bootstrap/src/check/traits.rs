@@ -149,15 +149,6 @@ fn overlap(a: &Ty, b: &Ty, sol: &mut Vec<Option<Ty>>) -> bool {
     }
 }
 
-/// Whether the type of an implementation fits the type it is looked up for,
-/// filling in `sol`: a range fits a range that it holds.
-fn fits(pattern: &Ty, given: &Ty, sol: &mut [Option<Ty>]) -> bool {
-    match (pattern, given) {
-        (Ty::Int(held), Ty::Int(r)) => held.holds(*r),
-        _ => unify(pattern, given, sol),
-    }
-}
-
 /// What a type parameter must implement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Bound {
@@ -803,6 +794,17 @@ impl<'a> Defs<'a> {
         found
     }
 
+    /// Whether the type of an implementation of trait `k` fits the type it is
+    /// looked up for, filling in `sol`: a range fits a range that it holds,
+    /// except for `Wrapping`, which only the range of a size has, as wrapping
+    /// is where a size wraps.
+    fn fits(&self, k: usize, pattern: &Ty, given: &Ty, sol: &mut [Option<Ty>]) -> bool {
+        match (pattern, given) {
+            (Ty::Int(held), Ty::Int(r)) if k != self.wrapping => held.holds(*r),
+            _ => unify(pattern, given, sol),
+        }
+    }
+
     /// `Eq`, `Ord`, and `Fmt` of a range of more than 64 bits, for which no
     /// implementation can be written, are the comparison of two numbers and
     /// the digits of one, which are lowered where they are written and never
@@ -840,7 +842,7 @@ impl<'a> Defs<'a> {
             let mut sol = vec![None; info.scope.names.len()];
             let fit = (info.args.iter().zip(types).zip(&self.outs[k]))
                 .filter(|(_, out)| !**out)
-                .all(|((pattern, given), _)| fits(pattern, given, &mut sol));
+                .all(|((pattern, given), _)| self.fits(k, pattern, given, &mut sol));
             if !fit {
                 continue;
             }
@@ -1417,7 +1419,7 @@ impl<'a> Defs<'a> {
             let mut sol = vec![None; info.scope.names.len()];
             let fit = (info.args.iter().zip(types).zip(&self.outs[k]))
                 .filter(|(_, out)| !**out)
-                .all(|((pattern, given), _)| fits(pattern, given, &mut sol));
+                .all(|((pattern, given), _)| self.fits(k, pattern, given, &mut sol));
             if fit {
                 return Some(info.args.iter().map(|t| t.solved(&sol)).collect());
             }
@@ -1454,9 +1456,7 @@ impl<'a> Defs<'a> {
                 let wide = self.wide_at_64(k, types);
                 let same = (all.iter().zip(&wide).zip(&self.outs[k]))
                     .filter(|(_, out)| !**out)
-                    .all(|((a, b), _)| {
-                        a == b || matches!((a, b), (Ty::Int(x), Ty::Int(y)) if x.holds(*y))
-                    });
+                    .all(|((a, b), _)| a == b || self.fits(k, a, b, &mut []));
                 if same { Found::Yes(all, by) } else { Found::No }
             }
             other => other,
