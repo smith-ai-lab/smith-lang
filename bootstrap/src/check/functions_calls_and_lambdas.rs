@@ -1836,7 +1836,21 @@ impl<'a> Checker<'a> {
             if let (Some(i), Expr::Lambda(l), Want::Ty(Ty::Fn(_))) = (param, &arg.value, &wanted) {
                 lambdas.push((i, l));
             }
-            let wanted = own_range(&arg.value, wanted, comparing);
+            // An argument for a type parameter that another argument settled to
+            // a whole number is checked by the range it gives, whatever its
+            // form, as a name is, and only a literal takes the range settled.
+            let settled = param.is_some_and(|i| {
+                matches!(signature.params[i].1, Ty::Param(p) if matches!(sol[p], Some(Ty::Int(_))))
+            });
+            let wanted = if settled
+                && !comparing
+                && !matches!(arg.value, Expr::Number { .. })
+                && !float_written(&arg.value)
+            {
+                Want::Any
+            } else {
+                own_range(&arg.value, wanted, comparing)
+            };
             let mark = body.extra.len();
             body.extra
                 .extend(self.lambda_effects(signature, param, &arg.value));
