@@ -4873,7 +4873,10 @@ impl<'l, 'a> Resolver<'l, 'a> {
                             "rename the definition, or delete `{name}` from the `use`"
                         )),
                     )
-                } else if item.alias.is_none() && PRELUDE_LISTED.contains(&name) {
+                } else if item.alias.is_none()
+                    && PRELUDE_LISTED.contains(&name)
+                    && !self.read[slot].exports(name)
+                {
                     Some(
                         Error::new(
                             pos,
