@@ -29,6 +29,10 @@ pub const ONCE: &[Test] = &[
         the_median_is_of_the_last_twenty_times,
     ),
     (
+        "a_run_slower_than_usual_as_a_whole_makes_no_test_slow_but_one_slow_against_it",
+        a_run_slower_than_usual_as_a_whole_makes_no_test_slow_but_one_slow_against_it,
+    ),
+    (
         "the_report_lists_the_slowest_tests_and_the_suite_for_each_week",
         the_report_lists_the_slowest_tests_and_the_suite_for_each_week,
     ),
@@ -135,6 +139,30 @@ fn the_median_is_of_the_last_twenty_times() {
     past += &history(20, &[("a", 100)])["commit,date,test,milliseconds\n".len()..];
     let (_, said) = run("check-times.sh", &[("h", past), ("t", "a,500\n".into())], &["h", "t"]);
     assert_eq!(said, "a\n");
+}
+
+fn a_run_slower_than_usual_as_a_whole_makes_no_test_slow_but_one_slow_against_it() {
+    // Sixty tests of 100 ms to 690 ms, and a run in which every one takes
+    // `factor` times as long, and the test `t7` `extra` times that again.
+    let usual: Vec<(String, u64)> = (0..60).map(|k| (format!("t{k}"), 100 + 10 * k)).collect();
+    let named: Vec<(&str, u64)> = usual.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+    let past = history(10, &named);
+    let run_at = |factor: u64, extra: u64| -> String {
+        (usual.iter())
+            .map(|(n, t)| format!("{n},{}\n", t * factor * if n == "t7" { extra } else { 1 }))
+            .collect()
+    };
+    for factor in [1, 3] {
+        let (_, said) = run("check-times.sh", &[("h", past.clone()), ("t", run_at(factor, 1))], &["h", "t"]);
+        assert_eq!(said, "", "every test {factor} times as long");
+        let (_, said) = run("check-times.sh", &[("h", past.clone()), ("t", run_at(factor, 5))], &["h", "t"]);
+        assert_eq!(said, "t7\n", "every test {factor} times as long, and t7 five times that");
+        let files = [("h", past.clone()), ("t", run_at(factor, 5)), ("u", format!("t7,{}\n", 170 * factor * 5))];
+        let (passed, said) = run("check-times.sh", &files, &["h", "t", "u"]);
+        assert!(!passed, "{said}");
+        assert!(said.contains(&format!("This run is {factor} times as slow as usual")), "{said}");
+        assert!(said.contains("- t7: "), "{said}");
+    }
 }
 
 fn the_report_lists_the_slowest_tests_and_the_suite_for_each_week() {

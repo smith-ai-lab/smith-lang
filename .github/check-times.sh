@@ -9,7 +9,8 @@
 # time is more than twice its median over its last 20 recorded times, and more
 # than it by more than 100 ms, and a test with fewer than 5 recorded times is
 # never slow. Each median is first scaled by how much slower than usual the
-# whole first run is, so a slow machine does not make every test slow. With no second file it prints the names of the slow tests, one on
+# whole first run is, when at least 50 tests show it, so a slow machine does
+# not make every test slow. With no second file it prints the names of the slow tests, one on
 # each line, which the caller runs again. With the file of that second run it
 # prints, as Markdown, the tests that are slow in both, with both times and the
 # median, and fails when there are any. A test that the second run did not run
@@ -25,16 +26,18 @@ LAST=20
 FEWEST=5
 FLOOR=100
 SPEED_FLOOR=20
+SPEED_FEWEST=50
 
 # With "speed", prints how much slower than usual the whole run $2 is: the
 # median, over its tests with a median of at least $SPEED_FLOOR ms, of each
-# test's time over its median, and never below 1. A machine slower than usual
+# test's time over its median, and never below 1, or 1 when fewer than
+# $SPEED_FEWEST tests have such a median, too few to tell the machine by. A machine slower than usual
 # makes every test slower, so the medians are scaled by it. With a number,
 # prints `test,milliseconds,median` for each test of $2 that is slow against
 # its median scaled by that number.
 # Usage: measure <history> <times> speed | <speed>
 measure() {
-  awk -F, -v last="$LAST" -v fewest="$FEWEST" -v floor="$FLOOR" -v speed_floor="$SPEED_FLOOR" -v given="$3" '
+  awk -F, -v last="$LAST" -v fewest="$FEWEST" -v floor="$FLOOR" -v speed_floor="$SPEED_FLOOR" -v speed_fewest="$SPEED_FEWEST" -v given="$3" '
     function median_of(a, n,    i, j, x) {
       for (i = 2; i <= n; i++) {
         x = a[i]
@@ -59,7 +62,7 @@ measure() {
     }
     END {
       if (given == "speed") {
-        speed = ratios ? median_of(ratio, ratios) : 1
+        speed = (ratios >= speed_fewest) ? median_of(ratio, ratios) : 1
         printf "%g\n", (speed < 1) ? 1 : speed
         exit
       }
