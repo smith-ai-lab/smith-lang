@@ -583,6 +583,10 @@ impl<'a> Checker<'a> {
             }
         }
         match list {
+            // An index that holds a mistake already reported is not proven.
+            Ty::List(element) | Ty::Slice(element) | Ty::Array(element, _) if at.unknown() => {
+                element[0].clone()
+            }
             Ty::List(element) | Ty::Slice(element) => {
                 self.in_range(body, of, None, index, pos);
                 element[0].clone()

@@ -101,6 +101,7 @@ pub(super) fn stops(body: &[Stmt], breaks: bool, returns: bool) -> bool {
                 heads.into_iter().any(|e| one(e, breaks, returns))
                     || any(&mut values(&l.body), false, returns)
             }
+            Expr::For(f) => any(&mut values(&f.round.body), false, returns),
             Expr::Interp { parts, .. } => parts
                 .iter()
                 .any(|p| matches!(p, Part::Expr(e) if one(e, breaks, returns))),

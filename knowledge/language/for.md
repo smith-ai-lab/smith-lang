@@ -2,7 +2,10 @@
 type: specification
 title: for
 description: A for describes an array by the value at every index, and each index gets its size from an array it reads or from the type the for is written for.
-status: planned
+status: partial
+built:
+  - "`for i { e }` with one index whose size is a number, which it takes from each array that is a name read at the index alone, `a[i]`, and from the type the `for` is written for, as a result, an argument, or a binding that states its type; it is refused when two of these differ or none gives a size, the index is the range below the size, so `arith` proves a read at it or at arithmetic on it, `x[i + 1]`, which gives it no size, the block is refused when it needs an effect but `alloc`, and the array is held in the frame, so no memory is asked for"
+  - "not a size that is a name, several indices, a block that assigns a `mut` outside it, or elements without `Copy`"
 ---
 
 # `for`
@@ -60,7 +63,7 @@ With `a: [3]f32` and `b: [4]f32` the index would have two sizes, so it is refuse
 fn mismatch(a: [3]f32, b: [4]f32) -> [3]f32 { for i { a[i] * b[i] } }
 ```
 
-The compiler does not build this refusal, so the page quotes no words. `i` would be `3` on `a` and `4` on `b`.
+This is refused: "the index `i` has two sizes: 3 from `a`, and 4 from `b`".
 
 **From the type it is written for.** Where the `for` is written in a place that expects an array, such as a function's result, an argument, or a binding that states its type, its indices take their sizes from that type. `ramp` above takes its `4` from its result. Here a binding states it.
 
@@ -68,19 +71,21 @@ The compiler does not build this refusal, so the page quotes no words. `i` would
 evens: [4]f32 = for i { float(i) * 2.0 }
 ```
 
-When both places give a size, the two must agree. The `i` below is `3` from `a` and `4` from the result, so it is refused, and the compiler does not build this refusal either.
+When both places give a size, the two must agree. The `i` below is `3` from `a` and `4` from the result, so it is refused: "the index `i` has two sizes: 3 from `a`, and 4 from the type the `for` is written for".
 
 ```
 fn widen(a: [3]f32) -> [4]f32 { for i { a[i] } }
 ```
 
-An index that gets a size from neither is refused, and the compiler names the index. Nothing gives the `i` below a size, since no array is read at it and no type is stated.
+An index that gets a size from neither is refused. Nothing gives the `i` below a size, since no array is read at it and no type is stated.
 
 ```
 fn lost() {
   x = for i { 1.0 }
 }
 ```
+
+This is refused: "the index `i` has no size, as no array is read at it alone and no type is stated for the `for`", with the fix "read an array at `i` alone, as `a[i]`, or state the type of the `for`, as `x: [4]f32 = for i { ... }`".
 
 ## Arithmetic on an index
 

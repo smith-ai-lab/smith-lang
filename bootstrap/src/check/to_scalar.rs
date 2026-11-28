@@ -27,6 +27,7 @@ use super::*;
 use crate::scalar as form;
 use crate::scalar::runtime::{self, Runtime};
 
+mod for_arrays;
 mod frames;
 mod functions_calls_and_lambdas;
 mod lists_and_text;
@@ -541,6 +542,7 @@ fn indexed_in(e: &Expr, into: &mut HashSet<String>) {
             }
             indexed_names(&l.body, into);
         }
+        Expr::For(f) => indexed_names(&f.round.body, into),
         Expr::Interp { parts, .. } => {
             for part in parts {
                 if let Part::Expr(e) = part {
@@ -2525,10 +2527,11 @@ impl<'a> Lowering<'a> {
             Expr::Loop(l) => {
                 match &l.over {
                     Some(o) => self.each_loop(out, l, o, env),
-                    None => self.round(out, l, env),
+                    None => self.round(out, l, None, env),
                 }
                 (Ty::Nothing, Vec::new())
             }
+            Expr::For(f) => self.for_expr(out, expr, f, env),
             Expr::Return { value, .. } => {
                 let values = match value {
                     Some(value) => self.expr(out, value, env).1,
@@ -2583,8 +2586,11 @@ impl<'a> Lowering<'a> {
     /// of the names the body assigns, and goes to the next round, or leaves
     /// when the range is used up. A `break` leaves too, and the blocks that
     /// leave meet in one, which gives the names their values after the
-    /// `loop`.
-    fn round(&mut self, out: &mut Out<'a>, l: &'a Loop, env: &[Ty]) {
+    /// `loop`. For the `loop` of a `for`, `keep` is where the array is built
+    /// and the type of its element: the counter runs from 0 to the size, and
+    /// what the block gives on each round is written to the element at the
+    /// counter.
+    fn round(&mut self, out: &mut Out<'a>, l: &'a Loop, keep: Option<(&Home, &Ty)>, env: &[Ty]) {
         // A name is a `mut` of the frame it is written in, so a name that
         // the body assigns is of this frame, and one that a lambda assigns
         // is of the frame the lambda is written in. A lambda written outside
@@ -2659,8 +2665,14 @@ impl<'a> Lowering<'a> {
                 .flat_map(|&(f, at)| out.frames[f][at].values.clone())
                 .collect()
         };
-        let range = match &l.range {
-            Some(r) => {
+        let range = match (&l.range, keep) {
+            (Some(r), Some((home, _))) => {
+                let t = Int::between(0, i128::from(home.size)).expect("a size");
+                let from = out.int(bits_of(t), 0);
+                let to = out.int(bits_of(t), i128::from(home.size));
+                Some((r.name.as_str(), t, from, to))
+            }
+            (Some(r), None) => {
                 let Ty::Int(t) = self.typed.type_of(&r.from, env) else {
                     unreachable!("checked")
                 };
@@ -2668,7 +2680,7 @@ impl<'a> Lowering<'a> {
                 let to = self.expr(out, &r.to, env).1[0];
                 Some((r.name.as_str(), t, from, to))
             }
-            None => None,
+            (None, _) => None,
         };
         let start = held(out);
         let mut types: Vec<form::Type> = start.iter().map(|v| out.types[v.0]).collect();
@@ -2715,10 +2727,22 @@ impl<'a> Lowering<'a> {
             self.drop_at(out, Site::Done(addr(l)));
             round.leaving.push((out.current, held(out)));
             out.current = inside;
-            out.define(name, Ty::Int(t), vec![params[0]]);
+            match keep {
+                // The index of a `for` is below the size.
+                Some((home, _)) => {
+                    let index =
+                        Ty::Int(Int::between(0, i128::from(home.size) - 1).expect("a size"));
+                    let at = self.held_as(out, &Ty::Int(t), &index, vec![params[0]]);
+                    out.define(name, index, at);
+                }
+                None => out.define(name, Ty::Int(t), vec![params[0]]),
+            }
         }
         out.loops.push(round);
-        self.block(out, &l.body, env);
+        let gives = self.block(out, &l.body, env);
+        if let Some((home, element)) = keep {
+            self.keep_round(out, l, (home, element), params[0], gives, env);
+        }
         let round = out.loops.pop().expect("pushed");
         out.names_mut().truncate(names);
         let mut args = held(out);
