@@ -71,17 +71,17 @@ fn a_text_built_from_texts_and_ascii_bytes_finishes_as_their_bytes_in_order() {
         for step in steps {
             match step {
                 Step::Text(s) => {
-                    chain += &format!(" |> append(\"{s}\")");
+                    chain = format!("append({chain}, \"{s}\")");
                     model.extend(s.bytes());
                 }
                 Step::Ascii(b) => {
-                    chain += &format!(" |> append_ascii({b})");
+                    chain = format!("append_ascii({chain}, {b})");
                     model.push(*b);
                 }
             }
         }
         let source = format!(
-            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str <alloc> {{\n  {chain} |> finish()\n}}\n\nfn main() <console, alloc> {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
+            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str <alloc> {{\n  finish({chain})\n}}\n\nfn main() <console, alloc> {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         let lines: String = model
@@ -123,7 +123,7 @@ fn no_module_but_std_text_builds_or_reads_the_field_of_a_text() {
 }
 
 fn building_a_text_needs_alloc() {
-    let source = "use std.text (append, text)\n\nfn grown() { text() |> append(\"a\") }\n\nfn main() { grown() }\n";
+    let source = "use std.text (append, text)\n\nfn grown() { append(text(), \"a\") }\n\nfn main() { grown() }\n";
     let errors = refused(source);
     assert!(errors.iter().any(|e| e.contains("`alloc`")), "{errors:?}");
 }

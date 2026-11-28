@@ -17,9 +17,9 @@ This grammar is the single source of truth for syntax. It is a first draft, and 
 ## Lexical rules
 
 - Source text is UTF-8. Spaces and tabs separate tokens, and a line break is a line feed. A carriage return is an error anywhere in a file, inside a string or a comment too. Any other character that belongs to no token, string, or comment is an error.
-- A newline ends a statement, except inside `( )` or `[ ]`, after an operator or comma, or before `|>`, `requires`, `ensures`, `decreases`, `invariant`, and the `{` that opens a function's body, or that opens an `impl`'s after a `requires`, or a `loop`'s after an `invariant`. A block inside `( )` or `[ ]` separates its own statements by newlines as usual.
+- A newline ends a statement, except inside `( )` or `[ ]`, after an operator or comma, or before `requires`, `ensures`, `decreases`, `invariant`, and the `{` that opens a function's body, or that opens an `impl`'s after a `requires`, or a `loop`'s after an `invariant`. A block inside `( )` or `[ ]` separates its own statements by newlines as usual.
 - Commas appear only inside `( )` and `[ ]`, in a list of effects in `< >`, and between the indices of a `for`. A semicolon appears only in a list of parameters, where it stands once, after the parameters that may be given by position.
-- An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword, and is not `_` alone, which is a token of its own: the place of a pipeline's value, and the pattern that throws a value away. The letters are `a` to `z` and `A` to `Z`.
+- An identifier, `IDENT`, is a letter or `_` followed by letters, digits, and `_`, and is not a keyword, and is not `_` alone, which is a token of its own: the pattern that throws a value away. The letters are `a` to `z` and `A` to `Z`.
 - The keywords are `and`, `as`, `break`, `decreases`, `derive`, `effect`, `effects`, `else`, `ensures`, `enum`, `fn`, `for`, `foreign`, `if`, `impl`, `in`, `invariant`, `loop`, `match`, `mut`, `not`, `or`, `out`, `pub`, `requires`, `return`, `struct`, `take`, `trait`, `try`, `use`, `with`, and `without`. The word `type` is a keyword only where an item starts and a name follows it, so it is an identifier anywhere else, as in a parameter named `type`.
 - A comment starts with `//`, stands on its own line, and attaches to the definition, parameter, field, case, `requires`, or statement that follows it.
 - A whole number is written in decimal, as `1000`, in hexadecimal after `0x`, as `0xff`, or in binary after `0b`, as `0b1010`. A float has a digit on both sides of its point, as `2.5`, and may end with an exponent, as `2.5e3`, and a decimal number with an exponent alone is a float too, as `1e-5`. An `_` may stand between two digits, as in `1_000_000`. There is no octal form and no suffix that names a type.
@@ -35,7 +35,6 @@ Operators bind more tightly further down the table.
 
 | Operators | Associativity |
 | --- | --- |
-| `\|>` | left |
 | `or` | left |
 | `and` | left |
 | `not` | prefix |
@@ -47,7 +46,7 @@ Operators bind more tightly further down the table.
 | `^` | right |
 | call, index, `.` | left |
 
-`not` covers the whole comparison that follows it, so `not a < b` means `not (a < b)`. The EBNF below gives the forms an expression can take, and this table alone says how its operators group. The `postfix` after a `|>` ends with a `call`, and one `arg` of that call may be `_`, which is where the value before the `|>` goes, as [Pipeline](language/pipeline.md) says.
+`not` covers the whole comparison that follows it, so `not a < b` means `not (a < b)`. The EBNF below gives the forms an expression can take, and this table alone says how its operators group.
 
 ## EBNF
 
@@ -102,8 +101,7 @@ pattern    = IDENT | "mut" IDENT | "." IDENT [ "(" pattern ")" ]
            | "(" pattern { "," pattern } ")"
            | LITERAL | string | "[" [ pattern { "," pattern } ] "]" ;
 
-expr       = binary { "|>" [ "try" ] postfix } ;
-binary     = operand { BINOP operand } ;
+expr       = operand { BINOP operand } ;
 operand    = { "not" } unary ;
 unary      = [ "-" | "try" ] postfix ;
 postfix    = primary { call | "[" index { "," index } "]" | "." IDENT } ;

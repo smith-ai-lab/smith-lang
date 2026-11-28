@@ -599,12 +599,7 @@ impl Parser<'_> {
             }));
         }
         Ok(match qualifier {
-            None => {
-                if name == "_" {
-                    self.holes.push(pos);
-                }
-                Expr::Name { name, pos }
-            }
+            None => Expr::Name { name, pos },
             Some((q, at)) => Expr::Field {
                 of: Box::new(Expr::Name { name: q, pos: at }),
                 name,

@@ -59,22 +59,6 @@ pub const MACHINE: &[Test] = &[
         || the_lexer_written_in_smith_lexes_every_generated_program_with_a_lexical_mistake_as_the_rust_lexer_does(7),
     ),
     (
-        "the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does_part_1_of_4",
-        || the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does(0),
-    ),
-    (
-        "the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does_part_2_of_4",
-        || the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does(1),
-    ),
-    (
-        "the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does_part_3_of_4",
-        || the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does(2),
-    ),
-    (
-        "the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does_part_4_of_4",
-        || the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does(3),
-    ),
-    (
         "the_lexer_written_in_smith_lexes_every_case_file_as_the_rust_lexer_does_part_1_of_3",
         || the_lexer_written_in_smith_lexes_every_case_file_as_the_rust_lexer_does(0),
     ),
@@ -168,44 +152,6 @@ fn place_a_mistake(g: &mut Gen, mut text: Vec<u8>) -> Vec<u8> {
     text
 }
 
-/// How many texts with pipes each program makes.
-const PIPED: u64 = 2;
-
-/// Where `|>` is placed in a text, at the start of a line or in the middle of
-/// one, with the line breaks, empty lines, comments and indentation that may
-/// come before it, and what looks like it and is not it: `|` and `>` apart,
-/// beside other punctuation, and with no `>` at all.
-fn place_pipes(g: &mut Gen, mut text: Vec<u8>) -> Vec<u8> {
-    const PIECES: &[&str] = &[
-        "|> f()\n",
-        "  |> f()\n",
-        "\n|> f()\n",
-        "// a comment\n|> f()\n",
-        "\n\n  // a comment\n\n    |> f()\n",
-        "\t|> f() |> g(_)\n",
-        "x |> f()\n",
-        "x|>f()\n",
-        "x | > f()\n",
-        "| >\n",
-        "|\n",
-        ">|\n",
-        "||>\n",
-        "|>>\n",
-        "|>=\n",
-        "|>|>\n",
-        "|>",
-    ];
-    for _ in 0..1 + g.below(3) {
-        let starts: Vec<usize> = std::iter::once(0)
-            .chain(text.iter().enumerate().filter(|(_, b)| **b == b'\n').map(|(i, _)| i + 1))
-            .collect();
-        let at = if g.below(2) == 0 { *g.pick(&starts) } else { g.below(text.len() + 1) };
-        let piece = g.pick(PIECES).as_bytes().to_vec();
-        text.splice(at..at, piece);
-    }
-    text
-}
-
 /// The part `part` of `parts` of the texts, numbered from 0: each text that
 /// is `part` more than a multiple of `parts` in the list, so that the parts are
 /// the texts of one test, no text is in two of them, and the long texts, which
@@ -285,16 +231,6 @@ fn the_lexer_written_in_smith_lexes_every_generated_program_with_a_lexical_mista
         .map(|(case, text)| generate::sample(32, case, |g: &mut Gen| place_a_mistake(g, text.clone())))
         .collect();
     lexes_as_the_rust_lexer_does(&part_of(texts, part, 8));
-}
-
-fn the_lexer_written_in_smith_lexes_every_generated_program_with_pipes_as_the_rust_lexer_does(part: usize) {
-    let texts: Vec<Vec<u8>> = generated_programs()
-        .into_iter()
-        .enumerate()
-        .flat_map(|(n, text)| (0..PIPED).map(move |k| (n as u64 * PIPED + k, text.clone())))
-        .map(|(case, text)| generate::sample(33, case, |g: &mut Gen| place_pipes(g, text.clone())))
-        .collect();
-    lexes_as_the_rust_lexer_does(&part_of(texts, part, 4));
 }
 
 fn the_lexer_written_in_smith_lexes_every_case_file_as_the_rust_lexer_does(part: usize) {

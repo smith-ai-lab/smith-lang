@@ -92,9 +92,8 @@ fn punct_place(p: Punct) -> Nat {
     .at_sign { 26 }
     .caret { 27 }
     .bang { 28 }
-    .pipe_arrow { 29 }
-    .percent { 30 }
-    .semicolon { 31 }
+    .percent { 29 }
+    .semicolon { 30 }
   }
 }
 

@@ -81,7 +81,6 @@ enum Punct {
   at_sign
   caret
   bang
-  pipe_arrow
   percent
   semicolon
 }
@@ -121,8 +120,6 @@ struct Lexer {
   at: Nat
   pos: Pos
   tokens: List[Token]
-  // The line breaks after the last token, which a `|>` that follows takes away.
-  pending: List[Pos]
   errors: List[LexError]
   line_has_token: bool
 }
@@ -357,42 +354,11 @@ fn is_newline(tok: Tok) -> bool {
   }
 }
 
-fn is_pipe(tok: Tok) -> bool {
-  match tok {
-    .punct(p) {
-      match p {
-        .pipe_arrow { true }
-        other { false }
-      }
-    }
-    other { false }
-  }
-}
-
-// The line breaks that wait are tokens now.
-fn flush(lx: take Lexer) -> Lexer <alloc> {
-  mut next = lx
-  waiting = next.pending
-  next.pending = []
-  loop i in 0..waiting.size {
-    next.tokens = push(take next.tokens, Token(tok: .newline, pos: waiting[i]))
-  }
-  next
-}
-
-// A line that starts with `|>` goes on from the line before, so the line breaks
-// that wait are not tokens when one is read.
 fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer <alloc> {
   mut next = lx
   next.line_has_token = not is_newline(tok)
-  if is_newline(tok) {
-    next.pending = push(take next.pending, pos)
-    next
-  } else {
-    if is_pipe(tok) { next.pending = [] } else { next = flush(take next) }
-    next.tokens = push(take next.tokens, Token(tok: tok, pos: pos))
-    next
-  }
+  next.tokens = push(take next.tokens, Token(tok: tok, pos: pos))
+  next
 }
 
 fn bump(lx: take Lexer) -> Lexer {
@@ -780,8 +746,6 @@ fn punct_at(src: List[Byte], at: Nat) -> Option[(Punct, Nat)] {
     .some((.caret, 1))
   } else if starts_with(src, at, "!") {
     .some((.bang, 1))
-  } else if starts_with(src, at, "|>") {
-    .some((.pipe_arrow, 2))
   } else if starts_with(src, at, "%") {
     .some((.percent, 1))
   } else if starts_with(src, at, ";") {
@@ -916,9 +880,7 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
   rounds = lx.src.size
   mut next = lx
   outside = next.tokens
-  waiting = next.pending
   next.tokens = []
-  next.pending = []
   mut depth: Nat = 0
   mut closed = false
   loop round in 0..rounds {
@@ -942,7 +904,6 @@ fn expression(lx: take Lexer, start: Pos, fuel: u64) -> (Lexer, Option[List[Toke
   }
   inside = next.tokens
   next.tokens = outside
-  next.pending = waiting
   // A string in the braces that the line ends inside is the one without its
   // quote, and it has reported that already.
   inner = has_string(inside) and last_is_unclosed(next.errors)
@@ -1004,7 +965,7 @@ fn lex(src: take List[Byte]) -> Result[List[Token], List[LexError]] <alloc> {
   if bad.size > 0 {
     .err(bad)
   } else {
-    lx = Lexer(src: freeze(take src), at: 0, pos: Pos(line: 1, col: 1), tokens: [], pending: [],
+    lx = Lexer(src: freeze(take src), at: 0, pos: Pos(line: 1, col: 1), tokens: [],
                errors: [], line_has_token: false)
     done = run(take lx)
     if done.errors.size > 0 { .err(done.errors) } else { .ok(done.tokens) }
