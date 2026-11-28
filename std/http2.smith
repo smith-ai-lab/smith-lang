@@ -1,6 +1,6 @@
 use std.bits (bit_and, bit_or, shift_right, u16, u32, u64)
 use std.http1 (Read)
-use std.int (saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_shift_left, wrapping_sub)
+use std.int (saturating_sub, wrapping_add, wrapping_mul, wrapping_shift_left, wrapping_sub)
 use std.list (freeze, push)
 use std.utf8 (utf8)
 
@@ -545,7 +545,7 @@ fn huffman(b: Slice[Byte], room: Nat) -> Result[List[Byte], str] <alloc> {
   loop i in 0..b.size {
     c = b[i]
     loop j in 0..8 {
-      bit = nat(bit_and(shr(nat(c), wrapping_narrow(wrapping_sub(7, j))), 1))
+      bit = nat(bit_and(shr(nat(c), 7 - j), 1))
       code = wrapping_add(code, bit)
       len = wrapping_add(len, 1)
       ones = ones and bit == 1
