@@ -547,9 +547,7 @@ impl<'a> Lowering<'a> {
     ) -> (Ty, Vec<form::Value>) {
         let typed = self.typed;
         let (given, values) = self.expr(out, &call.args[0].value, env);
-        let (Ty::Int(from), ty) = (given, typed.type_of(expr, env)) else {
-            unreachable!("checked")
-        };
+        let ty = typed.type_of(expr, env);
         let to = match &ty {
             Ty::Int(to) => *to,
             Ty::Enum(_, of) => match of.as_slice() {
@@ -558,8 +556,67 @@ impl<'a> Lowering<'a> {
             },
             _ => unreachable!("checked"),
         };
-        let values = self.narrowing(out, narrowing, (from, to), &values);
+        let values = match given {
+            Ty::Int(from) => self.narrowing(out, narrowing, (from, to), &values),
+            Ty::Float(float) => {
+                self.float_narrowing(out, narrowing, float_bits(float), to, values[0])
+            }
+            _ => unreachable!("checked"),
+        };
         (ty, values)
+    }
+
+    /// The float `x` taken to the range `to`, of 64 bits or fewer: as `clamp`
+    /// does, which rounds it to the nearest whole number, a half to the even
+    /// one, and gives the least of the range below it and the greatest above
+    /// it or where it is not a number, and as `narrow` does, which gives
+    /// `.some` where it is a whole number of the range. The float is compared
+    /// with the least float that is not below the range and the greatest that
+    /// is not above it, so that a whole number between the two is one of the
+    /// range, and then cut to an integer, which is exact.
+    fn float_narrowing(
+        &mut self,
+        out: &mut Out<'a>,
+        narrowing: Narrowing,
+        bits: form::FloatBits,
+        to: Int,
+        x: form::Value,
+    ) -> Vec<form::Value> {
+        use form::FloatCompare::*;
+        let narrow = bits_of(to);
+        let least = out.float(bits, float_at_least(bits, to.min()));
+        let greatest = out.float(bits, float_at_most(bits, to.max()));
+        let whole = |out: &mut Out<'a>, r: form::Value| {
+            let n = out.emit(
+                form::Op::IntFromFloat {
+                    signed: to.signed(),
+                    value: r,
+                },
+                vec![form::Type::Int(form::Bits::B64)],
+            )[0];
+            out.resize(to.signed(), n, narrow)
+        };
+        if narrowing == Narrowing::Clamp {
+            let r = out.float_round(form::Rounding::Nearest, x);
+            let below = out.float_compare(Less, r, least);
+            // Not so for a float that is not a number, which gives the greatest.
+            let not_above = out.float_compare(LessEqual, r, greatest);
+            let n = whole(out, r);
+            let (low, high) = (out.int(narrow, to.min()), out.int(narrow, to.max()));
+            let n = out.choose(below, low, n);
+            return vec![out.choose(not_above, n, high)];
+        }
+        use form::Binary::{And, Xor};
+        let cut = out.float_round(form::Rounding::Trunc, x);
+        let is_whole = out.float_compare(Equal, x, cut);
+        let not_below = out.float_compare(GreaterEqual, x, least);
+        let not_above = out.float_compare(LessEqual, x, greatest);
+        let fits = out.binary(And, is_whole, not_below);
+        let fits = out.binary(And, fits, not_above);
+        let one = out.int(form::Bits::B8, 1);
+        let wrong = out.binary(Xor, fits, one);
+        let n = whole(out, x);
+        self.optional(out, narrow, wrong, n)
     }
 
     /// Lowers `__system`, which asks the kernel for the call its first
@@ -1289,6 +1346,35 @@ impl<'a> Lowering<'a> {
             values.push(out.choose(wrong, zero, word));
         }
         values
+    }
+}
+
+/// The bits of the least float of the size that is not below `n`, a number
+/// of 64 bits or fewer, which every float holds in its range.
+fn float_at_least(bits: form::FloatBits, n: i128) -> u64 {
+    match bits {
+        form::FloatBits::F32 => {
+            let f = n as f32;
+            u64::from(if (f as i128) < n { f.next_up() } else { f }.to_bits())
+        }
+        form::FloatBits::F64 => {
+            let f = n as f64;
+            if (f as i128) < n { f.next_up() } else { f }.to_bits()
+        }
+    }
+}
+
+/// The bits of the greatest float of the size that is not above `n`.
+fn float_at_most(bits: form::FloatBits, n: i128) -> u64 {
+    match bits {
+        form::FloatBits::F32 => {
+            let f = n as f32;
+            u64::from(if (f as i128) > n { f.next_down() } else { f }.to_bits())
+        }
+        form::FloatBits::F64 => {
+            let f = n as f64;
+            if (f as i128) > n { f.next_down() } else { f }.to_bits()
+        }
     }
 }
 

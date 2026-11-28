@@ -1879,14 +1879,20 @@ impl<'a> Checker<'a> {
         }
         let value = &call.args[0].value;
         let given = self.expr(body, value, &Want::Any);
+        // A float has no range of its own, so every range is narrower.
         let from = match given {
-            Ty::Int(from) => from,
+            Ty::Int(from) => Some(from),
+            Ty::Float(_) if narrowing != Narrowing::Wrapping => None,
             Ty::Unknown | Ty::Flex(_) => return Ty::Unknown,
             other => {
                 let given = defs.describe(&other, body.scope);
+                let takes = match narrowing {
+                    Narrowing::Wrapping => "a whole number",
+                    _ => "a whole number or a float",
+                };
                 self.errors.push(Error::new(
                     value.pos(),
-                    format!("`{name}` takes a whole number, and this is {given}"),
+                    format!("`{name}` takes {takes}, and this is {given}"),
                 ));
                 return Ty::Unknown;
             }
@@ -1901,6 +1907,19 @@ impl<'a> Checker<'a> {
                 }
             }
             _ => return self.narrow_unexpected(body, call, name, want),
+        };
+        let Some(from) = from else {
+            if to.wide() {
+                self.errors.push(Error::new(
+                    call.pos,
+                    format!(
+                        "`{name}` of a float gives a range of 64 bits or fewer, and `{}` is wider",
+                        self.defs.spelling(to)
+                    ),
+                ));
+                return Ty::Unknown;
+            }
+            return wanted;
         };
         if to.min() <= from.min() && from.max() <= to.max() {
             let error = if to == from {
