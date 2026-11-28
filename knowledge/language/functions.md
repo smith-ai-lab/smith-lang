@@ -169,7 +169,7 @@ Three rules keep defaults simple.
 
 - Among the parameters by position, those with defaults come after those without. The one exception is a final parameter before `;` that takes a function, described under [`with`](with.md). `fn f(a: str = "p", b: str)` is refused: "`b` has no default, and comes after `a`, which has one", with the fix "move `b` before `a`, or give it a default". The parameters after `;` are given by name, so they stand in any order.
 - A default is a fixed value. It is an expression that uses no parameter, and it is worked out when the program is built, so it never depends on when or where the call happens. `fn tag(label: str, n: str = label)` is refused: "a default uses no parameter, and `label` is one".
-- A default carries no effect. A list that holds elements needs `alloc`, so `fn f(a: List[u8] = [1, 2])`, with a call of `f()` in `main`, is refused: "a default carries no effect, and a list that holds elements needs the `alloc` effect", at the `[`. So is a text that holds an expression, and so is a call of `push`. `[]` needs none, and is allowed.
+- A default carries no effect. A list that holds elements needs `alloc`, so `fn f(a: List[u8] = [1, 2])`, with a call of `f()` in `main`, is refused: "a default carries no effect, and a list that holds elements needs the `alloc` effect", at the `[`. So is a text that holds an expression, and so is a call of a function that needs `alloc`, as `copy([])` of `std.list`. `[]` needs none, and is allowed.
 
 The default of a parameter that takes a function is a lambda. It uses no parameter, as any default, and it carries the effects that the type of the parameter lists and no other, since the function that is given it calls it under them.
 

@@ -9,7 +9,7 @@ fn eat() -> u64 <alloc, console> {
   loop i in 0..9223372036854775807 {
     r: u64 = i
     if r % 1000 == 0 { print("{r}") }
-    xs = push(take xs, i)
+    push(mut xs, i)
   }
   0
 }

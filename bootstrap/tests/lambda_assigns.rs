@@ -61,7 +61,7 @@ const BOTH: &str = "fn both(f: fn(str)) {\n  f(\"a\")\n  f(\"b\")\n}\n\n";
 fn a_lambda_that_appends_to_a_var_it_gives_away_is_accepted_and_the_var_is_whole_after_the_call() {
     let source = format!(
         "use std.console (console, print)\nuse std.text (text, append, finish)\n\n{BOTH}\
-         fn gather() -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{ page = append(take page, part) }}\n  finish(take page)\n}}\n\n\
+         fn gather() -> str <alloc> {{\n  mut page = text()\n  both() fn(part) {{ append(mut page, part) }}\n  finish(take page)\n}}\n\n\
          fn main() <console, alloc> {{\n  print(gather())\n}}\n"
     );
     assert_eq!(outcome(&source).stdout, b"ab\n");
@@ -130,9 +130,9 @@ fn lambda(g: &mut Gen) -> Lambda {
 impl Lambda {
     fn statement(branch: Branch, leaves: bool) -> String {
         let mut text = match branch {
-            Branch::Appends => "page = append(take page, part)\n".to_string(),
-            Branch::Restarts => "s = finish(append(take page, part))\npage = text()\n".to_string(),
-            Branch::Spends => "s = finish(append(take page, part))\n".to_string(),
+            Branch::Appends => "append(mut page, part)\n".to_string(),
+            Branch::Restarts => "append(mut page, part)\ns = finish(take page)\npage = text()\n".to_string(),
+            Branch::Spends => "append(mut page, part)\ns = finish(take page)\n".to_string(),
         };
         if leaves {
             text += "return\n";
@@ -144,7 +144,7 @@ impl Lambda {
         let mut text = String::new();
         for line in &self.lines {
             match line {
-                None => text += "      page = append(take page, part)\n",
+                None => text += "      append(mut page, part)\n",
                 Some(l) => {
                     text += "      if c {\n";
                     for row in Lambda::statement(l.then.0, l.then.1).lines() {
@@ -255,15 +255,15 @@ fn a_try_between_the_give_away_and_the_assignment_is_a_path_that_leaves_with_the
              fn main() <console, alloc> {{\n  r = gather()\n  print(\"x\")\n}}\n"
         )
     };
-    let between = program("    t = append(take page, part)\n    try ok(part)\n    page = t\n");
+    let between = program("    mut t = page\n    append(mut t, part)\n    try ok(part)\n    page = t\n");
     let found = errors(&between);
     assert!(
         found.iter().any(|e| e.message.contains("gives away `page`")),
         "{found:?} for\n{between}"
     );
-    let before = program("    try ok(part)\n    page = append(take page, part)\n");
+    let before = program("    try ok(part)\n    append(mut page, part)\n");
     assert!(errors(&before).is_empty(), "{:?}", errors(&before));
-    let after = program("    page = append(take page, part)\n    try ok(part)\n");
+    let after = program("    append(mut page, part)\n    try ok(part)\n");
     assert!(errors(&after).is_empty(), "{:?}", errors(&after));
 }
 
@@ -305,10 +305,10 @@ impl Puts {
                 "part: str",
                 "part",
                 "text()",
-                "append(take held, part)",
+                "append(mut held, part)",
                 "finish(take held)",
             ),
-            false => ("Byte", "b: Byte", "b", "[]", "push(take held, b)", "held"),
+            false => ("Byte", "b: Byte", "b", "[]", "push(mut held, b)", "held"),
         };
         let result = if self.text { "str" } else { "List[Byte]" };
         let uses = if self.text {
@@ -326,11 +326,11 @@ impl Puts {
                 for b in part {
                     let value = if self.text { format!("\"{}\"", *b as char) } else { b.to_string() };
                     let step = if self.text {
-                        format!("append(take held, {value})")
+                        format!("append(mut held, {value})")
                     } else {
-                        format!("push(take held, {value})")
+                        format!("push(mut held, {value})")
                     };
-                    all += &format!("  held = {step}\n");
+                    all += &format!("  {step}\n");
                 }
             }
             all += &format!("  {end}\n}}\n\n");
@@ -339,7 +339,7 @@ impl Puts {
             text += &format!(
                 "effect sink {{\n  fn put({param})\n}}\n\n\
                  fn gather[T](body: fn() -> T <sink>) -> (T, {result}) <alloc> {{\n  mut held{} = {start}\n  \
-                 r = sink(put: fn({arg}) {{ held = {add} }}, body: body)\n  (r, {end})\n}}\n\n\
+                 r = sink(put: fn({arg}) {{ {add} }}, body: body)\n  (r, {end})\n}}\n\n\
                  fn middle() <sink> {{\n{}}}\n\n\
                  fn run() -> {result} <alloc> {{\n  (n, kept) = gather() {{\n{}    middle()\n{}  }}\n  kept\n}}\n\n",
                 if self.text { String::new() } else { format!(": List[{ty}]") },

@@ -1,7 +1,9 @@
 use std.entropy (entropy, fill)
 
 fn draw(bytes: take List[Byte]) -> List[Byte] {
-  fill(bytes)
+  mut filled = bytes
+  fill(mut filled)
+  filled
 }
 
 fn main() <entropy, alloc> {

@@ -55,7 +55,7 @@ fn drain(c: Connection) -> Result[List[Byte], NetError] <net, alloc> {
   mut all: List[Byte] = []
   loop round in 0..2000000 {
     match try read(c, 4096) {
-      .bytes(chunk) { all = append(take all, chunk.bytes) }
+      .bytes(chunk) { append(mut all, chunk.bytes) }
       .ended { return .ok(all) }
     }
   }
@@ -99,7 +99,7 @@ fn datagram(port: 1..65536) -> Result[(Address, List[Byte]), NetError] <console,
 fn writing(port: 1..65536) -> Result[(), NetError] <net, alloc> {
   with c = connect("127.0.0.1", port)
   mut block: List[Byte] = []
-  loop k in 0..65536 { block = push(take block, 7) }
+  loop k in 0..65536 { push(mut block, 7) }
   sent = freeze(take block)
   loop round in 0..4000 {
     try write(c, sent)

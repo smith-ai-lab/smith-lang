@@ -10,12 +10,10 @@ pub effect time {
 }
 
 // The eight bytes of a number, the low one first, as the kernel reads them.
-fn put(bytes: take List[Byte], n: u64) -> List[Byte] <alloc> {
-  mut made = bytes
+fn put(bytes: mut List[Byte], n: u64) <alloc> {
   loop i in 0..8 {
-    made = push(take made, bit_and(shift_right(n, 8 * i), 255))
+    push(mut bytes, bit_and(shift_right(n, 8 * i), 255))
   }
-  made
 }
 
 // The number that the eight bytes from `at` are, the low one first.
@@ -41,7 +39,8 @@ fn milliseconds(seconds: u64, nanoseconds: u64) -> u64 {
 // that end.
 fn system_now() -> Instant <alloc> {
   mut stamp: List[Byte] = __reserve(16)
-  stamp = put(put(take stamp, 0), 0)
+  put(mut stamp, 0)
+  put(mut stamp, 0)
   _ = __system(10, 0, stamp)
   reading: 0..4611686018427387904 = clamp(milliseconds(word(stamp, 0), word(stamp, 8)))
   instant(reading)
@@ -60,9 +59,11 @@ fn system_sleep(span: Duration) <alloc, task> {
     seconds: u64 = left / 1000
     nanoseconds: u64 = (left % 1000) * 1000000
     mut wait: List[Byte] = []
-    wait = put(put(take wait, seconds), nanoseconds)
+    put(mut wait, seconds)
+    put(mut wait, nanoseconds)
     mut rest: List[Byte] = __reserve(16)
-    rest = put(put(take rest, 0), 0)
+    put(mut rest, 0)
+    put(mut rest, 0)
     result = __system(11, wait, rest)
     if result != -4 { break }
     left = milliseconds(word(rest, 0), word(rest, 8))

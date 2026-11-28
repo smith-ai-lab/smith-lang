@@ -681,12 +681,15 @@ pub fn wait_to_write_by(handle: Descriptor, span: Duration) -> bool <task> {
 }
 
 // Bytes of a number of 32 bits, lowest first.
-fn le32(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
+fn le32(list: mut List[Byte], n: u64) <alloc> {
   b0: Byte = bit_and(n, 255)
   b1: Byte = bit_and(shift_right(n, 8), 255)
   b2: Byte = bit_and(shift_right(n, 16), 255)
   b3: Byte = bit_and(shift_right(n, 24), 255)
-  push(push(push(push(take list, b0), b1), b2), b3)
+  push(mut list, b0)
+  push(mut list, b1)
+  push(mut list, b2)
+  push(mut list, b3)
 }
 
 // Asks `epoll` to say once when the descriptor can be read or written. The event
@@ -696,10 +699,10 @@ fn register(ep: i64, fd: Descriptor, write: bool) -> i64 <alloc> {
   mut events: u64 = 1073741825
   if write { events = 1073741828 }
   mut event: List[Byte] = []
-  event = le32(take event, events)
-  event = le32(take event, fd)
-  event = le32(take event, fd)
-  event = le32(take event, fd)
+  le32(mut event, events)
+  le32(mut event, fd)
+  le32(mut event, fd)
+  le32(mut event, fd)
   added = __system(14, ep, 1, fd, event, 0, 0)
   if added == -17 { __system(14, ep, 3, fd, event, 0, 0) } else { added }
 }
@@ -711,10 +714,11 @@ fn on_macos() -> bool {
 }
 
 // Bytes of a number of 64 bits, lowest first.
-fn le64(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
+fn le64(list: mut List[Byte], n: u64) <alloc> {
   low: u64 = bit_and(n, 4294967295)
   high: u64 = shift_right(n, 32)
-  le32(le32(take list, low), high)
+  le32(mut list, low)
+  le32(mut list, high)
 }
 
 // The number that the eight bytes from `at` are, the low one first.
@@ -735,7 +739,8 @@ fn word64(bytes: List[Byte], at: Nat) -> u64 {
 // monotonic clock, 1 on Linux and 6 on macOS.
 fn read_clock() -> u64 <alloc> {
   mut stamp: List[Byte] = []
-  stamp = le64(le64(take stamp, 0), 0)
+  le64(mut stamp, 0)
+  le64(mut stamp, 0)
   mut clock: i64 = 1
   if on_macos() { clock = 6 }
   _ = __system(18, clock, stamp, 0, 0, 0, 0)
@@ -773,14 +778,14 @@ fn register_kqueue(kq: i64, fd: Descriptor, write: bool) -> i64 <alloc> {
   mut word: u64 = 1179647
   if write { word = 1179646 }
   mut change: List[Byte] = []
-  change = le32(take change, fd)
-  change = le32(take change, 0)
-  change = le32(take change, word)
-  change = le32(take change, 0)
-  change = le32(take change, 0)
-  change = le32(take change, 0)
-  change = le32(take change, 0)
-  change = le32(take change, 0)
+  le32(mut change, fd)
+  le32(mut change, 0)
+  le32(mut change, word)
+  le32(mut change, 0)
+  le32(mut change, 0)
+  le32(mut change, 0)
+  le32(mut change, 0)
+  le32(mut change, 0)
   __system(17, kq, change, 1, 0, 0, 0)
 }
 
@@ -795,8 +800,8 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
     // The time to wait is a pair of numbers, the seconds and the nanoseconds.
     ms: u64 = time
     mut limit: List[Byte] = []
-    limit = le64(take limit, ms / 1000)
-    limit = le64(take limit, (ms % 1000) * 1000000)
+    le64(mut limit, ms / 1000)
+    le64(mut limit, (ms % 1000) * 1000000)
     got = __system(17, kq, 0, 0, buffer, 1, limit)
   }
   if got != 1 { return .none }

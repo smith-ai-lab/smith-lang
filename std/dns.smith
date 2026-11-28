@@ -12,10 +12,11 @@ fn lower(b: Byte) -> Byte {
 }
 
 // The two bytes of a number, the high one first.
-fn put16(bytes: take List[Byte], n: u16) -> List[Byte] <alloc> {
+fn put16(bytes: mut List[Byte], n: u16) <alloc> {
   high = bit_and(shift_right(n, 8), 255)
   low = bit_and(n, 255)
-  push(push(take bytes, high), low)
+  push(mut bytes, high)
+  push(mut bytes, low)
 }
 
 // The question of the name, as a message that asks for the records of a kind,
@@ -29,26 +30,26 @@ pub fn query(id: u16, name: List[Byte], kind: u16) -> Option[List[Byte]] <alloc>
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
   if size == 0 or size > 253 { return .none }
   mut made: List[Byte] = []
-  made = put16(take made, id)
-  made = put16(take made, 256)
-  made = put16(take made, 1)
-  made = put16(take made, 0)
-  made = put16(take made, 0)
-  made = put16(take made, 0)
+  put16(mut made, id)
+  put16(mut made, 256)
+  put16(mut made, 1)
+  put16(mut made, 0)
+  put16(mut made, 0)
+  put16(mut made, 0)
   mut label: List[Byte] = []
   loop i in 0..size + 1 {
     if i == size or name[i] == '.' {
       if label.size == 0 or label.size > 63 { return .none }
-      made = push(take made, label.size)
-      made = append(take made, label)
+      push(mut made, label.size)
+      append(mut made, label)
       label = []
     } else {
-      label = push(take label, name[i])
+      push(mut label, name[i])
     }
   }
-  made = push(take made, 0)
-  made = put16(take made, kind)
-  made = put16(take made, 1)
+  push(mut made, 0)
+  put16(mut made, kind)
+  put16(mut made, 1)
   .some(made)
 }
 
@@ -91,8 +92,8 @@ fn name_at(msg: List[Byte], at: 0..65536) -> Option[(List[Byte], 0..65536)] <all
       return .none
     } else {
       if pos + 1 + n > msg.size { return .none }
-      if made.size > 0 { made = push(take made, '.') }
-      loop k in 0..n { made = push(take made, lower(msg[pos + 1 + k])) }
+      if made.size > 0 { push(mut made, '.') }
+      loop k in 0..n { push(mut made, lower(msg[pos + 1 + k])) }
       if made.size > 253 { return .none }
       pos = pos + 1 + n
     }
@@ -130,7 +131,7 @@ fn compared(name: List[Byte]) -> List[Byte] <alloc> {
   mut size = name.size
   if size > 0 and name[size - 1] == '.' { size = size - 1 }
   mut made: List[Byte] = []
-  loop i in 0..size { made = push(take made, lower(name[i])) }
+  loop i in 0..size { push(mut made, lower(name[i])) }
   made
 }
 
@@ -177,18 +178,18 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
     if rclass == 1 {
       mut data: List[Byte] = []
       if length <= 16 {
-        loop k in 0..length { data = push(take data, msg[start + k]) }
+        loop k in 0..length { push(mut data, msg[start + k]) }
       }
-      records = push(take records, Record(owner: owner, kind: rtype, target: target, data: data))
+      push(mut records, Record(owner: owner, kind: rtype, target: target, data: data))
     }
     at = start + length
   }
   mut known: List[List[Byte]] = []
-  known = push(take known, take asked)
+  push(mut known, take asked)
   loop round in 0..records.size {
     loop i in 0..records.size {
       if records[i].kind == 5 and has(known, records[i].owner) and not has(known, records[i].target) {
-        known = push(take known, copy(records[i].target))
+        push(mut known, copy(records[i].target))
       }
     }
   }
@@ -196,7 +197,7 @@ pub fn read_reply(msg: List[Byte], id: u16, name: List[Byte], kind: u16) -> Opti
   if kind == 28 { wanted = 16 }
   loop i in 0..records.size {
     if records[i].kind == kind and has(known, records[i].owner) and records[i].data.size == wanted {
-      addresses = push(take addresses, copy(records[i].data))
+      push(mut addresses, copy(records[i].data))
     }
   }
   .some(Reply(code: code, truncated: false, addresses: addresses))
@@ -232,7 +233,7 @@ pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
     } else if c == 46 {
       if digits == 0 { return .none }
       part: Option[Byte] = narrow(current)
-      parts = push(take parts, try part)
+      push(mut parts, try part)
       current = 0
       digits = 0
     } else {
@@ -241,7 +242,7 @@ pub fn ipv4(host: List[Byte]) -> Option[List[Byte]] <alloc> {
   }
   if digits == 0 { return .none }
   last: Option[Byte] = narrow(current)
-  parts = push(take parts, try last)
+  push(mut parts, try last)
   if parts.size != 4 { return .none }
   .some(parts)
 }
@@ -267,9 +268,11 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
         maybe: Option[u16] = narrow(current)
         group = try maybe
         if gap {
-          after = push(push(take after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+          push(mut after, bit_and(shift_right(group, 8), 255))
+          push(mut after, bit_and(group, 255))
         } else {
-          before = push(push(take before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+          push(mut before, bit_and(shift_right(group, 8), 255))
+          push(mut before, bit_and(group, 255))
         }
         current = 0
         digits = 0
@@ -287,9 +290,11 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
     maybe: Option[u16] = narrow(current)
     group = try maybe
     if gap {
-      after = push(push(take after, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+      push(mut after, bit_and(shift_right(group, 8), 255))
+      push(mut after, bit_and(group, 255))
     } else {
-      before = push(push(take before, bit_and(shift_right(group, 8), 255)), bit_and(group, 255))
+      push(mut before, bit_and(shift_right(group, 8), 255))
+      push(mut before, bit_and(group, 255))
     }
   } else if host.size > 0 and host[host.size - 1] == 58 {
     if host.size < 2 { return .none }
@@ -299,8 +304,8 @@ pub fn ipv6(host: List[Byte]) -> Option[List[Byte]] <alloc> {
   if gap {
     if made.size + after.size > 14 { return .none }
     missing: Nat = 16 - made.size - after.size
-    loop k in 0..missing { made = push(take made, 0) }
-    loop k in 0..after.size { made = push(take made, after[k]) }
+    loop k in 0..missing { push(mut made, 0) }
+    loop k in 0..after.size { push(mut made, after[k]) }
   } else {
     if made.size != 16 { return .none }
   }
@@ -320,19 +325,19 @@ fn lines(text: List[Byte]) -> List[List[List[Byte]]] <alloc> {
     mut c: Byte = 10
     if i < text.size { c = text[i] }
     if c == 10 {
-      if word.size > 0 { words = push(take words, take word) }
+      if word.size > 0 { push(mut words, take word) }
       word = []
-      if words.size > 0 { made = push(take made, take words) }
+      if words.size > 0 { push(mut made, take words) }
       words = []
       comment = false
     } else if comment {
     } else if c == '#' {
       comment = true
     } else if c == ' ' or c == 9 or c == 13 {
-      if word.size > 0 { words = push(take words, take word) }
+      if word.size > 0 { push(mut words, take word) }
       word = []
     } else {
-      word = push(take word, c)
+      push(mut word, c)
     }
   }
   made
@@ -359,7 +364,7 @@ pub fn hosts(text: List[Byte], name: List[Byte]) -> List[List[Byte]] <alloc> {
       match address(row[0]) {
         .some(a) {
           loop w in 1..row.size {
-            if compared(row[w]) == asked { found = push(take found, copy(a)) }
+            if compared(row[w]) == asked { push(mut found, copy(a)) }
           }
         }
         .none { }
@@ -428,7 +433,7 @@ pub fn config(text: List[Byte]) -> Config <alloc> {
       key = row[0]
       if says(key, "nameserver") and servers.size < 3 {
         match address(row[1]) {
-          .some(a) { servers = push(take servers, take a) }
+          .some(a) { push(mut servers, take a) }
           .none { }
         }
       } else if says(key, "domain") {
@@ -436,7 +441,7 @@ pub fn config(text: List[Byte]) -> Config <alloc> {
       } else if says(key, "search") {
         mut listed: List[List[Byte]] = []
         loop w in 1..row.size {
-          if listed.size < 6 { listed = push(take listed, copy(row[w])) }
+          if listed.size < 6 { push(mut listed, copy(row[w])) }
         }
         domains = listed
       } else if says(key, "options") {
@@ -462,7 +467,7 @@ pub fn config(text: List[Byte]) -> Config <alloc> {
       }
     }
   }
-  if servers.size == 0 { servers = push(take servers, [127, 0, 0, 1]) }
+  if servers.size == 0 { push(mut servers, [127, 0, 0, 1]) }
   Config(servers: servers, domains: domains, dots: dots, seconds: seconds, tries: tries)
 }
 
@@ -481,16 +486,16 @@ pub fn candidates(name: List[Byte], conf: Config) -> List[List[Byte]] <alloc> {
   mut added: List[List[Byte]] = []
   loop d in 0..conf.domains.size {
     mut joined = copy(name)
-    joined = push(take joined, '.')
-    joined = append(take joined, conf.domains[d])
-    added = push(take added, take joined)
+    push(mut joined, '.')
+    append(mut joined, conf.domains[d])
+    push(mut added, take joined)
   }
   if dots >= conf.dots {
-    made = push(take made, copy(name))
-    loop d in 0..added.size { made = push(take made, copy(added[d])) }
+    push(mut made, copy(name))
+    loop d in 0..added.size { push(mut made, copy(added[d])) }
   } else {
-    loop d in 0..added.size { made = push(take made, copy(added[d])) }
-    made = push(take made, copy(name))
+    loop d in 0..added.size { push(mut made, copy(added[d])) }
+    push(mut made, copy(name))
   }
   made
 }

@@ -59,7 +59,9 @@ Code inside the scope must have no `alloc` or I/O effects, no recursion other th
   ```
   fn collected(xs: [3]f32) -> List[f32] <gpu, alloc> {
     with device(gpu)
-    push([], xs[0])
+    mut made: List[f32] = []
+    push(mut made, xs[0])
+    made
   }
   ```
 

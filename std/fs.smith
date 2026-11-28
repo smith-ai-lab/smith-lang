@@ -162,25 +162,28 @@ fn name(path: str) -> Result[List[Byte], FsError] <alloc> {
   mut made: List[Byte] = []
   loop i in 0..path.size {
     if path[i] == 0 { return .err(.failed((path, "a path holds a zero byte"))) }
-    made = push(take made, path[i])
+    push(mut made, path[i])
   }
-  .ok(push(take made, 0))
+  push(mut made, 0)
+  .ok(made)
 }
 
 // A unit of UTF-16, the low byte first.
-fn put16(made: take List[Byte], unit: 0..65536) -> List[Byte] <alloc> {
-  push(push(take made, bit_and(unit, 255)), shift_right(unit, 8))
+fn put16(made: mut List[Byte], unit: 0..65536) <alloc> {
+  push(mut made, bit_and(unit, 255))
+  push(mut made, shift_right(unit, 8))
 }
 
 // What a code point is in UTF-16: one unit, or two where it is above 65535.
-fn put_point(made: take List[Byte], point: 0..2097152) -> List[Byte] <alloc> {
+fn put_point(made: mut List[Byte], point: 0..2097152) <alloc> {
   if point < 65536 {
-    put16(take made, point)
+    put16(mut made, point)
   } else {
     // The units of a surrogate pair: 55296 and the ten high bits of the point
     // less 65536, which is 55232 and the bits of the point above the tenth, and
     // 56320 and the ten low bits.
-    put16(put16(take made, 55232 + shift_right(point, 10)), 56320 + bit_and(point, 1023))
+    put16(mut made, 55232 + shift_right(point, 10))
+    put16(mut made, 56320 + bit_and(point, 1023))
   }
 }
 
@@ -196,9 +199,9 @@ fn wide_name(path: str) -> Result[List[Byte], FsError] <alloc> {
     if need > 0 {
       point = bit_and(bit_or(shift_left(point, 6), bit_and(b, 63)), 2097151)
       need = need - 1
-      if need == 0 { made = put_point(take made, point) }
+      if need == 0 { put_point(mut made, point) }
     } else if b < 128 {
-      made = put_point(take made, b)
+      put_point(mut made, b)
     } else if b < 224 {
       point = bit_and(b, 31)
       need = 1
@@ -210,7 +213,9 @@ fn wide_name(path: str) -> Result[List[Byte], FsError] <alloc> {
       need = 3
     }
   }
-  .ok(push(push(take made, 0), 0))
+  push(mut made, 0)
+  push(mut made, 0)
+  .ok(made)
 }
 
 // The path as the system reads it.
@@ -358,7 +363,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
       break
     } else {
       piece = __sized(take chunk, count(got))
-      if have == 0 { made = piece } else { made = append(take made, piece) }
+      if have == 0 { made = piece } else { append(mut made, piece) }
       n = count(got)
       if have + n > 18446744073709551615 { return .err(.failed((f.path, "read: too many bytes"))) }
       have = have + n
@@ -372,7 +377,7 @@ fn system_read(f: File, range: Range) -> Result[List[Byte], FsError] <alloc, tas
 fn tail(xs: List[Byte], from: Nat) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
   if from <= xs.size {
-    loop i in from..xs.size { made = push(take made, xs[i]) }
+    loop i in from..xs.size { push(mut made, xs[i]) }
   }
   made
 }
@@ -436,9 +441,9 @@ fn holding(files: List[MemoryFile], at: Nat, bytes: List[Byte]) -> List[MemoryFi
   mut made: List[MemoryFile] = []
   loop i in 0..files.size {
     if i == at {
-      made = push(take made, MemoryFile(path: files[i].path, bytes: copy(bytes)))
+      push(mut made, MemoryFile(path: files[i].path, bytes: copy(bytes)))
     } else {
-      made = push(take made, MemoryFile(path: files[i].path, bytes: copy(files[i].bytes)))
+      push(mut made, MemoryFile(path: files[i].path, bytes: copy(files[i].bytes)))
     }
   }
   made
@@ -450,7 +455,7 @@ fn piece(bytes: List[Byte], range: Range) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
   if range.start <= last {
     loop i in range.start..last {
-      if i < bytes.size { made = push(take made, bytes[i]) }
+      if i < bytes.size { push(mut made, bytes[i]) }
     }
   }
   made
@@ -462,11 +467,11 @@ fn put(old: List[Byte], at: Nat, bytes: List[Byte], total: Nat) -> List[Byte] <a
   mut made: List[Byte] = []
   loop k in 0..total {
     if k >= at and k - at < bytes.size {
-      made = push(take made, bytes[k - at])
+      push(mut made, bytes[k - at])
     } else if k < old.size {
-      made = push(take made, old[k])
+      push(mut made, old[k])
     } else {
-      made = push(take made, 0)
+      push(mut made, 0)
     }
   }
   made
@@ -495,7 +500,7 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
           room: Option[Descriptor] = narrow(held.size)
           match room {
             .some(at) {
-              held = push(take held, MemoryFile(path: path, bytes: []))
+              push(mut held, MemoryFile(path: path, bytes: []))
               .ok(named(at, path))
             }
             .none { .err(.failed((path, "create: no place for another file"))) }

@@ -126,7 +126,7 @@ fn byte_at(i: Nat) -> Byte {{
 
 fn content(n: Nat) -> List[Byte] <alloc> {{
   mut made: List[Byte] = []
-  loop i in 0..n {{ made = push(take made, byte_at(i)) }}
+  loop i in 0..n {{ push(mut made, byte_at(i)) }}
   made
 }}
 

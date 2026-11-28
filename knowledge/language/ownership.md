@@ -67,12 +67,13 @@ A [`List`](../library/list.md) has `Discard` and not `Copy`. Copying a list cost
 use std.list (push)
 
 fn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) <alloc> {
-  ys = push(copy(xs), 1)
+  mut ys = copy(xs)
+  push(mut ys, 1)
   (xs, ys)
 }
 ```
 
-`push` [takes](take.md) its list, so the list it gives back is the same memory with one more element, always, and not only where the compiler can see that it may be. `both` wants the old list too, so it writes `copy(xs)`. Without the `copy`, `xs` is used after it was given to `push`, and that is one error at the second use of `xs`, whose fix is to write `copy(xs)`. `copy` is a function of [`std.list`](../library/list.md) that carries `alloc`.
+`push` [changes](mut-parameters.md) the list it is given, so the list it changes is the same memory with one more element, always, and not only where the compiler can see that it may be. `both` wants the old list too, so it writes `copy(xs)`. Without the `copy`, `xs` is used after it was given to `ys`, and that is one error at the second use of `xs`, whose fix is to write `copy(xs)`. `copy` is a function of [`std.list`](../library/list.md) that carries `alloc`.
 
 Reading a list lends it and copies nothing: its `size`, an element, and passing it to a function that does not take it. A struct that holds a list has no `Copy` either, by the rule above, so the state of a program that is kept in a struct is moved and never duplicated. A `str` has `Copy`: a text cannot be changed, so two names for one text share it. So has a [`Slice`](../library/slice.md), which is what a list becomes when a program is done building it.
 

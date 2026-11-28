@@ -452,7 +452,7 @@ fn asked_with(written: &Written, changes: &[(u64, u64)]) -> (String, usize) {
 /// so that all of them exist at once, each holding the region it was given.
 fn many(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ wrapping_add(first, 1) }}\n    v = down(xs, at + 1)\n    wrapping_add(join(take g), v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ wrapping_add(first, 1) }}\n    v = down(xs, at + 1)\n    wrapping_add(join(take g), v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -474,7 +474,7 @@ fn a_thousand_tasks_that_wait_with_nothing_built_hold_under_eight_megabytes() {
 /// A task that waits inside an arena in each round of a loop.
 fn arena_rounds(rounds: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{\n    with arena()\n    xs = build(200)\n    g = spawn {{ wrapping_add(r, 1) }}\n    sum = wrapping_add(sum, wrapping_add(total(xs), join(take g)))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(5)\n  a = spawn {{ rounds({rounds}) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn rounds(n: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{\n    with arena()\n    xs = build(200)\n    g = spawn {{ wrapping_add(r, 1) }}\n    sum = wrapping_add(sum, wrapping_add(total(xs), join(take g)))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(5)\n  a = spawn {{ rounds({rounds}) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -496,7 +496,7 @@ fn a_task_that_waits_inside_an_arena_in_a_loop_asks_the_system_for_the_same_memo
 /// they built after the wait, in an order the seed picks.
 fn two_in_arenas(seed: u64) -> String {
     format!(
-        "{USES}fn build(n: u64, k: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, wrapping_add(i, k)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn mine(n: u64, k: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  rounds: u64 = 5\n  loop r in 0..rounds {{\n    with arena()\n    xs = build(n, k)\n    g = spawn {{ wrapping_add(r, 1) }}\n    v = join(take g)\n    sum = wrapping_add(sum, wrapping_add(total(xs), v))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ mine(50, 1000) }}\n  b = spawn {{ mine(80, 7) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64, k: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, wrapping_add(i, k)) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn mine(n: u64, k: u64) -> u64 <task, alloc> {{\n  mut sum: u64 = 0\n  rounds: u64 = 5\n  loop r in 0..rounds {{\n    with arena()\n    xs = build(n, k)\n    g = spawn {{ wrapping_add(r, 1) }}\n    v = join(take g)\n    sum = wrapping_add(sum, wrapping_add(total(xs), v))\n  }}\n  sum\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler({seed})\n  a = spawn {{ mine(50, 1000) }}\n  b = spawn {{ mine(80, 7) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -517,7 +517,7 @@ fn two_tasks_that_each_wait_inside_their_own_arena_never_see_each_others_bytes_c
 /// after another.
 fn one_after_another(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ total(build(100)) }}\n  join(take g)\n}}\n\nfn main() <console, alloc, diverge> {{\n  mut sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn child() -> u64 <alloc, diverge> {{\n  with test_scheduler(1)\n  g = spawn {{ total(build(100)) }}\n  join(take g)\n}}\n\nfn main() <console, alloc, diverge> {{\n  mut sum: u64 = 0\n  loop j in 0..{count} {{\n    sum = wrapping_add(sum, child())\n  }}\n  print(\"{{sum}}\")\n}}\n"
     )
 }
 
@@ -606,7 +606,7 @@ fn a_child_started_where_a_joined_one_was_is_a_new_task_with_a_value_of_its_own(
 /// after the arena it was started in has ended.
 fn left_running(seed: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  _ = spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  _ = spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(take p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, i) }}\n  acc\n}}\n\nfn total(xs: List[u64]) -> u64 {{\n  mut s: u64 = 0\n  loop i in 0..xs.size {{ s = wrapping_add(s, xs[i]) }}\n  s\n}}\n\nfn leave() <task, alloc, console> {{\n  with arena()\n  xs = build(100)\n  _ = spawn {{\n    print(\"sibling\")\n    total(build(50))\n  }}\n  _ = spawn {{\n    print(\"other\")\n    total(build(60))\n  }}\n  print(\"{{total(xs)}}\")\n}}\n\nfn parent() -> u64 <task, alloc, console> {{\n  leave()\n  a = spawn {{ total(build(10)) }}\n  b = spawn {{ total(build(20)) }}\n  wrapping_add(join(take a), join(take b))\n}}\n\nfn run() -> u64 <alloc, console, diverge> {{\n  with test_scheduler({seed})\n  p = spawn {{ parent() }}\n  join(take p)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -661,7 +661,7 @@ fn a_program_that_starts_no_task_has_no_pool_and_its_take_is_the_one_it_had(part
     assert!(checked > 50 / PARTS, "{checked} cases");
 }
 
-const LISTS: &str = "fn build(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(take acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
+const LISTS: &str = "fn build(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { push(mut acc, i) }\n  acc\n}\n\nfn total(xs: List[u64]) -> u64 {\n  mut s: u64 = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\n";
 
 /// Children that each build a list and give it, joined one after another, by a
 /// function that gives back what is in the list.
@@ -732,7 +732,7 @@ fn a_list_a_function_gives_up_to_main_is_read_there_after_more_calls_as_it_was_b
 /// bytes, and joins them on the way back, so that all of them exist at once.
 fn texts(count: u64) -> String {
     format!(
-        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ acc = push(take acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ \"{{first}}-abcdefghijklmnop\" }}\n    v = down(xs, at + 1)\n    t = join(take g)\n    wrapping_add(t.size, v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
+        "{USES}fn build(n: u64) -> List[u64] <alloc> {{\n  mut acc: List[u64] = []\n  loop i in 0..n {{ push(mut acc, i) }}\n  acc\n}}\n\nfn down(xs: Slice[u64], at: Nat) -> u64 <task, alloc>\n  decreases xs.size - at\n{{\n  if at < xs.size {{\n    first = xs[at]\n    g = spawn {{ \"{{first}}-abcdefghijklmnop\" }}\n    v = down(xs, at + 1)\n    t = join(take g)\n    wrapping_add(t.size, v)\n  }} else {{\n    0\n  }}\n}}\n\nfn run() -> u64 <alloc, diverge> {{\n  with test_scheduler(3)\n  a = spawn {{ down(freeze(build({count})), 0) }}\n  join(take a)\n}}\n\nfn main() <console, alloc, diverge> {{\n  print(\"{{run()}}\")\n}}\n"
     )
 }
 
@@ -769,7 +769,7 @@ fn dropped_children(count: u64, seed: u64, how: &str) -> String {
 /// that the loops of their rounds use.
 fn dropped_items() -> String {
     format!(
-        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(take t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  mut hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    hs = push(take hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\n"
+        "{USES_WITH_TASK}\n\nstruct Both {{\n  first: Task[u64]\n  second: Task[u64]\n}}\n\nenum Held {{\n  none\n  one: Task[u64]\n}}\n\nenum Deep {{\n  leaf: Task[u64]\n  more: List[Deep]\n}}\n\n{LISTS}fn nest() -> List[List[Task[u64]]] <task, alloc> {{\n  [[spawn {{ total(build(250)) }}], [spawn {{ total(build(250)) }}, spawn {{ total(build(250)) }}]]\n}}\n\nfn ignore(t: take Task[u64]) {{\n  ()\n}}\n\nfn maybe(t: take Task[u64], yes: bool) -> u64 <task> {{\n  if yes {{ join(take t) }} else {{ 0 }}\n}}\n\nfn handles() -> List[Task[u64]] <task, alloc> {{\n  mut hs: List[Task[u64]] = []\n  loop q in 0..3 {{\n    push(mut hs, spawn {{ total(build(250)) }})\n  }}\n  hs\n}}\n\n"
     )
 }
 

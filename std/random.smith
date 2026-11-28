@@ -89,11 +89,12 @@ fn widen(b: Byte) -> u64 { b }
 
 pub fn fresh() -> Key <entropy, alloc> {
   mut zeros: List[Byte] = []
-  loop i in 0..16 { zeros = push(take zeros, 0) }
+  loop i in 0..16 { push(mut zeros, 0) }
   mut first: u64 = 0
   mut second: u64 = 0
   mut position: u64 = 0
-  loop b in fill(take zeros) {
+  fill(mut zeros)
+  loop b in zeros {
     shifted = wrapping_shift_left(widen(b), bit_and(position, 7) * 8)
     if position < 8 {
       first = bit_or(first, shifted)

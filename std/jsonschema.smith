@@ -64,13 +64,13 @@ pub fn schema_text(to: take JsonSchema) -> str {
 
 fn emit(to: take JsonSchema, s: str) -> JsonSchema <alloc> {
   mut w = to
-  w.buffer = append(take w.buffer, s)
+  append(mut w.buffer, s)
   w
 }
 
 fn emit_json_string(to: take JsonSchema, s: str) -> JsonSchema <alloc> {
   mut w = to
-  w.buffer = append(take w.buffer, json_string(s))
+  append(mut w.buffer, json_string(s))
   w
 }
 
@@ -109,7 +109,7 @@ fn closed(to: take JsonSchema) -> JsonSchema <alloc> {
 
 fn enter(to: take JsonSchema, scope: Scope, tail: str) -> JsonSchema <alloc> {
   mut w = to
-  w.saved = push(take w.saved, Saved(scope: w.scope, count: w.count, tail: w.tail, required: w.required, case: w.case, below: w.top))
+  push(mut w.saved, Saved(scope: w.scope, count: w.count, tail: w.tail, required: w.required, case: w.case, below: w.top))
   w.top = w.saved.size
   w.scope = scope
   w.count = 0

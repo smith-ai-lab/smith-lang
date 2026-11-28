@@ -299,15 +299,19 @@ fn the_fix_for_a_missing_effect_writes_the_signature_with_its_defaults_as_they_w
 
 /// A file whose `main` calls functions whose defaults each hold one thing that needs the
 /// `alloc` effect, which a default carries none of: a list with elements, or
-/// a call of `push`. Each is refused where the thing is written, and a
+/// a call of `copy`. Each is refused where the thing is written, and a
 /// default that needs nothing is not.
 fn file_with_defaults_that_need_an_effect(g: &mut Gen) -> File {
     let mut file = File::default();
     let mut calls = String::new();
-    for i in 0..1 + g.below(4) {
+    let kinds: Vec<usize> = (0..1 + g.below(4)).map(|_| g.below(4)).collect();
+    if kinds.contains(&2) {
+        file.push("use std.list (copy)\n\n");
+    }
+    for (i, kind) in kinds.into_iter().enumerate() {
         calls.push_str(&format!("  f{i}()\n"));
         file.push(&format!("fn f{i}(a: List[Byte] = "));
-        match g.below(4) {
+        match kind {
             0 => file.push("[]"),
             1 => {
                 file.mistake("[", "a list that holds elements");
@@ -317,8 +321,8 @@ fn file_with_defaults_that_need_an_effect(g: &mut Gen) -> File {
                 file.push("]");
             }
             2 => {
-                file.mistake("push", "`push`");
-                file.push("([], 3)");
+                file.mistake("copy", "`copy`");
+                file.push("([])");
             }
             _ => {
                 file.mistake("[", "a list that holds elements");

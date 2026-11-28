@@ -21,12 +21,12 @@ fn written(address: List[Byte]) -> str <alloc> {
 
 // The bytes that a test gives for the ids of the queries, which are 1, 2, 3, and
 // so on, so that the test knows each id.
-fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
+fn counting(bytes: List[Byte]) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
   mut next: Byte = 0
   loop i in 0..bytes.size {
     next = wrapping_add(next, 1)
-    made = push(take made, next)
+    push(mut made, next)
   }
   made
 }
@@ -35,7 +35,7 @@ fn counting(bytes: take List[Byte]) -> List[Byte] <alloc> {
 // port: each address on a line of its own, or the kind of the failure and what
 // it says.
 fn look(name: str, hosts: str, resolv: str, port: 0..65536) <console, alloc, task> {
-  match resolve(name, hosts, resolv, port, "{name}:80", fn(bytes) { counting(take bytes) }) {
+  match resolve(name, hosts, resolv, port, "{name}:80", fn(bytes: mut List[Byte]) { bytes = counting(bytes) }) {
     .ok(found) {
       loop i in 0..found.size { print(written(found[i])) }
     }

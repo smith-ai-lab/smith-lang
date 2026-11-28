@@ -15,11 +15,11 @@ The module `std.entropy` declares the `entropy` [effect](../language/effect-decl
 
 ```
 effect entropy {
-  fn fill(bytes: take List[Byte]) -> List[Byte]
+  fn fill(bytes: mut List[Byte])
 }
 ```
 
-`fill` takes a list, fills every byte of it with bytes the system gives, and gives the list back. The list is the caller's and its size does not change, so a call needs no `alloc`.
+`fill` is passed a list `mut`, as `fill(mut bytes)`, and fills every byte of it with bytes the system gives. The list is the caller's and its size does not change, so a call needs no `alloc`.
 
 ```
 use std.console (console, print)
@@ -27,9 +27,10 @@ use std.entropy (entropy, fill)
 use std.fmt (hex)
 
 fn main() <console, entropy, alloc> {
-  bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  mut bytes: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
   mut line = ""
-  loop b in fill(take bytes) { line = "{line}{hex(b, width: 2, letters: .lower)}" }
+  fill(mut bytes)
+  loop b in bytes { line = "{line}{hex(b, width: 2, letters: .lower)}" }
   print(line)
 }
 ```
@@ -47,10 +48,10 @@ use std.list (push)
 
 fn fixed[T](body: fn() -> T <entropy>) -> T <alloc> {
   entropy(
-    fill: fn(bytes) {
+    fill: fn(bytes: mut List[Byte]) {
       mut made: List[Byte] = []
-      loop i in 0..bytes.size { made = push(take made, 171) }
-      made
+      loop i in 0..bytes.size { push(mut made, 171) }
+      bytes = made
     },
     body: body,
   )

@@ -108,7 +108,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
       if connections.size > 0 {{
         script = connections[0]
         mut tail: List[List[List[Byte]]] = []
-        loop i in 1..connections.size {{ tail = push(take tail, take connections[i]) }}
+        loop i in 1..connections.size {{ push(mut tail, take connections[i]) }}
         connections = tail
         left = []
         asked = 0
@@ -122,7 +122,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
         if script.size > 0 {{
           left = copy(script[0])
           mut tail: List[List[Byte]] = []
-          loop i in 1..script.size {{ tail = push(take tail, take script[i]) }}
+          loop i in 1..script.size {{ push(mut tail, take script[i]) }}
           script = tail
         }}
       }}
@@ -133,7 +133,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
         mut got: List[Byte] = []
         mut rest: List[Byte] = []
         loop i in 0..left.size {{
-          if i < piece {{ got = push(take got, left[i]) }} else {{ rest = push(take rest, left[i]) }}
+          if i < piece {{ push(mut got, left[i]) }} else {{ push(mut rest, left[i]) }}
         }}
         left = rest
         asked = saturating_add(asked, got.size)
@@ -142,7 +142,7 @@ fn playing[T](body: fn() -> T <net>) -> T <console, alloc> {{
     }},
     write: fn(c, data) {{
       mut made: List[Byte] = []
-      loop i in 0..data.size {{ made = push(take made, data[i]) }}
+      loop i in 0..data.size {{ push(mut made, data[i]) }}
       written = made
       print(\"request\")
       print(shown(copy(written)))
@@ -433,7 +433,7 @@ fn shown(b: take List[Byte]) -> str <alloc> {
 
 fn listed(t: str) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  loop i in 0..t.size { made = push(take made, t[i]) }
+  loop i in 0..t.size { push(mut made, t[i]) }
   made
 }
 

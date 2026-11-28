@@ -2,11 +2,11 @@ use std.text (Text, append, finish, text as new_text)
 
 // The bytes of `s` from `from` up to `end`, which are whole characters, as
 // they are, with nothing read again.
-fn run(to: take Text, s: str, from: Nat, end: Nat) -> Text <alloc>
+fn run(to: mut Text, s: str, from: Nat, end: Nat) <alloc>
   requires from <= end and end <= s.size
   requires boundary(s, from) and boundary(s, end)
 {
-  append(take to, s[from..end])
+  append(mut to, s[from..end])
 }
 
 // How HTML writes a byte that is not text where it stands, or nothing for a
@@ -165,11 +165,13 @@ pub fn escape(s: str) -> str <alloc> {
     // Only a byte below 128 is escaped, and such a byte is a character of
     // its own, so a run ends before it and the next begins after it.
     if b < 128 and written.size > 0 {
-      t = append(run(take t, s, from, i), written)
+      run(mut t, s, from, i)
+      append(mut t, written)
       from = i + 1
     }
   }
-  finish(run(take t, s, from, s.size))
+  run(mut t, s, from, s.size)
+  finish(take t)
 }
 
 // A text among other elements, written so that it is text and nothing else.
@@ -183,12 +185,8 @@ pub fn insert(page: Html) <markup> {
 }
 
 // The page so far, with the `>` of the tag that is open written.
-fn closed(t: take Text, open: bool) -> Text <alloc> {
-  if open {
-    append(take t, ">")
-  } else {
-    t
-  }
+fn closed(t: mut Text, open: bool) <alloc> {
+  if open { append(mut t, ">") }
 }
 
 // The handler of `markup`: it runs `writes`, gathers what it writes into one
@@ -201,27 +199,37 @@ pub fn render(writes: fn() <markup>) -> Html <alloc> {
   mut open = false
   markup(
     start: fn(tag) {
-      acc = append(append(closed(take acc, open), "<"), tag)
+      closed(mut acc, open)
+      append(mut acc, "<")
+      append(mut acc, tag)
       open = true
     },
     attribute: fn(name, value) {
-      acc = append(append(append(append(take acc, " "), name), "=\""), value)
-      acc = append(take acc, "\"")
+      append(mut acc, " ")
+      append(mut acc, name)
+      append(mut acc, "=\"")
+      append(mut acc, value)
+      append(mut acc, "\"")
     },
     emit: fn(escaped) {
-      acc = append(closed(take acc, open), escaped)
+      closed(mut acc, open)
+      append(mut acc, escaped)
       open = false
     },
     include: fn(page) {
-      acc = append(closed(take acc, open), page.page)
+      closed(mut acc, open)
+      append(mut acc, page.page)
       open = false
     },
     void: {
-      acc = closed(take acc, open)
+      closed(mut acc, open)
       open = false
     },
     end: fn(tag) {
-      acc = append(append(append(closed(take acc, open), "</"), tag), ">")
+      closed(mut acc, open)
+      append(mut acc, "</")
+      append(mut acc, tag)
+      append(mut acc, ">")
       open = false
     },
     body: writes,

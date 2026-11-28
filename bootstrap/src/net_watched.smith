@@ -64,23 +64,26 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   mut rights: List[Byte] = __reserve(64)
   said_at: u64 = __address_of(said)
   rights_at: u64 = __address_of(rights)
-  iov = append(eight(said_at), eight(64))
+  mut iov = eight(said_at)
+  append(mut iov, eight(64))
   iov_at: u64 = __address_of(iov)
   // The message the kernel fills: where the bytes go and where the descriptors
   // go. Its fields are laid out as the kernel's header says, which macOS
   // makes shorter.
   mut message: List[Byte] = eight(0)
-  message = append(take message, zeros(8))
-  message = append(take message, eight(iov_at))
+  append(mut message, zeros(8))
+  append(mut message, eight(iov_at))
   if on_macos() {
-    message = append(append(take message, number(1)), zeros(4))
-    message = append(take message, eight(rights_at))
-    message = append(append(take message, number(64)), zeros(4))
+    append(mut message, number(1))
+    append(mut message, zeros(4))
+    append(mut message, eight(rights_at))
+    append(mut message, number(64))
+    append(mut message, zeros(4))
   } else {
-    message = append(take message, eight(1))
-    message = append(take message, eight(rights_at))
-    message = append(take message, eight(64))
-    message = append(take message, zeros(8))
+    append(mut message, eight(1))
+    append(mut message, eight(rights_at))
+    append(mut message, eight(64))
+    append(mut message, zeros(8))
   }
   mut got: i64 = -4
   loop attempt in 0..8 {

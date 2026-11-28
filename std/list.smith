@@ -1,14 +1,14 @@
-pub fn push[T](list: take List[T], item: take T) -> List[T] <alloc> {
-  __push(list, item)
+pub fn push[T](list: mut List[T], item: take T) <alloc> {
+  __push(mut list, item)
 }
 
-pub fn append[T](a: take List[T], b: List[T]) -> List[T] <alloc> {
-  __append(a, b)
+pub fn append[T](a: mut List[T], b: List[T]) <alloc> {
+  __append(mut a, b)
 }
 
 pub fn copy[T: Copy](list: List[T]) -> List[T] <alloc> {
   mut made: List[T] = []
-  loop x in list { made = push(take made, x) }
+  loop x in list { push(mut made, x) }
   made
 }
 

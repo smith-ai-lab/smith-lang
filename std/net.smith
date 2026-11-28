@@ -255,29 +255,36 @@ fn sockaddr(address: List[Byte], port: 0..65536) -> Place <alloc> {
   mut made: List[Byte] = []
   if address.size == 4 {
     if on_macos() {
-      made = push(push(take made, 16), 2)
+      push(mut made, 16)
+      push(mut made, 2)
     } else {
-      made = push(push(take made, 2), 0)
+      push(mut made, 2)
+      push(mut made, 0)
     }
-    made = push(push(take made, high), low)
-    loop k in 0..address.size { made = push(take made, address[k]) }
-    loop k in 0..8 { made = push(take made, 0) }
+    push(mut made, high)
+    push(mut made, low)
+    loop k in 0..address.size { push(mut made, address[k]) }
+    loop k in 0..8 { push(mut made, 0) }
     return Place(family: 2, bytes: made)
   }
   mut family: Byte = 10
   if on_macos() {
     family = 30
-    made = push(push(take made, 28), 30)
+    push(mut made, 28)
+    push(mut made, 30)
   } else if on_windows() {
     family = 23
-    made = push(push(take made, 23), 0)
+    push(mut made, 23)
+    push(mut made, 0)
   } else {
-    made = push(push(take made, 10), 0)
+    push(mut made, 10)
+    push(mut made, 0)
   }
-  made = push(push(take made, high), low)
-  loop k in 0..4 { made = push(take made, 0) }
-  loop k in 0..address.size { made = push(take made, address[k]) }
-  loop k in 0..4 { made = push(take made, 0) }
+  push(mut made, high)
+  push(mut made, low)
+  loop k in 0..4 { push(mut made, 0) }
+  loop k in 0..address.size { push(mut made, address[k]) }
+  loop k in 0..4 { push(mut made, 0) }
   Place(family: family, bytes: made)
 }
 
@@ -298,14 +305,16 @@ fn place(host: str, port: 0..65536) -> Result[Place, NetError] <alloc> {
 // Four bytes that the kernel reads as the number `n`.
 fn number(n: Byte) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  made = push(push(take made, n), 0)
-  made = push(push(take made, 0), 0)
+  push(mut made, n)
+  push(mut made, 0)
+  push(mut made, 0)
+  push(mut made, 0)
   made
 }
 
 fn zeros(n: Nat) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  loop k in 0..n { made = push(take made, 0) }
+  loop k in 0..n { push(mut made, 0) }
   made
 }
 
@@ -315,12 +324,11 @@ fn hex_char(d: 0..16) -> 0..128 {
 }
 
 // The digits of a group, with none that is a zero at the front.
-fn hex(t: take Text, n: Nat) -> Text <alloc> {
-  mut made = t
-  if n >= 4096 { made = append_ascii(take made, hex_char((n / 4096) % 16)) }
-  if n >= 256 { made = append_ascii(take made, hex_char((n / 256) % 16)) }
-  if n >= 16 { made = append_ascii(take made, hex_char((n / 16) % 16)) }
-  append_ascii(take made, hex_char(n % 16))
+fn hex(t: mut Text, n: Nat) <alloc> {
+  if n >= 4096 { append_ascii(mut t, hex_char((n / 4096) % 16)) }
+  if n >= 256 { append_ascii(mut t, hex_char((n / 256) % 16)) }
+  if n >= 16 { append_ascii(mut t, hex_char((n / 16) % 16)) }
+  append_ascii(mut t, hex_char(n % 16))
 }
 
 // The host a peer's address holds, from the family it says and where the
@@ -341,7 +349,7 @@ fn host_text(bytes: List[Byte]) -> str <alloc> {
   mut groups: List[u16] = []
   loop k in 0..8 {
     group: u16 = bytes[8 + 2 * k] * 256 + bytes[9 + 2 * k]
-    groups = push(take groups, group)
+    push(mut groups, group)
   }
   mut start: Nat = 0
   mut length: Nat = 0
@@ -366,12 +374,13 @@ fn host_text(bytes: List[Byte]) -> str <alloc> {
     if skip > 0 {
       skip = skip - 1
     } else if length >= 2 and k == start {
-      t = append_ascii(append_ascii(take t, 58), 58)
+      append_ascii(mut t, 58)
+      append_ascii(mut t, 58)
       skip = saturating_sub(length, 1)
       gap = true
     } else {
-      if k > 0 and not gap { t = append_ascii(take t, 58) }
-      t = hex(take t, groups[k])
+      if k > 0 and not gap { append_ascii(mut t, 58) }
+      hex(mut t, groups[k])
       gap = false
     }
   }
@@ -500,8 +509,8 @@ fn file_text(path: str) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
   if on_macos() or on_windows() { return made }
   mut name: List[Byte] = []
-  loop i in 0..path.size { name = push(take name, path[i]) }
-  name = push(take name, 0)
+  loop i in 0..path.size { push(mut name, path[i]) }
+  push(mut name, 0)
   fd = __system(19, -100, name, 0, 0, 0, 0)
   if fd < 0 { return made }
   loop round in 0..16 {
@@ -510,7 +519,7 @@ fn file_text(path: str) -> List[Byte] <alloc> {
     if got <= 0 { break }
     chunk = __sized(take buffer, count(got))
     if made.size + chunk.size > 60000 { break }
-    made = append(take made, chunk)
+    append(mut made, chunk)
   }
   _ = __system(9, fd, 0, 0, 0, 0, 0)
   made
@@ -519,7 +528,7 @@ fn file_text(path: str) -> List[Byte] <alloc> {
 // The eight bytes of a number, the low one first, as the kernel reads them.
 fn eight(n: u64) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  loop i in 0..8 { made = push(take made, bit_and(shift_right(n, 8 * i), 255)) }
+  loop i in 0..8 { push(mut made, bit_and(shift_right(n, 8 * i), 255)) }
   made
 }
 
@@ -527,13 +536,14 @@ fn eight(n: u64) -> List[Byte] <alloc> {
 // of it for 20 and a write of it for 21, which Linux gives to the level 1.
 fn wait_at_most(fd: i64, name: i64, ms: u64) <alloc> {
   mut value: List[Byte] = eight(ms / 1000)
-  value = append(take value, eight((ms % 1000) * 1000))
+  append(mut value, eight((ms % 1000) * 1000))
   __system(6, fd, 1, name, value, 16, 0)
 }
 
 // The milliseconds the clock of the system says, which only goes forward.
 fn clock() -> u64 <alloc> {
-  stamp = append(eight(0), eight(0))
+  mut stamp = eight(0)
+  append(mut stamp, eight(0))
   mut which: i64 = 1
   if on_macos() { which = 6 }
   _ = __system(18, which, stamp, 0, 0, 0, 0)
@@ -579,8 +589,9 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
     return .none
   }
   mut framed: List[Byte] = []
-  framed = push(push(take framed, bit_and(shift_right(question.size, 8), 255)), bit_and(question.size, 255))
-  framed = append(take framed, question)
+  push(mut framed, bit_and(shift_right(question.size, 8), 255))
+  push(mut framed, bit_and(question.size, 255))
+  append(mut framed, question)
   size = framed.size
   packet = freeze(take framed)
   mut sent: Nat = 0
@@ -616,14 +627,14 @@ fn over_tcp(server: Place, question: List[Byte], ms: u64) -> Option[List[Byte]] 
       _ = __system(9, fd, 0, 0, 0, 0, 0)
       return .none
     } else {
-      got = append(take got, __sized(take buffer, count(n)))
+      append(mut got, __sized(take buffer, count(n)))
     }
     if got.size >= 2 and wanted == 2 { wanted = got[0] * 256 + got[1] + 2 }
   }
   _ = __system(9, fd, 0, 0, 0, 0, 0)
   if got.size < wanted or wanted < 14 { return .none }
   mut whole: List[Byte] = []
-  loop k in 0..got.size { if k >= 2 and k < wanted { whole = push(take whole, got[k]) } }
+  loop k in 0..got.size { if k >= 2 and k < wanted { push(mut whole, got[k]) } }
   .some(whole)
 }
 
@@ -690,8 +701,9 @@ fn believe(asked: take Asked, message: List[Byte], name: List[Byte], server: Pla
 // from the place it was asked; a failure of the nameserver is asked again at
 // once, four times at most, and any other code is ignored. A message that was
 // cut short is asked over TCP of the nameserver that sent it.
-fn ask_name(fd: Descriptor, servers: List[Place], conf: Config, name: List[Byte], address: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[Option[List[List[Byte]]], NetError] <alloc, task> {
-  ids = random([0, 0, 0, 0])
+fn ask_name(fd: Descriptor, servers: List[Place], conf: Config, name: List[Byte], address: str, random: fn(mut List[Byte])) -> Result[Option[List[List[Byte]]], NetError] <alloc, task> {
+  mut ids: List[Byte] = [0, 0, 0, 0]
+  random(mut ids)
   if ids.size < 4 { return .err(.failed((address, "lookup: no random bytes"))) }
   first: u16 = ids[0] * 256 + ids[1]
   mut second: u16 = ids[2] * 256 + ids[3]
@@ -769,8 +781,8 @@ fn ask_name(fd: Descriptor, servers: List[Place], conf: Config, name: List[Byte]
     return .err(.failed((address, "lookup: no nameserver answered in time")))
   }
   mut found: List[List[Byte]] = []
-  loop a in 0..one.addresses.size { found = push(take found, copy(one.addresses[a])) }
-  loop a in 0..two.addresses.size { found = push(take found, copy(two.addresses[a])) }
+  loop a in 0..one.addresses.size { push(mut found, copy(one.addresses[a])) }
+  loop a in 0..two.addresses.size { push(mut found, copy(two.addresses[a])) }
   if found.size == 0 { return .ok(.none) }
   .ok(.some(found))
 }
@@ -779,22 +791,26 @@ fn ask_name(fd: Descriptor, servers: List[Place], conf: Config, name: List[Byte]
 // nobody can predict: `getrandom` fills at most 256 bytes whole, and when it
 // gives less the lookup has none, and says so, and never goes on with bytes that
 // were not filled.
-fn random_bytes(bytes: take List[Byte]) -> List[Byte] <alloc> {
-  mut made: List[Byte] = []
-  if on_macos() or on_windows() { return made }
+fn random_bytes(bytes: mut List[Byte]) <alloc> {
   size = bytes.size
-  if size > 256 { return made }
+  if on_macos() or on_windows() or size > 256 {
+    bytes = []
+    return
+  }
   mut buffer: List[Byte] = __reserve(size)
   got = __system(21, buffer, size, 0, 0, 0, 0)
-  if got < 0 or count(got) != size { return made }
-  __sized(take buffer, size)
+  if got < 0 or count(got) != size {
+    bytes = []
+    return
+  }
+  bytes = __sized(take buffer, size)
 }
 
 // The addresses of a name, in the order they are tried: those of `/etc/hosts`,
 // when it has the name, and otherwise those the nameservers of
 // `/etc/resolv.conf` give for the first name of the list that has one. A name
 // that has none is `unknown_host`.
-pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, named: str, random: fn(take List[Byte]) -> List[Byte]) -> Result[List[List[Byte]], NetError] <alloc, task> {
+pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port: 0..65536, named: str, random: fn(mut List[Byte])) -> Result[List[List[Byte]], NetError] <alloc, task> {
   inside = hosts(hosts_text, host)
   if inside.size > 0 { return .ok(inside) }
   conf = config(resolv_text)
@@ -814,10 +830,10 @@ pub fn resolve(host: str, hosts_text: List[Byte], resolv_text: List[Byte], port:
     address = conf.servers[v]
     if address.size == 4 and family == 10 {
       mut mapped: List[Byte] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255]
-      mapped = append(take mapped, address)
-      servers = push(take servers, sockaddr(mapped, port))
+      append(mut mapped, address)
+      push(mut servers, sockaddr(mapped, port))
     } else if address.size == 16 or family == 2 {
-      servers = push(take servers, sockaddr(address, port))
+      push(mut servers, sockaddr(address, port))
     }
   }
   names = candidates(host, conf)
@@ -862,7 +878,7 @@ fn system_connect_to(host: str, port: 1..65536) -> Result[Connection, NetError] 
       if on_macos() { return .err(e) }
     }
   }
-  addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53, address_text(host, port), fn(bytes) { random_bytes(take bytes) })
+  addresses = try resolve(host, file_text("/etc/hosts"), file_text("/etc/resolv.conf"), 53, address_text(host, port), fn(bytes: mut List[Byte]) { random_bytes(mut bytes) })
   mut last: NetError = .unknown_host(address_text(host, port))
   loop a in 0..addresses.size {
     match connect_place(sockaddr(addresses[a], port), host, port) {

@@ -201,8 +201,9 @@ fn method_name(m: Method) -> str {
 }
 
 // The line break that ends a line of a head.
-fn ended(line: take List[Byte]) -> List[Byte] <alloc> {
-  push(push(take line, 13), 10)
+fn ended(line: mut List[Byte]) <alloc> {
+  push(mut line, 13)
+  push(mut line, 10)
 }
 
 // Whether a header of this name is among those the program gave.
@@ -221,19 +222,28 @@ fn names(headers: List[(HeaderName, HeaderValue)], name: str) -> bool <alloc> {
 // can be. `type_of` is empty for a request with no body.
 fn request_bytes(method: Method, place: Place, headers: List[(HeaderName, HeaderValue)], type_of: str, body: List[Byte]) -> List[Byte] <alloc> {
   mut made: List[Byte] = []
-  made = ended(append(take made, "{method_name(method)} {place.target} HTTP/1.1".bytes))
-  if not names(headers, "host") { made = ended(append(take made, "host: {place.named}".bytes)) }
-  made = ended(append(take made, "connection: close".bytes))
+  append(mut made, "{method_name(method)} {place.target} HTTP/1.1".bytes)
+  ended(mut made)
+  if not names(headers, "host") {
+    append(mut made, "host: {place.named}".bytes)
+    ended(mut made)
+  }
+  append(mut made, "connection: close".bytes)
+  ended(mut made)
   loop i in 0..headers.size {
     (n, v) = headers[i]
-    made = ended(append(take made, "{n}: {v}".bytes))
+    append(mut made, "{n}: {v}".bytes)
+    ended(mut made)
   }
   if type_of.size > 0 {
-    made = ended(append(take made, "content-type: {type_of}".bytes))
-    made = ended(append(take made, "content-length: {body.size}".bytes))
+    append(mut made, "content-type: {type_of}".bytes)
+    ended(mut made)
+    append(mut made, "content-length: {body.size}".bytes)
+    ended(mut made)
   }
-  made = ended(take made)
-  append(take made, body)
+  ended(mut made)
+  append(mut made, body)
+  made
 }
 
 // Why there is no response, before the program is told which request it was.
@@ -254,7 +264,11 @@ fn most_read(wanted: Nat) -> 1..65537 {
 // The bytes held and what the connection sent next, asking for at most `wanted`.
 fn more(c: Connection, held: Slice[Byte], wanted: Nat) -> Result[Slice[Byte], Trouble] <net, alloc> {
   match read(c, most_read(wanted)) {
-    .ok(.bytes(got)) { Result.ok(freeze(append(copy(held), got.bytes))) }
+    .ok(.bytes(got)) {
+      mut joined = copy(held)
+      append(mut joined, got.bytes)
+      Result.ok(freeze(take joined))
+    }
     .ok(.ended) { Result.err(Trouble.ended) }
     .err(e) { Result.err(Trouble.broke(e)) }
   }
@@ -332,7 +346,7 @@ fn read_chunks(c: Connection, held: Slice[Byte], limit: Nat) -> Result[List[Byte
         .complete((piece, used)) {
           if piece.size == 0 { return Result.ok(body) }
           if body.size + piece.size > limit { return Result.err(Trouble.big) }
-          body = append(take body, piece)
+          append(mut body, piece)
           bytes = after(bytes, used)
         }
         .incomplete {
@@ -482,8 +496,8 @@ pub fn client[T](body: fn() -> T <fetch>) -> T <net, alloc> {
 // the server wrote, as many bytes as it wrote, to the end or to the most it holds.
 fn through_host(place: Place, wire: List[Byte], most: Nat) -> Result[List[Byte], Trouble] <alloc> {
   mut request: List[Byte] = []
-  request = append(take request, "{place.host}\n{place.port}\n{most}\n".bytes)
-  request = append(take request, wire)
+  append(mut request, "{place.host}\n{place.port}\n{most}\n".bytes)
+  append(mut request, wire)
   given = __system(30, request, request.size, 0, 0, 0, 0)
   size: Option[Nat] = narrow(given)
   match size {
@@ -538,7 +552,7 @@ fn buffered_chunks(held: Slice[Byte], limit: Nat) -> Result[List[Byte], Trouble]
       .complete((piece, used)) {
         if piece.size == 0 { return Result.ok(body) }
         if body.size + piece.size > limit { return Result.err(Trouble.big) }
-        body = append(take body, piece)
+        append(mut body, piece)
         bytes = after(bytes, used)
       }
       .incomplete { return Result.err(Trouble.ended) }
@@ -589,7 +603,7 @@ pub fn host[T](body: fn() -> T <fetch>) -> T <alloc> {
 fn copied(headers: List[(HeaderName, HeaderValue)]) -> List[(HeaderName, HeaderValue)] <alloc> {
   mut made: List[(HeaderName, HeaderValue)] = []
   loop i in 0..headers.size {
-    made = push(take made, headers[i])
+    push(mut made, headers[i])
   }
   made
 }

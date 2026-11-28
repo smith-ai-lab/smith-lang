@@ -427,8 +427,8 @@ use std.net (Chunk, connection, handle, listener, net, release)
 fn listed(t: str) -> List[Byte] <alloc> {{
   mut made: List[Byte] = []
   loop i in 0..t.size {{
-    if t.bytes[i] == 10 {{ made = push(take made, 13) }}
-    made = push(take made, t.bytes[i])
+    if t.bytes[i] == 10 {{ push(mut made, 13) }}
+    push(mut made, t.bytes[i])
   }}
   made
 }}
@@ -455,7 +455,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
       if seen {{
         .ok(.ended)
       }} else {{
-        asked = push(take asked, handle(c))
+        push(mut asked, handle(c))
         made = if handle(c) == 2 {{
           listed({seven})
         }} else if handle(c) == 3 {{
@@ -468,8 +468,8 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
     }},
     write: fn(c, bytes) {{
       mut copied: List[Byte] = []
-      loop i in 0..bytes.size {{ copied = push(take copied, bytes[i]) }}
-      kept = push(take kept, take copied)
+      loop i in 0..bytes.size {{ push(mut copied, bytes[i]) }}
+      push(mut kept, take copied)
       .ok(())
     }},
     close: fn(c) {{ n = release(take c) }},

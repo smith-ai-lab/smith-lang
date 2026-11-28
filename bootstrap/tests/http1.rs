@@ -516,7 +516,7 @@ fn a_chunk_is_read_as_its_bytes_with_what_it_took_and_a_chunk_of_no_bytes_is_the
 }
 
 fn write_chunk_writes_a_chunk_that_chunk_reads_back() {
-    let helpers = format!("{CHUNK}fn show_written(data: Slice[Byte]) <console, alloc> {{\n  empty: List[Byte] = []\n  w = write_chunk(take empty, data)\n  loop v in w {{ print(\"{{v}}\") }}\n  show_chunk(take w)\n}}\n\n");
+    let helpers = format!("{CHUNK}fn show_written(data: Slice[Byte]) <console, alloc> {{\n  mut w: List[Byte] = []\n  write_chunk(mut w, data)\n  loop v in w {{ print(\"{{v}}\") }}\n  show_chunk(take w)\n}}\n\n");
     generate::check(
         5955,
         3,

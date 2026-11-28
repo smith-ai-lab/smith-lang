@@ -44,7 +44,7 @@ use std.task (join, spawn, test_ready_by, test_scheduler)
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(take xs, i)
+    push(mut xs, i)
   }}
   0
 }}
@@ -120,7 +120,7 @@ use std.task (join, outcome, spawn, task, test_scheduler)
 fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(take xs, i)
+    push(mut xs, i)
   }
   0
 }

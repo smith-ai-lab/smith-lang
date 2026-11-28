@@ -119,7 +119,7 @@ fn recording[T](connections: 0..1000, body: fn() -> T <net>) -> (T, List[List[By
       if seen {{
         .ok(.ended)
       }} else {{
-        asked = push(take asked, handle(c))
+        push(mut asked, handle(c))
         if handle(c) == 2 {{
           .ok(.bytes(Chunk(bytes: {seven})))
         }} else if handle(c) == 3 {{
@@ -131,8 +131,8 @@ fn recording[T](connections: 0..1000, body: fn() -> T <net>) -> (T, List[List[By
     }},
     write: fn(c, bytes) {{
       mut copied: List[Byte] = []
-      loop i in 0..bytes.size {{ copied = push(take copied, bytes[i]) }}
-      kept = push(take kept, take copied)
+      loop i in 0..bytes.size {{ push(mut copied, bytes[i]) }}
+      push(mut kept, take copied)
       .ok(())
     }},
     close: fn(c) {{ n = release(take c) }},

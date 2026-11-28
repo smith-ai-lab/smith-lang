@@ -227,30 +227,48 @@ fn read_l(ls: List[List[{e}]]) <console, alloc> {
   loop i in 0..ls.size { dump(ls[i]) }
 }
 
-fn wpush(w: take W, v: {e}) -> W <alloc> { W(xs: push(take w.xs, v)) }
+fn wpush(w: take W, v: {e}) -> W <alloc> {
+  mut grown = w
+  push(mut grown.xs, v)
+  grown
+}
 
 fn tpush(t: take (List[{e}], Byte), v: {e}) -> (List[{e}], Byte) <alloc> {
   match t {
-    (xs, k) { (push(take xs, v), k) }
+    (xs, k) {
+      mut ys = xs
+      push(mut ys, v)
+      (ys, k)
+    }
   }
 }
 
 fn epush(e: take E, v: {e}) -> E <alloc> {
   match e {
-    .empty { E.full(push([], v)) }
-    .full(xs) { E.full(push(take xs, v)) }
+    .empty {
+      mut xs: List[{e}] = []
+      push(mut xs, v)
+      E.full(xs)
+    }
+    .full(xs) {
+      mut ys = xs
+      push(mut ys, v)
+      E.full(ys)
+    }
   }
 }
 
 fn dpush(d: take Deep, v: {e}) -> Deep <alloc> {
-  (w, k) = d.inner
-  Deep(inner: (W(xs: push(take w.xs, v)), k))
+  (mut w, k) = d.inner
+  push(mut w.xs, v)
+  Deep(inner: (W(xs: w.xs), k))
 }
 
 fn fresh(a: {e}, b: {e}) -> List[{e}] <alloc> {
   mut xs: List[{e}] = []
-  xs = push(take xs, a)
-  push(take xs, b)
+  push(mut xs, a)
+  push(mut xs, b)
+  xs
 }
 
 ";
@@ -268,16 +286,16 @@ fn declare(k: Kind, h: usize) -> String {
 
 fn push_text(k: Kind, h: usize, step: &Step) -> String {
     match (k, step) {
-        (Kind::Plain, Step::Push { value, .. }) => format!("  h{h} = push(take h{h}, {value})\n"),
+        (Kind::Plain, Step::Push { value, .. }) => format!("  push(mut h{h}, {value})\n"),
         (Kind::Field, Step::Push { value, through, .. }) => match through {
             true => format!("  h{h} = wpush(take h{h}, {value})\n"),
-            false => format!("  h{h}.xs = push(take h{h}.xs, {value})\n"),
+            false => format!("  push(mut h{h}.xs, {value})\n"),
         },
         (Kind::Tuple, Step::Push { value, .. }) => format!("  h{h} = tpush(take h{h}, {value})\n"),
         (Kind::Enum, Step::Push { value, .. }) => format!("  h{h} = epush(take h{h}, {value})\n"),
         (Kind::Deep, Step::Push { value, .. }) => format!("  h{h} = dpush(take h{h}, {value})\n"),
         (Kind::Lists, Step::Nest { values, .. }) => {
-            format!("  h{h} = push(take h{h}, fresh({}, {}))\n", values[0], values[1])
+            format!("  push(mut h{h}, fresh({}, {}))\n", values[0], values[1])
         }
         _ => unreachable!("a step fits the holder it is for"),
     }
@@ -405,7 +423,7 @@ fn reading_a_list_asks_for_no_memory_and_moves_no_bytes() {
         for n in [0usize, 1, 3, 4, 9] {
             let program = |reads: &str| {
                 format!(
-                    "fn total(xs: List[{t}]) -> {t} {{\n  mut sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = []\n  loop i in 0..{n} {{ xs = push(take xs, 1) }}\n{reads}}}\n"
+                    "fn total(xs: List[{t}]) -> {t} {{\n  mut sum: {t} = 0\n  loop v in xs {{ sum = wrapping_add(sum, v) }}\n  sum\n}}\n\nfn first(xs: List[{t}]) -> {t} {{ if 0 < xs.size {{ xs[0] }} else {{ 0 }} }}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = []\n  loop i in 0..{n} {{ push(mut xs, 1) }}\n{reads}}}\n"
                 )
             };
             let reads = "  a = xs.size\n  b = first(xs)\n  c = total(xs)\n  loop i in 0..xs.size { d = xs[i] }\n  if 0 < a { print(\"read\") }\n  if 0 < wrapping_add(b, c) { print(\"read\") }\n";
@@ -457,13 +475,13 @@ fn a_function_that_gives_a_list_away_and_uses_it_again_is_one_error_whose_fix_is
  {
     let both = |first: &str| {
         format!(
-            "use std.list (copy)\n\nfn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) <alloc> {{\n  ys = push({first}, 1)\n  (xs, ys)\n}}\n\nfn main() <console, alloc> {{\n  zs: List[Byte] = [7, 8]\n  (a, b) = both(take zs)\n  print(\"{{a.size}} {{b.size}}\")\n}}\n"
+            "use std.list (copy)\n\nfn both(xs: take List[Byte]) -> (List[Byte], List[Byte]) <alloc> {{\n  mut ys = {first}\n  push(mut ys, 1)\n  (xs, ys)\n}}\n\nfn main() <console, alloc> {{\n  zs: List[Byte] = [7, 8]\n  (a, b) = both(take zs)\n  print(\"{{a.size}} {{b.size}}\")\n}}\n"
         )
     };
     let kept = both("copy(xs)");
     let program = lowered(&kept);
     assert_eq!(scalar::run(&program).stdout, b"2 3\n".to_vec());
-    let refused = both("take xs");
+    let refused = both("xs");
     let full = with_imports(&refused);
     let errors = check(full.as_bytes()).expect_err("a list used after it was given away");
     assert_eq!(errors.len(), 1, "{errors:?}");
@@ -528,7 +546,7 @@ fn copy_gives_a_new_list_of_the_same_elements_and_asks_for_alloc() {
         let t = ELEMS[*elem].0;
         let written: Vec<String> = items.iter().map(u64::to_string).collect();
         let source = format!(
-            "use std.list (copy)\n\nfn dump(xs: List[{t}]) <console, alloc> {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = [{}]\n  mut ys = copy(xs)\n  dump(ys)\n  ys = push(take ys, {to_copy})\n  xs = push(take xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
+            "use std.list (copy)\n\nfn dump(xs: List[{t}]) <console, alloc> {{\n  print(\"{{xs.size}}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n\nfn main() <console, alloc> {{\n  mut xs: List[{t}] = [{}]\n  mut ys = copy(xs)\n  dump(ys)\n  push(mut ys, {to_copy})\n  push(mut xs, {to_original})\n  dump(xs)\n  dump(ys)\n}}\n",
             written.join(", ")
         );
         let mut lines = Vec::new();

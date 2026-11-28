@@ -66,22 +66,22 @@ fn steps(g: &mut Gen) -> Vec<Step> {
 /// bytes of each in turn, whatever room the text had.
 fn a_text_built_from_texts_and_ascii_bytes_finishes_as_their_bytes_in_order() {
     generate::check(21, 40, steps, |steps| {
-        let mut chain = String::from("text()");
+        let mut chain = String::new();
         let mut model = Vec::new();
         for step in steps {
             match step {
                 Step::Text(s) => {
-                    chain = format!("append({chain}, \"{s}\")");
+                    chain += &format!("  append(mut t, \"{s}\")\n");
                     model.extend(s.bytes());
                 }
                 Step::Ascii(b) => {
-                    chain = format!("append_ascii({chain}, {b})");
+                    chain += &format!("  append_ascii(mut t, {b})\n");
                     model.push(*b);
                 }
             }
         }
         let source = format!(
-            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str <alloc> {{\n  finish({chain})\n}}\n\nfn main() <console, alloc> {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
+            "use std.console (console, print)\nuse std.text (append, append_ascii, finish, text)\n\nfn made() -> str <alloc> {{\n  mut t = text()\n{chain}  finish(take t)\n}}\n\nfn main() <console, alloc> {{\n  s = made()\n  loop i in 0..s.size {{ print(\"{{s[i]}}\") }}\n  print(\"{{s.size}}\")\n}}\n"
         );
         let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?} for {source}"));
         let lines: String = model
@@ -104,9 +104,9 @@ fn an_empty_text_asks_for_no_memory() {
 }
 
 fn a_byte_that_may_be_128_or_more_is_refused_by_append_ascii() {
-    let source = "use std.text (Text, append_ascii, finish, text)\n\nfn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }\n\nfn main() <alloc> { s = finish(wrong(65)) }\n";
+    let source = "use std.text (Text, append_ascii, finish, text)\n\nfn wrong(b: Byte) -> Text <alloc> {\n  mut t = text()\n  append_ascii(mut t, b)\n  t\n}\n\nfn main() <alloc> { s = finish(wrong(65)) }\n";
     assert!(!refused(source).is_empty(), "{source}");
-    let fine = "use std.text (Text, append_ascii, finish, text)\n\nfn right(b: 0..128) -> Text <alloc> { append_ascii(text(), b) }\n\nfn main() <alloc> { s = finish(right(65)) }\n";
+    let fine = "use std.text (Text, append_ascii, finish, text)\n\nfn right(b: 0..128) -> Text <alloc> {\n  mut t = text()\n  append_ascii(mut t, b)\n  t\n}\n\nfn main() <alloc> { s = finish(right(65)) }\n";
     assert_eq!(refused(fine), Vec::<String>::new(), "{fine}");
 }
 
@@ -123,7 +123,7 @@ fn no_module_but_std_text_builds_or_reads_the_field_of_a_text() {
 }
 
 fn building_a_text_needs_alloc() {
-    let source = "use std.text (append, text)\n\nfn grown() { append(text(), \"a\") }\n\nfn main() { grown() }\n";
+    let source = "use std.text (append, text)\n\nfn grown() {\n  mut t = text()\n  append(mut t, \"a\")\n}\n\nfn main() { grown() }\n";
     let errors = refused(source);
     assert!(errors.iter().any(|e| e.contains("`alloc`")), "{errors:?}");
 }

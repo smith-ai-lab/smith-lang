@@ -51,13 +51,13 @@ struct Out {
 
 fn put(to: take Out, b: 0..128) -> Out <alloc> {
   mut w = to
-  w.bytes = append_ascii(take w.bytes, b)
+  append_ascii(mut w.bytes, b)
   w
 }
 
 fn put_text(to: take Out, s: str) -> Out <alloc> {
   mut w = to
-  w.bytes = append(take w.bytes, s)
+  append(mut w.bytes, s)
   w
 }
 
@@ -156,7 +156,7 @@ fn start(to: take Out) -> Out <alloc> {
   mut w = to
   if w.tagged {
     w = put_text(take w, ",\"value\":")
-    w.opens = push(take w.opens, Open(depth: w.depth, below: w.top))
+    push(mut w.opens, Open(depth: w.depth, below: w.top))
     w.top = w.opens.size
     w.tagged = false
   } else if w.comma {
@@ -210,7 +210,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
     if i >= bytes.size { break }
     c = bytes[i]
     if c < 128 {
-      acc = append_ascii(take acc, c)
+      append_ascii(mut acc, c)
       i = saturating_add(i, 1)
     } else {
       n: Nat = if c >= 194 and c < 224 { 2 } else if c >= 224 and c < 240 { 3 } else if c >= 240 and c < 245 { 4 } else { 0 }
@@ -219,7 +219,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
       if n > 0 and i <= end and end <= bytes.size {
         match utf8(bytes[i..end]) {
           .ok(t) {
-            acc = append(take acc, t)
+            append(mut acc, t)
             whole = true
           }
           .err(e) { }
@@ -228,7 +228,7 @@ fn text_of(bytes: Slice[Byte]) -> str <alloc> {
       if whole {
         i = end
       } else {
-        acc = append(take acc, "�")
+        append(mut acc, "�")
         i = saturating_add(i, 1)
       }
     }
@@ -276,7 +276,7 @@ impl Writer[Out] {
       .key {
         if holds {
           mut v = put(quote(put(start(take w), '{'), name), ':')
-          v.opens = push(take v.opens, Open(depth: v.depth, below: v.top))
+          push(mut v.opens, Open(depth: v.depth, below: v.top))
           v.top = v.opens.size
           v
         } else {
@@ -414,7 +414,7 @@ impl Writer[Check] {
     mut v = w
     if v.held {
       v.held = false
-      v.frames = push(take v.frames, Beside(depth: saturating_add(v.depth, 1), of: v.of, case: v.case, below: v.top))
+      push(mut v.frames, Beside(depth: saturating_add(v.depth, 1), of: v.of, case: v.case, below: v.top))
       v.top = v.frames.size
       v.depth = saturating_add(v.depth, 1)
       v
@@ -780,7 +780,7 @@ fn walk(b: Slice[Byte], start: Nat, target: Nat) -> Result[Walk, Bad] <alloc> {
       c = byte(b, at)
       if at >= target { return walked(at, take frames, top, key, index, c == ']' or c == '}') }
       if c == '[' or c == '{' {
-        frames = push(take frames, Frame(kind: c, below: top, key: key, index: index))
+        push(mut frames, Frame(kind: c, below: top, key: key, index: index))
         top = frames.size
         key = 0
         index = 0
@@ -895,24 +895,22 @@ fn member(b: Slice[Byte], at: Nat) -> Result[Nat, Bad] {
 }
 
 // A character of the number `code`, as bytes.
-fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
-  mut acc = to
+fn put_char(to: mut List[Byte], code: u32) <alloc> {
   if code < 128 {
-    acc = push(take acc, code)
+    push(mut to, code)
   } else if code < 2048 {
-    acc = push(take acc, bit_or(192, shift_right(code, 6)))
-    acc = push(take acc, bit_or(128, bit_and(code, 63)))
+    push(mut to, bit_or(192, shift_right(code, 6)))
+    push(mut to, bit_or(128, bit_and(code, 63)))
   } else if code < 65536 {
-    acc = push(take acc, bit_or(224, shift_right(code, 12)))
-    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
-    acc = push(take acc, bit_or(128, bit_and(code, 63)))
+    push(mut to, bit_or(224, shift_right(code, 12)))
+    push(mut to, bit_or(128, bit_and(shift_right(code, 6), 63)))
+    push(mut to, bit_or(128, bit_and(code, 63)))
   } else if code < 2097152 {
-    acc = push(take acc, bit_or(240, shift_right(code, 18)))
-    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 12), 63)))
-    acc = push(take acc, bit_or(128, bit_and(shift_right(code, 6), 63)))
-    acc = push(take acc, bit_or(128, bit_and(code, 63)))
+    push(mut to, bit_or(240, shift_right(code, 18)))
+    push(mut to, bit_or(128, bit_and(shift_right(code, 12), 63)))
+    push(mut to, bit_or(128, bit_and(shift_right(code, 6), 63)))
+    push(mut to, bit_or(128, bit_and(code, 63)))
   }
-  acc
 }
 
 // Takes the bytes of a string that `quoted` checked from `at` to `end`, with
@@ -951,9 +949,9 @@ fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] <alloc> {
       is_code = false
     }
     if is_code {
-      acc = put_char(take acc, code)
+      put_char(mut acc, code)
     } else {
-      acc = push(take acc, made)
+      push(mut acc, made)
     }
     i = saturating_add(i, step)
   }
@@ -1017,13 +1015,14 @@ fn field_name(b: Slice[Byte], q: Quoted, at: Nat) -> str <alloc> {
   raw = unescape(b, at, q.end)
   (ok, upper) = written_camel(raw)
   mut acc: List[Byte] = []
-  if not ok { acc = push(take acc, ' ') }
+  if not ok { push(mut acc, ' ') }
   loop i in 0..raw.size {
     c = raw[i]
     if ok and c >= 'A' and c <= 'Z' {
-      acc = push(push(take acc, '_'), saturating_add(c, 32))
+      push(mut acc, '_')
+      push(mut acc, saturating_add(c, 32))
     } else {
-      acc = push(take acc, c)
+      push(mut acc, c)
     }
   }
   match utf8(freeze(take acc)) {
@@ -1041,24 +1040,22 @@ fn path_at(b: Slice[Byte], at: Nat) -> str <alloc> {
   }
 }
 
-fn put_member(b: Slice[Byte], to: take List[Byte], kind: Byte, key: Nat, index: Nat) -> List[Byte] <alloc> {
-  mut acc = to
+fn put_member(b: Slice[Byte], to: mut List[Byte], kind: Byte, key: Nat, index: Nat) <alloc> {
   if kind == '{' {
     match quoted(b, key) {
       .ok(q) {
-        if acc.size > 0 { acc = push(take acc, '.') }
+        if to.size > 0 { push(mut to, '.') }
         name = unescape(b, key, q.end)
-        loop i in 0..name.size { acc = push(take acc, name[i]) }
+        loop i in 0..name.size { push(mut to, name[i]) }
       }
       .err(e) { }
     }
   } else {
-    acc = push(take acc, '[')
+    push(mut to, '[')
     digits = "{index}"
-    loop i in 0..digits.size { acc = push(take acc, digits[i]) }
-    acc = push(take acc, ']')
+    loop i in 0..digits.size { push(mut to, digits[i]) }
+    push(mut to, ']')
   }
-  acc
 }
 
 fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
@@ -1067,18 +1064,18 @@ fn render_path(b: Slice[Byte], w: Walk) -> str <alloc> {
   mut t = w.top
   loop k in 0..w.frames.size {
     if t == 0 or t > w.frames.size { break }
-    chain = push(take chain, t)
+    push(mut chain, t)
     t = frame_at(w.frames, t).below
   }
   mut acc: List[Byte] = []
   loop j in 0..chain.size {
     f = frame_at(w.frames, chain[chain.size - 1 - j])
     if f.below != 0 and f.below <= w.frames.size {
-      acc = put_member(b, take acc, frame_at(w.frames, f.below).kind, f.key, f.index)
+      put_member(b, mut acc, frame_at(w.frames, f.below).kind, f.key, f.index)
     }
   }
   if w.top != 0 and w.top <= w.frames.size and not w.inside {
-    acc = put_member(b, take acc, frame_at(w.frames, w.top).kind, w.key, w.index)
+    put_member(b, mut acc, frame_at(w.frames, w.top).kind, w.key, w.index)
   }
   match utf8(freeze(take acc)) {
     .ok(text) { text }
@@ -1108,14 +1105,16 @@ fn read_error(b: Slice[Byte], bad: Bad) -> ReadError <alloc> {
 
 fn grown_nat(items: Slice[Nat], item: Nat) -> Slice[Nat] <alloc> {
   mut acc: List[Nat] = []
-  loop i in 0..items.size { acc = push(take acc, items[i]) }
-  freeze(push(take acc, item))
+  loop i in 0..items.size { push(mut acc, items[i]) }
+  push(mut acc, item)
+  freeze(take acc)
 }
 
 fn grown_byte(items: Slice[Byte], item: Byte) -> Slice[Byte] <alloc> {
   mut acc: List[Byte] = []
-  loop i in 0..items.size { acc = push(take acc, items[i]) }
-  freeze(push(take acc, item))
+  loop i in 0..items.size { push(mut acc, items[i]) }
+  push(mut acc, item)
+  freeze(take acc)
 }
 
 fn without_last_nat(items: Slice[Nat]) -> Slice[Nat] {

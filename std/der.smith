@@ -160,7 +160,7 @@ pub fn children(of: Parts) -> Result[List[Value], str] <alloc> {
     if rest.size == 0 { break }
     (v, end) = try read(rest)
     if end > rest.size { return .err("the bytes end inside a value") }
-    parts = push(take parts, v)
+    push(mut parts, v)
     rest = rest[end..]
   }
   .ok(parts)
@@ -207,9 +207,18 @@ pub fn object(of: Object) -> Result[List[Nat], str] <alloc> {
     n = wrapping_add(wrapping_mul(n, 128), low)
     if b < 128 {
       if arcs.size == 0 {
-        if n < 40 { arcs = push(push(take arcs, 0), n) } else if n < 80 { arcs = push(push(take arcs, 1), n - 40) } else { arcs = push(push(take arcs, 2), n - 80) }
+        if n < 40 {
+          push(mut arcs, 0)
+          push(mut arcs, n)
+        } else if n < 80 {
+          push(mut arcs, 1)
+          push(mut arcs, n - 40)
+        } else {
+          push(mut arcs, 2)
+          push(mut arcs, n - 80)
+        }
       } else {
-        arcs = push(take arcs, n)
+        push(mut arcs, n)
       }
       n = 0
       fresh = true

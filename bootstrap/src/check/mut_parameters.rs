@@ -307,6 +307,30 @@ impl<'a> Checker<'a> {
                     .collect(),
             );
         }
+        // `push` and `append`, which the compiler builds, change the list
+        // they are given first, as their signatures in `std.list` say. In a
+        // statement, which is never run, each is the list it would give.
+        if is_push(defs, call) && !body.contract {
+            let first = match call.callee.trim_start_matches("__") {
+                "append" => "a",
+                _ => "list",
+            };
+            return Some(
+                (call.args.iter().enumerate())
+                    .map(|(i, a)| {
+                        Some(Marked {
+                            name: if i == 0 {
+                                first.into()
+                            } else {
+                                written_expr(&a.value)
+                            },
+                            mutable: i == 0,
+                            lambda: None,
+                        })
+                    })
+                    .collect(),
+            );
+        }
         if call.qualifier.is_none()
             && let Some(f) = defs.function(call.name_pos, &call.callee)
         {

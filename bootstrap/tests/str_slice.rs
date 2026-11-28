@@ -123,7 +123,7 @@ fn utf8_of_a_frozen_list_is_what_the_standard_says_of_its_bytes() {
 fn every_byte_of_a_text_made_by_utf8_is_read_after_other_lists_reuse_memory() {
     generate::check(402, 60, bytes, |bytes| {
         let source = format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (freeze, push)\nuse std.utf8 (utf8)\n\nfn fill(n: u64, v: Byte) -> List[Byte] <alloc> {{\n  mut xs: List[Byte] = []\n  loop i in 0..n {{ xs = push(take xs, v) }}\n  xs\n}}\n\nfn main() <console, alloc> {{\n  b: List[Byte] = {}\n  match utf8(freeze(take b)) {{\n    .ok(t) {{\n      a = fill(40, 255)\n      c = fill(300, 254)\n      d = fill(9, 253)\n      print(\"ok {{t.size}} {{a.size}} {{c.size}} {{d.size}}\")\n      loop i in 0..t.size {{ print(\"{{t[i]}}\") }}\n    }}\n    .err(e) {{\n      a = fill(40, 255)\n      print(\"err {{e.at}} {{a.size}}\")\n    }}\n  }}\n}}\n",
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (freeze, push)\nuse std.utf8 (utf8)\n\nfn fill(n: u64, v: Byte) -> List[Byte] <alloc> {{\n  mut xs: List[Byte] = []\n  loop i in 0..n {{ push(mut xs, v) }}\n  xs\n}}\n\nfn main() <console, alloc> {{\n  b: List[Byte] = {}\n  match utf8(freeze(take b)) {{\n    .ok(t) {{\n      a = fill(40, 255)\n      c = fill(300, 254)\n      d = fill(9, 253)\n      print(\"ok {{t.size}} {{a.size}} {{c.size}} {{d.size}}\")\n      loop i in 0..t.size {{ print(\"{{t[i]}}\") }}\n    }}\n    .err(e) {{\n      a = fill(40, 255)\n      print(\"err {{e.at}} {{a.size}}\")\n    }}\n  }}\n}}\n",
             written(bytes)
         );
         let lines = match std::str::from_utf8(bytes) {

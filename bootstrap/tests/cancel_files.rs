@@ -147,8 +147,8 @@ fn a_cancelled_task_closes_both_files_of_a_struct_it_holds() {
 
 const LIST: &str = "fn hold_list(n: 0..1000) -> List[File] <fs, task, alloc> {
   mut fs: List[File] = []
-  fs = push(take fs, file(n))
-  fs = push(take fs, file(n + 1))
+  push(mut fs, file(n))
+  push(mut fs, file(n + 1))
   test_ready(n)
   fs
 }
@@ -193,7 +193,7 @@ fn a_file_a_task_holds_when_it_fails_is_closed_by_the_handler_once() {
     let functions = "fn eat() -> u64 <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(take xs, i)
+    push(mut xs, i)
   }
   0
 }

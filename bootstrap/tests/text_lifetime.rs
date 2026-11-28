@@ -113,7 +113,7 @@ fn program(c: &Case) -> (String, String) {
     };
     let store = match c.shape {
         Shape::Struct => "Held(n: n, tag: tag, body: body)".to_string(),
-        Shape::List => "push(push([], tag), body)".to_string(),
+        Shape::List => "mut made: List[str] = []\n  push(mut made, tag)\n  push(mut made, body)\n  made".to_string(),
         Shape::Tuple => "(n, tag, body)".to_string(),
         Shape::Enum => "Held.one((n, tag, body))".to_string(),
     };

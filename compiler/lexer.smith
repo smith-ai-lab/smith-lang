@@ -325,12 +325,12 @@ fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
       have = valid_prefix(src, i)
       if have == wanted(b) {
         if b == 13 {
-          errors = push(take errors, LexError(pos: pos, message: "a carriage return is not allowed in a Smith file"))
+          push(mut errors, LexError(pos: pos, message: "a carriage return is not allowed in a Smith file"))
         }
         pos = advance(pos, b)
         i = i + have
       } else {
-        errors = push(take errors, LexError(pos: pos, message: "the file is not valid UTF-8 here"))
+        push(mut errors, LexError(pos: pos, message: "the file is not valid UTF-8 here"))
         pos = Pos(line: pos.line, col: saturating_add(pos.col, 1))
         i = i + have
       }
@@ -343,7 +343,7 @@ fn text_errors(src: List[Byte]) -> List[LexError] <alloc> {
 
 fn error_at(lx: take Lexer, pos: Pos, message: take str) -> Lexer <alloc> {
   mut next = lx
-  next.errors = push(take next.errors, LexError(pos: pos, message: message))
+  push(mut next.errors, LexError(pos: pos, message: message))
   next
 }
 
@@ -357,7 +357,7 @@ fn is_newline(tok: Tok) -> bool {
 fn push_token(lx: take Lexer, tok: take Tok, pos: Pos) -> Lexer <alloc> {
   mut next = lx
   next.line_has_token = not is_newline(tok)
-  next.tokens = push(take next.tokens, Token(tok: tok, pos: pos))
+  push(mut next.tokens, Token(tok: tok, pos: pos))
   next
 }
 
@@ -806,13 +806,13 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
         } else if c == '{' {
           next = bump(take next)
           interpolated = true
-          if value.size > 0 { pieces = push(take pieces, .text(text_from(take value))) }
+          if value.size > 0 { push(mut pieces, .text(text_from(take value))) }
           value = []
           if fuel > 0 {
             (after, tokens) = expression(take next, start, fuel - 1)
             next = after
             match tokens {
-              .some(inside) { pieces = push(take pieces, .expr(inside)) }
+              .some(inside) { push(mut pieces, .expr(inside)) }
               .none { break }
             }
           } else {
@@ -827,7 +827,7 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
               if e == '"' or e == '\\' or e == '{' or e == '}' or e == 'n' or e == 't' {
                 next = bump(take next)
                 decoded: Byte = if e == 'n' { '\n' } else if e == 't' { '\t' } else { e }
-                value = push(take value, decoded)
+                push(mut value, decoded)
               } else {
                 shown = after_backslash(next)
                 next = error_at(take next, at, "unknown escape: a backslash is followed by {shown}, not one of \" \\ \{ \} n t")
@@ -841,7 +841,7 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
           }
         } else {
           next = bump(take next)
-          value = push(take value, c)
+          push(mut value, c)
         }
       }
     }
@@ -849,7 +849,7 @@ fn string(lx: take Lexer, start: Pos, fuel: u64) -> Lexer <alloc>
   if not interpolated {
     push_token(take next, .string(text_from(take value)), start)
   } else {
-    if value.size > 0 { pieces = push(take pieces, .text(text_from(take value))) }
+    if value.size > 0 { push(mut pieces, .text(text_from(take value))) }
     push_token(take next, .interp(pieces), start)
   }
 }

@@ -32,7 +32,7 @@ enum Frame {
 }
 
 fn frame(bytes: Slice[Byte]; largest: Nat = 16384) -> Read[Frame] <alloc>
-fn write_frame(to: take List[Byte], frame: Frame) -> List[Byte] <alloc>
+fn write_frame(to: mut List[Byte], frame: Frame) <alloc>
 ```
 
 - `frame` reads one frame and gives it with how many bytes it took, in the [`Read`](http1.md#reading) of `std.http1`. A frame's bytes, as the data of `data`, are a piece of what was given.
@@ -67,13 +67,13 @@ struct Decoder
 struct Encoder
 
 fn decoder(; table: Nat = 4096) -> Decoder
-fn decode(d: take Decoder, block: Slice[Byte]; largest: Nat = 65536) -> (Decoder, Result[List[(str, str)], str]) <alloc>
+fn decode(d: mut Decoder, block: Slice[Byte]; largest: Nat = 65536) -> Result[List[(str, str)], str] <alloc>
 
 fn encoder(; table: Nat = 4096) -> Encoder
-fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (Encoder, List[Byte]) <alloc>
+fn encode(e: mut Encoder, to: mut List[Byte], headers: List[(str, str)]) <alloc>
 ```
 
-- A `Decoder` and an `Encoder` hold the table of headers that HPACK builds up over a connection, so each is [taken](../language/take.md) and given back, and one is kept for each direction of each connection.
+- A `Decoder` and an `Encoder` hold the table of headers that HPACK builds up over a connection, so each is passed [`mut`](../language/mut-parameters.md), as `r = decode(mut d, block)`, and one is kept for each direction of each connection.
 - `decode` reads one block of headers. It gives `.err` where RFC 7541 says the block is wrong: an index that names no header, a number that does not end, a text in the short code that is not right, or a change of the table's size that is not at the start or is above what was agreed.
 - `largest` is the most bytes the headers of one block may come to once read, the bytes of the names and the values. A block that would come to more is `.err` before the memory for it is asked for, so a few bytes cannot be made into a great many.
 - A decoder made with `table` takes a change of the table's size up to `table`, and starts with a table of 4096 bytes or `table` if that is less, as RFC 9113 says. An encoder made with a `table` other than 4096 writes the change of size that tells the decoder at the start of its first block.
@@ -87,6 +87,6 @@ fn encode(e: take Encoder, to: take List[Byte], headers: List[(str, str)]) -> (E
 | Written | Gives |
 | --- | --- |
 | `frame(bytes)` | One frame and how many bytes it took, or that more are needed, or why it is refused |
-| `write_frame(to, frame)` | What was given, with the frame added |
-| `decode(d, block)` | The headers of a block, and the decoder with its table as the block left it |
-| `encode(e, to, headers)` | The block added to what was given, and the encoder with its table as it now is |
+| `write_frame(mut to, frame)` | `to` with the frame added |
+| `decode(mut d, block)` | The headers of a block, with `d`'s table as the block left it |
+| `encode(mut e, mut to, headers)` | The block added to `to`, with `e`'s table as it now is |

@@ -96,7 +96,7 @@ fn body(all: &[Print]) -> String {
 fn a_handler_of_console_receives_the_text_the_end_and_the_stream_as_written_and_as_defaulted() {
     generate::check(8901, 6, prints, |all| {
         let source = format!(
-            "{USES}{}fn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {{\n  mut seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {{\n      which = match to {{\n        .stdout {{ \"o\" }}\n        .stderr {{ \"e\" }}\n      }}\n      seen = push(take seen, \"{{which}}|{{text}}|{{end}}\")\n    }},\n    input: fn(prompt) {{ input(prompt) }},\n    body: body,\n  )\n  (r, seen)\n}}\n\nfn main() <console, alloc> {{\n  (u, lines) = capture(writes)\n  loop i in 0..lines.size {{\n    print(lines[i], end: \"#\")\n  }}\n}}\n",
+            "{USES}{}fn capture[T](body: fn() -> T <console>) -> (T, List[str]) <console, alloc> {{\n  mut seen: List[str] = []\n  r = console(\n    print: fn(text, end, to) {{\n      which = match to {{\n        .stdout {{ \"o\" }}\n        .stderr {{ \"e\" }}\n      }}\n      push(mut seen, \"{{which}}|{{text}}|{{end}}\")\n    }},\n    input: fn(prompt) {{ input(prompt) }},\n    body: body,\n  )\n  (r, seen)\n}}\n\nfn main() <console, alloc> {{\n  (u, lines) = capture(writes)\n  loop i in 0..lines.size {{\n    print(lines[i], end: \"#\")\n  }}\n}}\n",
             body(all)
         );
         let mut expected = String::new();

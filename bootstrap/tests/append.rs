@@ -31,8 +31,8 @@ pub const ONCE: &[Test] = &[
         appending_asks_for_memory_once_however_many_elements_it_adds,
     ),
     (
-        "the_list_appended_to_is_given_away_and_the_list_appended_is_lent",
-        the_list_appended_to_is_given_away_and_the_list_appended_is_lent,
+        "the_list_appended_to_is_changed_and_the_list_appended_is_lent",
+        the_list_appended_to_is_changed_and_the_list_appended_is_lent,
     ),
     (
         "append_is_refused_for_elements_that_cannot_be_copied_for_a_slice_and_without_alloc",
@@ -72,7 +72,7 @@ fn joined(g: &mut Gen) -> Joined {
 }
 
 fn pushes(name: &str, values: &[i128]) -> String {
-    values.iter().map(|v| format!("  {name} = push(take {name}, {v})\n")).collect()
+    values.iter().map(|v| format!("  push(mut {name}, {v})\n")).collect()
 }
 
 /// For every pair of lists of any whole number type, with any room in the
@@ -82,7 +82,7 @@ fn appending_a_list_gives_the_elements_of_both_in_order_and_leaves_the_list_adde
     generate::check(11, 40, joined, |j| {
         let t = j.ty.name;
         let body = format!(
-            "fn main() <console, alloc> {{\n  mut a: List[{t}] = []\n  mut b: List[{t}] = []\n{}{}  a = append(take a, b)\n  loop v in a {{ print(\"{{v}}\") }}\n  loop v in b {{ print(\"{{v}}\") }}\n}}\n",
+            "fn main() <console, alloc> {{\n  mut a: List[{t}] = []\n  mut b: List[{t}] = []\n{}{}  append(mut a, b)\n  loop v in a {{ print(\"{{v}}\") }}\n  loop v in b {{ print(\"{{v}}\") }}\n}}\n",
             pushes("a", &j.first),
             pushes("b", &j.second),
         );
@@ -97,7 +97,7 @@ fn appending_a_list_gives_the_elements_of_both_in_order_and_leaves_the_list_adde
 fn appending_a_text_adds_its_bytes() {
     generate::check(12, 30, |g| (0..g.below(12)).map(|_| *g.pick(&['a', 'z', ' ', 'é', '語', '😀'])).collect::<String>(), |s: &String| {
         let source = format!(
-            "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {{\n  mut xs: List[Byte] = []\n  xs = append(take xs, \"{s}\")\n  xs = append(take xs, \"{s}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n"
+            "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {{\n  mut xs: List[Byte] = []\n  append(mut xs, \"{s}\")\n  append(mut xs, \"{s}\")\n  loop v in xs {{ print(\"{{v}}\") }}\n}}\n"
         );
         let expected: String = s.bytes().chain(s.bytes()).map(|b| format!("{b}\n")).collect();
         assert_eq!(prints(&source), expected, "for {source}");
@@ -113,7 +113,7 @@ fn a_text_of_any_length_is_added_whole_after_what_the_list_holds() {
     let mut total = 0;
     for n in 0..=40usize {
         let text: String = (0..n).map(|k| char::from(b'a' + ((k * 7 + n) % 26) as u8)).collect();
-        body += &format!("  xs = append(take xs, \"{text}\")\n");
+        body += &format!("  append(mut xs, \"{text}\")\n");
         for b in text.bytes() {
             expected += &format!("{b}\n");
         }
@@ -131,7 +131,7 @@ fn appending_asks_for_memory_once_however_many_elements_it_adds() {
     for n in [1usize, 2, 3, 7, 8, 9, 16, 17, 100, 1000] {
         let text = "x".repeat(n);
         let source = format!(
-            "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {{\n  mut xs: List[Byte] = []\n  xs = append(take xs, \"{text}\")\n  print(\"{{xs.size}}\")\n}}\n"
+            "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {{\n  mut xs: List[Byte] = []\n  append(mut xs, \"{text}\")\n  print(\"{{xs.size}}\")\n}}\n"
         );
         let program = lower(source.as_bytes()).unwrap();
         let (outcome, taken) = scalar::run_taking(&program, usize::MAX);
@@ -140,30 +140,33 @@ fn appending_asks_for_memory_once_however_many_elements_it_adds() {
     }
 }
 
-const GIVE: &str = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  mut a: List[Byte] = []\n  mut b: List[Byte] = []\n  a = append(take a, b)\n";
+const GIVE: &str = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  mut a: List[Byte] = []\n  mut b: List[Byte] = []\n  append(mut a, b)\n";
 
-fn the_list_appended_to_is_given_away_and_the_list_appended_is_lent() {
+fn the_list_appended_to_is_changed_and_the_list_appended_is_lent() {
     let lent = format!("{GIVE}  print(\"{{a.size}} {{b.size}}\")\n}}\n");
     assert_eq!(refused(&lent), Vec::<String>::new(), "{lent}");
-    let twice = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  a: List[Byte] = []\n  b = append(take a, a)\n}\n";
-    let given = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  a: List[Byte] = []\n  b: List[Byte] = []\n  c = append(take a, b)\n  print(\"{a.size}\")\n}\n";
-    for source in [twice, given] {
-        let errors = refused(source);
-        assert!(
-            errors.iter().any(|e| e.contains("given away")),
-            "{errors:?} does not say a list was given away for {source}"
-        );
-    }
+    let twice = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  mut a: List[Byte] = []\n  append(mut a, a)\n}\n";
+    let errors = refused(twice);
+    assert!(
+        errors.iter().any(|e| e.contains("given away")),
+        "{errors:?} does not say a list was given away for {twice}"
+    );
+    let taken = "use std.console (console, print)\nuse std.list (append)\n\nfn main() <console, alloc> {\n  mut a: List[Byte] = []\n  b: List[Byte] = []\n  a = append(take a, b)\n  print(\"{a.size}\")\n}\n";
+    let errors = refused(taken);
+    assert!(
+        errors.iter().any(|e| e.contains("`append` changes `a`") && e.contains("`mut`")),
+        "{errors:?} does not say to pass the list appended to `mut` for {taken}"
+    );
 }
 
 fn append_is_refused_for_elements_that_cannot_be_copied_for_a_slice_and_without_alloc() {
-    let lists = "use std.list (append)\n\nfn main() <alloc> {\n  mut a: List[List[Byte]] = []\n  b: List[List[Byte]] = []\n  a = append(take a, b)\n}\n";
+    let lists = "use std.list (append)\n\nfn main() <alloc> {\n  mut a: List[List[Byte]] = []\n  b: List[List[Byte]] = []\n  append(mut a, b)\n}\n";
     let errors = refused(lists);
     assert!(errors.iter().any(|e| e.contains("`append`") && e.contains("copied")), "{errors:?}");
-    let slice = "use std.list (append, freeze)\n\nfn main() <alloc> {\n  s: Slice[Byte] = freeze([1])\n  a = append(s, [2])\n}\n";
+    let slice = "use std.list (append, freeze)\n\nfn main() <alloc> {\n  mut s: Slice[Byte] = freeze([1])\n  append(mut s, [2])\n}\n";
     let errors = refused(slice);
     assert!(errors.iter().any(|e| e.contains("slice")), "{errors:?}");
-    let none = "use std.list (append)\n\nfn main() {\n  a: List[Byte] = []\n  b: List[Byte] = []\n  c = append(take a, b)\n}\n";
+    let none = "use std.list (append)\n\nfn main() {\n  mut a: List[Byte] = []\n  b: List[Byte] = []\n  append(mut a, b)\n}\n";
     let errors = refused(none);
     assert!(errors.iter().any(|e| e.contains("`alloc`")), "{errors:?}");
 }

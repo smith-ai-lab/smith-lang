@@ -50,7 +50,7 @@ use std.task (Descriptor, join, outcome, spawn, task, test_scheduler)
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(take xs, i)
+    push(mut xs, i)
   }}
   0
 }}
@@ -194,7 +194,7 @@ fn owner(n: Descriptor) -> u64 <net, alloc> {{
   c = connection(n)
   mut kept: List[List[u64]] = []
   loop i in 0..9223372036854775807 {{
-    kept = push(take kept, big(i))
+    push(mut kept, big(i))
   }}
   close(take c)
   0

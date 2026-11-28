@@ -309,7 +309,7 @@ use std.list (push)
 
 fn one() -> List[1..2] <alloc> {
   mut xs = []
-  xs = push(take xs, 1)
+  push(mut xs, 1)
   xs
 }
 ```
@@ -335,12 +335,12 @@ fn small(xs: List[0..3]) -> Nat { xs.size }
 
 fn main() <alloc> {
   mut xs = []
-  xs = push(xs, 7)
+  push(mut xs, 7)
   n = small(xs)
 }
 ```
 
-This is refused: "`xs` is a `List[7..8]`, inferred from `push(xs, 7)` at line 7; the use at line 8 needs a `List[0..3]`". A list that is only pushed to for another name is settled the same way, as `ys = push(xs, 4)` settles `xs`.
+This is refused: "`xs` is a `List[7..8]`, inferred from `push(xs, 7)` at line 7; the use at line 8 needs a `List[0..3]`". A list that is pushed to and then given to another name is settled the same way, as `push(mut xs, 4)` and then `ys = xs` settle `xs`.
 
 ## A block with a try
 

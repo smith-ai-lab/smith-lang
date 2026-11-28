@@ -5204,17 +5204,39 @@ fn may_be_wrapper(text: &str) -> bool {
 }
 
 /// Whether a function's whole body is one call of a function the compiler
-/// builds, with the function's own parameters in order.
+/// builds, with the function's own parameters in order. A function that
+/// changes its first parameter, as `push` does, passes it `mut`, and is
+/// lowered to assigning what the call gives back and giving the parameter.
 fn is_wrapper(f: &Arc<Function>) -> bool {
-    matches!(&f.body[..], [Stmt::Expr(Expr::Call(c))]
-    if c.qualifier.is_none()
-        && c.callee.starts_with("__")
-        && c.args.len() == f.params.len()
-        && c.args.iter().zip(&f.params).all(|(a, p)| {
-            a.name.is_none()
-                && !a.after
-                && matches!(&a.value, Expr::Name { name, .. } if *name == p.name)
-        }))
+    let wraps = |c: &Call| {
+        c.qualifier.is_none()
+            && c.callee.starts_with("__")
+            && c.args.len() == f.params.len()
+            && c.args.iter().zip(&f.params).all(|(a, p)| {
+                a.name.is_none()
+                    && !a.after
+                    && a.mutable.is_some() == p.mutable
+                    && matches!(&a.value, Expr::Name { name, .. } if *name == p.name)
+            })
+    };
+    match &f.body[..] {
+        [Stmt::Expr(Expr::Call(c))] => wraps(c),
+        [
+            Stmt::Define {
+                name,
+                value: Expr::Call(c),
+                ..
+            },
+            Stmt::Expr(Expr::Name { name: given, .. }),
+        ] => {
+            name == given
+                && f.params
+                    .first()
+                    .is_some_and(|p| p.mutable && p.name == *name)
+                && wraps(c)
+        }
+        _ => false,
+    }
 }
 
 /// Whether a function is named as one that the compiler lowers at the call,

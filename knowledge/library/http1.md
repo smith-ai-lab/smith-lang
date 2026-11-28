@@ -89,12 +89,12 @@ The readers take the strict side of each, so that two servers cannot read one me
 ## Writing
 
 ```
-fn write_request_head(to: take Text, head: RequestHead) -> Text <alloc>
-fn write_response_head(to: take Text, head: ResponseHead) -> Text <alloc>
-fn write_chunk(to: take List[Byte], bytes: Slice[Byte]) -> List[Byte] <alloc>
+fn write_request_head(to: mut Text, head: RequestHead) <alloc>
+fn write_response_head(to: mut Text, head: ResponseHead) <alloc>
+fn write_chunk(to: mut List[Byte], bytes: Slice[Byte]) <alloc>
 ```
 
-Each adds what it writes to what it is given, and gives it back. A head is text, so it is added to a [`Text`](text.md#building-a-text). A name or a value that holds a line break is not written: the two head functions are refused such a value by a `requires`, so a header that came from outside cannot add a line of its own.
+Each adds what it writes to what it is passed `mut`. A head is text, so it is added to a [`Text`](text.md#building-a-text). A name or a value that holds a line break is not written: the two head functions are refused such a value by a `requires`, so a header that came from outside cannot add a line of its own.
 
 For every head `h` this module writes, reading what it wrote gives `h`.
 
@@ -105,4 +105,4 @@ For every head `h` this module writes, reading what it wrote gives `h`.
 | `request_head(bytes)`, `response_head(bytes)` | The head and how many bytes it took, or that more are needed, or why it is refused |
 | `body_of(headers)` | How the body is framed: none, a length, or chunks |
 | `chunk(bytes)` | The bytes of one chunk |
-| `write_request_head(to, head)`, `write_response_head(to, head)`, `write_chunk(to, bytes)` | What was given, with the message added |
+| `write_request_head(mut to, head)`, `write_response_head(mut to, head)`, `write_chunk(mut to, bytes)` | `to` with the message added |

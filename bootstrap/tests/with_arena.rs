@@ -36,7 +36,7 @@ pub const MACHINE: &[Test] = &[(
 )];
 
 /// `squares` and `sum_of_squares` of `arenas.md`.
-const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(take acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  mut total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
+const SQUARES: &str = "fn squares(n: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { push(mut acc, wrapping_mul(i, i)) }\n  acc\n}\n\nfn sum_of_squares(n: u64) -> u64 <alloc> {\n  xs = squares(n)\n  mut total = 0\n  loop i in 0..xs.size { total = wrapping_add(total, xs[i]) }\n  total\n}\n\n";
 
 /// A server that answers `calls` requests with `handle`, as `arenas.md` writes
 /// it, and prints what the answers add up to.
@@ -104,7 +104,7 @@ struct Case {
     stdout: Vec<u8>,
 }
 
-const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  mut s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { acc = push(take acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
+const ITEMS: &str = "use std.list (copy)\n\nfn total(xs: List[u64]) -> u64 {\n  mut s = 0\n  loop i in 0..xs.size { s = wrapping_add(s, xs[i]) }\n  s\n}\n\nfn build(n: u64, seed: u64) -> List[u64] <alloc> {\n  mut acc: List[u64] = []\n  loop i in 0..n { push(mut acc, wrapping_add(wrapping_mul(i, seed), 1)) }\n  acc\n}\n\n";
 
 fn built(n: u64, seed: u64) -> Vec<u64> {
     (0..n)
@@ -136,11 +136,11 @@ fn body(k: usize, l: &Level, indent: &str) -> String {
         l.temp
     );
     if l.add_temp {
-        s += &format!("{indent}loop i in 0..t.size {{ acc = push(take acc, t[i]) }}\n");
+        s += &format!("{indent}loop i in 0..t.size {{ push(mut acc, t[i]) }}\n");
     }
     if l.add_other {
         s += &format!(
-            "{indent}more = f{}(wrapping_add(a, 1))\n{indent}loop i in 0..more.size {{ acc = push(take acc, more[i]) }}\n",
+            "{indent}more = f{}(wrapping_add(a, 1))\n{indent}loop i in 0..more.size {{ push(mut acc, more[i]) }}\n",
             k - 1
         );
     }

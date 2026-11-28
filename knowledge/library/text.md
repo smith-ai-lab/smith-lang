@@ -57,8 +57,8 @@ struct Text {
 }
 
 fn text() -> Text
-fn append(t: take Text, s: str) -> Text <alloc>
-fn append_ascii(t: take Text, b: 0..128) -> Text <alloc>
+fn append(t: mut Text, s: str) <alloc>
+fn append_ascii(t: mut Text, b: 0..128) <alloc>
 fn finish(t: take Text) -> str
 ```
 
@@ -74,7 +74,11 @@ use std.console (console, print)
 use std.text (append, append_ascii, finish, text)
 
 fn pair(name: str, value: str) -> str <alloc> {
-  finish(append(append_ascii(append(text(), name), '='), value))
+  mut t = text()
+  append(mut t, name)
+  append_ascii(mut t, '=')
+  append(mut t, value)
+  finish(take t)
 }
 
 fn main() <console, alloc> {
@@ -84,12 +88,16 @@ fn main() <console, alloc> {
 
 This prints `depth=3`.
 
-Bytes that are not known to be valid become a text first, through [`utf8`](../language/text.md), and are then added: `append(take t, try utf8(bytes))`. There is no function that adds bytes as they are.
+Bytes that are not known to be valid become a text first, through [`utf8`](../language/text.md), and are then added: `append(mut t, try utf8(bytes))`. There is no function that adds bytes as they are.
 
 ```
 use std.text (append_ascii, text)
 
-fn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }
+fn wrong(b: Byte) -> Text <alloc> {
+  mut t = text()
+  append_ascii(mut t, b)
+  t
+}
 ```
 
 `wrong` is refused, because a `Byte` may be 128 or above, which is no character alone.
@@ -102,7 +110,7 @@ fn wrong(b: Byte) -> Text <alloc> { append_ascii(text(), b) }
 | --- | --- |
 | `strip_prefix(s, prefix)` | `.some` of the text after `prefix`, or `.none` when `s` does not begin with it |
 | `text()` | An empty `Text` |
-| `append(take t, s)` | `t` with the text `s` at its end |
-| `append_ascii(t, b)` | `t` with the byte `b`, which is below 128, at its end |
+| `append(mut t, s)` | `t` with the text `s` at its end |
+| `append_ascii(mut t, b)` | `t` with the byte `b`, which is below 128, at its end |
 | `finish(take t)` | The `str` of what `t` holds, with nothing read again |
 | `split_once(s, at)` | `.some` of the text before the first `at` and the text after it, or `.none`; an empty `at` is at the start |

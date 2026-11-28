@@ -55,13 +55,17 @@ fn shape(n: u64, k: u64) -> Shape <alloc> {
 }
 
 fn numbers(n: u64, k: u64) -> List[u64] <alloc> {
-  xs: List[u64] = []
-  push(push(take xs, n), k)
+  mut xs: List[u64] = []
+  push(mut xs, n)
+  push(mut xs, k)
+  xs
 }
 
 fn words(n: u64, k: u64) -> List[str] <alloc> {
-  xs: List[str] = []
-  push(push(take xs, \"{n}\"), \"{k}\")
+  mut xs: List[str] = []
+  push(mut xs, \"{n}\")
+  push(mut xs, \"{k}\")
+  xs
 }
 ";
 

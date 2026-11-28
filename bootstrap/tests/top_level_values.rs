@@ -330,7 +330,7 @@ fn reading_a_list_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory()
 /// A list read from the top level and pushed to is copied first, so the value
 /// is what it was the next time it is read.
 fn a_list_at_the_top_level_that_is_pushed_to_is_copied_and_stays_as_it_was() {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\ntable: List[u64] = [1, 2, 3]\n\nfn grown() -> List[u64] <alloc> {\n  mut xs = table\n  xs = push(take xs, 4)\n  xs\n}\n\nfn main() <console, alloc> {\n  xs = grown()\n  print(\"{xs.size} {table.size}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (push)\n\ntable: List[u64] = [1, 2, 3]\n\nfn grown() -> List[u64] <alloc> {\n  mut xs = table\n  push(mut xs, 4)\n  xs\n}\n\nfn main() <console, alloc> {\n  xs = grown()\n  print(\"{xs.size} {table.size}\")\n}\n";
     assert_eq!(printed(source), "4 3\n");
 }
 

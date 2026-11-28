@@ -92,7 +92,7 @@ fn a_program_asks_the_system_at_most_once_for_each_64_kb_it_uses_and_once_more()
 fn a_program_that_pushes_for_a_long_time_asks_at_most_once_for_each_64_kb_it_uses_and_once_more() {
     for n in [1, 100, 5000, 40000] {
         let source = format!(
-            "use std.bits (u64)\nuse std.list (push)\n\nfn main() <alloc> {{\n  mut xs: List[u64] = []\n  mut ys: List[Byte] = []\n  loop i in 0..{n} {{\n    xs = push(take xs, i)\n    ys = push(take ys, 1)\n  }}\n}}\n"
+            "use std.bits (u64)\nuse std.list (push)\n\nfn main() <alloc> {{\n  mut xs: List[u64] = []\n  mut ys: List[Byte] = []\n  loop i in 0..{n} {{\n    push(mut xs, i)\n    push(mut ys, 1)\n  }}\n}}\n"
         );
         asks_in_large_pieces(source.as_bytes(), None);
     }
@@ -113,7 +113,7 @@ fn the_lexer_on_a_text_of_measure_asks_at_most_once_for_each_64_kb_it_uses_and_o
     let pieces = 504 / PIECE_OF_SOURCE.len();
     let bytes: Vec<String> = PIECE_OF_SOURCE.bytes().map(|b| b.to_string()).collect();
     let source = format!(
-        "{lexer}\nfn piece() -> List[Byte] <alloc> {{\n  [{}]\n}}\n\nfn main() <console, alloc> {{\n  p = piece()\n  mut src: List[Byte] = []\n  loop r in 0..{pieces} {{\n    loop j in 0..p.size {{ src = push(take src, p[j]) }}\n  }}\n  match lex(take src) {{\n    .ok(tokens) {{ print(\"{{tokens.size}}\") }}\n    .err(errors) {{ print(\"error\") }}\n  }}\n}}\n",
+        "{lexer}\nfn piece() -> List[Byte] <alloc> {{\n  [{}]\n}}\n\nfn main() <console, alloc> {{\n  p = piece()\n  mut src: List[Byte] = []\n  loop r in 0..{pieces} {{\n    loop j in 0..p.size {{ push(mut src, p[j]) }}\n  }}\n  match lex(take src) {{\n    .ok(tokens) {{ print(\"{{tokens.size}}\") }}\n    .err(errors) {{ print(\"error\") }}\n  }}\n}}\n",
         bytes.join(", ")
     );
     asks_in_large_pieces(source.as_bytes(), None);

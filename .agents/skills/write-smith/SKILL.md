@@ -21,6 +21,7 @@ If the pages do not say how to write something the work depends on, ask in a com
 Habit from another language goes wrong in these places first. Each line says only where to read.
 
 - There are no references: a value is lent or taken, and never shared. `take.md`, `ownership.md`
+- A function that gives back the value it changed marks that parameter `mut`, as `push(mut xs, 3)` is called, and `take` is only for a value that leaves the caller for good. `take.md`, `mut-parameters.md`
 - An effect in a signature is a permission, and state that several functions change is kept by a handler. `effects.md`, `handlers.md`
 - The type of a whole number is a range and arithmetic is exact, so nothing is checked when the program runs and nothing is saturated to quiet the checker. `number-types.md`, `arithmetic.md`
 - There is no `while`, and every loop is shown to end. `loop.md`, `open-loop.md`

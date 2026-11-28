@@ -1,4 +1,4 @@
-entropy_unlisted.smith:4:3: `fill` needs the `entropy` effect, which `draw` does not declare
-  4 |   fill(bytes)
+entropy_unlisted.smith:5:3: `fill` needs the `entropy` effect, which `draw` does not declare
+  5 |   fill(mut filled)
     |   ^
   fix: write `fn draw(bytes: List[Byte]) -> List[Byte] <entropy>`

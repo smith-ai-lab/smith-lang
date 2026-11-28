@@ -5,19 +5,20 @@ use std.list (push)
 
 fn fixed[T](body: fn() -> T <entropy>) -> T <alloc> {
   entropy(
-    fill: fn(bytes) {
+    fill: fn(bytes: mut List[Byte]) {
       mut made: List[Byte] = []
-      loop i in 0..bytes.size { made = push(take made, 171) }
-      made
+      loop i in 0..bytes.size { push(mut made, 171) }
+      bytes = made
     },
     body: body,
   )
 }
 
 fn draw() -> str <entropy, alloc> {
-  bytes: List[Byte] = [0, 0, 0, 0]
+  mut bytes: List[Byte] = [0, 0, 0, 0]
   mut line = ""
-  loop b in fill(take bytes) { line = "{line}{hex(b, width: 2, letters: .lower)}" }
+  fill(mut bytes)
+  loop b in bytes { line = "{line}{hex(b, width: 2, letters: .lower)}" }
   line
 }
 

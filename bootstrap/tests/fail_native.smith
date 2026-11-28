@@ -10,7 +10,7 @@ use std.time (sleep, time)
 fn eat() <alloc> {
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {
-    xs = push(take xs, i)
+    push(mut xs, i)
   }
 }
 

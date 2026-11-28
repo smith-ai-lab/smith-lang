@@ -284,7 +284,7 @@ fn building(count: usize) -> String {
     for k in 0..count {
         let longer = 200 + k % 2;
         text.push_str(&format!(
-            "\nfn test_{k}() -> Result[(), Failed] <alloc> {{\n  mut xs: List[u64] = []\n  loop i in 0..200 {{ xs = push(take xs, i) }}\n  mut ys: List[u64] = []\n  loop i in 0..{longer} {{ ys = push(take ys, i) }}\n  expect {{ xs == ys }}\n}}\n"
+            "\nfn test_{k}() -> Result[(), Failed] <alloc> {{\n  mut xs: List[u64] = []\n  loop i in 0..200 {{ push(mut xs, i) }}\n  mut ys: List[u64] = []\n  loop i in 0..{longer} {{ push(mut ys, i) }}\n  expect {{ xs == ys }}\n}}\n"
         ));
     }
     text

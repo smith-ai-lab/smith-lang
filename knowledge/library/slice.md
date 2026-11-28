@@ -26,7 +26,7 @@ use std.list (freeze, push)
 
 fn evens(n: u64) -> Slice[u64] <alloc> {
   mut built: List[u64] = []
-  loop i in 0..n { built = push(take built, wrapping_mul(i, 2)) }
+  loop i in 0..n { push(mut built, wrapping_mul(i, 2)) }
   freeze(take built)
 }
 ```

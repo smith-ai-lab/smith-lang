@@ -12,7 +12,7 @@ built:
   - "a function marked `take` is spent by its first call or by being passed to a parameter that takes its function, so a second call, on any path or in a later round of a loop, is refused"
   - "a lambda that gives away a value without `Discard` is refused where the function it is passed to takes its function, as that function may not call it"
   - "a lambda a handler gives for an operation takes what the operation marks `take`, as a function does, so it must use the value or give it away exactly once"
-  - "a lambda that gives away a `mut` of the function it is written in and assigns it again before it ends, on every path, a `return` and a `try` that leaves among them, gives nothing away: it is accepted where the function it is passed to lends its function, and the `mut` is whole after the call, which is how a handler keeps a `Text` or a list; a path that leaves with the name given away is refused with the error at the lambda"
+  - "a lambda that gives away a `mut` of the function it is written in and assigns it again before it ends, on every path, a `return` and a `try` that leaves among them, gives nothing away: it is accepted where the function it is passed to lends its function, and the `mut` is whole after the call; a path that leaves with the name given away is refused with the error at the lambda"
   - "a function that is lent is called any number of times, and is passed to a parameter that lends its function and not to one that takes it"
   - "a type parameter has `Copy` and `Discard` only where a bound or a `requires` line asks, so a value of one is used at most once and must be taken, and a call, or an implementation it chooses, is given only a type that has what the bounds ask"
 ---
@@ -28,7 +28,7 @@ fn uniform(k: take Key) -> f32
 
 `split` and `uniform` own the key they are given. A caller that has passed its `Key` to either has no key left.
 
-A function that changes a value it is given takes it and gives it back, or marks it [`mut`](mut-parameters.md), which means the same. Nothing is copied.
+`take` is for a value that leaves the caller for good, as the key does that `split` turns into two. A function that changes a value it is given and gives back the changed value marks it [`mut`](mut-parameters.md), as `push(mut xs, 3)` does, and not `take`. Taking a value and giving it back means the same as `mut`, and nothing is copied either way, but `mut` says on the line that the caller keeps the value.
 
 ## Lending
 
@@ -58,15 +58,16 @@ A call of `lend_once` gives it a key nothing else holds, so the caller may not u
 
 A function is a value like any other, and calling it takes it. So how often a function may be called is said by the two traits that say it of every value: one that has [`Copy`](ownership.md) is called again and again, and one that has not is spent by its first call.
 
-A lambda is lent the names around it that it reads or assigns, and takes the ones it gives away. A lambda that takes a value without `Copy` has no `Copy` itself. This one gives `acc` to `append`, so it can be called once.
+A lambda is lent the names around it that it reads or assigns, and takes the ones it gives away. A lambda that takes a value without `Copy` has no `Copy` itself. This one gives `acc` to `freeze`, so it can be called once.
 
 ```
 use std.bits (u64)
+use std.list (freeze)
 
 fn finish(xs: take List[Byte], f: take fn(take List[Byte]) -> u64) -> u64 { f(take xs) }
 
 fn collect(acc: take List[Byte], xs: take List[Byte]) -> u64 {
-  finish(take xs) fn(ys) { append(take acc, ys).size }
+  finish(take xs) fn(ys) { freeze(take acc).size + ys.size }
 }
 ```
 
@@ -76,11 +77,12 @@ A parameter that is not marked `take` lends the function, as it lends any value,
 
 ```
 use std.bits (u64)
+use std.list (freeze)
 
 fn twice(xs: take List[Byte], f: fn(take List[Byte]) -> u64) -> u64 { f(take xs) }
 
 fn collect(acc: take List[Byte], xs: take List[Byte]) -> u64 {
-  twice(take xs) fn(ys) { append(take acc, ys).size }
+  twice(take xs) fn(ys) { freeze(take acc).size + ys.size }
 }
 ```
 
@@ -97,13 +99,18 @@ fn both(f: fn(str)) {
 }
 
 fn gather() -> str <alloc> {
+  mut last = ""
   mut page = text()
-  both() fn(part) { page = append(take page, part) }
-  finish(take page)
+  both() fn(part) {
+    append(mut page, part)
+    last = finish(take page)
+    page = text()
+  }
+  last
 }
 ```
 
-`append` takes `page`, and the same statement assigns what it gives back. This is accepted when every path through the lambda assigns the name after it is given away, a `return` and a `try` that leaves among them. A path that leaves with the name given away is refused with the error above. A [handler](handlers.md) keeps a value that is owned this way: its function takes the value its `mut` holds and puts the next one there.
+`finish` takes `page`, and the lambda assigns a new text to it before it ends. This is accepted when every path through the lambda assigns the name after it is given away, a `return` and a `try` that leaves among them. A path that leaves with the name given away is refused with the error above. `append(mut page, part)` gives nothing away, as `append` changes `page` where it is.
 
 A value the lambda gives away is spent in `collect` from the call the lambda is passed to: a use of `acc` after the call is refused, as a use after any give-away is, and a use before it is not. A second lambda of the same call that gives `acc` away is refused at the second use.
 

@@ -151,7 +151,7 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {
       if seen {{
         .ok(.ended)
       }} else {{
-        asked = push(take asked, handle(c))
+        push(mut asked, handle(c))
 {reads}{{
           .ok(.ended)
         }}
@@ -159,8 +159,8 @@ fn recording[T](body: fn() -> T <net>) -> (T, List[(u64, List[Byte])]) <alloc> {
     }},
     write: fn(c, bytes) {{
       mut copied: List[Byte] = []
-      loop i in 0..bytes.size {{ copied = push(take copied, bytes[i]) }}
-      kept = push(take kept, (handle(c), copied))
+      loop i in 0..bytes.size {{ push(mut copied, bytes[i]) }}
+      push(mut kept, (handle(c), copied))
       .ok(())
     }},
     close: fn(c) {{ n = release(take c) }},

@@ -45,7 +45,7 @@ fn main() <console, alloc> {{
   mut last: Nat = 0
   loop k in 0..{reps} {{
     mut xs: List[Item] = []
-    loop i in 0..{ITEMS} {{ xs = push(take xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
+    loop i in 0..{ITEMS} {{ push(mut xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
     {body}
   }}
   print(\"{{last}}\")
@@ -240,7 +240,7 @@ fn main() <console, alloc> {{
   mut last: Nat = 0
   loop k in 0..{reps} {{
     mut xs: List[Item] = []
-    loop i in 0..{ITEMS} {{ xs = push(take xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
+    loop i in 0..{ITEMS} {{ push(mut xs, Item(id: i, count: -5, on: bit_and(i, 1) == 0)) }}
     t = to_json(xs)
     {body}
   }}

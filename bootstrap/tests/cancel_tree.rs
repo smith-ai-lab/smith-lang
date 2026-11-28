@@ -432,7 +432,7 @@ use std.task (Descriptor, join, outcome, spawn, task, test_ready, test_ready_by,
 fn eat() -> u64 <alloc> {{
   mut xs: List[u64] = []
   loop i in 0..9223372036854775807 {{
-    xs = push(take xs, i)
+    push(mut xs, i)
   }}
   0
 }}

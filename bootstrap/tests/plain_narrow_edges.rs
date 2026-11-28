@@ -123,9 +123,9 @@ fn short_code() -> (String, String) {
     block.extend(SHORT);
     let mut source = "use std.console (console, print)\nuse std.http2 (decode, decoder)\nuse std.list (freeze, push)\n\nfn main() <console, alloc> {\n  mut l: List[Byte] = []\n".to_string();
     for b in block {
-        source += &format!("  l = push(take l, {b})\n");
+        source += &format!("  push(mut l, {b})\n");
     }
-    source += "  (d, r) = decode(decoder(table: 4096), freeze(take l), largest: 65536)\n  match r {\n    .ok(headers) { loop (n, v) in headers { print(\"{n}: {v}\") } }\n    .err(why) { print(why) }\n  }\n}\n";
+    source += "  mut d = decoder(table: 4096)\n  r = decode(mut d, freeze(take l), largest: 65536)\n  match r {\n    .ok(headers) { loop (n, v) in headers { print(\"{n}: {v}\") } }\n    .err(why) { print(why) }\n  }\n}\n";
     (source, ":authority: www.example.com\n".to_string())
 }
 

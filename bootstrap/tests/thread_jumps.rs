@@ -539,7 +539,7 @@ fn once(n: u64) -> u64 <console, alloc> {
 fn pushed(n: u64) -> u64 <alloc> {
   mut l: List[u64] = [0]
   e: Option[u64] = if n < 3 { .some(n) } else { .none }
-  l = push(take l, wrapping_add(n, 5))
+  push(mut l, wrapping_add(n, 5))
   r: u64 = match e {
     .some(v) { v }
     .none { 7 }

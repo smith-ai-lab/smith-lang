@@ -218,8 +218,8 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
 
 const LIST: &str = "fn hold_list(n: 0..1000) -> List[Connection] <net, task, alloc> {
   mut cs: List[Connection] = []
-  cs = push(take cs, connection(n))
-  cs = push(take cs, connection(n + 1))
+  push(mut cs, connection(n))
+  push(mut cs, connection(n + 1))
   test_ready(n)
   cs
 }

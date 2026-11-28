@@ -70,23 +70,27 @@ A part is found where it first begins, so `find("abab", "ab")` is `.some(0)`. A 
 
 ## Joining two lists
 
-`append` gives a list of the elements of `a` and then those of `b`. It needs no `Eq`, as it compares nothing, and it allocates, as [`push`](list.md) does.
+`append` adds the elements of `b` after those of `a`, which it is passed `mut`. It needs no `Eq`, as it compares nothing, and it allocates, as [`push`](list.md) does.
 
 ```
-fn append[T: Copy](a: take List[T], b: List[T]) -> List[T] <alloc>
+fn append[T: Copy](a: mut List[T], b: List[T]) <alloc>
 ```
 
 ```
 use std.list (append)
 
 fn demo() -> (List[Nat], List[Nat]) <alloc> {
-  (append([1, 2], [3]), append([], [3]))
+  mut a: List[Nat] = [1, 2]
+  append(mut a, [3])
+  mut b: List[Nat] = []
+  append(mut b, [3])
+  (a, b)
 }
 ```
 
-`append([1, 2], [3])` is `[1, 2, 3]`. `append([], [3])` is `[3]`, and with an empty `b` the result has the elements of `a` alone.
+`a` is `[1, 2, 3]` and `b` is `[3]`. With an empty `b`, `a` is as it was.
 
-`append` is built as `push` is. It takes `a` as `push` takes its list, so `out = append(take out, more)` grows `out` in place, as [a list is never copied unasked](../language/ownership.md#a-list-is-never-copied-unasked). It tests once whether `a`'s memory has room for the elements of `b`, and when it has not, asks once for memory that holds both and copies `a`'s elements, then it copies the elements of `b` after them in one go. `b` is lent, and its elements are copied, so `T` has `Copy`: a list of lists is joined with `push`.
+`append` is built as `push` is. It changes `a` as `push` changes its list, so `append(mut out, more)` grows `out` in place, as [a list is never copied unasked](../language/ownership.md#a-list-is-never-copied-unasked). It tests once whether `a`'s memory has room for the elements of `b`, and when it has not, asks once for memory that holds both and copies `a`'s elements, then it copies the elements of `b` after them in one go. `b` is lent, and its elements are copied, so `T` has `Copy`: a list of lists is joined with `push`.
 
 ## The forms
 
@@ -97,4 +101,4 @@ fn demo() -> (List[Nat], List[Nat]) <alloc> {
 | `find(xs, part)` | `.some` of the place where `part` first begins, or `.none`; an empty `part` is at 0 |
 | `starts_with(xs, prefix)` | `true` when `xs` begins with `prefix`; an empty `prefix` is always one |
 | `ends_with(xs, suffix)` | `true` when `xs` ends with `suffix`; an empty `suffix` is always one |
-| `append(take a, b)` | The elements of `a` and then those of `b`, with `alloc` |
+| `append(mut a, b)` | `a` with the elements of `b` after its own, with `alloc` |

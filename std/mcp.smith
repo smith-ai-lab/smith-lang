@@ -87,7 +87,7 @@ impl Deserialize[Members] {
               r = w
               match value {
                 .err(e) { return (r, Result.err(e)) }
-                .ok(v) { named = push(take named, (name, v)) }
+                .ok(v) { push(mut named, (name, v)) }
               }
             }
           }
@@ -181,24 +181,38 @@ fn header_text(value: str) -> Option[str] <alloc> {
 // The text of an error response. An id that could not be read is left out, as
 // the protocol writes it, where JSON-RPC writes `null`.
 fn failure_text(id: Option[str], code: Int, message: str, data: Option[str]) -> str <alloc> {
-  a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\"")
-  b = match id {
-    .some(i) { texts.append(texts.append(take a, ",\"id\":"), i) }
-    .none { a }
+  mut b = texts.text()
+  texts.append(mut b, "\{\"jsonrpc\":\"2.0\"")
+  match id {
+    .some(i) {
+      texts.append(mut b, ",\"id\":")
+      texts.append(mut b, i)
+    }
+    .none { }
   }
-  c = texts.append(texts.append(take b, ",\"error\":\{\"code\":"), to_json(code))
-  d = texts.append(texts.append(take c, ",\"message\":"), to_json(message))
-  e = match data {
-    .some(x) { texts.append(texts.append(take d, ",\"data\":"), x) }
-    .none { d }
+  texts.append(mut b, ",\"error\":\{\"code\":")
+  texts.append(mut b, to_json(code))
+  texts.append(mut b, ",\"message\":")
+  texts.append(mut b, to_json(message))
+  match data {
+    .some(x) {
+      texts.append(mut b, ",\"data\":")
+      texts.append(mut b, x)
+    }
+    .none { }
   }
-  texts.finish(texts.append(take e, "\}\}"))
+  texts.append(mut b, "\}\}")
+  texts.finish(take b)
 }
 
 fn success_text(id: str, result: str) -> str <alloc> {
-  a = texts.append(texts.text(), "\{\"jsonrpc\":\"2.0\",\"id\":")
-  b = texts.append(texts.append(take a, id), ",\"result\":")
-  texts.finish(texts.append(texts.append(take b, result), "\}"))
+  mut b = texts.text()
+  texts.append(mut b, "\{\"jsonrpc\":\"2.0\",\"id\":")
+  texts.append(mut b, id)
+  texts.append(mut b, ",\"result\":")
+  texts.append(mut b, result)
+  texts.append(mut b, "\}")
+  texts.finish(take b)
 }
 
 // A failure the message is answered with, as any answer is.
@@ -517,29 +531,33 @@ fn meta_text(server: Server) -> str <alloc> {
 }
 
 fn list_text(server: Server, entries: List[str]) -> str <alloc> {
-  mut b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"tools\":[")
+  mut b = texts.text()
+  texts.append(mut b, "\{\"resultType\":\"complete\",\"tools\":[")
   loop i in 0..entries.size {
-    if i > 0 { b = texts.append(take b, ",") }
-    b = texts.append(take b, entries[i])
+    if i > 0 { texts.append(mut b, ",") }
+    texts.append(mut b, entries[i])
   }
-  b = texts.append(take b, "],\"ttlMs\":")
-  b = texts.append(take b, to_json(server.ttl))
-  b = texts.append(take b, ",\"cacheScope\":\"private\",\"_meta\":")
-  b = texts.append(take b, meta_text(server))
-  texts.finish(texts.append(take b, "\}"))
+  texts.append(mut b, "],\"ttlMs\":")
+  texts.append(mut b, to_json(server.ttl))
+  texts.append(mut b, ",\"cacheScope\":\"private\",\"_meta\":")
+  texts.append(mut b, meta_text(server))
+  texts.append(mut b, "\}")
+  texts.finish(take b)
 }
 
 // The result of a call: what the tool gave, as text and as structured content,
 // marked as an error when it failed.
 fn call_text(server: Server, failed: bool, value: str) -> str <alloc> {
-  mut b = texts.append(texts.text(), "\{\"resultType\":\"complete\",\"content\":[\{\"type\":\"text\",\"text\":")
-  b = texts.append(take b, json_string(value))
-  b = texts.append(take b, "\}],\"structuredContent\":")
-  b = texts.append(take b, value)
-  if failed { b = texts.append(take b, ",\"isError\":true") }
-  b = texts.append(take b, ",\"_meta\":")
-  b = texts.append(take b, meta_text(server))
-  texts.finish(texts.append(take b, "\}"))
+  mut b = texts.text()
+  texts.append(mut b, "\{\"resultType\":\"complete\",\"content\":[\{\"type\":\"text\",\"text\":")
+  texts.append(mut b, json_string(value))
+  texts.append(mut b, "\}],\"structuredContent\":")
+  texts.append(mut b, value)
+  if failed { texts.append(mut b, ",\"isError\":true") }
+  texts.append(mut b, ",\"_meta\":")
+  texts.append(mut b, meta_text(server))
+  texts.append(mut b, "\}")
+  texts.finish(take b)
 }
 
 // What the server answers to a message of its lines, from what the lines gave:
@@ -616,7 +634,7 @@ pub fn mcp(
           any = true
           call
         },
-        listed: fn(entry) { entries = push(take entries, entry) },
+        listed: fn(entry) { push(mut entries, entry) },
         answered: fn(failed, value) { result = .some(call_text(server, failed, value)) },
         refused: fn(code, why) { failure = .some((code, why)) },
         body: body,
@@ -691,13 +709,15 @@ fn entry_of[F, A, R](f: F) -> str <alloc>
   requires Describe[A]
 {
   schema = schema_text(Describe[A].describe(json_schema(Json(cases: .key, names: .written))))
-  mut b = texts.append(texts.text(), "\{\"name\":")
-  b = texts.append(take b, json_string(Function.name(f)))
-  b = texts.append(take b, ",\"description\":")
-  b = texts.append(take b, json_string(Function.about(f)))
-  b = texts.append(take b, ",\"inputSchema\":")
-  b = texts.append(take b, schema)
-  texts.finish(texts.append(take b, "\}"))
+  mut b = texts.text()
+  texts.append(mut b, "\{\"name\":")
+  texts.append(mut b, json_string(Function.name(f)))
+  texts.append(mut b, ",\"description\":")
+  texts.append(mut b, json_string(Function.about(f)))
+  texts.append(mut b, ",\"inputSchema\":")
+  texts.append(mut b, schema)
+  texts.append(mut b, "\}")
+  texts.finish(take b)
 }
 
 // The function `f` offered as a tool. It is listed when the message lists the

@@ -281,7 +281,7 @@ fn build(g: &mut Gen) -> Build {
 }
 
 fn a_program_builds_a_list_pushes_to_it_and_reads_each_element() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  xs = push(take xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  push(mut xs, 4)\n  ys = xs\n  loop i in 0..ys.size { print(\"{ys[i]}\") }\n}\n";
     prints(source, ["1", "2", "3", "4"].map(String::from).to_vec());
 }
 
@@ -295,14 +295,14 @@ fn a_list_holds_the_size_and_the_elements_that_were_put_in_in_order(part: u64) {
         let last = if b.var {
             body += &format!("  mut xs: List[{t}] = {}\n", literal(&b.start));
             for v in &b.pushes {
-                body += &format!("  xs = push(take xs, {})\n", v.written());
+                body += &format!("  push(mut xs, {})\n", v.written());
             }
             body += "  ys = xs\n";
             "ys".to_string()
         } else {
             body += &format!("  l0: List[{t}] = {}\n", literal(&b.start));
             for (k, v) in b.pushes.iter().enumerate() {
-                body += &format!("  l{} = push(take l{k}, {})\n", k + 1, v.written());
+                body += &format!("  mut l{} = l{k}\n  push(mut l{}, {})\n", k + 1, k + 1, v.written());
             }
             format!("l{}", b.pushes.len())
         };
@@ -361,17 +361,17 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
         assert_eq!(refused(source), Vec::<String>::new(), "for {source}");
     }
     let lost = [
-        list(&format!("    xs = push(take xs, 4)\n{read}")),
+        list(&format!("    push(mut xs, 4)\n{read}")),
         list(&format!(
-            "    loop i in 0..2 {{ xs = push(take xs, 4) }}\n{read}"
+            "    loop i in 0..2 {{ push(mut xs, 4) }}\n{read}"
         )),
         list(&format!(
-            "    loop i in 0..2 {{\n      {read}\n      xs = push(take xs, 4)\n    }}"
+            "    loop i in 0..2 {{\n      {read}\n      push(mut xs, 4)\n    }}"
         )),
-        list(&format!("    if k == 7 {{ xs = push(take xs, 4) }}\n{read}")),
-        list(&format!("    run({{ xs = push(take xs, 4) }})\n{read}")),
+        list(&format!("    if k == 7 {{ push(mut xs, 4) }}\n{read}")),
+        list(&format!("    run({{ push(mut xs, 4) }})\n{read}")),
         list(&format!(
-            "    run({{\n      xs = push(take xs, 4)\n      {read}\n    }})"
+            "    run({{\n      push(mut xs, 4)\n      {read}\n    }})"
         )),
         field("    c.at = 18446744073709551615\n    x: u64 = c.at + 1\n    print(\"{x}\")"),
         field("    c = Cursor(at: 18446744073709551615)\n    x: u64 = c.at + 1\n    print(\"{x}\")"),
@@ -379,7 +379,7 @@ fn a_var_list_and_a_var_field_are_known_to_arith_until_they_are_assigned() {
     for source in &lost {
         assert!(!refused(source).is_empty(), "compiles: {source}");
     }
-    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  xs = push(take xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
+    let example = "use std.console (console, print)\nuse std.list (push)\n\nfn main() <console, alloc> {\n  mut xs: List[Byte] = [1, 2, 3]\n  push(mut xs, 4)\n  loop i in 0..xs.size { if i == 3 { print(\"{xs[i]}\") } }\n}\n";
     prints(example, vec!["4".to_string()]);
 }
 
@@ -521,7 +521,7 @@ fn names(g: &mut Gen) -> Names {
             }
             2 | 3 => {
                 let v = byte(g);
-                body += &format!("  a{j} = push(take a{j}, {v})\n");
+                body += &format!("  push(mut a{j}, {v})\n");
                 vars[j].push(v);
             }
             4 => {
@@ -535,7 +535,7 @@ fn names(g: &mut Gen) -> Names {
             }
             6 => {
                 let v = byte(g);
-                body += &format!("  n{} = push(copy(a{j}), {v})\n", snaps.len());
+                body += &format!("  mut n{0} = copy(a{j})\n  push(mut n{0}, {v})\n", snaps.len());
                 let mut copy = vars[j].clone();
                 copy.push(v);
                 snaps.push(copy);
@@ -543,7 +543,7 @@ fn names(g: &mut Gen) -> Names {
             7 if !snaps.is_empty() => {
                 let s = g.below(snaps.len());
                 let v = byte(g);
-                body += &format!("  a{k} = push(copy(n{s}), {v})\n");
+                body += &format!("  a{k} = copy(n{s})\n  push(mut a{k}, {v})\n");
                 vars[k] = snaps[s].clone();
                 vars[k].push(v);
             }
@@ -573,12 +573,12 @@ fn names(g: &mut Gen) -> Names {
             }
             11 => {
                 let v = byte(g);
-                body += &format!("  loop i in 0..3 {{ a{j} = push(take a{j}, {v}) }}\n");
+                body += &format!("  loop i in 0..3 {{ push(mut a{j}, {v}) }}\n");
                 vars[j].extend([v; 3]);
             }
             _ => {
                 let v = byte(g);
-                body += &format!("  a{j} = push(take a{j}, {v})\n");
+                body += &format!("  push(mut a{j}, {v})\n");
                 vars[j].push(v);
             }
         }
@@ -607,7 +607,7 @@ fn names(g: &mut Gen) -> Names {
     let copy: &[&str] = if body.contains("copy(") { &["copy"] } else { &[] };
     let uses = header(&[("std.console", &["console", "print"]), ("std.list", &["push"]), ("std.list", copy)], "");
     let source = format!(
-        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] <alloc> {{\n  mut grown = xs\n  grown = push(take grown, 9)\n  grown\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
+        "{uses}fn grow(xs: take List[Byte]) -> List[Byte] <alloc> {{\n  mut grown = xs\n  push(mut grown, 9)\n  grown\n}}\n\nfn main() <console, alloc> {{\n{body}}}\n"
     );
     Names { source, lines }
 }
@@ -633,7 +633,7 @@ fn pushed(elem: Elem, n: usize) -> String {
     };
     let uses = header(&[("std.list", &["push"])], elem.name());
     format!(
-        "{uses}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(take xs, {one}) }}\n}}\n",
+        "{uses}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ push(mut xs, {one}) }}\n}}\n",
         elem.name()
     )
 }
@@ -682,7 +682,7 @@ fn a_list_has_room_for_at_most_twice_its_elements_each_at_the_size_of_its_type()
 }
 
 fn push_and_a_list_with_elements_need_the_alloc_effect() {
-    let pushes = "use std.list (push)\n\nfn main() {\n  xs: List[Byte] = []\n  ys = push(take xs, 1)\n}\n";
+    let pushes = "use std.list (push)\n\nfn main() {\n  mut xs: List[Byte] = []\n  push(mut xs, 1)\n}\n";
     let literal = "fn main() {\n  xs: List[Byte] = [1]\n}\n";
     for source in [pushes, literal] {
         let errors = refused(source);
@@ -696,7 +696,7 @@ fn push_and_a_list_with_elements_need_the_alloc_effect() {
 }
 
 fn a_list_of_people_prints_each_name_and_age() {
-    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() <console, alloc> {\n  mut people: List[Person] = []\n  people = push(take people, Person(name: \"ada\", age: 36))\n  people = push(take people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
+    let source = "use std.console (console, print)\nuse std.list (push)\n\nstruct Person {\n  name: str\n  age: Byte\n}\n\nfn main() <console, alloc> {\n  mut people: List[Person] = []\n  push(mut people, Person(name: \"ada\", age: 36))\n  push(mut people, Person(name: \"alan\", age: 41))\n  all = people\n  loop i in 0..all.size { print(\"{all[i].name} {all[i].age}\") }\n}\n";
     prints(source, ["ada 36", "alan 41"].map(String::from).to_vec());
 }
 
@@ -1022,13 +1022,13 @@ fn a_list_of_any_type_holds_what_was_put_in_in_order(part: u64) {
         let last = if h.var {
             body += &format!("mut xs: List[{t}] = {}\n", items(&h.ty, &h.start));
             for v in &h.pushes {
-                body += &format!("xs = push(take xs, {})\n", h.ty.written(v));
+                body += &format!("push(mut xs, {})\n", h.ty.written(v));
             }
             "xs".to_string()
         } else {
             body += &format!("l0: List[{t}] = {}\n", items(&h.ty, &h.start));
             for (k, v) in h.pushes.iter().enumerate() {
-                body += &format!("l{} = push(take l{k}, {})\n", k + 1, h.ty.written(v));
+                body += &format!("mut l{} = l{k}\npush(mut l{}, {})\n", k + 1, k + 1, h.ty.written(v));
             }
             format!("l{}", h.pushes.len())
         };
@@ -1065,7 +1065,7 @@ const HOLDERS: &[(&str, &str, &str)] = &[
     ("[{}]", "head(take {})", "List[List[Byte]]"),
 ];
 
-const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] <alloc> {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> {\n  mut grown = xs\n  grown = push(take grown, 9)\n  grown\n}\n\n";
+const HOLDER_ITEMS: &str = "struct Wrap {\n  xs: List[Byte]\n}\n\nfn first(t: take (List[Byte], Byte)) -> List[Byte] {\n  match t {\n    (xs, k) { xs }\n  }\n}\n\nfn inner(o: take Option[List[Byte]]) -> List[Byte] {\n  match o {\n    .some(xs) { xs }\n    .none { [] }\n  }\n}\n\nfn head(ls: take List[List[Byte]]) -> List[Byte] <alloc> {\n  if 0 < ls.size { copy(ls[0]) } else { [] }\n}\n\nfn grow(xs: take List[Byte]) -> List[Byte] <alloc> {\n  mut grown = xs\n  push(mut grown, 9)\n  grown\n}\n\n";
 
 fn fill(pattern: &str, with: &str) -> String {
     pattern.replace("{}", with)
@@ -1107,7 +1107,7 @@ fn shared(g: &mut Gen) -> Shared {
             }
             1..=3 => {
                 let v = byte(g);
-                body += &format!("a{j} = push(take a{j}, {v})\n");
+                body += &format!("push(mut a{j}, {v})\n");
                 vars[j].push(v);
             }
             4 | 5 => {
@@ -1145,7 +1145,7 @@ fn shared(g: &mut Gen) -> Shared {
             }
             10 => {
                 let v = byte(g);
-                body += &format!("loop i in 0..3 {{ a{j} = push(take a{j}, {v}) }}\n");
+                body += &format!("loop i in 0..3 {{ push(mut a{j}, {v}) }}\n");
                 vars[j].extend([v; 3]);
             }
             _ => {
@@ -1207,14 +1207,14 @@ fn a_push_to_a_list_held_inside_another_value_grows_in_place_while_it_has_room()
         for n in 1usize..=9 {
             let program = |push: &str| {
                 format!(
-                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <alloc> {{\n  mut a: List[Byte] = []\n  loop i in 0..{n} {{ a = push(take a, 1) }}\n  h: {ty} = {}\n  mut b = {}\n{push}}}\n",
+                    "use std.list (copy, push)\n\n{HOLDER_ITEMS}fn main() <alloc> {{\n  mut a: List[Byte] = []\n  loop i in 0..{n} {{ push(mut a, 1) }}\n  h: {ty} = {}\n  mut b = {}\n{push}}}\n",
                     fill(build, "a"),
                     fill(take, "h"),
                 )
             };
             let (without, with) = (
                 requests(&program("")),
-                requests(&program("  b = push(take b, 2)\n")),
+                requests(&program("  push(mut b, 2)\n")),
             );
             // The list has room for the next power of two.
             let full = n.is_power_of_two();
@@ -1231,7 +1231,7 @@ fn pushes_by(setup: &str, loop_body: &str, n: usize) -> usize {
     ))
 }
 
-const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc <alloc> {\n  mut next = a\n  next.items = push(take next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] <alloc> { push(take items, x) }\n\n";
+const ACC: &str = "use std.bits (u64)\nuse std.list (push)\n\nstruct Acc {\n  items: List[u64]\n  n: u64\n}\n\nfn add(a: take Acc, x: u64) -> Acc <alloc> {\n  mut next = a\n  push(mut next.items, x)\n  next\n}\n\nfn more(items: take List[u64], x: u64) -> List[u64] <alloc> {\n  mut grown = items\n  push(mut grown, x)\n  grown\n}\n\n";
 
 /// A list grown in the way `form` says asks for memory as many times as one
 /// grown in a plain `mut` may, as many as the logarithm of the pushes, however
@@ -1250,7 +1250,7 @@ fn a_list_that_a_function_takes_in_a_struct_and_returns_grows_as_a_plain_var_doe
 
 /// A list that is a field of a `mut` grows as a plain `mut` does.
 fn a_list_that_is_a_field_of_a_var_grows_as_a_plain_var_does() {
-    grows_as_a_plain_var_does("a.items = push(take a.items, i)");
+    grows_as_a_plain_var_does("push(mut a.items, i)");
 }
 
 /// A list that a function pushes to and returns grows as a plain `mut` does.
@@ -1263,7 +1263,7 @@ fn a_list_that_a_function_pushes_to_and_returns_grows_as_a_plain_var_does() {
 /// that a list of `n` of them has room for between `n` and `2n` elements of
 /// the size the types give.
 fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest() {
-    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() <alloc> {\n  mut xs: List[M] = []\n  loop i in 0..3 { xs = push(take xs, M(a: 1, b: 2, c: 3)) }\n}\n";
+    let mixed = "use std.bits (u32)\nuse std.list (push)\n\nstruct M {\n  a: Byte\n  b: u32\n  c: Byte\n}\n\nfn main() <alloc> {\n  mut xs: List[M] = []\n  loop i in 0..3 { push(mut xs, M(a: 1, b: 2, c: 3)) }\n}\n";
     let program = lower(mixed.as_bytes()).expect("compiles");
     let (_, asked) = scalar::run_taking(&program, usize::MAX);
     let asked = growth::rooms(&asked);
@@ -1286,7 +1286,7 @@ fn an_element_takes_its_scalars_at_their_sizes_and_a_whole_number_of_its_largest
             let declarations = Ty::source(&[t]);
             let uses = header(&[("std.list", &["push"])], &format!("{} {declarations}", t.name()));
             let source = format!(
-                "{uses}{}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ xs = push(take xs, {}) }}\n}}\n",
+                "{uses}{}fn main() <alloc> {{\n  mut xs: List[{}] = []\n  loop i in 0..{n} {{ push(mut xs, {}) }}\n}}\n",
                 declarations,
                 t.name(),
                 t.written(v),
@@ -1390,7 +1390,7 @@ fn a_loop_over_a_list_of_any_type_gives_each_element_of_the_list_it_began_with_u
         let t = l.ty.name();
         let mut setup = String::new();
         for v in &l.before {
-            setup += &format!("ys = push(take ys, {})\n", l.ty.written(v));
+            setup += &format!("push(mut ys, {})\n", l.ty.written(v));
         }
         let mut block = String::new();
         if let Some(k) = l.stop {
@@ -1398,7 +1398,7 @@ fn a_loop_over_a_list_of_any_type_gives_each_element_of_the_list_it_began_with_u
         }
         block += "seen = wrapping_add(seen, 1)\n";
         if let Some(extra) = &l.push {
-            block += &format!("ys = push(take ys, {})\n", l.ty.written(extra));
+            block += &format!("push(mut ys, {})\n", l.ty.written(extra));
         }
         block += &l.ty.dump("v", &mut 0);
         let declarations = Ty::source(&[&l.ty]);

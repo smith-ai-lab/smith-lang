@@ -120,7 +120,7 @@ fn one_line(s: str) -> bool {
 fn small(t: str) -> str <alloc> {
   mut bytes: List[Byte] = []
   loop i in 0..t.size {
-    bytes = push(take bytes, lowered(t[i]))
+    push(mut bytes, lowered(t[i]))
   }
   match utf8(freeze(take bytes)) {
     .ok(made) { made }
@@ -185,27 +185,37 @@ pub fn size(p: Payload) -> Nat {
 
 // The bytes of a payload.
 pub fn content(p: Payload) -> List[Byte] <alloc> {
-  append([], p.data)
+  mut made: List[Byte] = []
+  append(mut made, p.data)
+  made
 }
 
 // The JSON of a value, as `application/json`.
 pub fn json[T: Serialize](value: T) -> Payload <alloc> {
-  Payload(kind: header_value("application/json"), data: append([], to_json(value).bytes))
+  mut made: List[Byte] = []
+  append(mut made, to_json(value).bytes)
+  Payload(kind: header_value("application/json"), data: made)
 }
 
 // A text, as `text/plain; charset=utf-8`.
 pub fn text(s: str) -> Payload <alloc> {
-  Payload(kind: header_value("text/plain; charset=utf-8"), data: append([], s.bytes))
+  mut made: List[Byte] = []
+  append(mut made, s.bytes)
+  Payload(kind: header_value("text/plain; charset=utf-8"), data: made)
 }
 
 // A page, as `text/html; charset=utf-8`.
 pub fn html(page: Html) -> Payload <alloc> {
-  Payload(kind: header_value("text/html; charset=utf-8"), data: append([], "{page}".bytes))
+  mut made: List[Byte] = []
+  append(mut made, "{page}".bytes)
+  Payload(kind: header_value("text/html; charset=utf-8"), data: made)
 }
 
 // Bytes of a type that is given, as it is.
 pub fn bytes(data: List[Byte], content_type: HeaderValue) -> Payload <alloc> {
-  Payload(kind: content_type, data: append([], data))
+  mut made: List[Byte] = []
+  append(mut made, data)
+  Payload(kind: content_type, data: made)
 }
 
 // The digit of a number below 16, in capital letters.
@@ -225,11 +235,13 @@ fn form_part(t: str) -> List[Byte] <alloc> {
   loop i in 0..t.size {
     b = t[i]
     if plain_in_form(b) {
-      made = push(take made, b)
+      push(mut made, b)
     } else if b == ' ' {
-      made = push(take made, '+')
+      push(mut made, '+')
     } else {
-      made = push(push(push(take made, '%'), hex_digit(b / 16)), hex_digit(b % 16))
+      push(mut made, '%')
+      push(mut made, hex_digit(b / 16))
+      push(mut made, hex_digit(b % 16))
     }
   }
   made
@@ -241,8 +253,10 @@ pub fn form(pairs: List[(str, str)]) -> Payload <alloc> {
   mut made: List[Byte] = []
   loop i in 0..pairs.size {
     (name, value) = pairs[i]
-    if i > 0 { made = push(take made, '&') }
-    made = append(push(append(take made, form_part(name)), '='), form_part(value))
+    if i > 0 { push(mut made, '&') }
+    append(mut made, form_part(name))
+    push(mut made, '=')
+    append(mut made, form_part(value))
   }
   Payload(kind: header_value("application/x-www-form-urlencoded"), data: made)
 }

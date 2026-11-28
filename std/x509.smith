@@ -238,7 +238,7 @@ fn dns_names(v: Value, names: take List[str]) -> Result[List[str], str] <alloc> 
     match xs[i] {
       .context((n, p)) { }
       .context_bytes((n, b)) {
-        if n == 2 { found = push(take found, try text(.ia5(b))) }
+        if n == 2 { push(mut found, try text(.ia5(b))) }
       }
       _ { return .err("a name of a kind that RFC 5280 does not give") }
     }
@@ -327,7 +327,7 @@ fn extensions(list: Value) -> Result[Found, str] <alloc> {
     } else if critical {
       return .err("an extension marked critical that is not read")
     }
-    seen = push(take seen, take id)
+    push(mut seen, take id)
   }
   .ok(Found(names: names, signing: signing))
 }
@@ -491,7 +491,7 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
   if is_line(input, from, end, "-----END CERTIFICATE-----") {
     match decode(finish(take s.body)) {
       .some(bytes) {
-        s.found = push(take s.found, take bytes)
+        push(mut s.found, take bytes)
         s.at = .outside
         s.body = new_text()
         return .ok(s)
@@ -522,7 +522,7 @@ fn read_line(state: take Pem, input: str, from: Nat, to: Nat) -> Result[Pem, str
     loop k in begin..end {
       b = input[k]
       if b >= 128 { return .err("a byte that is not base64 in a certificate") }
-      s.body = append_ascii(take s.body, b)
+      append_ascii(mut s.body, b)
     }
   }
   .ok(s)
