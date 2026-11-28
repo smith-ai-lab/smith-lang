@@ -11,7 +11,7 @@ use super::vector::{
 };
 use super::{
     Binary, Bits, Compare, Constant, End, FloatBinary, FloatBits, FloatCompare, Fused, Jump, Lane,
-    Op, Program, Stream, System, Type, Value,
+    Op, Program, Rounding, Stream, System, Type, Value,
 };
 
 /// What a program did: what it wrote to standard output, and the status it
@@ -734,6 +734,31 @@ pub(super) fn float_sqrt(bits: FloatBits, x: u64) -> u64 {
     }
 }
 
+/// The float of the size rounded to a whole number the way `mode` says. A
+/// float that is not a number is the one float that is not a number.
+pub(super) fn float_round(mode: Rounding, bits: FloatBits, x: u64) -> u64 {
+    match bits {
+        FloatBits::F32 => {
+            let a = f32::from_bits(x as u32);
+            float_result_f32(match mode {
+                Rounding::Floor => a.floor(),
+                Rounding::Ceil => a.ceil(),
+                Rounding::Trunc => a.trunc(),
+                Rounding::Nearest => a.round_ties_even(),
+            })
+        }
+        FloatBits::F64 => {
+            let a = f64::from_bits(x);
+            float_result_f64(match mode {
+                Rounding::Floor => a.floor(),
+                Rounding::Ceil => a.ceil(),
+                Rounding::Trunc => a.trunc(),
+                Rounding::Nearest => a.round_ties_even(),
+            })
+        }
+    }
+}
+
 /// What `op` gives for two floats of the size, as the bits of a float of that
 /// size.
 pub(super) fn float_binary(op: FloatBinary, bits: FloatBits, x: u64, y: u64) -> u64 {
@@ -1183,6 +1208,13 @@ impl Machine<'_> {
                             panic!("a square root of what is not a float")
                         };
                         vec![Word::Int(float_sqrt(bits, x))]
+                    }
+                    Op::FloatRound { mode, value } => {
+                        let bits = float_bits_of(f.types[value.0]);
+                        let Word::Int(x) = get(value) else {
+                            panic!("a rounding of what is not a float")
+                        };
+                        vec![Word::Int(float_round(*mode, bits, x))]
                     }
                     Op::FloatBits(value) | Op::FloatFromBits(value) => {
                         let Word::Int(x) = get(value) else {

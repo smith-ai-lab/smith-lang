@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::eval::{
     binary, bits_of, compare, divides_wrongly, float_binary, float_bits_of, float_compare,
-    float_from_int, float_fused, float_mask, float_negate, float_resize, float_sqrt,
+    float_from_int, float_fused, float_mask, float_negate, float_resize, float_round, float_sqrt,
     int_from_float, mask, narrow, widen,
 };
 use super::graph::{self, jumps};
@@ -233,6 +233,9 @@ fn folded(mut f: Function) -> Function {
                     known[value.0].map(|x| float_negate(float_bits_of(ty), x))
                 }
                 Op::FloatSqrt(value) => known[value.0].map(|x| float_sqrt(float_bits_of(ty), x)),
+                Op::FloatRound { mode, value } => {
+                    known[value.0].map(|x| float_round(*mode, float_bits_of(ty), x))
+                }
                 Op::FloatBits(value) | Op::FloatFromBits(value) => known[value.0],
                 Op::FloatCompare { op, a, b } => match (known[a.0], known[b.0]) {
                     (Some(x), Some(y)) => {

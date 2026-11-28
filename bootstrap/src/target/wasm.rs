@@ -15,7 +15,7 @@ use super::wasm_structure::{self as structure, Shape};
 use super::{Named, Part};
 use crate::scalar::{
     Binary, Bits, Builder, Compare, Constant, End, FloatBinary, FloatBits, FloatCompare, Function,
-    Instruction, Jump, Op, Place, Program, Stream, System, Type, Value,
+    Instruction, Jump, Op, Place, Program, Rounding, Stream, System, Type, Value,
 };
 
 /// Where the first of the program's texts is. Nothing is below it, so no text
@@ -1282,6 +1282,21 @@ impl Lowering<'_> {
                 let double = self.double(*value);
                 self.get(*value);
                 self.code.op(if double { F64_SQRT } else { F32_SQRT });
+                self.set(results[0]);
+            }
+            Op::FloatRound { mode, value } => {
+                let double = self.double(*value);
+                self.get(*value);
+                self.code.op(match (mode, double) {
+                    (Rounding::Floor, false) => F32_FLOOR,
+                    (Rounding::Ceil, false) => F32_CEIL,
+                    (Rounding::Trunc, false) => F32_TRUNC,
+                    (Rounding::Nearest, false) => F32_NEAREST,
+                    (Rounding::Floor, true) => F64_FLOOR,
+                    (Rounding::Ceil, true) => F64_CEIL,
+                    (Rounding::Trunc, true) => F64_TRUNC,
+                    (Rounding::Nearest, true) => F64_NEAREST,
+                });
                 self.set(results[0]);
             }
             Op::FloatBits(value) => {

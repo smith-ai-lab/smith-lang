@@ -421,6 +421,7 @@ fn each_read(op: &Op, mut f: impl FnMut(Value)) {
         | Op::Narrow(value)
         | Op::FloatNegate(value)
         | Op::FloatSqrt(value)
+        | Op::FloatRound { value, .. }
         | Op::FloatBits(value)
         | Op::FloatFromBits(value)
         | Op::FloatFromInt { value, .. }

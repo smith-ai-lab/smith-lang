@@ -8,7 +8,7 @@ use super::indexed::Folded;
 use super::moves::{self, Move, Step};
 use crate::scalar::{
     Binary, Compare, Constant, End, FloatBinary, FloatCompare, Function, Fused, Op,
-    Place as Written, Program, Raw, Stream, System as Call, Type, Value,
+    Place as Written, Program, Raw, Rounding, Stream, System as Call, Type, Value,
 };
 
 mod level;
@@ -917,6 +917,37 @@ impl Asm {
     /// the difference, 0x59 for the product, and 0x5e for the quotient.
     pub fn float_arithmetic(&mut self, opcode: u8, width: u32, rd: Reg, rm: Rm) {
         self.sse(None, Self::scalar(width), false, opcode, rd, rm);
+    }
+
+    /// `roundss` or `roundsd rd, rm, imm` of SSE4.1, which `x86-64-v3` has: the
+    /// float rounded to a whole number the way `mode` says, with bit 3 of the
+    /// immediate set so that no exception of an inexact result is raised.
+    pub fn float_round(&mut self, mode: Rounding, width: u32, rd: Reg, rm: Rm) {
+        let imm = 0x08
+            | match mode {
+                Rounding::Nearest => 0,
+                Rounding::Floor => 1,
+                Rounding::Ceil => 2,
+                Rounding::Trunc => 3,
+            };
+        let opcode = if width == 4 { 0x0a } else { 0x0b };
+        self.writing(None, |a| {
+            a.bytes(&[0x66]);
+            let xb = match rm {
+                Rm::Reg(r) => r.0 >> 3,
+                Rm::Place(place) => Self::rex_xb(place),
+            };
+            let rex = ((rd.0 >> 3) << 2) | xb;
+            if rex != 0 {
+                a.bytes(&[0x40 | rex]);
+            }
+            a.bytes(&[0x0f, 0x3a, opcode]);
+            match rm {
+                Rm::Reg(r) => a.bytes(&[Self::modrm(rd, r)]),
+                Rm::Place(place) => a.place(rd, place),
+            }
+            a.bytes(&[imm]);
+        });
     }
 
     /// `ucomiss` or `ucomisd ra, rm`: sets the zero, parity, and carry flags to
@@ -2556,6 +2587,11 @@ impl<S: System> Writer<'_, S> {
             Op::FloatSqrt(value) => {
                 let t = self.float_target(results[0], &[]);
                 asm.float_arithmetic(0x51, self.width(results[0]), t, self.float_operand(*value));
+                self.float_finish(asm, results[0], t);
+            }
+            Op::FloatRound { mode, value } => {
+                let t = self.float_target(results[0], &[]);
+                asm.float_round(*mode, self.width(results[0]), t, self.float_operand(*value));
                 self.float_finish(asm, results[0], t);
             }
             Op::FloatBits(value) => {

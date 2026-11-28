@@ -3,7 +3,7 @@
 //! the functions of the form that the generators build.
 
 use smith::scalar::{
-    self, Bits, Builder, FloatBinary, FloatBits, FloatCompare, Function, Op, Program,
+    self, Bits, Builder, FloatBinary, FloatBits, FloatCompare, Function, Op, Program, Rounding,
     Stream, System, Type, Value,
 };
 
@@ -811,7 +811,8 @@ pub fn pressure(g: &mut Gen) -> Program {
 }
 
 /// What the instructions of floats of one size give of two floats: the four
-/// operations, the negation of the first, the six comparisons, the first as a
+/// operations, the negation of the first, the square root of each, the four
+/// roundings of the first to a whole number, the six comparisons, the first as a
 /// float of the other size, and the first cut to each size of whole number, as
 /// signed and as unsigned.
 fn on_floats(ty: Type) -> Function {
@@ -827,6 +828,10 @@ fn on_floats(ty: Type) -> Function {
     types.push(ty);
     for x in [v[0], v[1]] {
         results.push(b.float_sqrt(x));
+        types.push(ty);
+    }
+    for mode in Rounding::ALL {
+        results.push(b.float_round(mode, v[0]));
         types.push(ty);
     }
     // The bits of a float, and the float of those bits.
