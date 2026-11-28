@@ -10,12 +10,12 @@
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, UdpSocket};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use smith::target::Target;
 
 use crate::Test;
+use crate::shared;
 use crate::targets;
 
 pub const ONCE: &[Test] = &[(
@@ -69,10 +69,10 @@ fn linux() -> Vec<Target> {
 
 /// The program, built once for `target`.
 fn program(target: Target) -> &'static [u8] {
-    static X64: OnceLock<Vec<u8>> = OnceLock::new();
-    static ARM64: OnceLock<Vec<u8>> = OnceLock::new();
+    static X64: shared::Once<Vec<u8>> = shared::Once::new();
+    static ARM64: shared::Once<Vec<u8>> = shared::Once::new();
     let cell = if target.name().ends_with("arm64") { &ARM64 } else { &X64 };
-    cell.get_or_init(|| {
+    cell.get(|| {
         let source = include_str!("dns_program.smith");
         targets::build(source.as_bytes(), target).unwrap_or_else(|e| panic!("{e:?}"))
     })
