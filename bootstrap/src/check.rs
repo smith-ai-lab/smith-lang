@@ -7412,6 +7412,7 @@ impl<'a> Typed<'a> {
                     .map(|t| (t != Ty::Unknown).then_some(t))
                     .collect();
                 defs.complete_outs(&sig.scope.requires, &mut some, &Scope::default());
+                defs.widen_to_implementations(&sig.scope.requires, &mut some, &Scope::default());
                 some.into_iter().map(|t| t.unwrap_or(Ty::Unknown)).collect()
             };
             let gives = sig.gives.subst(&args);

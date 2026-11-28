@@ -5,7 +5,9 @@
 //! the range inside an `Option`, a struct, a tuple, or a `List`, and is
 //! refused naming the trait when none does. A second implementation for a
 //! range that overlaps one already written is refused, naming the first. And
-//! `Wrapping` is had only by a range that fills a size.
+//! `Wrapping` is had only by a range that fills a size. A type parameter
+//! whose bound a range meets through the implementation of a size is that
+//! size.
 
 use smith::{check, lower, scalar};
 
@@ -28,6 +30,10 @@ pub const ONCE: &[Test] = &[
     (
         "a_range_that_fills_a_size_has_wrapping_and_one_a_value_narrower_does_not",
         a_range_that_fills_a_size_has_wrapping_and_one_a_value_narrower_does_not,
+    ),
+    (
+        "a_bound_met_through_a_size_makes_the_type_parameter_that_size",
+        a_bound_met_through_a_size_makes_the_type_parameter_that_size,
     ),
 ];
 
@@ -221,4 +227,96 @@ fn a_range_that_fills_a_size_has_wrapping_and_one_a_value_narrower_does_not() {
             );
         }
     }
+}
+
+#[derive(Debug)]
+struct Bound {
+    /// The size, as its bits and whether it is signed.
+    bits: u32,
+    signed: bool,
+    /// The range of the value, inside the size and narrower.
+    value: (i128, i128),
+    /// Whether the trait is the prelude's `Bits` or the program's `Step`.
+    bits_trait: bool,
+    /// Whether the value is given in an `Option`, through a bound on an `impl`.
+    in_option: bool,
+}
+
+fn bound(g: &mut Gen) -> Bound {
+    let bits = *g.pick(&[8u32, 16, 32]);
+    let signed = g.one_in(2);
+    let (low, high): (i128, i128) = if signed {
+        (-(1 << (bits - 1)), 1 << (bits - 1))
+    } else {
+        (0, 1 << bits)
+    };
+    let a = low + g.below(50) as i128;
+    let b = high - g.below(50) as i128 - 1;
+    Bound {
+        bits,
+        signed,
+        value: (a, b.max(a + 1)),
+        bits_trait: g.one_in(2),
+        in_option: g.one_in(2),
+    }
+}
+
+/// The program that gives `x`, of the narrower range, to the generic `go`, and
+/// binds what it gives to a name of type `held`, and the program that calls
+/// the trait's function on `x` directly.
+fn bound_program(c: &Bound, held: &str, generic: bool) -> String {
+    let size = format!("{}{}", if c.signed { "i" } else { "u" }, c.bits);
+    let (a, b) = c.value;
+    let range = format!("{a}..{b}");
+    let (uses, function, trait_text) = if c.bits_trait {
+        (format!("use std.bits (Bits, bit_not, {size})\n"), "bit_not", String::new())
+    } else {
+        (
+            format!("use std.bits ({size})\n"),
+            "step",
+            format!(
+                "trait Bits2[T] {{\n  fn step(x: T) -> T\n}}\n\n\
+                 impl Bits2[{size}] {{\n  fn step(x: {size}) -> {size} {{ x }}\n}}\n\n"
+            ),
+        )
+    };
+    let bound = if c.bits_trait { "Bits" } else { "Bits2" };
+    let option_impl = if c.in_option && !c.bits_trait {
+        "impl[T: Bits2] Bits2[Option[T]] {\n  fn step(x: Option[T]) -> Option[T] {\n    \
+         match x {\n      .some(v) { .some(step(v)) }\n      .none { .none }\n    }\n  }\n}\n\n"
+    } else {
+        ""
+    };
+    let call = if generic { "go" } else { function };
+    let body = if option_impl.is_empty() {
+        format!("  y: {held} = {call}(x)\n  print(\"{{y}}\")")
+    } else {
+        format!(
+            "  o: Option[{range}] = .some(x)\n  r: Option[{held}] = {call}(o)\n  \
+             match r {{\n    .some(y) {{ print(\"{{y}}\") }}\n    .none {{ print(\"none\") }}\n  }}"
+        )
+    };
+    let go = if generic {
+        format!("fn go[T: {bound}](v: T) -> T {{ {function}(v) }}\n\n")
+    } else {
+        String::new()
+    };
+    format!(
+        "{uses}use std.console (console, print)\n\n{trait_text}{option_impl}{go}\
+         fn main() <console, alloc> {{\n  x: {range} = {a}\n{body}\n}}\n"
+    )
+}
+
+fn a_bound_met_through_a_size_makes_the_type_parameter_that_size() {
+    generate::check(7171, 16, bound, |c| {
+        let size = format!("{}{}", if c.signed { "i" } else { "u" }, c.bits);
+        let range = format!("{}..{}", c.value.0, c.value.1);
+        let generic = bound_program(c, &size, true);
+        let direct = bound_program(c, &size, false);
+        assert_eq!(prints(&generic), prints(&direct), "{generic}\n{direct}");
+        // What `go` gives is of the size, and is not taken as the narrower range
+        // with nothing shown.
+        let narrowed = bound_program(c, &range, true);
+        assert!(check(narrowed.as_bytes()).is_err(), "accepted: {narrowed}");
+    });
 }

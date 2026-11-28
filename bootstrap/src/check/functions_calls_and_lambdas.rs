@@ -1402,6 +1402,33 @@ impl<'a> Checker<'a> {
                     Found::Yes(..) | Found::Unknown => {}
                 }
             }
+            // A type parameter that is a range met through the implementation
+            // of a wider range is that range, and an argument it types is
+            // widened to it.
+            let widened = defs.widen_to_implementations(&sig.scope.requires, &mut sol, body.scope);
+            if !widened.is_empty() {
+                let places = params_of(&sig.params, sig.by_position(), &call.args);
+                for (arg, p) in call.args.iter().zip(places.into_iter().flatten()) {
+                    let pattern = &sig.params[p].1;
+                    for (t, narrow, wide) in &widened {
+                        if let (Ty::Param(q), Ty::Int(to)) = (pattern, wide)
+                            && q == t
+                        {
+                            self.widened.insert(addr(&arg.value), *to);
+                        } else if pattern.mentions(*t) && !defs.kept_as(wide, narrow) {
+                            self.errors.push(Error::new(
+                                arg.value.pos(),
+                                format!(
+                                    "this holds {}, which is kept apart from the {} that \
+                                     `{name}` takes it as",
+                                    defs.describe(narrow, body.scope),
+                                    defs.describe(wide, body.scope)
+                                ),
+                            ));
+                        }
+                    }
+                }
+            }
             self.contract_call(body, call, &defs.file.functions[f], sig);
             self.call_decreases(body, call, f, sig);
             // A division that wraps is of a divisor that is not zero.

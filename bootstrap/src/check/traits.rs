@@ -149,6 +149,23 @@ fn overlap(a: &Ty, b: &Ty, sol: &mut Vec<Option<Ty>>) -> bool {
     }
 }
 
+/// Whether `wide` is `narrow` or holds it, a range holding a range it holds,
+/// and, `inside` another type, only one kept at the same size.
+fn holds_as_kept(wide: &Ty, narrow: &Ty, inside: bool) -> bool {
+    match (wide, narrow) {
+        (Ty::Int(w), Ty::Int(n)) => w == n || w.holds(*n) && (!inside || w.holder() == n.holder()),
+        (Ty::Struct(s, x), Ty::Struct(t, y)) | (Ty::Enum(s, x), Ty::Enum(t, y)) => {
+            s == t && x.iter().zip(y).all(|(a, b)| holds_as_kept(a, b, true))
+        }
+        (Ty::Tuple(x), Ty::Tuple(y))
+        | (Ty::List(x), Ty::List(y))
+        | (Ty::Slice(x), Ty::Slice(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(a, b)| holds_as_kept(a, b, true))
+        }
+        (a, b) => a == b,
+    }
+}
+
 /// What a type parameter must implement.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Bound {
@@ -794,6 +811,65 @@ impl<'a> Defs<'a> {
         found
     }
 
+    /// Whether `wide`, a type an implementation of trait `k` was found for, is
+    /// `narrow` or holds it: a range holds a range it holds, as `fits` says, and
+    /// inside another type only one that is kept at its size, so that a value
+    /// of the narrower is one of the wider as it is.
+    fn held_by(&self, k: usize, wide: &Ty, narrow: &Ty) -> bool {
+        k != self.wrapping && holds_as_kept(wide, narrow, false) || wide == narrow
+    }
+
+    /// Whether a value of `narrow` is a value of `wide` as it is kept: the
+    /// two are the same, or each range in `narrow` is held by the one in its
+    /// place in `wide` and kept at the same size.
+    pub(super) fn kept_as(&self, wide: &Ty, narrow: &Ty) -> bool {
+        holds_as_kept(wide, narrow, true)
+    }
+
+    /// The type parameters of requirement `r` that hold a range met through
+    /// the implementation of a wider range, each with the type it was and the
+    /// one it is: `needed` are the requirement's types as solved, and `met`
+    /// the types of the implementation found for them.
+    pub(super) fn widened_params(
+        &self,
+        r: &Requirement,
+        needed: &[Ty],
+        met: &[Ty],
+    ) -> Vec<(usize, Ty, Ty)> {
+        (r.types.iter().zip(needed).zip(met).zip(&self.outs[r.of]))
+            .filter_map(|(((t, n), m), out)| match t {
+                Ty::Param(p) if !out && n != m => Some((*p, n.clone(), m.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Makes each type parameter that `requires` holds, and that is a range
+    /// met through the implementation of a wider range, that range, as a
+    /// call is checked and as its copy is chosen. Gives each one changed,
+    /// with the range it was and the one it is.
+    pub(super) fn widen_to_implementations(
+        &self,
+        requires: &[Requirement],
+        sol: &mut [Option<Ty>],
+        scope: &Scope,
+    ) -> Vec<(usize, Ty, Ty)> {
+        let mut changed = Vec::new();
+        for r in requires {
+            let needed: Vec<Ty> = r.types.iter().map(|t| t.solved(sol)).collect();
+            if needed.iter().any(Ty::unknown) {
+                continue;
+            }
+            if let Found::Yes(met, _) = self.meets_types(r.of, &needed, scope, &mut Vec::new()) {
+                for (p, narrow, wide) in self.widened_params(r, &needed, &met) {
+                    sol[p] = Some(wide.clone());
+                    changed.push((p, narrow, wide));
+                }
+            }
+        }
+        changed
+    }
+
     /// Whether the type of an implementation of trait `k` fits the type it is
     /// looked up for, filling in `sol`: a range fits a range that it holds,
     /// except for `Wrapping`, which only the range of a size has, as wrapping
@@ -846,7 +922,7 @@ impl<'a> Defs<'a> {
             if !fit {
                 continue;
             }
-            let Some(sol) = sol.into_iter().collect::<Option<Vec<Ty>>>() else {
+            let Some(mut sol) = sol.into_iter().collect::<Option<Vec<Ty>>>() else {
                 return Found::Unknown;
             };
             if info.scope.invalid.contains(&true) {
@@ -855,7 +931,17 @@ impl<'a> Defs<'a> {
             for r in &info.scope.requires {
                 let needed: Vec<Ty> = r.types.iter().map(|t| t.subst(&sol)).collect();
                 match self.meets_types(r.of, &needed, scope, stack) {
-                    Found::Yes(..) => {}
+                    Found::Yes(met, _) => {
+                        // A type parameter met through the implementation of a
+                        // wider range is that range, where a value of the
+                        // narrower one is a value of it as it is kept.
+                        for (p, narrow, wide) in self.widened_params(r, &needed, &met) {
+                            if !self.kept_as(&wide, &narrow) {
+                                continue 'impls;
+                            }
+                            sol[p] = wide;
+                        }
+                    }
                     Found::No => continue 'impls,
                     other => return other,
                 }
@@ -1456,7 +1542,7 @@ impl<'a> Defs<'a> {
                 let wide = self.wide_at_64(k, types);
                 let same = (all.iter().zip(&wide).zip(&self.outs[k]))
                     .filter(|(_, out)| !**out)
-                    .all(|((a, b), _)| a == b || self.fits(k, a, b, &mut []));
+                    .all(|((a, b), _)| self.held_by(k, a, b));
                 if same { Found::Yes(all, by) } else { Found::No }
             }
             other => other,
