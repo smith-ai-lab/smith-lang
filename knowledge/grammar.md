@@ -7,7 +7,7 @@ built:
   - "`effect_def`: `effect IDENT { fn_sig }`, with `pub` in a module, whose operations are signatures with no body"
   - "`group_def`: `effects IDENT = effects`, with `pub` in a module, and a group in any list of `effects`"
   - "`params`: the parameters of a function before a `;` are given by position or by name and those after it by name only, and a call, a statement, and a function type hold no `;`"
-  - "`value_def`: a value at the top level states its type, `IDENT \":\" type \"=\" expr`, and one that does not is refused at its name; the form with a type is not built yet"
+  - "`value_def`: a value at the top level states its type, `IDENT \":\" type \"=\" expr`, and one that does not is refused at its name; not with `pub`"
 ---
 
 # Smith grammar

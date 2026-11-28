@@ -345,6 +345,80 @@ pub fn call(program: &Program, function: usize, args: &[u64]) -> Vec<u64> {
     integers(machine.call(function, words).ok().expect("memory"))
 }
 
+/// A scalar a function gave, as `work_out` gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Scalar {
+    Int(u64),
+    /// An address of the memory the run left.
+    Address(usize),
+    Vector(u128),
+}
+
+/// What a function that takes nothing gave, run from the start of a program
+/// that holds its texts, and the memory the run left, which `bytes` reads.
+pub struct Worked {
+    pub scalars: Vec<Scalar>,
+    memory: Vec<u8>,
+}
+
+impl Worked {
+    /// The `count` bytes at `at`, or `None` where the run left no memory.
+    pub fn bytes(&self, at: usize, count: usize) -> Option<&[u8]> {
+        let from = at.checked_sub(BASE)?;
+        self.memory.get(from..from.checked_add(count)?)
+    }
+}
+
+/// Runs the function of the program that takes nothing, as a value at the top
+/// level is worked out when the program is built, and gives what it gave, or
+/// `None` when it ended the run.
+pub fn work_out(program: &Program, function: usize) -> Option<Worked> {
+    let mut memory = Vec::new();
+    let mut starts = Vec::new();
+    for text in &program.data {
+        starts.push(BASE + memory.len());
+        memory.extend_from_slice(text);
+    }
+    let mut machine = Machine {
+        program,
+        memory,
+        starts,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+        stdin: Vec::new(),
+        read: 0,
+        left: usize::MAX,
+        requests: Vec::new(),
+        taking: None,
+        taken: Vec::new(),
+        copying: None,
+        copied: Vec::new(),
+        blocks: BLOCKS,
+        depth: 0,
+        ready: None,
+        waited: Vec::new(),
+        poison: false,
+        failed: None,
+        in_landing: false,
+        entering_landing: false,
+        frames: HashMap::new(),
+        freed: BTreeMap::new(),
+    };
+    let words = machine.call(function, Vec::new()).ok()?;
+    let scalars = words
+        .into_iter()
+        .map(|w| match w {
+            Word::Int(n) => Scalar::Int(n),
+            Word::Address(a) => Scalar::Address(a),
+            Word::Vector(v) => Scalar::Vector(v),
+        })
+        .collect();
+    Some(Worked {
+        scalars,
+        memory: machine.memory,
+    })
+}
+
 fn integers(words: Vec<Word>) -> Vec<u64> {
     words
         .into_iter()

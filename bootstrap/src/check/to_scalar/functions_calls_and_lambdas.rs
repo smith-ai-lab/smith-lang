@@ -338,7 +338,9 @@ impl<'a> Lowering<'a> {
                 .find(|(n, _)| *n == number)
                 .map_or("main", |(_, label)| label.as_str())
         };
-        let mut text = format!("{module}.{}", written_name(name));
+        // The function that gives a value at the top level is called by the value's name.
+        let name = crate::parser::value_name(name).unwrap_or(written_name(name));
+        let mut text = format!("{module}.{name}");
         if !types.is_empty() {
             let args: Vec<String> = (types.iter())
                 .map(|ty| defs.text(ty, &Scope::default()))

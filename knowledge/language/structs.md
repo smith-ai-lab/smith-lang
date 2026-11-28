@@ -7,7 +7,8 @@ built:
   - "structs with fields and defaults, reading a field, and assigning to a field of a `mut` with `=`"
   - "a struct that takes a whole number as a parameter, written `[n: Nat]` or `[n: Pos]`, which a type names with the number written out, as `Box[10]`, and whose name is a bound in the type of a field, as `0..n`, and a construction that leaves the number out, which takes it from the type it must give"
   - "a field whose type is a statement, which holds a proof, as [A struct that holds a proof](proof-fields.md) says"
-  - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes a type after the name; one that states its type is not built yet"
+  - "a value at the top level of a file that states no type is refused, at its name, with the fix that writes the type its value has after the name"
+  - "a value at the top level of a file that states its type, worked out when the program is built from literals, structs, enums, tuples, lists, other top-level values, and calls of functions that carry no effect, and read by any function of the file with no call and no memory asked for; one that needs an effect or is defined by itself, an assignment to one, and a second definition of its name are refused at the name; not a list or a slice whose elements hold a text or a list, and not a value read by another module"
 ---
 
 # Structs
@@ -178,7 +179,7 @@ A value may be defined at the top level of a file, outside every function, and i
 unit: Rect = Rect(w: 1, h: 1)
 ```
 
-A top-level value with no type is refused, at its name: `unit = Rect(w: 1, h: 1)` gives "a value at the top level states its type, and `unit` does not", with the fix that writes the type after the name, `unit: Rect = Rect(w: 1, h: 1)`. The compiler names the type in the fix once it builds top-level values, and until then the fix shows `T` where the type goes.
+A top-level value with no type is refused, at its name: `unit = Rect(w: 1, h: 1)` gives "a value at the top level states its type, and `unit` does not", with the fix that writes the type after the name, `unit: Rect = Rect(w: 1, h: 1)`. The fix names the type the value has.
 
 A top-level value is fixed. It is worked out when the program is built and kept in the executable, so it costs nothing when the program starts, and it cannot be assigned, as no name that is not a `mut` can.
 

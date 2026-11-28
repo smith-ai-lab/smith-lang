@@ -446,7 +446,7 @@ fn assigned(mut call: Call, kept: Option<Kept>) -> Vec<Stmt> {
 }
 
 /// Gives `visit` the expression each statement holds.
-fn each_expr(stmt: &mut Stmt, visit: &mut dyn FnMut(&mut Expr)) {
+pub(super) fn each_expr(stmt: &mut Stmt, visit: &mut dyn FnMut(&mut Expr)) {
     match stmt {
         Stmt::Define { value, .. } | Stmt::Destructure { value, .. } | Stmt::Expr(value) => {
             visit(value)
@@ -463,7 +463,7 @@ fn each_expr(stmt: &mut Stmt, visit: &mut dyn FnMut(&mut Expr)) {
 
 /// Gives `visit` each expression an expression holds directly, and not those
 /// of its blocks.
-fn each_child(e: &mut Expr, visit: &mut dyn FnMut(&mut Expr)) {
+pub(super) fn each_child(e: &mut Expr, visit: &mut dyn FnMut(&mut Expr)) {
     match e {
         Expr::Call(call) => {
             if let Some(inner) = &mut call.through {
@@ -529,7 +529,7 @@ fn each_child(e: &mut Expr, visit: &mut dyn FnMut(&mut Expr)) {
 
 /// Gives `visit` each block an expression holds directly: the arms of a
 /// `match`, the body of a loop or a `for`, and the body of a lambda.
-fn each_block(e: &mut Expr, visit: &mut dyn FnMut(&mut Vec<Stmt>)) {
+pub(super) fn each_block(e: &mut Expr, visit: &mut dyn FnMut(&mut Vec<Stmt>)) {
     match e {
         Expr::Match(m) => {
             for arm in &mut m.arms {

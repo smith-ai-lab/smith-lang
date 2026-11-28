@@ -1065,6 +1065,10 @@ impl Builder<'_, '_> {
                 let at = self.body.names.iter().rposition(|(n, _)| n == name)?;
                 Some(root(self.body, self.facts, at))
             }
+            // A value at the top level is one value wherever it is read.
+            Expr::Call(call) if let Some(name) = crate::parser::value_name(&call.callee) => {
+                Some(format!("^{name}"))
+            }
             // What a parameter marked `mut` was given is its first version.
             Expr::Call(call) => {
                 let name = super::mut_parameters::old_name(self.checker.defs, call)?;

@@ -20,6 +20,8 @@ pub(crate) use lift::env_name;
 mod lists_and_text;
 mod numbers_and_operators;
 pub mod outline;
+mod top_values;
+pub(crate) use top_values::value_name;
 mod traits;
 
 use effects_with_and_try::{Block, Line, split};
@@ -976,6 +978,13 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
                     p.skip_item(start);
                 }
             },
+            Tok::Ident(_) if matches!(p.peek(1), Tok::Punct(":" | "=")) => match p.top_value() {
+                Ok(f) => functions.push(f),
+                Err(e) => {
+                    p.errors.push(e);
+                    p.skip_item(start);
+                }
+            },
             _ => {
                 let error = p.item();
                 p.errors.push(error);
@@ -1021,6 +1030,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
             p.unbuilt.push(Error::unsupported(*pos, "`pub`"));
         }
     }
+    top_values::read_as_calls(&mut functions, &mut p.errors);
     mut_parameters::lower(
         &mut functions,
         (&impls, &traits),
@@ -1030,6 +1040,13 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
     if !library {
         lift::lift(&mut functions, &mut structs);
     }
+    // A value of the file is a name of its own, which no other module's is.
+    let values: HashSet<&str> = (functions.iter())
+        .filter_map(|f| value_name(&f.name))
+        .collect();
+    let mut idents = Vec::new();
+    ident_uses(&tokens[after_uses..], None, &mut idents);
+    idents.retain(|(name, _)| !values.contains(name.as_str()));
     if p.errors.is_empty() {
         Ok(File {
             functions: share(functions),
@@ -1047,11 +1064,7 @@ fn parse_file(tokens: &[Token], library: bool) -> Result<File, Vec<Error>> {
                 written_names(&tokens[after_uses..], &mut written);
                 written
             },
-            idents: {
-                let mut idents = Vec::new();
-                ident_uses(&tokens[after_uses..], None, &mut idents);
-                idents
-            },
+            idents,
             // The prelude's own items, at line 0, are not looked through.
             floats: tokens.first().is_some_and(|t| t.pos.line != 0)
                 && tokens.iter().any(writes_float),
@@ -1604,14 +1617,6 @@ impl Parser<'_> {
             Tok::Keyword("effect") => "declaring an effect",
             Tok::Keyword("derive") => "`derive`",
             Tok::Keyword("foreign") => "a foreign function",
-            Tok::Ident(name) if self.peek(1) == &Tok::Punct("=") => {
-                let mut error = Error::new(
-                    pos,
-                    format!("a value at the top level states its type, and `{name}` does not"),
-                );
-                error.fix = Some(format!("write its type after the name: `{name}: T = ...`"));
-                return error;
-            }
             Tok::Ident(_) => "a definition other than a function",
             tok => return self.expected("a definition", tok),
         };
