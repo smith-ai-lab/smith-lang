@@ -56,3 +56,20 @@ jobs:
             echo "descriptors: $(ulimit -n), connections held: $(sysctl -n kern.ipc.somaxconn)"
           fi
           cargo test --locked -- --group=machine
+      # The time of each test, and the tests that became much slower than their
+      # own history on this kind of machine, as `ci` does for the first.
+      - name: Say which tests became much slower than their own history
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          SMITH_SEED: 0
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            ulimit -n 10240 || true
+            sudo sysctl -w kern.ipc.somaxconn=4096 || true
+          fi
+          cargo test --locked -- --group=machine --times="$RUNNER_TEMP/times"
+          sh ../.github/slow-tests.sh "${{ inputs.os }}" "$RUNNER_TEMP/times" --group=machine > "$RUNNER_TEMP/slow" || status=$?
+          cat "$RUNNER_TEMP/slow"
+          cat "$RUNNER_TEMP/slow" >> "$GITHUB_STEP_SUMMARY"
+          exit "${status:-0}"

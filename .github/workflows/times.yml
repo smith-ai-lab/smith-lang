@@ -1,0 +1,104 @@
+name: times
+
+# Records the time of every test on each kind of runner, which a pull request's
+# tests are compared with as `.github/check-times.sh` says. Runs after a merge,
+# never for a pull request, so it cannot hold one up. The times are kept on the
+# branch `times`, a file for each kind of runner, a line
+# `commit,date,test,milliseconds` for each test of each merge, and nothing on
+# the branch is ever changed, only added to.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: times
+  cancel-in-progress: false
+
+jobs:
+  record:
+    name: record the time of every test on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The first is the reference runner, which the whole suite runs on. The
+        # others run the group that depends on the machine, as `ci` does.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      # Only this job may write, and only to the times branch.
+      contents: write
+    defaults:
+      run:
+        working-directory: bootstrap
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the package that runs a Worker
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: bootstrap/tests/support
+        run: npm ci --ignore-scripts
+      - name: Install the emulator of x86-64 chips
+        if: matrix.os == 'ubuntu-latest'
+        uses: ./.github/actions/qemu
+      # The seed that the run of a pull request is given, so that a test is
+      # given the same input on both.
+      - name: Time every test
+        shell: bash
+        run: |
+          set -eu
+          if [ "$RUNNER_OS" = macOS ]; then
+            ulimit -n 10240 || true
+            sudo sysctl -w kern.ipc.somaxconn=4096 || true
+          fi
+          group=
+          if [ "${{ matrix.os }}" != ubuntu-latest ]; then group=--group=machine; fi
+          SMITH_SEED=0 cargo test --locked -- $group --times="$RUNNER_TEMP/times"
+      - name: Add the times to the times branch
+        shell: bash
+        env:
+          TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+          RUNNER: ${{ matrix.os }}
+        run: |
+          set -eu
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          url="https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git"
+          kept="$RUNNER_TEMP/kept"
+          date=$(date -u +%Y-%m-%d)
+          for attempt in 1 2 3 4 5 6 7 8; do
+            rm -rf "$kept"
+            if git ls-remote --exit-code --heads "$url" times >/dev/null; then
+              git clone --quiet --branch times --single-branch "$url" "$kept"
+            else
+              git init --quiet --initial-branch=times "$kept"
+              git -C "$kept" remote add origin "$url"
+            fi
+            file="$kept/$RUNNER.csv"
+            [ -f "$file" ] || echo "commit,date,test,milliseconds" > "$file"
+            # A rerun of this job for the same commit adds nothing.
+            if grep -q "^${COMMIT}," "$file"; then
+              exit 0
+            fi
+            awk -F, -v c="$COMMIT" -v d="$date" '{ print c "," d "," $1 "," $2 }' "$RUNNER_TEMP/times" >> "$file"
+            git -C "$kept" add "$RUNNER.csv"
+            git -C "$kept" commit --quiet -m "chore(times): record ${COMMIT} on ${RUNNER}"
+            # Never forced, so an earlier line cannot be changed. The jobs of
+            # the other kinds of runner push to the same branch, and the one
+            # that is behind fetches again and tries again.
+            if git -C "$kept" push --quiet origin times:refs/heads/times; then
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          echo "could not push the times branch" >&2
+          exit 1
