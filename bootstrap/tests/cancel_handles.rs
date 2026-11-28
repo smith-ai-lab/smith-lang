@@ -49,7 +49,7 @@ use std.instant (ms)
 use std.int (wrapping_add)
 use std.net (close, connection, handle, net, release, write, Connection)
 use std.list (freeze, push)
-use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+use std.task (Descriptor, join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 {functions}
 fn run(seed: u64) -> u64 <net, diverge, alloc> {{
@@ -117,7 +117,7 @@ fn sorted(mut lines: Vec<String>) -> Vec<String> {
     lines
 }
 
-const HOLD: &str = "fn hold(n: u64) -> u64 <net, task> {
+const HOLD: &str = "fn hold(n: Descriptor) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
   close(take c)
@@ -137,8 +137,8 @@ const PAIR: &str = "struct Pair {
   b: Connection
 }
 
-fn hold_two(n: u64) -> u64 <net, task> {
-  p = Pair(a: connection(n), b: connection(wrapping_add(n, 1)))
+fn hold_two(n: 0..1000) -> u64 <net, task> {
+  p = Pair(a: connection(n), b: connection(n + 1))
   test_ready(n)
   close(take p.a)
   close(take p.b)
@@ -153,7 +153,7 @@ fn a_cancelled_task_closes_both_connections_of_a_struct_it_holds() {
     }
 }
 
-const GIVEN: &str = "fn parent(n: u64) -> u64 <net, task> {
+const GIVEN: &str = "fn parent(n: Descriptor) -> u64 <net, task> {
   child = spawn { connection(n) }
   c = join(take child)
   test_ready(n)
@@ -200,7 +200,7 @@ fn main() <time, net> {
     assert!(errors.contains("add `net` to its effects"), "{errors}");
 }
 
-const FINISH: &str = "fn finish(n: u64) -> u64 <net, task> {
+const FINISH: &str = "fn finish(n: Descriptor) -> u64 <net, task> {
   c = connection(n)
   test_ready(n)
   close(take c)
@@ -216,10 +216,10 @@ fn a_connection_that_is_closed_by_its_function_is_not_closed_again_when_no_task_
     assert_eq!(sorted(said(&source)), ["1", "closed 4"]);
 }
 
-const LIST: &str = "fn hold_list(n: u64) -> List[Connection] <net, task, alloc> {
+const LIST: &str = "fn hold_list(n: 0..1000) -> List[Connection] <net, task, alloc> {
   mut cs: List[Connection] = []
   cs = push(take cs, connection(n))
-  cs = push(take cs, connection(wrapping_add(n, 1)))
+  cs = push(take cs, connection(n + 1))
   test_ready(n)
   cs
 }

@@ -1,6 +1,6 @@
 use std.bits (bit_and, bit_xor, i64, shift_right, u64)
 use std.instant (Duration, Instant, milliseconds, until)
-use std.int (saturating_add, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_sub)
+use std.int (saturating_add, wrapping_add, wrapping_mul, wrapping_sub)
 use std.list (push)
 
 // The functions of task groups: `tasks` opens a group for the rest of a block,
@@ -18,9 +18,13 @@ pub struct Frame {
 without Copy for Frame
 without Discard for Frame
 
+// The number the system gives a thing it opened, as a file or a socket, which is
+// never negative.
+pub type Descriptor = 0..9223372036854775808
+
 // What the system calls a thing that a task waits on, as `Connection` holds one.
 pub struct Handle {
-  pub number: u64
+  pub number: Descriptor
 }
 
 // What a task waits for: a handle to be ready to read or to write, some
@@ -646,14 +650,14 @@ pub fn test_scheduler_with_io[T](seed: u64, ready: List[u64], body: take fn() ->
 
 // A task waits until the test says the handle is ready, as it does for a
 // connection of a socket under the scheduler of a program.
-pub fn test_ready(handle: u64) <task> {
+pub fn test_ready(handle: Descriptor) <task> {
   __wait(.read(Handle(number: handle)))
 }
 
 // A task waits until the test says the handle is ready or the milliseconds have
 // gone, whichever comes first, in the time of the test, which goes forward only
 // when no task can run. It is told which: true when the handle was ready.
-pub fn test_ready_by(handle: u64, span: Duration) -> bool <task> {
+pub fn test_ready_by(handle: Descriptor, span: Duration) -> bool <task> {
   wait_to_read_by(handle, span)
 }
 
@@ -664,13 +668,13 @@ pub fn wait_for_time(span: Duration) <task> {
 
 // Waits until the descriptor can be read or the milliseconds have gone, whichever
 // comes first, and says which: true when it can be read.
-pub fn wait_to_read_by(handle: u64, span: Duration) -> bool <task> {
+pub fn wait_to_read_by(handle: Descriptor, span: Duration) -> bool <task> {
   limit(milliseconds(span))
   __wait(.read_by(Handle(number: handle)))
   not timed_out()
 }
 
-pub fn wait_to_write_by(handle: u64, span: Duration) -> bool <task> {
+pub fn wait_to_write_by(handle: Descriptor, span: Duration) -> bool <task> {
   limit(milliseconds(span))
   __wait(.write_by(Handle(number: handle)))
   not timed_out()
@@ -688,7 +692,7 @@ fn le32(list: take List[Byte], n: u64) -> List[Byte] <alloc> {
 // Asks `epoll` to say once when the descriptor can be read or written. The event
 // is the same twelve bytes of data on every machine that has `epoll`, since the
 // descriptor is written where each machine reads it.
-fn register(ep: i64, fd: u64, write: bool) -> i64 <alloc> {
+fn register(ep: i64, fd: Descriptor, write: bool) -> i64 <alloc> {
   mut events: u64 = 1073741825
   if write { events = 1073741828 }
   mut event: List[Byte] = []
@@ -696,9 +700,8 @@ fn register(ep: i64, fd: u64, write: bool) -> i64 <alloc> {
   event = le32(take event, fd)
   event = le32(take event, fd)
   event = le32(take event, fd)
-  descriptor: i64 = wrapping_narrow(fd)
-  added = __system(14, ep, 1, descriptor, event, 0, 0)
-  if added == -17 { __system(14, ep, 3, descriptor, event, 0, 0) } else { added }
+  added = __system(14, ep, 1, fd, event, 0, 0)
+  if added == -17 { __system(14, ep, 3, fd, event, 0, 0) } else { added }
 }
 
 // Whether the kernel is macOS's, whose scheduler waits with `kqueue` and not
@@ -766,7 +769,7 @@ fn make_queue() -> i64 {
 // Asks `kqueue` to say once when the descriptor can be read or written: one
 // `kevent` of 32 bytes, which is the descriptor, the filter (-1 to read and -2 to
 // write), the flags that add it and drop it once it has said so, and zeros.
-fn register_kqueue(kq: i64, fd: u64, write: bool) -> i64 <alloc> {
+fn register_kqueue(kq: i64, fd: Descriptor, write: bool) -> i64 <alloc> {
   mut word: u64 = 1179647
   if write { word = 1179646 }
   mut change: List[Byte] = []
@@ -807,7 +810,7 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
 }
 
 // Asks the system's queue to say once when the descriptor can be read or written.
-fn register_wait(queue: i64, fd: u64, write: bool) -> i64 <alloc> {
+fn register_wait(queue: i64, fd: Descriptor, write: bool) -> i64 <alloc> {
   if on_macos() { register_kqueue(queue, fd, write) } else { register(queue, fd, write) }
 }
 

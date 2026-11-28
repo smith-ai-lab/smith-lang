@@ -426,7 +426,7 @@ use std.instant (ms)
 use std.int (wrapping_add)
 use std.net (Connection, close, connection, handle, net, release)
 use std.list (push)
-use std.task (join, outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+use std.task (Descriptor, join, outcome, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 // Asks for more memory than the system gives, so that the task that calls it ends.
 fn eat() -> u64 <alloc> {{
@@ -437,7 +437,7 @@ fn eat() -> u64 <alloc> {{
   0
 }}
 
-fn opened(id: u64) -> Connection <console, alloc> {{
+fn opened(id: Descriptor) -> Connection <console, alloc> {{
   print(\"opened {{id}}\")
   connection(id)
 }}

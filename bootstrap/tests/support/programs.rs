@@ -2239,7 +2239,7 @@ const STD_NAMES: &[(&str, &[&str])] = &[
         &[
             "clamp", "narrow",
             "saturating_add", "saturating_mul", "saturating_sub",
-            "wrapping_add", "wrapping_mul", "wrapping_narrow", "wrapping_shift_left",
+            "wrapping_add", "wrapping_mul", "wrapping_shift_left",
             "wrapping_sub",
         ],
     ),

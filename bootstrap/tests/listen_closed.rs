@@ -97,7 +97,7 @@ fn app() <http, alloc> {{
   get(\"/users/:id\", user)
 }}
 
-fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
+fn recording[T](connections: 0..1000, body: fn() -> T <net>) -> (T, List[List[Byte]]) <alloc> {{
   mut accepted: u64 = 0
   mut asked: List[u64] = []
   mut kept: List[List[Byte]] = []
@@ -108,7 +108,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
       if accepted > connections {{
         .err(.closed(l.host))
       }} else {{
-        .ok(connection(wrapping_add(accepted, 1)))
+        .ok(connection(accepted + 1))
       }}
     }},
     stop: fn(l) {{ n = release(take l) }},
@@ -145,7 +145,7 @@ fn recording[T](connections: u64, body: fn() -> T <net>) -> (T, List[List[Byte]]
   (result, kept)
 }}
 
-fn run(connections: u64, seed: u64) -> ((), List[List[Byte]]) <alloc, diverge> {{
+fn run(connections: 0..1000, seed: u64) -> ((), List[List[Byte]]) <alloc, diverge> {{
   with recording(connections)
 {scheduler}  with listen(port: 80)
   app()
@@ -153,6 +153,14 @@ fn run(connections: u64, seed: u64) -> ((), List[List[Byte]]) <alloc, diverge> {
 
 fn number(text: str) -> u64 <alloc> {{
   got: Result[u64, ReadError] = from_text(\"n\", text)
+  match got {{
+    .ok(v) {{ v }}
+    .err(e) {{ 0 }}
+  }}
+}}
+
+fn count(text: str) -> 0..1000 <alloc> {{
+  got: Result[0..1000, ReadError] = from_text(\"connections\", text)
   match got {{
     .ok(v) {{ v }}
     .err(e) {{ 0 }}
@@ -171,7 +179,7 @@ fn show(writes: List[List[Byte]]) <console, alloc> {{
 
 fn main(args: List[str]) <console, alloc, diverge> {{
   if args.size == 2 {{
-    (done, writes) = run(number(args[0]), number(args[1]))
+    (done, writes) = run(count(args[0]), number(args[1]))
     show(writes)
   }}
 }}

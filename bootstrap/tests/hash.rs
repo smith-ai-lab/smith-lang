@@ -51,7 +51,7 @@ enum Shape {
 }
 
 fn shape(n: u64, k: u64) -> Shape <alloc> {
-  if bit_and(n, 1) == 0 { Shape.name(\"{k}\") } else { Shape.line(wrapping_narrow(k)) }
+  if bit_and(n, 1) == 0 { Shape.name(\"{k}\") } else { Shape.line(bit_and(k, 4294967295)) }
 }
 
 fn numbers(n: u64, k: u64) -> List[u64] <alloc> {
@@ -75,20 +75,20 @@ fn header(values: &[(&str, &str)]) -> String {
         }
     }
     format!(
-        "use std.bits ({})\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul, wrapping_narrow)\nuse std.list (push)\n\n",
+        "use std.bits ({})\nuse std.console (console, print)\nuse std.int (wrapping_add, wrapping_mul)\nuse std.list (push)\n\n",
         bits.join(", ")
     )
 }
 
 const VALUES: &[(&str, &str)] = &[
     ("u64", "k"),
-    ("u16", "wrapping_narrow(k)"),
-    ("u32", "wrapping_narrow(k)"),
-    ("i32", "wrapping_narrow(k)"),
+    ("u16", "bit_and(k, 65535)"),
+    ("u32", "bit_and(k, 4294967295)"),
+    ("i32", "bit_and(k, 2147483647)"),
     ("str", "\"{k}\""),
     ("Pair", "Pair(a: k, b: \"{n}\")"),
     ("(u64, u64)", "(n, k)"),
-    ("((Byte, u64), str)", "((wrapping_narrow(n), k), \"{n}\")"),
+    ("((Byte, u64), str)", "((bit_and(n, 255), k), \"{n}\")"),
     ("Shape", "shape(n, k)"),
     ("List[u64]", "numbers(n, k)"),
     ("List[str]", "words(n, k)"),

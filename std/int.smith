@@ -40,10 +40,6 @@ pub fn narrow[A, B](x: A) -> Option[B] {
   __narrow(x)
 }
 
-pub fn wrapping_narrow[A, B](x: A) -> B {
-  __wrapping_narrow(x)
-}
-
 pub fn clamp[A, B](x: A) -> B {
   __clamp(x)
 }
