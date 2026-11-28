@@ -10335,12 +10335,12 @@ impl<'a> Checker<'a> {
         let (l, e) = match (flexible(&r.from), flexible(&r.to)) {
             (true, false) => {
                 let e = self.expr(body, &r.to, &Want::Any);
-                let side = Self::side_want(&e);
+                let side = Self::end_want(&e, &r.from);
                 (self.expr(body, &r.from, &side), e)
             }
             (false, true) => {
                 let l = self.expr(body, &r.from, &Want::Any);
-                let side = Self::side_want(&l);
+                let side = Self::end_want(&l, &r.to);
                 let e = self.expr(body, &r.to, &side);
                 (l, e)
             }
@@ -10352,6 +10352,16 @@ impl<'a> Checker<'a> {
         match (&l, &e) {
             (Ty::Unknown, _) | (_, Ty::Unknown) => Ty::Unknown,
             (Ty::Int(a), Ty::Int(b)) if a == b => l.clone(),
+            // Ends of two ranges are each taken as a `Nat`, as a `Nat` is an
+            // end beside any of them, where each is shown to fit.
+            (Ty::Int(a), Ty::Int(b))
+                if (!a.signed() && !b.signed()) || *a == Int::U64 || *b == Int::U64 =>
+            {
+                let nat = Ty::Int(Int::U64);
+                self.expect(body, &r.from, &l, &nat);
+                self.expect(body, &r.to, &e, &nat);
+                nat
+            }
             (Ty::Int(a), Ty::Int(b)) => {
                 self.errors.push(Error::new(
                     r.to.pos(),

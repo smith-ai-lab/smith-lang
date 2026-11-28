@@ -260,20 +260,10 @@ impl<'a> Checker<'a> {
                 false => Want::Any,
             };
             match self.expr(body, end, &wanted) {
-                Ty::Int(Int::U64) | Ty::Unknown => {}
-                Ty::Int(t) => {
-                    self.errors.push(
-                        Error::new(
-                            end.pos(),
-                            format!(
-                                "an end of a range is a `Nat`, and this is a `{}`",
-                                self.defs.spelling(t)
-                            ),
-                        )
-                        .with_fix("use `convert`"),
-                    );
-                }
-                at @ Ty::Flex(_) => self.expect(body, end, &at, &Ty::Int(Int::U64)),
+                Ty::Unknown => {}
+                // An end is a `Nat`, which any range is taken as where it is
+                // shown to fit, as at an argument.
+                at @ (Ty::Int(_) | Ty::Flex(_)) => self.expect(body, end, &at, &Ty::Int(Int::U64)),
                 other => {
                     let given = defs.describe(&other, body.scope);
                     self.errors.push(Error::new(

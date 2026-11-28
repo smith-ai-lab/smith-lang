@@ -2673,10 +2673,12 @@ impl<'a> Lowering<'a> {
                 Some((r.name.as_str(), t, from, to))
             }
             (Some(r), None) => {
-                let Ty::Int(t) = self.typed.type_of(&r.from, env) else {
+                // The counter has the type the ends are taken as, which is
+                // that of the first end as it is widened.
+                let (Ty::Int(t), from) = self.expr(out, &r.from, env) else {
                     unreachable!("checked")
                 };
-                let from = self.expr(out, &r.from, env).1[0];
+                let from = from[0];
                 let to = self.expr(out, &r.to, env).1[0];
                 Some((r.name.as_str(), t, from, to))
             }
