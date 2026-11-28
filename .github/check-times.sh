@@ -52,12 +52,15 @@ if [ "$#" -eq 2 ]; then
   exit 0
 fi
 
-first=$(slow "$1" "$2")
-second=$(slow "$1" "$3")
-both=$(printf '%s\n' "$first" | awk -F, -v again="$second" '
-  BEGIN { n = split(again, lines, "\n"); for (i = 1; i <= n; i++) { split(lines[i], f, ","); second[f[1]] = f[2] } }
+# The second run's slow tests go through a file, as an `awk -v` value may not
+# hold a line break on every awk.
+again=$(mktemp)
+trap 'rm -f "$again"' EXIT
+slow "$1" "$3" > "$again"
+both=$(slow "$1" "$2" | awk -F, '
+  NR == FNR { second[$1] = $2; next }
   NF && ($1 in second) { printf "- %s: %d ms and %d ms, where the median of its last times is %g ms\n", $1, $2, second[$1], $3 }
-')
+' "$again" -)
 
 if [ -z "$both" ]; then
   echo "No test takes more than twice the median of its last times and $FLOOR ms more in both runs."
