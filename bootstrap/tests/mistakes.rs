@@ -32,16 +32,8 @@ pub const ONCE: &[Test] = &[
         a_default_that_needs_an_effect_is_refused_at_what_needs_it,
     ),
     (
-        "a_type_that_holds_itself_is_reported_once_and_its_uses_are_not_checked",
-        a_type_that_holds_itself_is_reported_once_and_its_uses_are_not_checked,
-    ),
-    (
         "a_type_that_holds_itself_only_through_a_list_is_accepted",
         a_type_that_holds_itself_only_through_a_list_is_accepted,
-    ),
-    (
-        "a_type_that_holds_itself_with_no_list_between_is_refused_once_where_it_closes_the_cycle",
-        a_type_that_holds_itself_with_no_list_between_is_refused_once_where_it_closes_the_cycle,
     ),
     (
         "a_type_parameter_of_an_implementation_is_refused_unless_its_types_name_it",
@@ -343,73 +335,6 @@ fn a_default_that_needs_an_effect_is_refused_at_what_needs_it() {
     generate::check(283, 200, file_with_defaults_that_need_an_effect, File::check);
 }
 
-/// A file that defines a struct or an enum that holds itself, directly or
-/// through another, with no `List` between, and then uses them wrongly. A type
-/// that holds itself so is not supported yet, which is the only error the file
-/// gives: what the type would be is not known, so a use of it is not held to
-/// it. The error is where the type that `main` uses first is written inside
-/// what it holds.
-fn file_with_a_type_that_holds_itself(g: &mut Gen) -> File {
-    let mut file = File::default();
-    let shape = g.below(4);
-    let types: &[&str] = match shape {
-        0 => &["E"],
-        1 => &["S"],
-        _ => &["E", "P"],
-    };
-    let first = *g.pick(types);
-    // Writes a name, as the mistake if it is the one that closes the cycle.
-    let name = |file: &mut File, name: &str| {
-        if name == first {
-            file.mistake(name, "holds itself");
-        } else {
-            file.push(name);
-        }
-    };
-    match shape {
-        0 => {
-            file.push("enum E {\n  a: ");
-            name(&mut file, "E");
-            file.push("\n  b: str\n}\n");
-        }
-        1 => {
-            file.push("struct S {\n  next: ");
-            name(&mut file, "S");
-            file.push("\n}\n");
-        }
-        2 => {
-            file.push("enum E {\n  a: ");
-            name(&mut file, "P");
-            file.push("\n  b: str\n}\nstruct P {\n  e: ");
-            name(&mut file, "E");
-            file.push("\n}\n");
-        }
-        _ => {
-            file.push("struct P {\n  e: ");
-            name(&mut file, "E");
-            file.push("\n}\nenum E {\n  a: ");
-            name(&mut file, "P");
-            file.push("\n  b: str\n}\n");
-        }
-    }
-    file.push("fn main() {\n");
-    for i in 0..1 + g.below(4) {
-        let ty = if i == 0 { first } else { *g.pick(types) };
-        let value = if ty == "E" && g.one_in(2) {
-            ".b(1)"
-        } else {
-            "5"
-        };
-        file.push(&format!("  v{i}: {ty} = {value}\n"));
-    }
-    file.push("}\n");
-    file
-}
-
-fn a_type_that_holds_itself_is_reported_once_and_its_uses_are_not_checked() {
-    generate::check(124, 200, file_with_a_type_that_holds_itself, File::check);
-}
-
 /// The names of the types of a cycle, which are none that the library has.
 const CYCLE: [&str; 4] = ["Ta", "Tb", "Tc", "Td"];
 
@@ -417,41 +342,25 @@ const CYCLE: [&str; 4] = ["Ta", "Tb", "Tc", "Td"];
 const HELD: [&str; 3] = ["X", "Option[X]", "(X, str)"];
 const THROUGH: [&str; 3] = ["List[X]", "List[List[X]]", "Option[List[X]]"];
 
-/// Writes the type `X`, as `form` says, with `name` written by `write`.
-fn written(file: &mut File, form: &str, name: &str, mistake: Option<&str>) {
-    let (before, after) = form.split_once('X').expect("a form names the type");
-    file.push(before);
-    match mistake {
-        Some(what) => file.mistake(name, what),
-        None => file.push(name),
-    }
-    file.push(after);
-}
-
 /// A cycle of structs and enums, each holding the next and the last holding
 /// the first, as the first holds nothing else. `links` says for each how the
-/// next is held, in place or through a `List`. When `mistake` says what, the
-/// name of the first type, which the walk begins at when `main` uses it, is
-/// written, where the last holds it, as the mistake.
-fn cycle_of_types(g: &mut Gen, links: &[bool], mistake: Option<&str>) -> File {
+/// next is held, in place or through a `List`.
+fn cycle_of_types(g: &mut Gen, links: &[bool]) -> File {
     let mut file = File::default();
     let n = links.len();
     let kinds: Vec<bool> = (0..n).map(|_| g.one_in(2)).collect();
-    let start = 0;
     for (i, is_struct) in kinds.iter().enumerate() {
         let next = (i + 1) % n;
         let form = match links[i] {
             true => *g.pick(&THROUGH),
             false => *g.pick(&HELD),
         };
-        let closes = next == start && !links[i];
-        let what = mistake.filter(|_| closes);
         if *is_struct {
             file.push(&format!("struct {} {{\n  next: ", CYCLE[i]));
         } else {
             file.push(&format!("enum {} {{\n  b: str\n  a: ", CYCLE[i]));
         }
-        written(&mut file, form, CYCLE[next], what);
+        file.push(&form.replace('X', CYCLE[next]));
         file.push("\n}\n");
     }
     file
@@ -464,7 +373,7 @@ fn file_with_a_cycle_through_a_list(g: &mut Gen) -> File {
     let mut links: Vec<bool> = (0..n).map(|_| g.one_in(2)).collect();
     let k = g.below(n);
     links[k] = true;
-    let mut file = cycle_of_types(g, &links, None);
+    let mut file = cycle_of_types(g, &links);
     if g.one_in(2) {
         file.push("fn main() {\n  v: List[Ta] = []\n}\n");
     } else {
@@ -475,27 +384,6 @@ fn file_with_a_cycle_through_a_list(g: &mut Gen) -> File {
 
 fn a_type_that_holds_itself_only_through_a_list_is_accepted() {
     generate::check(5870, 60, file_with_a_cycle_through_a_list, File::check);
-}
-
-/// A file with a cycle of types none of which holds the next through a
-/// `List`, and a `main` that uses the first type the walk reaches, so the
-/// error is given once, where the last of the cycle holds that type.
-fn file_with_a_cycle_in_place(g: &mut Gen) -> File {
-    let n = 1 + g.below(4);
-    let links = vec![false; n];
-    let mut file = cycle_of_types(g, &links, Some("holds itself"));
-    file.push("fn main() {\n  v: Ta = 5\n}\n");
-    file
-}
-
-fn a_type_that_holds_itself_with_no_list_between_is_refused_once_where_it_closes_the_cycle() {
-    generate::check(5871, 60, file_with_a_cycle_in_place, |file: &File| {
-        file.check();
-        // The error says what is built.
-        let found = lower(with_imports(&file.source).as_bytes()).expect_err("a refusal");
-        assert!(found.len() == 1 && found[0].message.contains("`List`"), "{found:?}");
-        assert!(found[0].unbuilt, "{found:?}");
-    });
 }
 
 /// A file with an implementation that has a type parameter, and a call that

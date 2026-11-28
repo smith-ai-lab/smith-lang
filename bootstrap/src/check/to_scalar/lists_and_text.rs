@@ -344,6 +344,16 @@ impl<'a> Lowering<'a> {
             }
             Expr::Field { of, name, .. } => {
                 let (ty, address, scalars) = self.element_at(out, of, env);
+                // A struct kept in a node is read from the node its address is.
+                let (address, scalars) = match self.boxed(&ty) {
+                    true => {
+                        let node = self.load(out, address, &scalars)[0];
+                        let inner = self.inner_scalars(&ty);
+                        let (places, _) = form::element(&inner);
+                        (node, inner.into_iter().zip(places).collect())
+                    }
+                    false => (address, scalars),
+                };
                 let (start, size, ty) = match ty {
                     Ty::List(_) | Ty::Slice(_) | Ty::Text => (1, 1, Ty::Int(Int::U64)),
                     Ty::Struct(s, args) => {

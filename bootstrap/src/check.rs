@@ -949,11 +949,18 @@ struct Defs<'a> {
     /// The functions of traits with each name, as the trait and the
     /// function's place in it.
     trait_fns: Map<&'a str, Vec<(usize, usize)>>,
-    /// Whether each struct contains itself, directly or through others, as
-    /// already reported. A type that names one is not known.
+    /// Whether each struct is refused as an alias that names itself or as a
+    /// type of which no value can be made, as already reported. A type that
+    /// names one is not known.
     cyclic: Vec<bool>,
     /// The same, for each enum.
     cyclic_enums: Vec<bool>,
+    /// Whether each struct holds itself with no `List` between, directly or
+    /// through others, so that a value of it is the address of a node of its
+    /// scalars.
+    boxed: Vec<bool>,
+    /// The same, for each enum.
+    boxed_enums: Vec<bool>,
     struct_scopes: Vec<Scope>,
     /// The type of each field of each struct, among its type parameters.
     fields: Vec<Vec<Ty>>,
@@ -2990,6 +2997,8 @@ fn check_file(
         trait_fns,
         cyclic: vec![false; file.structs.len()],
         cyclic_enums: vec![false; file.enums.len()],
+        boxed: vec![false; file.structs.len()],
+        boxed_enums: vec![false; file.enums.len()],
         implicit: vec![0; file.structs.len()],
         constructions: Vec::new(),
         field_items: Vec::new(),
@@ -3060,12 +3069,7 @@ fn check_file(
         bound_params: RefCell::new(Vec::new()),
     };
     alias_cycles(&mut defs, &mut errors);
-    let mut done = Vec::new();
-    for &d in &reached_types {
-        if !done.contains(&d) {
-            cycles(&mut defs, d, &mut Vec::new(), &mut done, &mut errors);
-        }
-    }
+    cycles(&mut defs, &reached_types, &mut errors);
     defs.implicit = (0..file.structs.len())
         .map(|s| defs.implicit_arity(s, &mut Vec::new()))
         .collect();
@@ -6250,23 +6254,10 @@ fn head(t: &Ty) -> Option<Def> {
     }
 }
 
-/// Reports each type, of a field or of a case, that closes a cycle of
-/// structs and enums that hold one another with no `List` between, in a walk
-/// from `d`, and marks those on the cycle. A `List` keeps its elements out of
-/// line, in memory of its own, so a type that reaches itself only through
-/// one is not a cycle. `path` is the definitions being walked, and `done`
-/// those already walked.
-fn cycles(
-    defs: &mut Defs,
-    d: Def,
-    path: &mut Vec<Def>,
-    done: &mut Vec<Def>,
-    errors: &mut Vec<Error>,
-) {
-    path.push(d);
-    let file = defs.file;
-    let types: Vec<&Type> = match d {
-        Def::Struct(s) if defs.cyclic[s] => Vec::new(),
+/// The types a struct or an enum holds: those of its fields, or those its
+/// cases hold.
+fn held_types(file: &File, d: Def) -> Vec<&Type> {
+    match d {
         Def::Struct(s) => (file.structs[s].fields.iter().map(|f| &f.ty))
             .chain(&file.structs[s].alias)
             .collect(),
@@ -6275,34 +6266,228 @@ fn cycles(
             .iter()
             .filter_map(|c| c.ty.as_ref())
             .collect(),
-    };
-    for ty in types {
-        for (name, pos) in held_names(defs, ty) {
-            let t = match defs.type_at(pos, name) {
-                Some(Item::Struct(s)) => Def::Struct(s),
-                Some(Item::Enum(e)) => Def::Enum(e),
-                _ => continue,
-            };
-            if let Some(at) = path.iter().position(|p| *p == t) {
-                let mut error = Error::unsupported(
-                    pos,
-                    &format!("a type that holds itself with no `List` between, as `{name}` does,"),
-                );
-                error.message.push_str(", and a `List` of it is built");
-                errors.push(error);
-                for &p in &path[at..] {
-                    match p {
-                        Def::Struct(s) => defs.cyclic[s] = true,
-                        Def::Enum(e) => defs.cyclic_enums[e] = true,
-                    }
+    }
+}
+
+/// The struct or the enum the name written at `pos` is, if it is one.
+fn def_at(defs: &Defs, pos: Pos, name: &str) -> Option<Def> {
+    match defs.type_at(pos, name) {
+        Some(Item::Struct(s)) => Some(Def::Struct(s)),
+        Some(Item::Enum(e)) => Some(Def::Enum(e)),
+        _ => None,
+    }
+}
+
+/// Finds the structs and enums that hold themselves with no `List` between,
+/// directly or through others, each of which is kept as the address of a
+/// node of its scalars. Of those `reached`, refuses each that no value can be
+/// made of, at its name, and each type that holds itself as a parameter of a
+/// function it holds.
+fn cycles(defs: &mut Defs, reached: &[Def], errors: &mut Vec<Error>) {
+    let file = defs.file;
+    let all: Vec<Def> = (0..file.structs.len())
+        .map(Def::Struct)
+        .chain((0..file.enums.len()).map(Def::Enum))
+        .collect();
+    // What each holds in place, and what it names anywhere in its types.
+    let edges = |in_place: bool| -> Vec<Vec<Def>> {
+        (all.iter())
+            .map(|&d| {
+                let mut to = Vec::new();
+                for ty in held_types(file, d) {
+                    let names = match in_place {
+                        true => held_names(defs, ty),
+                        false => named(ty),
+                    };
+                    to.extend(
+                        names
+                            .into_iter()
+                            .filter_map(|(n, pos)| def_at(defs, pos, n)),
+                    );
                 }
-            } else if !done.contains(&t) {
-                cycles(defs, t, path, done, errors);
+                to
+            })
+            .collect()
+    };
+    let (in_place, anywhere) = (edges(true), edges(false));
+    let index = |d: Def| all.iter().position(|&a| a == d).expect("a definition");
+    // Whether `to` is reached from `from` by one step or more.
+    let reaches = |graph: &[Vec<Def>], from: Def, to: Def| {
+        let mut seen: Vec<Def> = graph[index(from)].clone();
+        let mut k = 0;
+        while k < seen.len() {
+            if seen[k] == to {
+                return true;
+            }
+            for &next in &graph[index(seen[k])] {
+                if !seen.contains(&next) {
+                    seen.push(next);
+                }
+            }
+            k += 1;
+        }
+        false
+    };
+    for &d in &all {
+        let boxed = match d {
+            Def::Struct(s) => file.structs[s].alias.is_none() && reaches(&in_place, d, d),
+            Def::Enum(_) => reaches(&in_place, d, d),
+        };
+        match d {
+            Def::Struct(s) => defs.boxed[s] = boxed,
+            Def::Enum(e) => defs.boxed_enums[e] = boxed,
+        }
+    }
+    for &d in reached {
+        for ty in held_types(file, d) {
+            for (name, pos) in function_params(ty) {
+                if let Some(t) = def_at(defs, pos, name)
+                    && (t == d || reaches(&anywhere, t, d))
+                {
+                    errors.push(Error::new(
+                        pos,
+                        format!(
+                            "a type may not hold itself as a parameter of a function it holds, as `{}` does through `{name}`",
+                            def_name(file, d)
+                        ),
+                    ));
+                }
             }
         }
     }
-    path.pop();
-    done.push(d);
+    let pos = |d: Def| match d {
+        Def::Struct(s) => file.structs[s].pos,
+        Def::Enum(e) => file.enums[e].pos,
+    };
+    let unmade: Vec<Def> = (reached.iter().copied())
+        .filter(|&d| match d {
+            Def::Struct(s) => defs.boxed[s],
+            Def::Enum(e) => defs.boxed_enums[e],
+        })
+        .filter(|&d| !buildable_def(defs, d, &[], &mut Vec::new()))
+        .collect();
+    for &d in &unmade {
+        // A cycle of types none of which can be made is refused once, at the
+        // name of the one declared first.
+        let first = (unmade.iter())
+            .filter(|&&o| o == d || reaches(&in_place, d, o) && reaches(&in_place, o, d))
+            .min_by_key(|&&o| (pos(o).line, pos(o).col))
+            .copied();
+        if first == Some(d) {
+            let name = def_name(file, d);
+            errors.push(Error::new(
+                pos(d),
+                format!(
+                    "no value of `{name}` can be made, as every way to make one needs a `{name}` already"
+                ),
+            ));
+        }
+        match d {
+            Def::Struct(s) => defs.cyclic[s] = true,
+            Def::Enum(e) => defs.cyclic_enums[e] = true,
+        }
+    }
+}
+
+/// The name a struct or an enum is declared with.
+fn def_name(file: &File, d: Def) -> &str {
+    match d {
+        Def::Struct(s) => &file.structs[s].name,
+        Def::Enum(e) => &file.enums[e].name,
+    }
+}
+
+/// Every name in a type, in any place, with where it is.
+fn named(t: &Type) -> Vec<(&str, Pos)> {
+    fn names<'a>(t: &'a Type, out: &mut Vec<(&'a str, Pos)>) {
+        if !t.name.is_empty() {
+            out.push((t.name.as_str(), t.pos));
+        }
+        for a in &t.args {
+            names(a, out);
+        }
+    }
+    let mut out = Vec::new();
+    names(t, &mut out);
+    out
+}
+
+/// Every name in the types of the parameters of each function type in a
+/// type, with where it is.
+fn function_params(t: &Type) -> Vec<(&str, Pos)> {
+    let mut out = Vec::new();
+    if t.function {
+        for p in &t.args[..t.args.len().saturating_sub(1)] {
+            out.extend(named(p));
+        }
+    }
+    for a in &t.args {
+        out.extend(function_params(a));
+    }
+    out
+}
+
+/// Whether a value of the struct or the enum can be made, with each of its
+/// type parameters one that can be made as `params` says, when those in
+/// `making` are taken as ones that cannot, as they are being made: a struct
+/// whose every field can be made, or an enum with a case that holds nothing
+/// or holds what can be made.
+fn buildable_def(defs: &Defs, d: Def, params: &[bool], making: &mut Vec<(Def, Vec<bool>)>) -> bool {
+    let key = (d, params.to_vec());
+    if making.contains(&key) {
+        return false;
+    }
+    making.push(key);
+    let file = defs.file;
+    let generics = match d {
+        Def::Struct(s) => &file.structs[s].generics,
+        Def::Enum(e) => &file.enums[e].generics,
+    };
+    let env: Vec<(&str, bool)> = (generics.iter())
+        .enumerate()
+        .map(|(i, g)| (g.name.as_str(), params.get(i).copied().unwrap_or(true)))
+        .collect();
+    let can = |t: &Type, making: &mut Vec<(Def, Vec<bool>)>| buildable(defs, t, &env, making);
+    let found = match d {
+        Def::Struct(s) => (file.structs[s].fields.iter())
+            .map(|f| &f.ty)
+            .chain(&file.structs[s].alias)
+            .all(|t| can(t, making)),
+        Def::Enum(e) => {
+            (file.enums[e].cases.iter()).any(|c| c.ty.as_ref().is_none_or(|t| can(t, making)))
+        }
+    };
+    making.pop();
+    found
+}
+
+/// Whether a value of the type can be made, with the type parameters of
+/// `env` ones that can be made as it says.
+fn buildable(
+    defs: &Defs,
+    t: &Type,
+    env: &[(&str, bool)],
+    making: &mut Vec<(Def, Vec<bool>)>,
+) -> bool {
+    if t.function {
+        return true;
+    }
+    if let Some(&(_, can)) = env.iter().find(|(n, _)| *n == t.name) {
+        return can;
+    }
+    if let Some(d) = def_at(defs, t.pos, &t.name) {
+        let params: Vec<bool> = t
+            .args
+            .iter()
+            .map(|a| buildable(defs, a, env, making))
+            .collect();
+        return buildable_def(defs, d, &params, making);
+    }
+    // A list or a slice may be empty, and a tuple or an array holds its parts.
+    if matches!(t.name.as_str(), "List" | "Slice") {
+        return true;
+    }
+    t.args.iter().all(|a| buildable(defs, a, env, making))
 }
 
 /// Every name in a type that the type holds in place, with where it is: its
@@ -6313,7 +6498,7 @@ fn held_names<'a>(defs: &Defs, t: &'a Type) -> Vec<(&'a str, Pos)> {
         if !t.name.is_empty() {
             out.push((t.name.as_str(), t.pos));
         }
-        if t.name == "List" && defs.type_at(t.pos, "List").is_none() {
+        if t.function || t.name == "List" && defs.type_at(t.pos, "List").is_none() {
             return;
         }
         for a in &t.args {

@@ -1045,12 +1045,14 @@ const STRUCTS_NOT_BUILT: &[(&str, &str)] = &[
     ("struct Spare {\n  a: str = (1)", "(2)\n}"),
 ];
 
-/// The same, for a struct that `main` reaches and that contains itself.
+/// The same, for a struct that `main` reaches and that contains itself with no
+/// way out, so that no value of it can be made, which is refused at the name
+/// of the first declared of the types of the cycle.
 const CYCLES: &[(&str, &str)] = &[
-    ("struct Loop {\n  next: ", "Loop\n}"),
+    ("struct ", "Loop {\n  next: Loop\n}"),
     (
-        "struct Loop {\n  a: str\n  next: Other\n}\n\nstruct Other {\n  back: ",
-        "Loop\n}",
+        "struct ",
+        "Loop {\n  a: str\n  next: Other\n}\n\nstruct Other {\n  back: Loop\n}",
     ),
 ];
 
@@ -1236,7 +1238,7 @@ fn build(g: &mut Gen, kind: Option<Kind>) -> Case {
 fn own_item(b: &mut Builder) {
     let (mentions, choices) = match b.kind {
         Some(Kind::StructNotBuilt) => (NOT_BUILT, STRUCTS_NOT_BUILT),
-        Some(Kind::ContainsItself) => (NOT_BUILT, CYCLES),
+        Some(Kind::ContainsItself) => ("no value of `Loop` can be made", CYCLES),
         _ => unreachable!("not a mistake in a definition of its own"),
     };
     let (before, rest) = *b.g.pick(choices);
