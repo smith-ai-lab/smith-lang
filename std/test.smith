@@ -1,0 +1,28 @@
+// What a check of a test that failed says: the file and the place of the
+// `expect`, the check as it is written, and, when the check is a comparison,
+// what each side of it was.
+pub struct Failed {
+  pub path: str
+  pub line: Nat
+  pub column: Nat
+  pub check: str
+  pub sides: Option[Sides]
+}
+
+// The two sides of a comparison, each as `repr` writes it.
+pub struct Sides {
+  pub left: str
+  pub right: str
+}
+
+// The check of a test, which gives `.ok(())` when `check` gives `true`. The
+// compiler writes each call in its place, with the check written in braces
+// after it, as code that says where the call is and what each side of a
+// comparison was, so this body is never what a call runs.
+pub fn expect(check: fn() -> bool) -> Result[(), Failed] {
+  if check() {
+    .ok(())
+  } else {
+    .err(Failed(path: "", line: 0, column: 0, check: "", sides: .none))
+  }
+}

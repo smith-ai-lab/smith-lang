@@ -1,5 +1,5 @@
-//! The `smith` command: `build`, `run`, and `check`, over the compiler in
-//! `lib.rs`.
+//! The `smith` command: `build`, `run`, `check`, and `test`, over the
+//! compiler in `lib.rs`.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -20,6 +20,7 @@ const USAGE: &str =
        smith [--timings] <task> [--<flag> <value>...]
        smith [--timings] run [--target <target>] [<file>.smith [<word>...]]
        smith [--timings] check [<file>.smith]
+       smith [--timings] test
        smith [--timings] --watch <command>
        smith --version";
 
@@ -131,7 +132,8 @@ fn command(args: &[OsString]) -> Result<ExitCode, String> {
             run_to_the_end(&executable, &request.words)
         }
         "check" => check(rest, timings),
-        "new" | "test" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
+        "test" => test(rest, timings),
+        "new" | "fmt" | "vendor" | "hole" | "find" | "deps" | "cost" => {
             Err(format!("smith {name} is not supported yet"))
         }
         task => run_task(task, rest, timings),
@@ -261,6 +263,139 @@ fn check_reading(
     } else {
         ExitCode::SUCCESS
     })
+}
+
+/// `smith test`: builds each file of tests below the folder, `x_test.smith`,
+/// with a `main` that runs one of its tests, and runs it once for each test.
+/// It says of each test whether it passed and what each failure says, and
+/// fails when a test fails or a file of tests is refused.
+fn test(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
+    if let Some(arg) = args.first() {
+        let arg = text(arg)?;
+        if arg == "--timings" || arg == "--watch" {
+            return Err(flag_of_smith(arg, "test"));
+        }
+        return Err(format!(
+            "`smith test` runs every test, and takes nothing after it\n{USAGE}"
+        ));
+    }
+    let root = std::env::current_dir().map_err(|e| format!("cannot find this folder: {e}"))?;
+    let mut found = Vec::new();
+    test_files(&root, &mut Vec::new(), &mut found);
+    found.sort();
+    let folder = std::env::temp_dir().join(format!("smith-test-{}", std::process::id()));
+    let ran = test_in(&found, &folder, timings);
+    let _ = std::fs::remove_dir_all(&folder);
+    let (passed, failed) = ran?;
+    println!("{passed} passed, {failed} failed");
+    Ok(if failed > 0 {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+/// Builds and runs the tests of each file, the executables in `folder`, and
+/// gives how many passed and how many failed, where a file that is refused
+/// counts as one that failed.
+fn test_in(found: &[String], folder: &Path, timings: bool) -> Result<(usize, usize), String> {
+    let (mut passed, mut failed) = (0, 0);
+    for path in found {
+        let entry = PathBuf::from(path);
+        let (_, source) = read_entry(&entry)?;
+        let text = String::from_utf8_lossy(&source).into_owned();
+        let files = Files::in_current_folder(&entry)?;
+        let tests = match smith::testing::read(&text) {
+            Ok(tests) => tests,
+            Err(errors) => {
+                eprint!("{}", files.render(path, &source, &errors));
+                failed += 1;
+                continue;
+            }
+        };
+        if tests.names.is_empty() {
+            continue;
+        }
+        let target = Target::host().ok_or_else(|| {
+            format!(
+                "this machine, {}, is not a target",
+                Target::host_description()
+            )
+        })?;
+        let program = tests.program(&text);
+        let mut stages = Timings::new();
+        let built = smith::compile_project_files_timed(
+            program.as_bytes(),
+            &files.project(),
+            target,
+            false,
+            false,
+            &mut stages,
+        );
+        if timings {
+            eprintln!("{path}\n{}", stages.report());
+        }
+        let built = match built {
+            Ok(built) => built,
+            Err(errors) => {
+                // What is wrong in the `main` written after the file is wrong
+                // in the tests it calls, which is said there.
+                let lines = text.split('\n').count();
+                let theirs: Vec<diag::Error> = (errors.iter())
+                    .filter(|e| e.module.is_some() || e.pos.line <= lines)
+                    .cloned()
+                    .collect();
+                let shown = if theirs.is_empty() { &errors } else { &theirs };
+                eprint!("{}", files.render(path, program.as_bytes(), shown));
+                failed += 1;
+                continue;
+            }
+        };
+        let name = path.trim_end_matches(".smith").replace('/', ".");
+        let executable = folder.join(target.executable_name(&name));
+        std::fs::create_dir_all(folder)
+            .and_then(|()| write_executable(&executable, &built.executable, true))
+            .map_err(|e| format!("{}: {e}", executable.display()))?;
+        for test in &tests.names {
+            let words = [OsString::from(test)];
+            let output = run(&executable, &words, None, std::process::Stdio::piped())
+                .and_then(std::process::Child::wait_with_output)
+                .map_err(|e| format!("{}: {e}", executable.display()))?;
+            if output.status.success() {
+                println!("passed {path} {test}");
+                passed += 1;
+            } else {
+                println!("failed {path} {test}");
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
+                failed += 1;
+            }
+        }
+    }
+    Ok((passed, failed))
+}
+
+/// The files of tests below the folder, by their paths from the root, but
+/// those in hidden folders.
+fn test_files(folder: &Path, above: &mut Vec<String>, found: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(folder) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = entry.path();
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            above.push(name);
+            test_files(&path, above, found);
+            above.pop();
+        } else if smith::testing::is_test_file(&name) {
+            let mut parts = above.clone();
+            parts.push(name);
+            found.push(parts.join("/"));
+        }
+    }
 }
 
 /// The files of the project a command runs in, which is the folder it runs in:
@@ -484,15 +619,17 @@ fn write_executable(path: &Path, bytes: &[u8], runs: bool) -> std::io::Result<()
     Ok(())
 }
 
-/// Starts a built executable with the words it is started with. `smith --watch`
-/// gives it a socket too, which the program holds at descriptor 3.
+/// Starts a built executable with the words it is started with, writing its
+/// errors to `errors`. `smith --watch` gives it a socket too, which the
+/// program holds at descriptor 3.
 fn run(
     executable: &Path,
     words: &[OsString],
     control: Option<&Control>,
+    errors: std::process::Stdio,
 ) -> std::io::Result<std::process::Child> {
     let mut command = std::process::Command::new(executable);
-    command.args(words);
+    command.args(words).stderr(errors);
     #[cfg(unix)]
     if let Some(socket) = control {
         use std::os::fd::AsRawFd;
@@ -531,7 +668,7 @@ type Control = ();
 /// Runs a built executable with the words it is started with, and exits as it
 /// does.
 fn run_to_the_end(executable: &Path, words: &[OsString]) -> Result<ExitCode, String> {
-    let status = run(executable, words, None)
+    let status = run(executable, words, None, std::process::Stdio::inherit())
         .and_then(|mut child| child.wait())
         .map_err(|e| format!("{}: {e}", executable.display()))?;
     let code = status.code().unwrap_or(1);
@@ -670,7 +807,12 @@ fn absolute(path: &Path) -> PathBuf {
 #[cfg(unix)]
 fn watch_command(name: &str, rest: &[OsString], timings: bool) -> Result<ExitCode, String> {
     let mut starter = |executable: &Path, words: &[OsString], control: &Control| {
-        run(executable, words, Some(control))
+        run(
+            executable,
+            words,
+            Some(control),
+            std::process::Stdio::inherit(),
+        )
     };
     match name {
         "build" | "run" => {

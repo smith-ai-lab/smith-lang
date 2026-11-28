@@ -35,6 +35,7 @@ use std::sync::{Arc, OnceLock};
 mod arith;
 mod core_term;
 mod effects_with_and_try;
+mod expect;
 mod for_arrays;
 mod frames;
 mod functions_calls_and_lambdas;
@@ -2647,7 +2648,11 @@ fn check_reading(
         }
     }
     file.floats |= read.iter().any(|m| m.file.floats);
-    let (mut file, items, mut lazy) = splice(file, read, &mut errors, asks_function);
+    let entry_path = library.project.as_ref().and_then(|p| p.entry).map_or_else(
+        || "main.smith".to_string(),
+        |e| format!("{}.smith", e.replace('.', "/")),
+    );
+    let (mut file, items, mut lazy) = splice(file, read, &mut errors, asks_function, &entry_path);
     lazy.written = written;
     file.modules = module_names(&labels, library);
     let checked = check_file(
@@ -5163,6 +5168,7 @@ fn splice<'a>(
     mut modules: Vec<Module<'a>>,
     errors: &mut Vec<Error>,
     asks_function: bool,
+    entry_path: &str,
 ) -> (File, Items, Lazy<'a>) {
     // The names each module writes as they are, since the file lists them, or
     // since the compiler builds them.
@@ -5274,6 +5280,43 @@ fn splice<'a>(
             }
         })
         .collect();
+    // What the file calls the items of `std.test` that a call of `expect` is
+    // written out with, and the text of each module it may be called in.
+    let tests = (modules.iter().position(|m| m.name == "std.test")).map(|t| {
+        let names = |expect: Vec<String>| expect::Names {
+            expect,
+            failed: written(t, "Failed"),
+            sides: written(t, "Sides"),
+        };
+        let test = &modules[t];
+        let entry = (test.entry_imported.iter())
+            .filter(|n| *n == "expect")
+            .cloned()
+            .chain(
+                (test.entry_aliased.iter())
+                    .filter(|(n, _)| n == "expect")
+                    .map(|(_, a)| a.clone()),
+            )
+            .collect();
+        let mut texts = vec![(0, entry_path.to_string(), None, names(entry))];
+        texts.extend(
+            (modules.iter())
+                .filter(|m| !m.name.starts_with("std."))
+                .map(|m| {
+                    let expect = (m.imports.iter())
+                        .filter(|i| i.from == t && i.name == "expect")
+                        .map(|i| i.written.clone())
+                        .collect();
+                    (
+                        m.number,
+                        m.label.clone(),
+                        Some(m.source.to_string()),
+                        names(expect),
+                    )
+                }),
+        );
+        texts
+    });
     let mut resolution = Resolution::default();
     let namings: Vec<std::rc::Rc<Naming>> = plans
         .iter_mut()
@@ -5391,6 +5434,23 @@ fn splice<'a>(
             }
         }
         rest.push(lazy);
+    }
+    if let Some(texts) = tests {
+        let entry_text = file.text.clone().unwrap_or_else(|| "".into());
+        let mut made = 0;
+        for f in &mut file.functions {
+            let number = module_of(f.pos);
+            let Some((_, path, source, names)) =
+                (texts.iter()).find(|(n, ..)| *n == number && !(number == 0 && of_prelude(f.pos)))
+            else {
+                continue;
+            };
+            let source = source.as_deref().unwrap_or(&entry_text);
+            // A function of a project's module is its own, as it was just read.
+            if let Some(f) = std::sync::Arc::get_mut(f) {
+                expect::expand(f, names, path, source, &mut made, errors);
+            }
+        }
     }
     file.scopes = scopes;
     let items = Items(

@@ -2,7 +2,12 @@
 type: specification
 title: Running tests
 description: smith test, which runs every test or the ones chosen, in parallel, and what a failure and a run print.
-status: planned
+status: partial
+built:
+  - "`smith test` with nothing after it, which finds every file `x_test.smith` below the folder it runs in, but in hidden folders, builds each with a `main` that runs one of its tests, and runs each test in a process of its own, one after another"
+  - "what a run prints: `passed` or `failed` with the file and the name of each test, on standard output, what each failure says, on standard error, and how many passed and failed; the run ends with status 1 when a test fails or a file of tests is refused, and 0 otherwise"
+  - "a test's effects, which are the real ones, and a handler a test installs with `with`, which answers in their place"
+  - "not tests in parallel in one process, choosing tests, `--seed`, or the slowest tests"
 ---
 
 # Running tests
@@ -13,7 +18,7 @@ status: planned
 smith test
 ```
 
-All tests run in one process, each as a task with its own arena, in parallel. A run ends with its slowest tests and how long each took.
+All tests run in one process, each as a task with its own arena, in parallel. A run says of each test whether it passed, prints what each failure says, and ends with how many passed and failed, and then its slowest tests and how long each took. It ends with status 1 when a test failed, and 0 when every test passed.
 
 ## Choosing tests
 
