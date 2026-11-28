@@ -710,6 +710,15 @@ pub(crate) fn is_float_call(defs: &Defs, call: &Call) -> bool {
         && defs.trait_fns_at(at, name).is_none()
 }
 
+/// What is wanted of the side of an operator beside a float that its use
+/// decides: the float the place wants, if it wants one.
+fn float_of_place(wanted: &Want) -> &Want {
+    match wanted {
+        Want::Ty(Ty::Float(_)) => wanted,
+        _ => &Want::Any,
+    }
+}
+
 pub(super) fn flexible(e: &Expr) -> bool {
     match e {
         Expr::Number { .. } => true,
@@ -935,13 +944,15 @@ impl<'a> Checker<'a> {
                 self.expr(body, left, &wanted),
                 self.expr(body, right, &wanted),
             ),
+            // The other side takes the float of the place, if the place wants
+            // one, so that a float it holds that nothing else decides is of it.
             (false, false) if float_deferred(defs, left) => {
-                let r = self.expr(body, right, &Want::Any);
+                let r = self.expr(body, right, float_of_place(&wanted));
                 let side = Self::side_want(&r);
                 (self.expr(body, left, &side), r)
             }
             (false, false) if float_deferred(defs, right) => {
-                let l = self.expr(body, left, &Want::Any);
+                let l = self.expr(body, left, float_of_place(&wanted));
                 let side = Self::side_want(&l);
                 let r = self.expr(body, right, &side);
                 (l, r)
