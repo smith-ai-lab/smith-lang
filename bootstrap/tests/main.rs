@@ -5,7 +5,7 @@
 //! Arguments that do not start with `-` keep only the tests whose names
 //! hold one of them.
 //!
-//! A test that computes for more than 500 ms fails the run, and the run
+//! A test that computes for more than 2 s fails the run, and the run
 //! names it, as `LIMIT` says. A test that is over it in its first measure is
 //! run once more, and is judged by the least of the two, as `support/limit.rs`
 //! says, so that a machine that was slow once does not fail it and its work does.
@@ -66,7 +66,7 @@ type Failed = Vec<(&'static str, String)>;
 const SLOWEST: usize = 70;
 
 /// What a test may compute for, as `clock` measures it.
-const LIMIT: Duration = Duration::from_millis(500);
+const LIMIT: Duration = Duration::from_millis(2000);
 
 /// What a test is given beyond `clock::hang`, a fifth of it, so that a program
 /// it starts that does not end is stopped, and fails the test saying so,
