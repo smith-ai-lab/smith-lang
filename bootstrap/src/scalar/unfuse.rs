@@ -40,7 +40,7 @@ pub fn unfuse(program: &Program) -> Option<Program> {
     }
     let mut out = program.clone();
     let scratch = out.data.len();
-    out.data.push(vec![0; 8]);
+    out.data.push(vec![0; 8].into());
     let mut at = [None, None];
     for (k, (used, bits)) in [(single, FloatBits::F32), (double, FloatBits::F64)]
         .into_iter()

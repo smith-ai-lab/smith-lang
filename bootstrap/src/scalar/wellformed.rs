@@ -103,7 +103,12 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                         Constant::Vector(..) => matches!(f.types[result.0], Type::Vector(_)),
                         Constant::Null => f.types[result.0] == Type::Address,
                         Constant::Data(t) => {
-                            if *t >= program.data.len() {
+                            let Some(d) = program.data.get(*t) else {
+                                return Err(Why::Missing);
+                            };
+                            if (d.addresses.iter())
+                                .any(|&(at, to)| at + 8 > d.bytes.len() || to >= program.data.len())
+                            {
                                 return Err(Why::Missing);
                             }
                             f.types[result.0] == Type::Address

@@ -64,8 +64,109 @@ pub struct Part {
 }
 
 /// What a target lays out for a program: the code, the data it reads each under
-/// its label, and the parts of the code.
-type Laid<'a, A> = (A, Vec<(usize, &'a [u8])>, Vec<Part>);
+/// its label, the program's data first and in their order, and the parts of
+/// the code. The data are put after the code, one after another.
+type Laid<A> = (A, Vec<(usize, Vec<u8>)>, Vec<Part>);
+
+/// Writes each address the program's data hold into the data as `code` laid
+/// them out, after `code` bytes of code that are loaded at `load`, and gives
+/// where each address is, from the start of the code.
+fn write_addresses(
+    program: &Program,
+    data: &mut [(usize, Vec<u8>)],
+    code: usize,
+    load: u64,
+) -> Vec<u64> {
+    if !program.holds_addresses() {
+        return Vec::new();
+    }
+    let mut starts = Vec::new();
+    let mut end = code as u64;
+    for (_, bytes) in &data[..program.data.len()] {
+        starts.push(end);
+        end += bytes.len() as u64;
+    }
+    let loaded: Vec<u64> = starts.iter().map(|s| load + s).collect();
+    let mut at = Vec::new();
+    for ((k, d), bytes) in program.data.iter().enumerate().zip(program.placed(&loaded)) {
+        at.extend(
+            d.addresses
+                .iter()
+                .map(|&(place, _)| starts[k] + place as u64),
+        );
+        data[k].1 = bytes;
+    }
+    at
+}
+
+/// The data of a program as `code` laid them out, for an executable whose code
+/// cannot be fixed when it is loaded: those that hold no address stay after the
+/// code, and those that hold one are put elsewhere, in memory the loader may
+/// write, where an address is fixed as the system says.
+struct Apart {
+    /// The data that stay after the code, in their order.
+    kept: Vec<(usize, Vec<u8>)>,
+    /// Each datum put elsewhere, by its label and its place among the
+    /// program's data, and where it starts, at a multiple of 8.
+    moved: Vec<(usize, usize, u64)>,
+    /// How many bytes the data put elsewhere take.
+    size: u64,
+}
+
+impl Apart {
+    fn of(program: &Program, data: Vec<(usize, Vec<u8>)>) -> Apart {
+        let mut apart = Apart {
+            kept: Vec::new(),
+            moved: Vec::new(),
+            size: 0,
+        };
+        for (k, (label, bytes)) in data.into_iter().enumerate() {
+            match program.data.get(k) {
+                Some(d) if !d.addresses.is_empty() => {
+                    let at = apart.size.next_multiple_of(8);
+                    apart.moved.push((label, k, at));
+                    apart.size = at + bytes.len() as u64;
+                }
+                _ => apart.kept.push((label, bytes)),
+            }
+        }
+        apart
+    }
+
+    /// Where each address the moved data hold is, from where they start.
+    fn addresses(&self, program: &Program) -> Vec<u64> {
+        (self.moved.iter())
+            .flat_map(|&(_, k, at)| {
+                (program.data[k].addresses.iter()).map(move |&(p, _)| at + p as u64)
+            })
+            .collect()
+    }
+
+    /// The bytes of the moved data, which start at `elsewhere`, with every
+    /// address written as the executable asks to be loaded, after `code`
+    /// bytes of code at `load`.
+    fn bytes(&self, program: &Program, code: usize, load: u64, elsewhere: u64) -> Vec<u8> {
+        let mut starts = vec![0; program.data.len()];
+        let mut end = load + code as u64;
+        let mut kept = self.kept.iter();
+        for (k, start) in starts.iter_mut().enumerate() {
+            match self.moved.iter().find(|m| m.1 == k) {
+                Some(&(_, _, at)) => *start = elsewhere + at,
+                None => {
+                    *start = end;
+                    end += kept.next().expect("a datum that stays").1.len() as u64;
+                }
+            }
+        }
+        let placed = program.placed(&starts);
+        let mut out = vec![0; self.size as usize];
+        for &(_, k, at) in &self.moved {
+            let at = at as usize;
+            out[at..at + placed[k].len()].copy_from_slice(&placed[k]);
+        }
+        out
+    }
+}
 
 /// The runs of the code from `from` to `to`, given where the code of each
 /// instruction that has a new place begins. A run is the code of the

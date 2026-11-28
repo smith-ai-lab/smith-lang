@@ -195,7 +195,7 @@ fn program(is_double: bool, count: u64, seed: u64) -> Program {
     functions.push(main);
     let main = functions.len() - 1;
     Program {
-        data: vec![smith::scalar::exp_table()],
+        data: vec![smith::scalar::exp_table().into()],
         functions,
         main,
     }

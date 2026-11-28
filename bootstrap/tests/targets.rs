@@ -821,7 +821,7 @@ pub fn rotating(types: &[Type], starts: &[u64], sources: &[usize], rounds: u64) 
     write_all(&mut b, types, &in_done);
     b.ret(vec![]);
     let program = scalar::Program {
-        data: vec![b"swap".to_vec(), b"x".to_vec()],
+        data: vec![b"swap".to_vec().into(), b"x".to_vec().into()],
         functions: vec![b.finish(&[])],
         main: 0,
     };
@@ -948,7 +948,7 @@ pub fn passing(
     let main = main.finish(&[]);
 
     let program = scalar::Program {
-        data: vec![b"swap".to_vec(), b"x".to_vec()],
+        data: vec![b"swap".to_vec().into(), b"x".to_vec().into()],
         functions: vec![leaf, pass, main],
         main: 2,
     };

@@ -745,7 +745,7 @@ pub fn table(f: Function, types: &[Type], rows: &[Vec<u64>]) -> Program {
     );
     b.ret(vec![]);
     Program {
-        data: vec![data],
+        data: vec![data.into()],
         functions: vec![f, b.finish(&[])],
         main: 1,
     }

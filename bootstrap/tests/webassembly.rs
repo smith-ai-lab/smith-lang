@@ -21,7 +21,9 @@ use crate::cli::{folder, smith, stderr};
 use crate::generate::{self, Gen};
 use crate::targets::{case_files, updating};
 use crate::float_form::{self as ff, canonical_program};
-use crate::{choices, enums, lambdas, numbers, programs, repeat, text, tuples, valid_modules};
+use crate::{
+    choices, enums, lambdas, numbers, programs, repeat, text, top_level_values, tuples, valid_modules,
+};
 
 pub const ONCE: &[Test] = &[
     (
@@ -63,6 +65,10 @@ pub const ONCE: &[Test] = &[
     (
         "a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints",
         a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints,
+    ),
+    (
+        "a_module_of_lists_at_the_top_level_of_texts_or_of_lists_prints_what_the_evaluator_prints",
+        a_module_of_lists_at_the_top_level_of_texts_or_of_lists_prints_what_the_evaluator_prints,
     ),
     (
         "a_module_of_a_jump_that_gives_its_parameters_as_if_all_were_copied_at_once_prints_what_the_evaluator_prints",
@@ -413,6 +419,10 @@ fn a_module_of_generated_programs_with_lambdas_prints_what_the_evaluator_prints(
 fn a_module_of_generated_programs_with_enums_and_tuples_prints_what_the_evaluator_prints() {
     every_module_agrees(106, 8, enums::program, |case| case.source.as_bytes());
     every_module_agrees(107, 8, tuples::program, |case| case.source.as_bytes());
+}
+
+fn a_module_of_lists_at_the_top_level_of_texts_or_of_lists_prints_what_the_evaluator_prints() {
+    every_module_agrees(108, 4, top_level_values::listed, |case| case.source.as_bytes());
 }
 
 /// The integers every size has that an operation is most likely to get wrong:

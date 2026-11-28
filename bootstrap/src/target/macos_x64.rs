@@ -21,12 +21,19 @@ const MACHINE: Machine = Machine {
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let files = program.asks_the_files();
-    let (asm, data, parts) = if files {
+    let (mut asm, data, parts) = if files {
         x86_64::code::<Macos<true>>(program)
     } else {
         x86_64::code::<Macos<false>>(program)
     };
-    let size = asm.len() + data.iter().map(|(_, d)| d.len()).sum::<usize>();
+    // `__TEXT` cannot be written when the program is loaded at a place of the
+    // system's choosing, so the data that hold an address are put in
+    // `__DATA`, where the loader moves each address as far as it moved the
+    // executable.
+    let code_size = asm.code_len();
+    let apart = super::Apart::of(program, data);
+    let moved = apart.addresses(program);
+    let size = asm.len() + apart.kept.iter().map(|(_, d)| d.len()).sum::<usize>();
     let imports = macho::imports(
         program.allocates(),
         program.asks_for_entropy(),
@@ -36,10 +43,22 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         program.asks_for_descriptors(),
     );
     let mut at = 0;
-    let executable = macho::executable(&MACHINE, size as u64, imports, |code, got| {
-        at = code;
-        asm.finish(&data, code, got)
-    });
+    let writable = apart.size;
+    let executable = macho::executable(
+        &MACHINE,
+        size as u64,
+        imports,
+        writable,
+        &moved,
+        |code, got, elsewhere| {
+            at = code;
+            for &(label, _, place) in &apart.moved {
+                asm.bind_at(label, (elsewhere + place - code) as usize);
+            }
+            let data = apart.bytes(program, code_size, code, elsewhere);
+            (asm.finish(&apart.kept, code, got), data)
+        },
+    );
     (executable, super::shifted(parts, at))
 }
 

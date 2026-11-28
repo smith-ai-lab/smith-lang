@@ -779,7 +779,7 @@ impl<'a> Lowering<'a> {
             let at = match self.exp_table {
                 Some(at) => at,
                 None => {
-                    self.data.push(form::exp_table());
+                    self.data.push(form::exp_table().into());
                     let at = self.data.len() - 1;
                     self.exp_table = Some(at);
                     at
@@ -863,8 +863,8 @@ impl<'a> Lowering<'a> {
             Some(at) => at,
             None => {
                 let (inverses, powers) = form::ryu_tables();
-                self.data.push(inverses);
-                self.data.push(powers);
+                self.data.push(inverses.into());
+                self.data.push(powers.into());
                 let at = (self.data.len() - 2, self.data.len() - 1);
                 self.float_tables = Some(at);
                 at

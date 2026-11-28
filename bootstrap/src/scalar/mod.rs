@@ -1252,10 +1252,30 @@ impl Function {
 /// says. No function calls itself, directly or through others.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
-    /// The bytes of the program's texts, which `Constant::Data` addresses.
-    pub data: Vec<Vec<u8>>,
+    /// The program's texts and other data, which `Constant::Data` addresses.
+    pub data: Vec<Datum>,
     pub functions: Vec<Function>,
     pub main: usize,
+}
+
+/// Bytes of the program's data, which a `Constant::Data` gives the address of,
+/// and the places among them that hold the address of a datum: a list of
+/// texts, whose every element holds the address of its text.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Datum {
+    pub bytes: Vec<u8>,
+    /// Each address the bytes hold: the place of the first of its 8 bytes,
+    /// which are zero here, and the datum it is the address of.
+    pub addresses: Vec<(usize, usize)>,
+}
+
+impl From<Vec<u8>> for Datum {
+    fn from(bytes: Vec<u8>) -> Datum {
+        Datum {
+            bytes,
+            addresses: Vec::new(),
+        }
+    }
 }
 
 /// The types of the parameters of a `main` that takes the words the program was
@@ -1264,6 +1284,26 @@ pub struct Program {
 pub const ARGUMENTS: [Type; 3] = [Type::Int(Bits::B64), Type::Address, Type::Address];
 
 impl Program {
+    /// The bytes of each datum where each datum starts at its address in
+    /// `starts`, with every address among them written in, little end first.
+    pub fn placed(&self, starts: &[u64]) -> Vec<Vec<u8>> {
+        (self.data.iter())
+            .map(|d| {
+                let mut bytes = d.bytes.clone();
+                for &(at, to) in &d.addresses {
+                    bytes[at..at + 8].copy_from_slice(&starts[to].to_le_bytes());
+                }
+                bytes
+            })
+            .collect()
+    }
+
+    /// Whether a datum holds an address, which an executable that is loaded
+    /// at a place of the system's choosing must have fixed when it is loaded.
+    pub fn holds_addresses(&self) -> bool {
+        self.data.iter().any(|d| !d.addresses.is_empty())
+    }
+
     /// Whether `main` takes what the system gives a program that is started
     /// with words, which a target must then give it.
     pub fn takes_arguments(&self) -> bool {
