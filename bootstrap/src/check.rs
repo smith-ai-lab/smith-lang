@@ -3952,14 +3952,20 @@ impl<'a> Library<'a> {
 /// `std.net` as `smith --watch` builds it into the programs it runs, and into no
 /// other. The handler of `net` there asks `smith --watch` for the socket it
 /// listens on, and gives `.closed` from `accept` when `smith --watch` closes the
-/// control socket. It is the module with three lines added to the two functions
-/// that listen and accept, and the functions of `net_watched.smith` after it, so
-/// that the module every other program is built with is not changed by it.
+/// control socket, and from every `read` of a connection once it is closed, which
+/// a read that waits is woken for. It is the module with lines added to the
+/// functions that listen, accept, and read, and the functions of
+/// `net_watched.smith` after it, so that the module every other program is built
+/// with is not changed by it.
 fn watched_net() -> &'static str {
     static TEXT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     TEXT.get_or_init(|| {
         let mut text = library_text("net").to_string();
         let stop = "if told_to_stop() { return .err(.closed(address_text(l.host, l.port))) }";
+        // A read once the run is told to stop gives `.closed`, before it looks
+        // for bytes, and so does a read that waited when the telling came.
+        let read_closed = "return .err(.closed(address_text(c.host, c.port)))";
+        let read_stop = format!("if told_to_stop() {{ {read_closed} }}");
         // What each place is, and what it is made.
         let additions = [
             (
@@ -3973,6 +3979,14 @@ fn watched_net() -> &'static str {
             (
                 "  loop attempt in 0..64 {\n    fd = __system(3, l.handle, 0, 0, 0, 0, 0)\n".to_string(),
                 format!("  loop attempt in 0..64 {{\n    {stop}\n    fd = __system(3, l.handle, 0, 0, 0, 0, 0)\n"),
+            ),
+            (
+                "fn system_read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc, task> {\n  if not c.opened { return .err(not_opened(address_text(c.host, c.port), \"read\", c.handle)) }\n".to_string(),
+                format!("fn system_read(c: Connection, most: 1..18446744073709551616) -> Result[Got, NetError] <alloc, task> {{\n  if not c.opened {{ return .err(not_opened(address_text(c.host, c.port), \"read\", c.handle)) }}\n  {read_stop}\n"),
+            ),
+            (
+                "      if got == would_block() {\n        wait_to_read(c.handle)\n".to_string(),
+                format!("      if got == would_block() {{\n        if not wait_to_read_or_stop(c.handle) {{ {read_closed} }}\n"),
             ),
         ];
         for (at, made) in additions {

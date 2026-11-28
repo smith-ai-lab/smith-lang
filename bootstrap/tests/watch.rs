@@ -25,6 +25,14 @@ pub const MACHINE: &[Test] = &[
         a_served_page_is_the_new_one_after_the_file_is_rewritten,
     ),
     (
+        "a_kept_connection_is_never_answered_by_the_run_before_a_save_and_that_run_ends_unkilled",
+        a_kept_connection_is_never_answered_by_the_run_before_a_save_and_that_run_ends_unkilled,
+    ),
+    (
+        "a_request_waiting_on_a_kept_connection_when_the_run_is_stopped_is_not_answered_by_it",
+        a_request_waiting_on_a_kept_connection_when_the_run_is_stopped_is_not_answered_by_it,
+    ),
+    (
         "requests_sent_across_changes_are_answered_whole_by_the_old_program_or_the_new",
         requests_sent_across_changes_are_answered_whole_by_the_old_program_or_the_new,
     ),
@@ -205,6 +213,119 @@ fn ask(port: u16) -> Result<Answer, String> {
         return Err(format!("a response of {} bytes of {length}: {text:?}", body.len()));
     }
     Ok(Answer { status, body: body.to_string() })
+}
+
+/// Asks for `/` on a connection that the client keeps for its next request, as a
+/// browser does, and gives the response, or why there is none: the connection
+/// was closed before the response was whole.
+fn ask_kept(stream: &mut TcpStream) -> Result<Answer, String> {
+    send_kept(stream, "/")?;
+    answer_on(stream)
+}
+
+/// Sends a request for the path on a connection that the client keeps.
+fn send_kept(stream: &mut TcpStream, path: &str) -> Result<(), String> {
+    stream
+        .write_all(format!("GET {path} HTTP/1.1\r\nhost: localhost\r\n\r\n").as_bytes())
+        .map_err(|e| format!("not written: {e}"))
+}
+
+/// The next response on the connection, whole, or why there is none.
+fn answer_on(stream: &mut TcpStream) -> Result<Answer, String> {
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        if let Some(at) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&bytes[..at]).into_owned();
+            let length: usize = head
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length: "))
+                .and_then(|n| n.parse().ok())
+                .ok_or_else(|| format!("no length: {head:?}"))?;
+            if bytes.len() >= at + 4 + length {
+                let status = head.get(9..12).and_then(|c| c.parse().ok()).ok_or_else(|| format!("no status: {head:?}"))?;
+                let body = String::from_utf8_lossy(&bytes[at + 4..at + 4 + length]).into_owned();
+                return Ok(Answer { status, body });
+            }
+        }
+        match stream.read(&mut chunk) {
+            Ok(0) => return Err(format!("closed after {} bytes", bytes.len())),
+            Ok(n) => bytes.extend_from_slice(&chunk[..n]),
+            Err(e) => return Err(format!("not read: {e}")),
+        }
+    }
+}
+
+/// A browser keeps its connection and sends its next request on it. The run
+/// that a save stops closes the connection it keeps, which waits for no
+/// request, and ends by itself, which `smith --watch` says it did by saying
+/// nothing of killing it. So the next request on the connection, sent once the
+/// next run has begun, is answered by no run before the save: the connection is
+/// closed, and the client sends the request again on a new one, which the new
+/// run answers.
+fn a_kept_connection_is_never_answered_by_the_run_before_a_save_and_that_run_ends_unkilled() {
+    if !runs_here() {
+        return;
+    }
+    let (dir, port) = served("watch_kept", "before");
+    let watch = Watch::start(&dir, &["--watch", "serve", "--port", &port.to_string()], false);
+    until_it_says(port, "before");
+    let mut kept = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    kept.set_read_timeout(Some(PATIENCE)).unwrap();
+    let first = ask_kept(&mut kept).unwrap();
+    assert_eq!(first.body, "before");
+    std::fs::write(dir.join("main.smith"), page("after")).unwrap();
+    wait_for("the second run to begin", || watch.said() == "started\nstarted\n");
+    match ask_kept(&mut kept) {
+        Ok(said) => assert_eq!(said.body, "after", "the kept connection was answered by the run before the save"),
+        Err(_) => assert_eq!(ask(port).unwrap().body, "after"),
+    }
+    assert!(
+        !watch.errors().contains("killed"),
+        "the run before the save was killed: {}",
+        watch.errors()
+    );
+}
+
+/// A page that says `before`, and whose route at `/held` says `asked` and then
+/// waits for a line of standard input before it answers, so that a test holds
+/// the run while it answers. `/` does not wait, since `listen` runs the routes
+/// for it once more after its listener is closed.
+const HELD: &str = "use std.console (console, input, print)\nuse std.http (Text, get, http, routes)\n\nfn index() -> Text {\n  Text(text: \"before\")\n}\n\nfn held() -> Text <console, alloc> {\n  print(\"asked\")\n  _ = input()\n  Text(text: \"held\")\n}\n\npub fn main() <http, console, alloc> {\n  with routes()\n  get(\"/\", index)\n  get(\"/held\", held)\n}\n";
+
+/// A client sends its next request on a kept connection while the run is still
+/// answering the one before, and the run is told to stop before it answers.
+/// The run answers the request it read, and then reads the connection once
+/// more, where the next request is waiting: the read gives `.closed`, since the
+/// run was told to stop, and the request is answered by no run before the save.
+fn a_request_waiting_on_a_kept_connection_when_the_run_is_stopped_is_not_answered_by_it() {
+    if !runs_here() {
+        return;
+    }
+    let (dir, port) = served("watch_waiting", "unused");
+    std::fs::write(dir.join("main.smith"), HELD).unwrap();
+    let mut watch = Watch::start(&dir, &["--timings", "--watch", "serve", "--port", &port.to_string()], true);
+    let mut kept: Option<TcpStream> = None;
+    wait_for("the run to listen", || {
+        kept = TcpStream::connect(("127.0.0.1", port)).ok();
+        kept.is_some()
+    });
+    let mut kept = kept.unwrap();
+    kept.set_read_timeout(Some(PATIENCE)).unwrap();
+    send_kept(&mut kept, "/held").unwrap();
+    wait_for("the route to be asked", || watch.said().contains("asked"));
+    // The next request waits on the connection while the run answers.
+    send_kept(&mut kept, "/").unwrap();
+    std::fs::write(dir.join("main.smith"), page("after")).unwrap();
+    wait_for("the change to be built", || watch.builds() == 2);
+    watch.type_line();
+    assert_eq!(answer_on(&mut kept).unwrap().body, "held");
+    if let Ok(said) = answer_on(&mut kept) {
+        assert_eq!(said.body, "after", "the waiting request was answered by the run before the save");
+    }
+    wait_for("the second run to begin", || watch.said() == "started\nasked\nstarted\n");
+    assert_eq!(ask(port).unwrap().body, "after");
+    assert!(!watch.errors().contains("killed"), "the run before the save was killed: {}", watch.errors());
 }
 
 /// How long a run that is told to stop has before `smith --watch` kills it,

@@ -1,8 +1,11 @@
 // What the library of a program that `smith --watch` builds adds to `std.net`:
 // the handler asks `smith --watch` for the socket it listens on, and `accept`
-// gives `.closed` when `smith --watch` has closed its end of the control socket.
-// `bootstrap/src/lib.rs` puts these after the rest of the module, and the three
-// lines it says in `watch_net` into `system_listen_on` and `system_accept`.
+// gives `.closed` when `smith --watch` has closed its end of the control socket,
+// and so does every `read` of a connection from then on, even one that has
+// bytes waiting, and one that waits for bytes when it comes.
+// `watched_net` of `bootstrap/src/check.rs` puts these after the rest of the
+// module, and the lines it says into `system_listen_on`, `system_accept`, and
+// `system_read`.
 
 // The descriptor on which `smith --watch` talks to the run it started. Only a
 // program that `smith --watch` builds has this code, so no other program looks at
@@ -112,4 +115,46 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
     fd = whole(control_bytes[16], control_bytes[17], control_bytes[18], control_bytes[19])
   }
   .ok(Listener(handle: fd, opened: true, host: host, port: port))
+}
+
+// The four bytes of a number, the low one first.
+fn four(n: u64) -> List[Byte] <alloc> {
+  mut made: List[Byte] = []
+  loop i in 0..4 { made = push(take made, bit_and(shift_right(n, 8 * i), 255)) }
+  made
+}
+
+// Asks the queue to say when the descriptor can be read: an event of `epoll` on
+// Linux, which is the same twelve bytes on every machine as the scheduler's,
+// and a `kevent` of 32 bytes on macOS, which reads and is added.
+fn watch_read(queue: i64, fd: i64) <alloc> {
+  number: u64 = wrapping_narrow(fd)
+  if on_macos() {
+    mut change = four(number)
+    change = append(append(take change, four(0)), four(131071))
+    change = append(take change, zeros(20))
+    _ = __system(17, queue, change, 1, 0, 0, 0)
+  } else {
+    mut event = four(1)
+    event = append(append(take event, four(number)), append(four(number), four(number)))
+    _ = __system(14, queue, 1, fd, event, 0, 0)
+  }
+}
+
+// Waits until the connection can be read or `smith --watch` closes the control
+// socket, and says whether the run goes on: false once it is told to stop, so
+// that a connection that waits for its next request is ended at once. The task
+// waits for a queue of its own that holds the two, an `epoll` of Linux or a
+// `kqueue` of macOS, which the scheduler waits for as for any descriptor.
+fn wait_to_read_or_stop(fd: i64) -> bool <alloc, task> {
+  queue = if on_macos() { __system(16, 0, 0, 0, 0, 0, 0) } else { __system(13, 0, 0, 0, 0, 0, 0) }
+  if queue < 0 {
+    wait_to_read(fd)
+    return not told_to_stop()
+  }
+  watch_read(queue, fd)
+  watch_read(queue, control())
+  wait_to_read(queue)
+  _ = __system(9, queue, 0, 0, 0, 0, 0)
+  not told_to_stop()
 }

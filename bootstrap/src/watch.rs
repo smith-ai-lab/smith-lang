@@ -283,6 +283,12 @@ impl Run {
             while !self.ended() && Instant::now() < until {
                 std::thread::sleep(Duration::from_millis(5));
             }
+            if !self.ended() {
+                eprintln!(
+                    "smith --watch: the run did not end within {} seconds of being told to stop, so it is killed",
+                    GRACE.as_secs()
+                );
+            }
         }
         self.kill();
     }
