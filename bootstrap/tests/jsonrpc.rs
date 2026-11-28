@@ -9,7 +9,7 @@
 //! from it with a list leaks into the library modules it reaches, so they use
 //! the module as `jsonrpc` and write what it gives in patterns.
 
-use smith::{lower, scalar};
+use smith::{check, lower, scalar};
 
 use crate::Test;
 use crate::generate::{self, Gen};
@@ -62,6 +62,14 @@ pub const ONCE: &[Test] = &[
     (
         "what_the_page_leaves_open_is_read_as_the_issue_proposes",
         what_the_page_leaves_open_is_read_as_the_issue_proposes,
+    ),
+    (
+        "parameters_that_are_no_object_or_array_and_a_batch_of_nothing_are_refused_where_they_are_written",
+        parameters_that_are_no_object_or_array_and_a_batch_of_nothing_are_refused_where_they_are_written,
+    ),
+    (
+        "the_functions_that_make_parameters_check_the_value_they_are_given",
+        the_functions_that_make_parameters_check_the_value_they_are_given,
     ),
     (
         "the_failures_the_standard_names_have_its_codes",
@@ -205,14 +213,14 @@ fn show_match(subject: &str, indent: &str) -> String {
       .text(t) {{ print(\"request {{r.method}} text {{t}}\") }}
       .null {{ print(\"request {{r.method}} null\") }}
     }}
-    match r.params {{
+    match jsonrpc.params_json(r.params) {{
       .some(p) {{ print(\"params {{raw_text(p)}}\") }}
       .none {{ print(\"no params\") }}
     }}
   }}
   .notification(n) {{
     print(\"notification {{n.method}}\")
-    match n.params {{
+    match jsonrpc.params_json(n.params) {{
       .some(p) {{ print(\"params {{raw_text(p)}}\") }}
       .none {{ print(\"no params\") }}
     }}
@@ -349,7 +357,10 @@ fn expression(m: &Msg, v: &str) -> (String, Option<String>) {
         Ident::Text(t) => format!(".text({})", lit(t)),
         Ident::Null => ".null".to_string(),
     };
-    let params = |p: &Option<String>| if p.is_some() { format!(".some({v})") } else { ".none".to_string() };
+    let some_raw = |p: &Option<String>| if p.is_some() { format!(".some({v})") } else { ".none".to_string() };
+    // The parameters are the value `v` made by `object` or `array`, which
+    // `with_raw` binds as `{v}p`.
+    let params = |p: &Option<String>| if p.is_some() { format!("{v}p") } else { ".none".to_string() };
     match m {
         Msg::Request { id: i, method, params: p } => (
             format!(".request(jsonrpc.Request(id: {}, method: {}, params: {}))", id(i), lit(method), params(p)),
@@ -368,7 +379,7 @@ fn expression(m: &Msg, v: &str) -> (String, Option<String>) {
                 ".response(jsonrpc.Response(id: {}, outcome: .err(jsonrpc.Failure(code: {code}, message: {}, data: {}))))",
                 id(i),
                 lit(message),
-                params(data)
+                some_raw(data)
             ),
             data.clone(),
         ),
@@ -376,15 +387,29 @@ fn expression(m: &Msg, v: &str) -> (String, Option<String>) {
 }
 
 /// The statements that run `body` with `v` the `RawJson` of `raw`, if there is
-/// one.
-fn with_raw(raw: &Option<String>, v: &str, body: &str) -> String {
+/// one, and, when `params` says the value is the parameters of a call, with
+/// `{v}p` the `Params` that `object` or `array` makes of it.
+fn with_raw(raw: &Option<String>, v: &str, params: bool, body: &str) -> String {
     match raw {
-        Some(text) => format!(
-            "match raw_json({}) {{\n.ok({v}) {{\n{body}}}\n.err(e) {{ print(\"not json\") }}\n}}\n",
-            lit(text)
-        ),
+        Some(text) => {
+            let body = if params {
+                let make = if text.starts_with('{') { "object" } else { "array" };
+                format!("match jsonrpc.{make}({v}) {{\n.some({v}p) {{\n{body}}}\n.none {{ print(\"not params\") }}\n}}\n")
+            } else {
+                body.to_string()
+            };
+            format!(
+                "match raw_json({}) {{\n.ok({v}) {{\n{body}}}\n.err(e) {{ print(\"not json\") }}\n}}\n",
+                lit(text)
+            )
+        }
         None => body.to_string(),
     }
+}
+
+/// Whether the one value a message has that is a `RawJson` is its parameters.
+fn has_params(m: &Msg) -> bool {
+    matches!(m, Msg::Request { .. } | Msg::Notification { .. })
 }
 
 /// The three cases of the property are a test each, as a case is what a test may
@@ -409,7 +434,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch(part: u64) {
                 let body = format!(
                     "t = jsonrpc.write(texts.text(), {e})\ns = texts.finish(take t)\nprint(s)\nshow(s)\n"
                 );
-                functions += &format!("fn single{i}() <console, alloc> {{\n{}}}\n\n", with_raw(&raw, "v", &body));
+                functions += &format!("fn single{i}() <console, alloc> {{\n{}}}\n\n", with_raw(&raw, "v", has_params(m), &body));
                 calls += &format!("  single{i}()\n");
                 lines.push(written(m));
                 lines.extend(shown(m));
@@ -424,7 +449,7 @@ fn a_message_written_is_read_back_as_the_message_and_so_is_a_batch(part: u64) {
                     items.join(", ")
                 );
                 for (k, (_, raw)) in made.iter().enumerate().rev() {
-                    body = with_raw(raw, &format!("v{k}"), &body);
+                    body = with_raw(raw, &format!("v{k}"), has_params(&ms[k]), &body);
                 }
                 functions += &format!("fn batch{i}() <console, alloc> {{\n{body}}}\n\n");
                 calls += &format!("  batch{i}()\n");
@@ -871,4 +896,68 @@ fn what_the_page_leaves_open_is_read_as_the_issue_proposes() {
     let texts: Vec<String> = cases.iter().map(|(t, _)| t.to_string()).collect();
     let want: Vec<String> = cases.iter().flat_map(|(_, l)| l.iter().map(|x| x.to_string())).collect();
     assert_eq!(reads(&texts), want);
+}
+
+/// What the compiler says of a program, as one text, or nothing when it builds.
+fn refusal(source: &str) -> String {
+    let found = check(source.as_bytes()).err().unwrap_or_default();
+    found.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("\n")
+}
+
+fn parameters_that_are_no_object_or_array_and_a_batch_of_nothing_are_refused_where_they_are_written() {
+    let program = |body: &str| format!("use std.json (raw_json)\nuse std.jsonrpc\nuse std.text as texts\n\nfn main() <alloc> {{\n{body}}}\n");
+    let notification = |params: &str| format!("jsonrpc.Notification(method: \"n\", params: {params})");
+    // What is right is built.
+    let right = program(&format!(
+        "  match raw_json(\"[1]\") {{\n    .ok(v) {{\n      match jsonrpc.array(v) {{\n        .some(p) {{ _ = {} }}\n        .none {{ }}\n      }}\n    }}\n    .err(e) {{ }}\n  }}\n  t = jsonrpc.write_batch(texts.text(), [.notification({})])\n  _ = texts.finish(take t)\n",
+        notification("p"),
+        notification(".none")
+    ));
+    assert_eq!(refusal(&right), "");
+    // A raw value is no parameters: the case holds an `Object` or an `Array`,
+    // which only the module makes.
+    for (call, name) in [
+        (notification(".some(v)"), "some"),
+        (notification("v"), "Params"),
+        (notification(".object(v)"), "Object"),
+        (notification(".array(jsonrpc.Array(json: v))"), "json"),
+        (notification(".object(jsonrpc.Object(json: v))"), "json"),
+    ] {
+        let wrong = refusal(&program(&format!("  match raw_json(\"3\") {{\n    .ok(v) {{ _ = {call} }}\n    .err(e) {{ }}\n  }}\n")));
+        assert!(wrong.contains(name), "{wrong:?} for {call}");
+        assert_ne!(wrong, "", "{call} is refused");
+    }
+    // A batch of nothing is not written, and the message says what is not proven.
+    for empty in ["[]", "no_messages"] {
+        let body = if empty == "[]" {
+            "  t = jsonrpc.write_batch(texts.text(), [])\n  _ = texts.finish(take t)\n".to_string()
+        } else {
+            format!("  none = [.notification({})]\n  rest = none[1..]\n  t = jsonrpc.write_batch(texts.text(), rest)\n  _ = texts.finish(take t)\n", notification(".none"))
+        };
+        let wrong = refusal(&program(&body));
+        assert!(wrong.contains("write_batch") && wrong.contains("size > 0"), "{wrong:?} for {empty}");
+    }
+}
+
+fn the_functions_that_make_parameters_check_the_value_they_are_given() {
+    // Each value is tried with both functions: only an object is an object and
+    // only an array is an array.
+    let values = ["{}", "[]", "{\"a\":[1]}", "[1,{}]", "3", "\"x\"", "null", "true", "-1.5e3"];
+    let mut body = String::new();
+    for v in values {
+        body += &format!(
+            "  match raw_json({}) {{\n    .ok(v) {{\n      match jsonrpc.object(v) {{\n        .some(p) {{ print(\"object\") }}\n        .none {{ print(\"no\") }}\n      }}\n      match jsonrpc.array(v) {{\n        .some(p) {{ print(\"array\") }}\n        .none {{ print(\"no\") }}\n      }}\n    }}\n    .err(e) {{ print(\"bad\") }}\n  }}\n",
+            lit(v)
+        );
+    }
+    let source = format!("use std.console (console, print)\nuse std.json (raw_json)\nuse std.jsonrpc\n\nfn main() <console, alloc> {{\n{body}}}\n");
+    let want: Vec<&str> = values
+        .iter()
+        .flat_map(|v| match v.as_bytes()[0] {
+            b'{' => ["object", "no"],
+            b'[' => ["no", "array"],
+            _ => ["no", "no"],
+        })
+        .collect();
+    assert_eq!(printed(&source), want);
 }

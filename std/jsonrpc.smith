@@ -9,15 +9,32 @@ pub enum Id {
   null
 }
 
+// The parameters of a call: an object, an array, or none, as the standard says.
+// The field of each is private, so only `object` and `array` and the reader make
+// one, and each checks what it holds.
+pub struct Object {
+  json: RawJson
+}
+
+pub struct Array {
+  json: RawJson
+}
+
+pub enum Params {
+  none
+  object: Object
+  array: Array
+}
+
 pub struct Request {
   pub id: Id
   pub method: str
-  pub params: Option[RawJson]
+  pub params: Params
 }
 
 pub struct Notification {
   pub method: str
-  pub params: Option[RawJson]
+  pub params: Params
 }
 
 pub struct Failure {
@@ -151,9 +168,23 @@ fn kind(raw: RawJson) -> Byte {
   if s.size == 0 { 0 } else { s[0] }
 }
 
-fn structured(raw: RawJson) -> bool {
-  k = kind(raw)
-  k == 123 or k == 91
+// The parameters that are an object, when the value is one.
+pub fn object(raw: RawJson) -> Option[Params] {
+  if kind(raw) == 123 { .some(.object(Object(json: raw))) } else { .none }
+}
+
+// The parameters that are an array, when the value is one.
+pub fn array(raw: RawJson) -> Option[Params] {
+  if kind(raw) == 91 { .some(.array(Array(json: raw))) } else { .none }
+}
+
+// The value the parameters are, when there are any.
+pub fn params_json(params: Params) -> Option[RawJson] {
+  match params {
+    .none { .none }
+    .object(o) { .some(o.json) }
+    .array(a) { .some(a.json) }
+  }
 }
 
 // A whole number of `Int`: `std.json` refuses a fraction and an exponent.
@@ -216,6 +247,13 @@ fn failure_of(raw: RawJson) -> Option[Failure] <alloc> {
   }
 }
 
+fn structured_params(raw: RawJson) -> Option[Params] {
+  match object(raw) {
+    .some(p) { .some(p) }
+    .none { array(raw) }
+  }
+}
+
 fn message_of(members: Members) -> Result[Message, Failure] <alloc> {
   named = members.named
   if not version_ok(named) { return .err(invalid_request()) }
@@ -230,10 +268,14 @@ fn message_of(members: Members) -> Result[Message, Failure] <alloc> {
         .some(t) { t }
         .none { return .err(invalid_request()) }
       }
-      params = find(named, "params")
-      match params {
-        .some(p) { if not structured(p) { return .err(invalid_request()) } }
-        .none { }
+      params = match find(named, "params") {
+        .some(p) {
+          match structured_params(p) {
+            .some(v) { v }
+            .none { return .err(invalid_request()) }
+          }
+        }
+        .none { Params.none }
       }
       match id {
         .none { .ok(.notification(Notification(method: name, params: params))) }
@@ -332,8 +374,8 @@ fn id_text(id: Id) -> str <alloc> {
   }
 }
 
-fn params_of(to: take Text, params: Option[RawJson]) -> Text <alloc> {
-  match params {
+fn params_of(to: take Text, params: Params) -> Text <alloc> {
+  match params_json(params) {
     .some(p) { append(append(take to, ",\"params\":"), raw_text(p)) }
     .none { to }
   }
@@ -369,7 +411,9 @@ pub fn write(to: take Text, message: Message) -> Text <alloc> {
   }
 }
 
-pub fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc> {
+pub fn write_batch(to: take Text, messages: List[Message]) -> Text <alloc>
+  requires messages.size > 0
+{
   mut written = append(take to, "[")
   mut first = true
   loop m in messages {

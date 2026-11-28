@@ -646,8 +646,8 @@ fn route(server: Server, incoming: Incoming) -> Routed <alloc> {
             .request(r) {
               match r.id {
                 .null { Routed.done(failure(.none, -32600, "Invalid Request", .none)) }
-                .number(n) { request_route(server, incoming, to_json(n), r.method, r.params) }
-                .text(t) { request_route(server, incoming, to_json(t), r.method, r.params) }
+                .number(n) { request_route(server, incoming, to_json(n), r.method, jsonrpc.params_json(r.params)) }
+                .text(t) { request_route(server, incoming, to_json(t), r.method, jsonrpc.params_json(r.params)) }
               }
             }
           }
