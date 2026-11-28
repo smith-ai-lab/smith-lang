@@ -137,7 +137,11 @@ impl<'a> Checker<'a> {
                 .filter(|(_, n)| n.is_none())
                 .map(|(p, _)| p.name.as_str())
                 .collect();
-            let written: Vec<String> = (0..template.params.len()).map(|_| "4".into()).collect();
+            // A number an argument or the type the call must give says is
+            // written as it is, and one that nothing says as an example.
+            let written: Vec<String> = (found.iter())
+                .map(|n| n.map_or("4".to_string(), |n| n.to_string()))
+                .collect();
             self.errors.push(
                 Error::new(
                     call.pos,
