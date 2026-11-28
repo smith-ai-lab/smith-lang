@@ -25,6 +25,14 @@ pub const MACHINE: &[Test] = &[
         "every_failure_is_shrunk_to_choices_that_no_smaller_try_fails_with",
         every_failure_is_shrunk_to_choices_that_no_smaller_try_fails_with,
     ),
+    (
+        "every_choice_is_shrunk_to_the_least_that_fails_in_a_bounded_number_of_replays",
+        every_choice_is_shrunk_to_the_least_that_fails_in_a_bounded_number_of_replays,
+    ),
+    (
+        "a_pair_of_choices_is_shrunk_to_the_least_sum_that_fails",
+        a_pair_of_choices_is_shrunk_to_the_least_sum_that_fails,
+    ),
 ];
 
 /// A folder holding one file of tests, `x_test.smith`, with the text.
@@ -169,8 +177,9 @@ fn every_property_runs_100_times_with_a_key_each_and_one_seed_gives_one_run() {
 /// For every property that fails, the input the failure says is the one the
 /// last run built from the choices it was given and fails on, every run
 /// whose choices come before those, fewer of them or as many with the first
-/// that differs less, passed, and a property of one choice is shrunk to the
-/// least choice that fails.
+/// that differs less, passed, and the left side the failure says is the
+/// least that fails, which a run of one choice reaches through the choice and
+/// a run of two through the second.
 fn every_failure_is_shrunk_to_choices_that_no_smaller_try_fails_with() {
     let failing = |g: &mut Gen| {
         let mut p = a_property(g);
@@ -196,8 +205,94 @@ fn every_failure_is_shrunk_to_choices_that_no_smaller_try_fails_with() {
                 assert!(passes(p, c), "{c:?} fails and comes before {reported:?}\n{said}");
             }
         }
-        if p.draws == 1 {
-            assert_eq!(reported, &vec![p.below], "{said}");
+        assert_eq!(sum, p.below, "{said}{failure}");
+    });
+}
+
+/// The most replays a property of one choice is shrunk in: 64 passes of 64.
+const REPLAYS: usize = 64 * 64;
+
+/// A property of one choice that fails when the choice is no less than
+/// `least`, or when what it is modulo `modulus` is no less, where at least a
+/// tenth of every `modulus` choices fail.
+#[derive(Debug)]
+struct Least {
+    least: u64,
+    modulus: Option<u64>,
+    seed: u64,
+}
+
+/// A number of up to 64 bits, of a width drawn first, so that numbers of
+/// every size are drawn.
+fn wide(g: &mut Gen) -> u64 {
+    let width = g.below(65) as u32;
+    let high = g.below(1 << 30) as u64;
+    let low = g.below(1 << 30) as u64;
+    let top = g.below(16) as u64;
+    let n = (top << 60) | (high << 30) | low;
+    if width == 64 { n } else { n & ((1u64 << width) - 1) }
+}
+
+fn a_least(g: &mut Gen) -> Least {
+    let modulus = (!g.one_in(3)).then(|| wide(g).max(2));
+    let least = match modulus {
+        // Half of the time fewer than half of the choices fail.
+        Some(m) if g.one_in(2) => m / 2 + wide(g) % (m / 2 - m.div_ceil(10) + 1),
+        Some(m) => wide(g) % (m / 2 + 1),
+        // Half of the choices or more fail, so that a run finds one.
+        None => wide(g) >> 1,
+    };
+    Least { least, modulus, seed: g.below(1 << 30) as u64 }
+}
+
+fn least_text(p: &Least) -> String {
+    let check = match p.modulus {
+        Some(m) => format!("a % {m} < least()"),
+        None => "a < least()".to_string(),
+    };
+    format!(
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.random (Key, bits)\nuse std.test (Failed, expect)\n\nfn least() -> u64 {{ {} }}\n\nfn test_least(key: take Key) -> Result[(), Failed] <console, alloc> {{\n  a = bits(take key)\n  print(\"drawn {{a}}\")\n  expect {{ {check} }}\n}}\n",
+        p.least
+    )
+}
+
+/// For every property of one choice that fails from `least` on, spread over
+/// every width of 64 bits, with `%` and without, the failure is shrunk in no
+/// more than `REPLAYS` replays after the run that first failed, to a choice
+/// that is `least` modulo the modulus, and to `least` itself when there is no
+/// modulus or at least half of every `modulus` choices fail.
+fn every_choice_is_shrunk_to_the_least_that_fails_in_a_bounded_number_of_replays() {
+    generate::check(12493, 12, a_least, |p| {
+        let dir = project("least", &least_text(p));
+        let ran = smith(&dir, &["test", "--seed", &p.seed.to_string()]);
+        let said = stdout(&ran);
+        assert_eq!(ran.status.code(), Some(1), "{said}{}", stderr(&ran));
+        let runs = runs_of(&said);
+        let fails = |c: u64| match p.modulus {
+            Some(m) => c % m >= p.least,
+            None => c >= p.least,
+        };
+        let first = runs.iter().position(|c| fails(c[0])).unwrap_or_else(|| panic!("{said}"));
+        let replays = runs.len() - first - 1;
+        assert!(replays <= REPLAYS, "{replays} replays\n{said}");
+        let reported = runs.last().unwrap()[0];
+        match p.modulus {
+            Some(m) if p.least > m / 2 => assert_eq!(reported % m, p.least, "{said}"),
+            _ => assert_eq!(reported, p.least, "{said}"),
         }
     });
+}
+
+const PAIR: &str = "use std.bits (u64)\nuse std.random (Key, bits, split)\nuse std.test (Failed, expect)\n\nfn test_pair(key: take Key) -> Result[(), Failed] {\n  (ka, kb) = split(take key)\n  a: u64 = bits(take ka) % 1000\n  b: u64 = bits(take kb) % 1000\n  expect { a + b < 1500 }\n}\n";
+
+/// Two choices from `split`, modulo 1000, that fail when they add to 1500 or
+/// more, are shrunk to two that add to 1500 exactly, for every seed.
+fn a_pair_of_choices_is_shrunk_to_the_least_sum_that_fails() {
+    let dir = project("pair", PAIR);
+    for seed in 1..=4 {
+        let ran = smith(&dir, &["test", "--seed", &seed.to_string()]);
+        let failure = stderr(&ran);
+        assert_eq!(ran.status.code(), Some(1), "{failure}");
+        assert_eq!(left_of(&failure), 1500, "{failure}");
+    }
 }
