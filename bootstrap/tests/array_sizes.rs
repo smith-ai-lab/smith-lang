@@ -28,6 +28,14 @@ pub const ONCE: &[Test] = &[
         "an_index_proven_below_a_size_that_is_a_name_runs_and_one_that_is_not_is_refused",
         an_index_proven_below_a_size_that_is_a_name_runs_and_one_that_is_not_is_refused,
     ),
+    (
+        "a_size_is_settled_from_an_array_of_ranges_and_from_an_array_written_out",
+        a_size_is_settled_from_an_array_of_ranges_and_from_an_array_written_out,
+    ),
+    (
+        "the_fix_for_a_size_nothing_settles_writes_the_sizes_the_arguments_settle",
+        the_fix_for_a_size_nothing_settles_writes_the_sizes_the_arguments_settle,
+    ),
 ];
 
 const PRODUCT: &str = "fn product[n: Nat](a: [n]f32, b: [n]f32) -> [n]f32 { for i { a[i] * b[i] } }\n";
@@ -253,5 +261,66 @@ fn an_index_proven_below_a_size_that_is_a_name_runs_and_one_that_is_not_is_refus
                 "{errors:?} for\n{named}"
             );
         }
+    });
+}
+
+/// Whole numbers below 10, written out.
+fn whole(xs: &[u64]) -> String {
+    let items: Vec<String> = xs.iter().map(u64::to_string).collect();
+    format!("[{}]", items.join(", "))
+}
+
+/// The size of an array of a range is settled from an argument as that of an
+/// array of floats is: from a binding of the type, from an array written out,
+/// which is of the range of its elements, and for two sizes from two arrays.
+fn a_size_is_settled_from_an_array_of_ranges_and_from_an_array_written_out() {
+    generate::check(
+        4905,
+        6,
+        |g: &mut Gen| {
+            let n = 1 + g.below(4);
+            let m = 1 + g.below(4);
+            (floats(g, n), floats(g, m))
+        },
+        |(a, b)| {
+            let (n, m) = (a.len(), b.len());
+            let source = with_header(format!(
+                "fn last[n: Nat](a: [n]0..10) -> 0..10 {{ a[n - 1] }}\n\n\
+                 fn glue[n: Nat, m: Nat](a: [n]0..10, b: [m]0..10) -> [n + m]0..10 {{ for i {{ a[0] }} }}\n\n\
+                 fn main() <console, alloc> {{\n  a: [{n}]0..10 = {}\n  b: [{m}]0..10 = {}\n  print(\"{{last(a)}} {{last({})}}\")\n  print(\"{{glue(a, b)}}\")\n}}\n",
+                whole(a),
+                whole(b),
+                whole(b)
+            ));
+            let glued = vec![a[0]; n + m];
+            assert_eq!(
+                stdout(&source),
+                format!("{} {}\n{}\n", a[n - 1], b[m - 1], whole(&glued)),
+                "for\n{source}"
+            );
+        },
+    );
+}
+
+/// A call that leaves a size out that nothing settles is refused, and the fix
+/// writes in brackets each size an argument settles as that size.
+fn the_fix_for_a_size_nothing_settles_writes_the_sizes_the_arguments_settle() {
+    // The fix once wrote 4 for every size, so 4 is not one that tells.
+    let size = |g: &mut Gen| match 1 + g.below(5) {
+        n if n >= 4 => n + 1,
+        n => n,
+    };
+    generate::check(4906, 4, size, |n| {
+        let source = with_header(format!(
+            "fn pick[n: Nat, m: Nat](a: [n]0..10) -> 0..10 {{ a[0] }}\n\n\
+             fn main() <console, alloc> {{\n  a: [{n}]0..10 = {}\n  print(\"{{pick(a)}}\")\n}}\n",
+            whole(&vec![1; *n])
+        ));
+        let errors = check(source.as_bytes()).expect_err(&source);
+        assert!(
+            errors.iter().any(|e| e.message.contains("`m`")
+                && e.fix.as_deref().is_some_and(|f| f.contains(&format!("`pick[{n}, ")))),
+            "{errors:?} for\n{source}"
+        );
     });
 }

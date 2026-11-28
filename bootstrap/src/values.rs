@@ -244,7 +244,11 @@ fn shape(tokens: &[&Token]) -> Option<Shape> {
                 },
                 _ => None,
             };
-            Some(Shape::Array(name, Box::new(shape(&tokens[close + 1..])?)))
+            // An element of a type that says no number, as a range does, is
+            // a name that no parameter has.
+            let element =
+                shape(&tokens[close + 1..]).unwrap_or(Shape::Name(String::new(), Vec::new()));
+            Some(Shape::Array(name, Box::new(element)))
         }
         [t] => match &t.tok {
             Tok::Ident(name) => Some(Shape::Name(name.clone(), Vec::new())),
