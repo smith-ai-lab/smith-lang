@@ -5,10 +5,11 @@ description: The smith commands, how build, run, and check take a file and a tar
 status: partial
 built:
   - "`smith build`, `smith run`, and `smith check` on `main.smith` or a named file"
+  - "`smith test` with nothing after it, as [Running tests](running-tests.md) says"
   - "`smith build --target wasm`, which writes a module and the file of JavaScript that loads it"
   - "`smith build --map`, which writes `<name>.map` beside the executable with a `fn` line for each function of its code, and after it an `at` line for each run of its instructions that was built from one place in the source"
   - "`smith check` warning of an effect a function lists and nothing in it needs"
-  - "`smith --timings` before `build`, `run`, `check`, and a task, a flag of `smith` written after the command refused with the place it goes, and `--target` before the command refused with the commands it belongs to"
+  - "`smith --timings` before `build`, `run`, `check`, `test`, and a task, a flag of `smith` written after the command refused with the place it goes, and `--target` before the command refused with the commands it belongs to"
   - "`smith --watch` before `build`, `run`, `check`, and a task, on Linux and macOS, which builds again each time a file the build read changes, prints the errors of a build that fails and goes on with the run before, lets a run end before the next starts, and ends the run when it is interrupted; a flag of `smith` given twice is refused"
   - "not `--watch` on Windows"
 ---

@@ -15,6 +15,7 @@ mod parser;
 pub mod project;
 pub mod scalar;
 pub mod target;
+pub mod testing;
 pub mod timings;
 mod values;
 pub mod work;

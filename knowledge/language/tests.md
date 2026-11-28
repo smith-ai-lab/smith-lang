@@ -2,7 +2,12 @@
 type: specification
 title: Tests
 description: Tests found by convention, a function named test_ that returns a Result, the expect check, and a test file as an ordinary module.
-status: planned
+status: partial
+built:
+  - "every function named `test_` of a file `x_test.smith` is a test, and `smith test` runs it, as [Running tests](running-tests.md) says; a function named `test_` that takes a parameter or does not give `Result[(), Failed]` is refused with one error, at its name, that names the form a test has"
+  - "`expect { e }` and `try expect { e }`, as [Test](../library/test.md) says: a comparison that fails shows both of its sides as `repr` writes them, and any other check that fails is shown as written"
+  - "a test file as an ordinary module, whose errors are reported as those of any module, and a test that carries effects, which the system answers, unless the test installs a handler of one with `with`"
+  - "not a property, a test that takes a `Key` or typed parameters"
 ---
 
 # Tests
@@ -28,7 +33,7 @@ use model.tokenizer (encode)
 use std.test (Failed, expect)
 
 fn test_empty() -> Result[(), Failed] {
-  expect { len(encode("")) == 0 }
+  expect { encode("").size == 0 }
 }
 ```
 
@@ -36,7 +41,15 @@ The test file for `model/tokenizer.smith` is `model/tokenizer_test.smith`, and `
 
 ## What `expect` reports
 
-`expect` receives its lambda as [code](code.md), so a failed comparison reports both of its sides. A test that fails on `len(encode("")) == 0` says what `len(encode(""))` was and what `0` was.
+`expect` receives its lambda as [code](code.md), so a failed comparison reports both of its sides. A test that fails on `encode("").size == 0` says where the `expect` is, the check as it is written, and what `encode("").size` was and what `0` was.
+
+```
+model/tokenizer_test.smith:5:3: expected encode("").size == 0
+  left:  1
+  right: 0
+```
+
+A check that is not a comparison, such as `is_empty(tokens)`, is shown as it is written.
 
 ## Several checks
 
@@ -48,7 +61,7 @@ use std.test (Failed, expect)
 
 fn test_tokens() -> Result[(), Failed] {
   tokens = encode("hello")
-  try expect { len(tokens) <= len("hello") }
+  try expect { tokens.size <= "hello".size }
   expect { decode(tokens) == "hello" }
 }
 ```

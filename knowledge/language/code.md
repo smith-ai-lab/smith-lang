@@ -6,6 +6,7 @@ status: partial
 built:
   - "the core term as data, in `bootstrap/src/core.rs`: the nodes `lit`, `name`, `call`, `apply`, `lambda`, `bind`, `make`, `field`, and `choose`, each holding its type and its place in the source, with their parts and a one-line printing; `bool` is an enum of the prelude and has no node of its own, and `for` and `loop` are not nodes yet"
   - "the checker produces the core term of a function of the file that is made of whole numbers and `bool`: a number, a name, `+`, `-`, `*` as calls of operators with the exact range, the six comparisons, `and`, `or`, `not`, `if`, a binding, a call of a function like it, a text, a struct or a tuple that is built, a case of an enum with what it holds, a field of a struct or a tuple, and a `match` on any of these by number, text, name, case, and tuple patterns; a list that is built, a function written where it is used, and a call of a name that holds a function, as `lambda` and `apply`; a `loop` over a range, a list, or a text, or open-ended, whose round is names given values, `mut`s assigned and `if` with no `else` that ends in `break`, with the `mut`s it assigns handed from round to round; `xs.size`, `xs[i]`, and `t.bytes` as calls of operations of their own, and a `loop` over a `str`, which runs over its bytes; a function with anything else, such as an assignment in a branch that does not end in `break`, a `return` in a loop, an index, or a type parameter, has none yet"
+  - "`expect` of `std.test`, whose call with its check in braces after it the compiler writes out as the code this page describes, as [Test](../library/test.md) says; not `Code[T]`, `code`, `run`, or a function over code that a program writes"
 ---
 
 # Functions over code
@@ -19,7 +20,7 @@ A function over code receives the code of an argument instead of its value. It r
 ```
 fn test_tokens(text: str) -> Result[(), Failed] {
   tokens = encode(text)
-  try expect { len(tokens) <= len(text) }
+  try expect { tokens.size <= text.size }
   expect { decode(tokens) == text }
 }
 ```
@@ -27,7 +28,7 @@ fn test_tokens(text: str) -> Result[(), Failed] {
 When the second check fails, it reports the code of the comparison and what each side was.
 
 ```
-tokenizer_test.smith:4: expected decode(tokens) == text
+tokenizer_test.smith:4:3: expected decode(tokens) == text
   left:  "helo"
   right: "hello"
 ```
