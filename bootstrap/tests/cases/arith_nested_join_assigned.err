@@ -1,0 +1,4 @@
+arith_nested_join_assigned.smith:17:3: cannot prove that the invariant `at <= i` holds after a pass, where `i` is one more
+  17 |   }
+     |   ^
+  fix: state an invariant that holds at the start and that each pass keeps, or give `arith` the facts it needs with an `if` or a `requires`

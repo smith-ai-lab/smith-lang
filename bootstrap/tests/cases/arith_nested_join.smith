@@ -1,0 +1,20 @@
+use std.console (console, print)
+use std.bits (u8)
+
+fn f(xs: List[u8]) <console, alloc> {
+  mut at: Nat = 0
+  loop i in 0..xs.size
+    invariant at <= i
+  {
+    b = xs[i]
+    if b < 128 {
+      w = b + 1
+      if w > 10 {
+        at = i
+      }
+    }
+  }
+  print("{at}")
+}
+
+fn main() <console, alloc> { f([1, 20, 3]) }
