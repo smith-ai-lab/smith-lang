@@ -11,6 +11,7 @@ built:
   - "a `Range` that holds the proof `ordered: start <= end`, which `arith` builds where the range is written as a value, so that `3..1` is refused and so is `from..to` where `arith` cannot prove `from <= to`"
   - "not a range as a type, or a piece of an array or a list"
   - "`x[a..b]`, `x[..k]`, and `x[k..]` on a `str`, as [A piece of a text](text.md#a-piece-of-a-text) says"
+  - "a number of any range as an end of a piece, of a `loop`, and of a range written as a value, taken as a `Nat` where `arith` shows it is not below 0, with the bounds of its type known; in a `loop`, an end beside a `Nat`, two ends of different ranges from 0, or a number written out that the range of the other end does not hold, each taken as a `Nat`, and the counter a `Nat`"
 ---
 
 # Ranges and slices
@@ -130,6 +131,8 @@ fn word(src: List[Byte], from: u64, to: u64) -> List[Byte]
 ```
 
 `word("let x", 4, 5)` is the one byte of `x`. Without the `requires`, `src[from..to]` is refused, and the error states what is needed, as it does for an index. The three ways to supply it are those of an index: the range of a `loop`, an `if`, or a `requires`.
+
+An end is a `Nat`, and a number of any range is taken as one where it is shown not to be below 0, as at an argument. With `j: 1..3`, `x[j..3]` needs nothing more, as `arith` knows from the type that `j <= 2`. With `j: -2..3` it is refused, "cannot prove that `j >= 0`, so `j` may not fit `Nat`", until an `if` or a `requires` shows it. So it is for the ends of a `loop` and of a range written as a value.
 
 ## A slice of a list
 

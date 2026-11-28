@@ -1365,6 +1365,29 @@ impl<'a> Checker<'a> {
         }
     }
 
+    /// What is wanted of `literal`, an end of a range whose other end has
+    /// type `other`: that type, or a `Nat` where the literal is a number from
+    /// 0 that the type does not hold, so the two are taken as they are beside
+    /// a `Nat`.
+    pub(super) fn end_want(other: &Ty, literal: &Expr) -> Want {
+        match (other, literal) {
+            (
+                Ty::Int(t),
+                Expr::Number {
+                    magnitude,
+                    negative: false,
+                    ..
+                },
+            ) if t.ends().is_some_and(|(min, max)| {
+                i128::try_from(*magnitude).map_or(true, |n| n < min || n > max)
+            }) && *magnitude <= u64::MAX as u128 =>
+            {
+                Want::Ty(Ty::Int(Int::U64))
+            }
+            _ => Self::side_want(other),
+        }
+    }
+
     /// Checks `float(n)`, which is the float of the value of the whole number
     /// `n`: the float type that is wanted, and an `f64` where nothing decides.
     pub(super) fn float_of(&mut self, body: &mut Body<'a>, call: &Call, want: &Want) -> Ty {
