@@ -360,7 +360,7 @@ fn array_params_case(g: &mut Gen) -> Case {
 /// Runs the program that gives each case to `reply_to` and prints what it gave.
 fn replies(cases: &[Case]) -> Vec<Got> {
     let mut source = String::from(
-        "use std.console (console, print)\nuse std.mcp\n\nfn run(name: str, version: str, instructions: Option[str], ttl: Nat, origins: take List[str], text: str, headers: take List[(str, str)]) <console, alloc> {\n  r = mcp.reply_to(mcp.Server(name: name, version: version, instructions: instructions, ttl: ttl, origins: origins), mcp.Incoming(text: text, headers: headers))\n  print(\"--\")\n  print(\"{r.status}\")\n  match r.text {\n    .some(t) { print(t) }\n    .none { print(\"none\") }\n  }\n}\n\nfn main() <console, alloc> {\n",
+        "use std.console (console, print)\nuse std.mcp\n\nfn run(name: str, version: str, instructions: Option[str], ttl: Nat, origins: take List[str], text: str, headers: take List[(str, str)]) <console, alloc> {\n  r = mcp.reply_to(mcp.Server(name: name, version: version, instructions: instructions, ttl: ttl, origins: origins), mcp.Incoming(text: text, headers: headers))\n  print(\"--\")\n  match r {\n    .answer(t) {\n      print(\"200\")\n      print(t)\n    }\n    .nothing {\n      print(\"202\")\n      print(\"none\")\n    }\n    .refused((status, t)) {\n      print(\"{status}\")\n      print(t)\n    }\n  }\n}\n\nfn main() <console, alloc> {\n",
     );
     for c in cases {
         let instructions = match &c.server.instructions {
@@ -678,7 +678,7 @@ fn origin_case(g: &mut Gen) -> Case {
         0 | 1 => {
             c.headers.push(("origin".to_string(), origin.to_string()));
             if !c.server.origins.iter().any(|o| o == origin) {
-                c.want = Want::Silent { status: 403 };
+                c.want = failed(403, INVALID_REQUEST, None);
             }
         }
         // No origin: the client is no browser.

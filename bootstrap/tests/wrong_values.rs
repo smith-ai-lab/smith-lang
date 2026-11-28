@@ -15,6 +15,10 @@ pub const ONCE: &[Test] = &[
         "a_boolean_is_refused_where_a_file_mode_or_the_letters_of_a_number_are_given",
         a_boolean_is_refused_where_a_file_mode_or_the_letters_of_a_number_are_given,
     ),
+    (
+        "a_reply_of_mcp_holds_what_it_says_and_a_refusal_has_a_status_that_is_one",
+        a_reply_of_mcp_holds_what_it_says_and_a_refusal_has_a_status_that_is_one,
+    ),
 ];
 
 /// What the compiler says of a program, as one text, or nothing when it builds.
@@ -53,6 +57,26 @@ fn a_boolean_is_refused_where_a_file_mode_or_the_letters_of_a_number_are_given()
         ("_ = write_all(\"x\", [], mode: true)", "Mode"),
     ] {
         let wrong = refusal(&program("", call));
+        assert!(wrong.contains(name), "{wrong:?} for {call}");
+    }
+}
+
+fn a_reply_of_mcp_holds_what_it_says_and_a_refusal_has_a_status_that_is_one() {
+    let program = |call: &str| format!("use std.mcp (Reply)\n\nfn main() {{\n  _ = {call}\n}}\n");
+    for call in ["Reply.answer(\"x\")", "Reply.nothing", "Reply.refused((403, \"x\"))", "Reply.refused((499, \"x\"))"] {
+        assert_eq!(refusal(&program(call)), "", "{call}");
+    }
+    // A refusal is a 4xx, a text with no answer is not a state, and the status
+    // beside a text is no member of a reply.
+    for (call, name) in [
+        ("Reply.refused((200, \"x\"))", "400"),
+        ("Reply.refused((202, \"x\"))", "400"),
+        ("Reply.refused((500, \"x\"))", "500"),
+        ("Reply.refused((404))", "400..500"),
+        ("Reply.answer(.none)", "text"),
+        ("Reply(text: .none, status: 202)", "Reply"),
+    ] {
+        let wrong = refusal(&program(call));
         assert!(wrong.contains(name), "{wrong:?} for {call}");
     }
 }
