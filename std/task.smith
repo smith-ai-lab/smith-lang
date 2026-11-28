@@ -790,7 +790,7 @@ fn ready_kqueue(kq: i64, time: i64) -> Option[u64] <alloc> {
     got = __system(17, kq, 0, 0, buffer, 1, 0)
   } else {
     // The time to wait is a pair of numbers, the seconds and the nanoseconds.
-    ms: u64 = wrapping_narrow(time)
+    ms: u64 = time
     mut limit: List[Byte] = []
     limit = le64(take limit, ms / 1000)
     limit = le64(take limit, (ms % 1000) * 1000000)
@@ -908,7 +908,7 @@ fn group[T](body: take fn() -> T <task>) -> T <alloc> {
           if many == 0 {
             time = -1
             if soon > 0 {
-              if soon > 2147483647 { time = 2147483647 } else { time = wrapping_narrow(soon) }
+              if soon > 2147483647 { time = 2147483647 } else { time = soon }
             }
           }
           if ep < 0 { ep = make_queue() }

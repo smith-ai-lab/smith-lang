@@ -1,6 +1,6 @@
-use std.bits (bit_and, bit_not, bit_or, shift_right, u32, u64)
+use std.bits (bit_and, bit_not, bit_or, shift_left, shift_right, u32, u64)
 use std.deserialize (Deserialize, Problem, ReadError, Reader, fail, read)
-use std.int (saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_narrow, wrapping_shift_left, wrapping_sub)
+use std.int (saturating_add, saturating_sub, wrapping_add, wrapping_mul, wrapping_shift_left, wrapping_sub)
 use std.list (freeze, push)
 use std.serialize (Serialize, Writer, write)
 use std.text (Text, append, append_ascii, finish, text)
@@ -898,7 +898,7 @@ fn member(b: Slice[Byte], at: Nat) -> Result[Nat, Bad] {
 fn put_char(to: take List[Byte], code: u32) -> List[Byte] <alloc> {
   mut acc = to
   if code < 128 {
-    acc = push(take acc, wrapping_narrow(code))
+    acc = push(take acc, code)
   } else if code < 2048 {
     acc = push(take acc, bit_or(192, shift_right(code, 6)))
     acc = push(take acc, bit_or(128, bit_and(code, 63)))
@@ -947,7 +947,7 @@ fn unescape(b: Slice[Byte], at: Nat, end: Nat) -> List[Byte] <alloc> {
       } else { made = e }
     }
     if is_code and code < 128 {
-      made = wrapping_narrow(code)
+      made = code
       is_code = false
     }
     if is_code {
@@ -1367,14 +1367,14 @@ fn literal(r: take In, a: Nat, w: str, wanted: str) -> (In, Result[(), ReadError
   }
 }
 
-fn pushed(r: take In, form: u64) -> Result[In, Bad] <alloc> {
+fn pushed(r: take In, form: 0..2) -> Result[In, Bad] <alloc> {
   mut w = r
   n = w.cases
   if n < 64 {
     by: Byte = n
-    w.forms = bit_or(w.forms, wrapping_shift_left(form, by))
+    w.forms = bit_or(w.forms, shift_left(form, by))
   } else {
-    w.deep = grown_byte(w.deep, wrapping_narrow(form))
+    w.deep = grown_byte(w.deep, form)
   }
   w.cases = saturating_add(n, 1)
   Result.ok(w)

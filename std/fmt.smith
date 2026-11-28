@@ -1,5 +1,4 @@
 use std.bits (bit_and, shift_right, u64)
-use std.int (wrapping_add, wrapping_narrow)
 use std.list (freeze, push)
 use std.utf8 (utf8)
 
@@ -16,13 +15,13 @@ pub enum Letters {
   lower
 }
 
-fn hex_digit(d: u64, letters: Letters) -> Byte {
+fn hex_digit(d: 0..16, letters: Letters) -> Byte {
   if d < 10 {
-    wrapping_narrow(wrapping_add(48, d))
+    48 + d
   } else {
     match letters {
-      .upper { wrapping_narrow(wrapping_add(55, d)) }
-      .lower { wrapping_narrow(wrapping_add(87, d)) }
+      .upper { 55 + d }
+      .lower { 87 + d }
     }
   }
 }
