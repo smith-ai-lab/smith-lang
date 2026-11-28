@@ -753,6 +753,21 @@ impl<'a> Lowering<'a> {
         if float && call.callee == "__sqrt" {
             return (typed.type_of(expr, env), vec![out.float_sqrt(args[0])]);
         }
+        if float {
+            let mode = match call.callee.as_str() {
+                "__floor" => Some(form::Rounding::Floor),
+                "__ceil" => Some(form::Rounding::Ceil),
+                "__trunc" => Some(form::Rounding::Trunc),
+                "__round" => Some(form::Rounding::Nearest),
+                _ => None,
+            };
+            if let Some(mode) = mode {
+                return (
+                    typed.type_of(expr, env),
+                    vec![out.float_round(mode, args[0])],
+                );
+            }
+        }
         if float && call.callee == "__float_text" {
             return (typed.type_of(expr, env), self.float_text(out, args[0]));
         }

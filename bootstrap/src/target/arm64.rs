@@ -8,7 +8,7 @@ use super::indexed::{self, Folded};
 use super::moves::{self, Move, Step};
 use crate::scalar::{
     Binary, Compare, Constant, End, FloatBinary, FloatCompare, Function, Fused, Jump, Op,
-    Place as Written, Program, Raw, Stream, System as Call, Type, Value,
+    Place as Written, Program, Raw, Rounding, Stream, System as Call, Type, Value,
 };
 
 mod vector;
@@ -730,6 +730,18 @@ impl Asm {
     /// `fsqrt fd, fn`.
     pub fn float_sqrt(&mut self, width: u32, rd: u32, rn: u32) {
         self.word(0x1e21_c000 | Self::double(width) | rn << 5 | rd);
+    }
+
+    /// `frintm`, `frintp`, `frintz`, or `frintn fd, fn`: the float rounded to a
+    /// whole number the way `mode` says.
+    pub fn float_round(&mut self, mode: Rounding, width: u32, rd: u32, rn: u32) {
+        let rmode = match mode {
+            Rounding::Nearest => 0,
+            Rounding::Ceil => 1,
+            Rounding::Floor => 2,
+            Rounding::Trunc => 3,
+        };
+        self.word(0x1e24_4000 | Self::double(width) | rmode << 15 | rn << 5 | rd);
     }
 
     /// `fmov fd, fn`.
@@ -1923,6 +1935,12 @@ impl<S: System> Writer<'_, S> {
                 let r = self.float_read(asm, V30, *value);
                 let t = self.float_target(results[0]);
                 asm.float_sqrt(self.width(results[0]), t, r);
+                self.float_finish(asm, results[0], t);
+            }
+            Op::FloatRound { mode, value } => {
+                let r = self.float_read(asm, V30, *value);
+                let t = self.float_target(results[0]);
+                asm.float_round(*mode, self.width(results[0]), t, r);
                 self.float_finish(asm, results[0], t);
             }
             Op::FloatBits(value) => {

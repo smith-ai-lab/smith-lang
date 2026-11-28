@@ -2,7 +2,7 @@
 
 use super::{
     Binary, Bits, Block, Compare, Constant, End, FloatBinary, FloatBits, FloatCompare, Function,
-    Fused, Instruction, Jump, Op, Place, System, Type, Value,
+    Fused, Instruction, Jump, Op, Place, Rounding, System, Type, Value,
 };
 
 /// A function being built. Its first block is where it starts.
@@ -103,6 +103,11 @@ impl Builder {
     pub fn float_sqrt(&mut self, value: Value) -> Value {
         let ty = self.types[value.0];
         self.emit(Op::FloatSqrt(value), &[ty])[0]
+    }
+
+    pub fn float_round(&mut self, mode: Rounding, value: Value) -> Value {
+        let ty = self.types[value.0];
+        self.emit(Op::FloatRound { mode, value }, &[ty])[0]
     }
 
     /// The bits of a float, as an integer of its size.

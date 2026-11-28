@@ -193,6 +193,10 @@ trait Float[T] {
   fn ln(a: T) -> T
   fn sin(a: T) -> T
   fn cos(a: T) -> T
+  fn floor(a: T) -> T
+  fn ceil(a: T) -> T
+  fn trunc(a: T) -> T
+  fn round(a: T) -> T
 }
 
 trait Bits[T] {
@@ -659,6 +663,10 @@ impl Float[f32] {
   fn ln(a: f32) -> f32 { __ln(a) }
   fn sin(a: f32) -> f32 { __sin(a) }
   fn cos(a: f32) -> f32 { __cos(a) }
+  fn floor(a: f32) -> f32 { __floor(a) }
+  fn ceil(a: f32) -> f32 { __ceil(a) }
+  fn trunc(a: f32) -> f32 { __trunc(a) }
+  fn round(a: f32) -> f32 { __round(a) }
 }
 
 impl Float[f64] {
@@ -667,6 +675,10 @@ impl Float[f64] {
   fn ln(a: f64) -> f64 { __ln(a) }
   fn sin(a: f64) -> f64 { __sin(a) }
   fn cos(a: f64) -> f64 { __cos(a) }
+  fn floor(a: f64) -> f64 { __floor(a) }
+  fn ceil(a: f64) -> f64 { __ceil(a) }
+  fn trunc(a: f64) -> f64 { __trunc(a) }
+  fn round(a: f64) -> f64 { __round(a) }
 }
 
 impl Add[i8] {

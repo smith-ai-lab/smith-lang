@@ -564,6 +564,28 @@ pub enum FloatBinary {
     Div,
 }
 
+/// Which whole number a float is rounded to by `FloatRound`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Rounding {
+    /// The greatest whole number not above the float.
+    Floor,
+    /// The least whole number not below the float.
+    Ceil,
+    /// The whole number next to the float towards zero.
+    Trunc,
+    /// The nearest whole number, and the even one of two at a half.
+    Nearest,
+}
+
+impl Rounding {
+    pub const ALL: [Rounding; 4] = [
+        Rounding::Floor,
+        Rounding::Ceil,
+        Rounding::Trunc,
+        Rounding::Nearest,
+    ];
+}
+
 /// What a fused instruction works out of three floats of one size, `a`, `b`,
 /// and `c`, exactly and then rounded once, to the nearest, ties to even.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -679,6 +701,14 @@ pub enum Op {
     /// IEEE 754 says: a float below 0 has none, and gives the one float that is
     /// not a number, and `-0.0` gives itself.
     FloatSqrt(Value),
+    /// The float rounded to a whole number, a float of its size, the way `mode`
+    /// says: a zero keeps its sign, a float that rounds to zero is a zero of
+    /// its sign, and an infinity and a float that is not a number are given
+    /// back.
+    FloatRound {
+        mode: Rounding,
+        value: Value,
+    },
     /// The bits of a float, as an integer of its size, which keeps every bit of
     /// it, a float that is not a number included.
     FloatBits(Value),
@@ -879,6 +909,7 @@ impl Op {
             | Op::VectorExtract { vector: value, .. }
             | Op::FloatNegate(value)
             | Op::FloatSqrt(value)
+            | Op::FloatRound { value, .. }
             | Op::FloatBits(value)
             | Op::FloatFromBits(value)
             | Op::FloatFromInt { value, .. }
@@ -944,6 +975,7 @@ impl Op {
             | Op::VectorExtract { vector: value, .. }
             | Op::FloatNegate(value)
             | Op::FloatSqrt(value)
+            | Op::FloatRound { value, .. }
             | Op::FloatBits(value)
             | Op::FloatFromBits(value)
             | Op::FloatFromInt { value, .. }

@@ -558,6 +558,18 @@ impl Machine {
             } else {
                 u128::from(f32s(a).sqrt().to_bits())
             };
+        } else if w & 0xffbe_7c00 == 0x1e24_4000 {
+            // frintn, frintp, frintm, or frintz, by the mode in bits 15 to 16
+            let mode = w >> 15 & 3;
+            self.f[rd] = if double {
+                let x = f64::from_bits(a);
+                let r = [x.round_ties_even(), x.ceil(), x.floor(), x.trunc()][mode as usize];
+                u128::from(r.to_bits())
+            } else {
+                let x = f32s(a);
+                let r = [x.round_ties_even(), x.ceil(), x.floor(), x.trunc()][mode as usize];
+                u128::from(r.to_bits())
+            };
         } else if w & 0xffff_fc00 == 0x1e60_4000 {
             // fmov dd, dn
             self.f[rd] = u128::from(a);

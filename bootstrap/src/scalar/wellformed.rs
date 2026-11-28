@@ -211,7 +211,7 @@ fn function_of(program: &Program, f: &Function) -> Result<(), Why> {
                     }
                     used(value, i, ty)?;
                 }
-                Op::FloatSqrt(value) => {
+                Op::FloatSqrt(value) | Op::FloatRound { value, .. } => {
                     let [result] = instruction.results[..] else {
                         return Err(Why::WrongCount);
                     };
