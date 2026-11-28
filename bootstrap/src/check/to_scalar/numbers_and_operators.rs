@@ -626,6 +626,134 @@ impl<'a> Lowering<'a> {
     /// asks for as many bytes as it is given and gives a list of them with
     /// none as its elements, and `__sized`, which gives the list it is given
     /// with as many elements as it is told.
+    /// Lowers `__choice(record, place, drawn)`, which `bits` calls under
+    /// `smith test`. `record` is the address of the table of the run, a list
+    /// of words: how many entries it holds, how many it has room for, how
+    /// many choices the run has drawn, and then the entries, three words each,
+    /// the place, the choice, and the number of the draw that read it, which
+    /// is 0 when none has. An entry of the place gives its choice, and is
+    /// marked as drawn the first time; a place with no entry is given
+    /// `drawn`, which is put in a new entry while the table has room.
+    fn choice(
+        &mut self,
+        out: &mut Out<'a>,
+        record: form::Value,
+        place: form::Value,
+        drawn: form::Value,
+    ) -> form::Value {
+        let word = form::Type::Int(form::Bits::B64);
+        let slot = out.emit(form::Op::Frame { bytes: 8 }, vec![form::Type::Address])[0];
+        out.emit(
+            form::Op::Store {
+                ty: word,
+                address: slot,
+                value: record,
+            },
+            Vec::new(),
+        );
+        let table = out.emit(
+            form::Op::Load {
+                ty: form::Type::Address,
+                address: slot,
+            },
+            vec![form::Type::Address],
+        )[0];
+        let at = |out: &mut Out<'a>, base: form::Value, words: i128| {
+            let by = out.int(form::Bits::B64, words * 8);
+            out.binary(form::Binary::Add, base, by)
+        };
+        let load = |out: &mut Out<'a>, address: form::Value| {
+            out.emit(form::Op::Load { ty: word, address }, vec![word])[0]
+        };
+        let store = |out: &mut Out<'a>, address: form::Value, value: form::Value| {
+            out.emit(
+                form::Op::Store {
+                    ty: word,
+                    address,
+                    value,
+                },
+                Vec::new(),
+            );
+        };
+        let entries = load(out, table);
+        let draws_at = at(out, table, 2);
+        let draws = load(out, draws_at);
+        let one = out.int(form::Bits::B64, 1);
+        let next_draw = out.binary(form::Binary::Add, draws, one);
+        let done = out.new_block();
+        let given = out.fresh(word);
+        out.blocks[done].params = vec![given];
+        let zero = out.int(form::Bits::B64, 0);
+        let three = out.int(form::Bits::B64, 24);
+        let first = at(out, table, 3);
+        let header = out.new_block();
+        let i = out.fresh(word);
+        out.blocks[header].params = vec![i];
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![zero],
+        });
+        out.current = header;
+        let more = out.compare(form::Compare::LessU, i, entries);
+        let arms = out.switch(more, 2);
+        let (missed, look) = (arms[0], arms[1]);
+        out.current = look;
+        let offset = out.binary(form::Binary::Mul, i, three);
+        let entry = out.binary(form::Binary::Add, first, offset);
+        let held = load(out, entry);
+        let same = out.compare(form::Compare::Equal, held, place);
+        let arms = out.switch(same, 2);
+        let (other, found) = (arms[0], arms[1]);
+        out.current = other;
+        let after = out.binary(form::Binary::Add, i, one);
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: header,
+            args: vec![after],
+        });
+        out.current = found;
+        let value_at = at(out, entry, 1);
+        let value = load(out, value_at);
+        let order_at = at(out, entry, 2);
+        let order = load(out, order_at);
+        let fresh = out.compare(form::Compare::Equal, order, zero);
+        let marked = out.choose(fresh, next_draw, order);
+        store(out, order_at, marked);
+        let counted = out.choose(fresh, next_draw, draws);
+        store(out, draws_at, counted);
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: done,
+            args: vec![value],
+        });
+        out.current = missed;
+        let room_at = at(out, table, 1);
+        let room = load(out, room_at);
+        let fits = out.compare(form::Compare::LessU, entries, room);
+        let arms = out.switch(fits, 2);
+        let (full, add) = (arms[0], arms[1]);
+        out.current = full;
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: done,
+            args: vec![drawn],
+        });
+        out.current = add;
+        let offset = out.binary(form::Binary::Mul, entries, three);
+        let entry = out.binary(form::Binary::Add, first, offset);
+        store(out, entry, place);
+        let value_at = at(out, entry, 1);
+        store(out, value_at, drawn);
+        let order_at = at(out, entry, 2);
+        store(out, order_at, next_draw);
+        let held = out.binary(form::Binary::Add, entries, one);
+        store(out, table, held);
+        store(out, draws_at, next_draw);
+        out.blocks[out.current].end = form::End::Jump(form::Jump {
+            block: done,
+            args: vec![drawn],
+        });
+        out.current = done;
+        given
+    }
+
     pub(super) fn kernel_call(
         &mut self,
         out: &mut Out<'a>,
@@ -682,6 +810,7 @@ impl<'a> Lowering<'a> {
                 let (_, list) = self.expr(out, &call.args[0].value, env);
                 (ty, vec![list[0], words[1], list[2]])
             }
+            "__choice" => (ty, vec![self.choice(out, words[0], words[1], words[2])]),
             _ => {
                 let Expr::Number { magnitude, .. } = &call.args[0].value else {
                     unreachable!("checked")

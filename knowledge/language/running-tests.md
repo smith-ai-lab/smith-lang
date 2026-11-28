@@ -9,7 +9,8 @@ built:
   - "the program is built of the files of the tests chosen and what they reach, so a mistake in a module that none of them imports is not said; a file of tests that is refused is said, counts as one failed, and the others are built again without it, and a mistake in a module that is not a file of tests refuses the run"
   - "what a run prints: `passed` or `failed` with the file and the name of each test, on standard output, what each failure says, on standard error, how many passed and failed, and then `slowest:` and the five slowest tests, each with how long it took in milliseconds; a test that ends by running out of memory, or by a write that is refused, fails, and the others go on; the run ends with status 1 when a test fails or a file of tests is refused, and 0 otherwise"
   - "a test's effects, which are the real ones, and a handler a test installs with `with`, which answers in their place"
-  - "not `--seed`, or a test that takes a `Key`"
+  - "a test that takes a `Key`, which is a [property](properties.md) and is said as `passed` with `(100 runs)` after its name, and a failure of one, which ends with the seed of the run"
+  - "`smith test --seed <n>`, which runs with the seed `n`, so that a run gives the same keys, and the same results, as the run whose failure said that seed; a run given no seed makes one of its own, which differs from one run to the next"
 ---
 
 # Running tests

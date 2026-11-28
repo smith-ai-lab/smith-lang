@@ -1547,6 +1547,7 @@ impl<'a> Checker<'a> {
         let bytes = Ty::List(vec![Ty::Int(Int::U8)]);
         match call.callee.as_str() {
             "__system" | "__address_of" => Ty::Int(Int::I64),
+            "__choice" => Ty::Int(Int::U64),
             "__consume" => Ty::Nothing,
             "__reserve" => {
                 self.needs(body, "alloc", call.pos, "`__reserve`");
