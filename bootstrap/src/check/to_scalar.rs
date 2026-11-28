@@ -2497,7 +2497,7 @@ impl<'a> Lowering<'a> {
                     let values = self.case(out, &ty, k, None, env);
                     return (ty, values);
                 }
-                if indexed(of) && !self.over_array(of, env) {
+                if indexed(of) && !self.over_array(of, env) && !self.by_trait(of, env) {
                     let (ty, address, scalars) = self.element_at(out, expr, env);
                     return (ty, self.load(out, address, &scalars));
                 }
@@ -2558,6 +2558,10 @@ impl<'a> Lowering<'a> {
             Expr::List { items, .. } => self.list_literal(out, expr, items, env),
             Expr::Slice { of, from, to, .. } => {
                 self.piece(out, expr, (of, from.as_deref(), to.as_deref()), env)
+            }
+            Expr::Index { of, index, .. } if self.by_trait(expr, env) => {
+                let (instance, gives) = typed.indexer(expr, env).expect("checked");
+                self.operator_call(out, instance, gives, (of, index), env)
             }
             Expr::Index { of, index, .. } if self.over_array(expr, env) => {
                 self.array_element(out, expr, (of, index), env)

@@ -184,6 +184,16 @@ impl<'a> Lowering<'a> {
         (ty, values)
     }
 
+    /// Whether `e`, an index or a field of one, reads through the `Index` of a
+    /// type that is not built in, which is a call of its `at`.
+    pub(super) fn by_trait(&self, e: &Expr, env: &[Ty]) -> bool {
+        match e {
+            Expr::Index { .. } => self.typed.indexer(e, env).is_some(),
+            Expr::Field { of, .. } => self.by_trait(of, env),
+            _ => false,
+        }
+    }
+
     /// Whether `e`, an index or a field of one, reads inside an array.
     pub(super) fn over_array(&self, e: &Expr, env: &[Ty]) -> bool {
         match e {

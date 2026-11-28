@@ -1456,9 +1456,12 @@ impl<'a> Checker<'a> {
         let [Stmt::Expr(inner)] = def.body.as_slice() else {
             return None;
         };
+        // A body that is `true` or `false` says the same for every type.
+        let constant =
+            matches!(inner, Expr::Name { name, .. } if name == "true" || name == "false");
         if !def.effects.is_empty()
             || !def.generics.is_empty()
-            || !info.scope.names.is_empty()
+            || !(info.scope.names.is_empty() || constant)
             || def.result.is_none()
         {
             return None;

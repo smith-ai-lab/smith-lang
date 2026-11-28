@@ -1041,6 +1041,8 @@ struct Defs<'a> {
     /// The traits of `+`, `-`, `*`, `/`, and `%`.
     operators: [usize; 5],
     hash: usize,
+    /// The prelude's `Index`, which `x[i]` calls on a type of a program's own.
+    index: usize,
     convert: usize,
     bits: usize,
     /// The prelude's `Function`, which every function with a name is given.
@@ -3088,6 +3090,7 @@ fn check_file(
         ord: prelude_item(&file, Kind::Trait, "Ord"),
         operators: ["Add", "Sub", "Mul", "Div", "Rem"].map(|n| prelude_item(&file, Kind::Trait, n)),
         hash: prelude_item(&file, Kind::Trait, "Hash"),
+        index: prelude_item(&file, Kind::Trait, "Index"),
         convert: prelude_item(&file, Kind::Trait, "Convert"),
         bits: try_prelude_trait(&file, "Bits").unwrap_or(usize::MAX),
         function: prelude_item(&file, Kind::Trait, "Function"),
@@ -7447,6 +7450,28 @@ impl<'a> Typed<'a> {
         Some((instance, defs.trait_sigs[k][fi].gives.subst(&all)))
     }
 
+    /// The `at` of `Index` that `of[index]` runs where `of` is of a type that
+    /// is not built in, in the copy of the definition with the type
+    /// parameters `env`, and the type it gives.
+    fn indexer(&self, expr: &Expr, env: &[Ty]) -> Option<(Instance, Ty)> {
+        let Expr::Index { of, index, .. } = expr else {
+            return None;
+        };
+        let defs = self.defs;
+        let container = self.type_of(of, env);
+        if matches!(
+            container,
+            Ty::List(_) | Ty::Slice(_) | Ty::Array(..) | Ty::Matrix(..) | Ty::Text
+        ) {
+            return None;
+        }
+        let k = defs.index;
+        let fi = traits::trait_function(&defs.file.traits[k], "at")?;
+        let types = vec![container, self.type_of(index, env), self.type_of(expr, env)];
+        let (instance, all) = defs.chosen(k, fi, types, Vec::new());
+        Some((instance, defs.trait_sigs[k][fi].gives.subst(&all)))
+    }
+
     /// What a checked call does, with the type parameters of the definition
     /// it is written in replaced by `env`.
     fn callee(&self, call: &Call, env: &[Ty]) -> Callee {
@@ -7738,6 +7763,11 @@ impl<'a> Typed<'a> {
                 && let Some((callee, _)) = self.operator(e, *op, (left, right), &instance.args)
             {
                 out.push((*op_pos, callee));
+            }
+            if let Expr::Index { pos, .. } = e
+                && let Some((callee, _)) = self.indexer(e, &instance.args)
+            {
+                out.push((*pos, callee));
             }
             let Expr::Call(call) = e else {
                 continue;

@@ -537,10 +537,15 @@ impl<'a> Checker<'a> {
     /// Checks `of[index]`, which reads an element of a list, and compiles
     /// only when `arith` proves that the index is below the list's size.
     pub(super) fn index(&mut self, body: &mut Body<'a>, of: &Expr, index: &Expr, pos: Pos) -> Ty {
-        let defs = self.defs;
         let list = self.expr(body, of, &Want::Any);
         if let Ty::Matrix(element, sizes) = &list {
             return self.matrix_index(body, of, index, (&element[0], sizes), pos);
+        }
+        if !matches!(
+            list,
+            Ty::List(_) | Ty::Slice(_) | Ty::Array(..) | Ty::Text | Ty::Unknown
+        ) {
+            return self.indexed(body, (of, index, pos), &list);
         }
         let at = self.index_type(body, index);
         match list {
@@ -560,17 +565,71 @@ impl<'a> Checker<'a> {
                 self.in_range(body, of, None, index, pos);
                 Ty::Int(Int::U8)
             }
-            Ty::Unknown => Ty::Unknown,
-            other => {
-                let given = defs.describe(&other, body.scope);
+            _ => Ty::Unknown,
+        }
+    }
+
+    /// Checks `of[index]` where `of` is of a type that is not built in, which
+    /// is a call of `at` of the `Index` that the type of `of` and of the index
+    /// choose. It compiles where `valid` is proven, as the `requires` of `at`.
+    fn indexed(
+        &mut self,
+        body: &mut Body<'a>,
+        (of, index, pos): (&Expr, &Expr, Pos),
+        c: &Ty,
+    ) -> Ty {
+        let defs = self.defs;
+        let k = defs.index;
+        // A literal is of the index type of the one `impl` the container has.
+        let mut indices = (defs.impls_of[k].iter())
+            .filter_map(|&n| defs.impls[n].as_ref())
+            .filter_map(|info| {
+                let mut sol = vec![None; info.scope.names.len()];
+                if !unify(&info.args[0], c, &mut sol) {
+                    return None;
+                }
+                let sol: Vec<Ty> = sol.into_iter().map(|t| t.unwrap_or(Ty::Unknown)).collect();
+                Some(info.args[1].subst(&sol))
+            });
+        let want = match (flexible(index), indices.next(), indices.next()) {
+            (true, Some(one), None) if !one.unknown() => Want::Ty(one),
+            (true, ..) => Want::Ty(Ty::Int(Int::U64)),
+            _ => Want::Any,
+        };
+        let i = self.expr(body, index, &want);
+        if i.unknown() {
+            return Ty::Unknown;
+        }
+        let types = vec![c.clone(), i, Ty::Unknown];
+        match defs.find(k, &types, body.scope, &mut Vec::new()) {
+            Found::Yes(all, _) => {
+                let fi = traits::trait_function(&defs.file.traits[k], "at").expect("a function");
+                body.facts.sibling = Some(k);
+                self.contract_at(
+                    body,
+                    (pos, addr(of), None),
+                    vec![(of, 0), (index, 1)],
+                    &defs.file.traits[k].functions[fi],
+                    &defs.trait_sigs[k][fi],
+                );
+                body.facts.sibling = None;
+                all[2].clone()
+            }
+            Found::No => {
                 self.errors.push(Error::new(
                     pos,
                     format!(
-                        "an index is read from a list, a slice, or a text, and this is {given}"
+                        "there is no implementation of `Index` for {}",
+                        defs.types_of(k, &types, body.scope)
                     ),
                 ));
                 Ty::Unknown
             }
+            Found::Two(a, b) => {
+                self.errors.push(defs.ambiguous(pos, a, b));
+                Ty::Unknown
+            }
+            Found::Unknown => Ty::Unknown,
         }
     }
 

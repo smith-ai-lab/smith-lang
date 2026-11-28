@@ -7,7 +7,8 @@ built:
   - "indexing a `List` of whole numbers or `bool`s as `xs[i]`, which compiles when `arith` proves `i < xs.size` from the size of a list written out or given to a name, the range of a `loop`, an `if`, or a `requires` over a list's `size`, where `i` is a whole number of an unsigned type"
   - "an array whose size is in its type, `a[i]` read and `a[i] = e` assigned of a `mut`, which compile when `arith` proves `i` below the size, from the type of the index, an `if`, or a `requires`, and are refused with `cannot prove that `3 < 3`` otherwise"
   - "a matrix read as `m[r, c]` and assigned as `m[r, c] = e` of a `mut`, with one index for each size, each of which compiles when `arith` proves it below its size, and refused when the number of indices is not the number of sizes"
-  - "not `Index` as a trait a program implements, or an element of a list assigned"
+  - "`Index` in the prelude, as a trait a program implements for a type of its own: `x[i]` of that type is a call of the `at` its `impl` gives, which compiles where `valid` is proven, at the index, from a `valid` that is `true`, for a generic `impl` too, or a comparison of the index, and a type with no `impl` is refused with an error that names `Index`; a literal index is of the index type of the one `impl` the type has"
+  - "not an element of a list assigned, or `x[i]` of a type parameter that `Index` bounds"
 ---
 
 # Indexing
@@ -123,7 +124,7 @@ fn at_or_zero(xs: List[Byte], i: Int) -> Byte {
 
 `at_or_zero([5, 6, 7], 1)` is `6`, and with `-1` or `5` it is `0`. With `if i < xs.size` alone, `xs[i]` is refused, as `i` may be below 0. A `size` is a `Nat`, as [Arrays and sizes](arrays.md) says, and any two ranges are compared, so an `Int` compares with it.
 
-Only a type that implements `Index` can be indexed. With `n: Byte`, `n[0]` is refused, as an index is read from a list and this is a `Byte`.
+Only a type that implements `Index` can be indexed. With `n: Byte`, `n[0]` is refused, as there is no implementation of `Index` for a `Byte`.
 
 ## Indexing is a trait
 
