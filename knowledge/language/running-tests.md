@@ -4,10 +4,12 @@ title: Running tests
 description: smith test, which runs every test or the ones chosen, in parallel, and what a failure and a run print.
 status: partial
 built:
-  - "`smith test` with nothing after it, which finds every file `x_test.smith` below the folder it runs in, but in hidden folders, builds each with a `main` that runs one of its tests, and runs each test in a process of its own, one after another"
-  - "what a run prints: `passed` or `failed` with the file and the name of each test, on standard output, what each failure says, on standard error, and how many passed and failed; the run ends with status 1 when a test fails or a file of tests is refused, and 0 otherwise"
+  - "`smith test`, which finds every file `x_test.smith` below the folder it runs in, but in hidden folders, `smith test <file>`, which runs the tests of that file, and `smith test --name <text>`, which runs the tests whose name holds the text, of every file or of the file given"
+  - "all tests chosen run in one program, each as a task of [Tasks](tasks.md) with an arena of its own, as [Memory of a task](task-arenas.md) says: they run in waves of as many as the machine has processors, and a wave's tests run in turns while one of them waits, so a test that has ended holds no memory and every test gives the result it gives alone; a child does not yet run at the same time as its parent, so a test that does not wait runs to its end before the next starts"
+  - "the program is built of the files of the tests chosen and what they reach, so a mistake in a module that none of them imports is not said; a file of tests that is refused is said, counts as one failed, and the others are built again without it, and a mistake in a module that is not a file of tests refuses the run"
+  - "what a run prints: `passed` or `failed` with the file and the name of each test, on standard output, what each failure says, on standard error, how many passed and failed, and then `slowest:` and the five slowest tests, each with how long it took in milliseconds; a test that ends by running out of memory, or by a write that is refused, fails, and the others go on; the run ends with status 1 when a test fails or a file of tests is refused, and 0 otherwise"
   - "a test's effects, which are the real ones, and a handler a test installs with `with`, which answers in their place"
-  - "not tests in parallel in one process, choosing tests, `--seed`, or the slowest tests"
+  - "not `--seed`, or a test that takes a `Key`"
 ---
 
 # Running tests

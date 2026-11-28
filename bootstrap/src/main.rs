@@ -2,7 +2,7 @@
 //! compiler in `lib.rs`.
 
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
@@ -20,7 +20,7 @@ const USAGE: &str =
        smith [--timings] <task> [--<flag> <value>...]
        smith [--timings] run [--target <target>] [<file>.smith [<word>...]]
        smith [--timings] check [<file>.smith]
-       smith [--timings] test
+       smith [--timings] test [<file>_test.smith] [--name <text>]
        smith [--timings] --watch <command>
        smith --version";
 
@@ -265,113 +265,367 @@ fn check_reading(
     })
 }
 
-/// `smith test`: builds each file of tests below the folder, `x_test.smith`,
-/// with a `main` that runs one of its tests, and runs it once for each test.
-/// It says of each test whether it passed and what each failure says, and
-/// fails when a test fails or a file of tests is refused.
+/// `smith test`: runs the tests of every file of tests below the folder,
+/// `x_test.smith`, or of the file given, and of those the ones whose name
+/// holds the text after `--name`, as tasks of one process. It says of each
+/// test whether it passed and what each failure says, how many passed and
+/// failed, and the slowest, and fails when a test fails or a file of tests is
+/// refused.
 fn test(args: &[OsString], timings: bool) -> Result<ExitCode, String> {
-    if let Some(arg) = args.first() {
-        let arg = text(arg)?;
-        if arg == "--timings" || arg == "--watch" {
-            return Err(flag_of_smith(arg, "test"));
-        }
-        return Err(format!(
-            "`smith test` runs every test, and takes nothing after it\n{USAGE}"
-        ));
-    }
     let root = std::env::current_dir().map_err(|e| format!("cannot find this folder: {e}"))?;
-    let mut found = Vec::new();
-    test_files(&root, &mut Vec::new(), &mut found);
-    found.sort();
+    let (file, name) = tests_chosen(args, &root)?;
+    let found = match file {
+        Some(file) => vec![file],
+        None => {
+            let mut found = Vec::new();
+            test_files(&root, &mut Vec::new(), &mut found);
+            found.sort();
+            found
+        }
+    };
     let folder = std::env::temp_dir().join(format!("smith-test-{}", std::process::id()));
-    let ran = test_in(&found, &folder, timings);
+    let ran = test_in(&found, name.as_deref(), &root, &folder, timings);
     let _ = std::fs::remove_dir_all(&folder);
-    let (passed, failed) = ran?;
-    println!("{passed} passed, {failed} failed");
-    Ok(if failed > 0 {
+    let ran = ran?;
+    println!("{} passed, {} failed", ran.passed, ran.failed);
+    let mut slowest = ran.times;
+    slowest.sort_by_key(|(ms, _)| std::cmp::Reverse(*ms));
+    if !slowest.is_empty() {
+        println!("slowest:");
+        for (ms, test) in slowest.iter().take(SLOWEST) {
+            println!("  {ms} ms {test}");
+        }
+    }
+    Ok(if ran.failed > 0 {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
     })
 }
 
-/// Builds and runs the tests of each file, the executables in `folder`, and
-/// gives how many passed and how many failed, where a file that is refused
-/// counts as one that failed.
-fn test_in(found: &[String], folder: &Path, timings: bool) -> Result<(usize, usize), String> {
-    let (mut passed, mut failed) = (0, 0);
+/// How many of the slowest tests a run of `smith test` ends by listing.
+const SLOWEST: usize = 5;
+
+/// The file of tests and the text of `--name` that `smith test` is given,
+/// each when it is. The file is given by its path from the folder, as a run
+/// names it.
+fn tests_chosen(
+    args: &[OsString],
+    root: &Path,
+) -> Result<(Option<String>, Option<String>), String> {
+    let (mut file, mut name) = (None, None);
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        let arg = text(arg)?;
+        match arg {
+            "--timings" | "--watch" => return Err(flag_of_smith(arg, "test")),
+            "--name" if name.is_some() => return Err("`--name` is given twice".to_string()),
+            "--name" => {
+                let Some(value) = args.next() else {
+                    return Err(format!(
+                        "`--name` is followed by the text a test's name holds\n{USAGE}"
+                    ));
+                };
+                name = Some(text(value)?.to_string());
+            }
+            _ if arg.starts_with('-') => {
+                return Err(format!(
+                    "unknown flag `{arg}`; the flag of `smith test` is --name\n{USAGE}"
+                ));
+            }
+            _ if file.is_some() => {
+                return Err(format!("`smith test` takes one file of tests\n{USAGE}"));
+            }
+            _ => file = Some(test_file(arg, root)?),
+        }
+    }
+    Ok((file, name))
+}
+
+/// The path from the folder of a file of tests that `smith test` is given.
+fn test_file(arg: &str, root: &Path) -> Result<String, String> {
+    let given = Path::new(arg);
+    let is_tests = given
+        .file_name()
+        .is_some_and(|n| smith::testing::is_test_file(&n.to_string_lossy()));
+    if !is_tests {
+        return Err(format!(
+            "`{arg}` is not a file of tests, whose name ends in `_test.smith`"
+        ));
+    }
+    if !given.is_file() {
+        return Err(format!("{arg}: there is no such file"));
+    }
+    let whole = absolute(given);
+    let relative = whole.strip_prefix(root).unwrap_or(&whole);
+    let mut parts = Vec::new();
+    for part in relative.components() {
+        match part {
+            Component::Normal(name) => parts.push(name.to_string_lossy().into_owned()),
+            Component::CurDir => {}
+            _ => {
+                return Err(format!(
+                    "{arg}: a file of tests is in the folder `smith test` runs in, or below it"
+                ));
+            }
+        }
+    }
+    Ok(parts.join("/"))
+}
+
+/// What a run of tests gave: how many passed and failed, where a file that is
+/// refused counts as one that failed, and how long each test that ended took,
+/// in milliseconds, with its file and name.
+struct Ran {
+    passed: usize,
+    failed: usize,
+    times: Vec<(u64, String)>,
+}
+
+/// A file of tests that a run builds: its path, the module it is, its text,
+/// and its tests.
+struct TestFile {
+    path: String,
+    module: String,
+    source: String,
+    tests: smith::testing::Tests,
+    /// The tests chosen of it, each with its number in the run.
+    chosen: Vec<(usize, String)>,
+}
+
+/// Builds one program of the tests chosen of the files, the executable in
+/// `folder`, and runs it. A file whose tests are refused, or that the build
+/// refuses, is said and left out, and the rest are built again without it.
+fn test_in(
+    found: &[String],
+    name: Option<&str>,
+    root: &Path,
+    folder: &Path,
+    timings: bool,
+) -> Result<Ran, String> {
+    let mut ran = Ran {
+        passed: 0,
+        failed: 0,
+        times: Vec::new(),
+    };
+    let mut files: Vec<TestFile> = Vec::new();
+    let mut number = 0;
     for path in found {
-        let entry = PathBuf::from(path);
-        let (_, source) = read_entry(&entry)?;
-        let text = String::from_utf8_lossy(&source).into_owned();
-        let files = Files::in_current_folder(&entry)?;
-        let tests = match smith::testing::read(&text) {
+        let (_, bytes) = read_entry(&root.join(path))?;
+        let source = String::from_utf8_lossy(&bytes).into_owned();
+        let tests = match smith::testing::read(&source) {
             Ok(tests) => tests,
             Err(errors) => {
-                eprint!("{}", files.render(path, &source, &errors));
-                failed += 1;
+                eprint!("{}", Files::at(root).render(path, &bytes, &errors));
+                ran.failed += 1;
                 continue;
             }
         };
-        if tests.names.is_empty() {
+        let chosen: Vec<(usize, String)> = (tests.tests.iter())
+            .filter(|t| name.is_none_or(|n| t.name.contains(n)))
+            .map(|t| {
+                number += 1;
+                (number - 1, t.name.clone())
+            })
+            .collect();
+        if chosen.is_empty() && tests.parses {
             continue;
         }
-        let target = Target::host().ok_or_else(|| {
-            format!(
-                "this machine, {}, is not a target",
-                Target::host_description()
-            )
-        })?;
-        let program = tests.program(&text);
-        let mut stages = Timings::new();
+        let module = path.trim_end_matches(".smith").replace('/', ".");
+        files.push(TestFile {
+            path: path.clone(),
+            module,
+            source,
+            tests,
+            chosen,
+        });
+    }
+    if files.is_empty() {
+        return Ok(ran);
+    }
+    let target = Target::host().ok_or_else(|| {
+        format!(
+            "this machine, {}, is not a target",
+            Target::host_description()
+        )
+    })?;
+    let width = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let mut stages = Timings::new();
+    let built = loop {
+        let mut written = BTreeMap::new();
+        let chosen: Vec<Vec<(usize, &str)>> = (files.iter())
+            .map(|f| f.chosen.iter().map(|(k, n)| (*k, n.as_str())).collect())
+            .collect();
+        let shown: Vec<smith::testing::File> = (files.iter().zip(&chosen))
+            .map(|(f, chosen)| {
+                written.insert(f.module.clone(), f.tests.module(&f.source, chosen));
+                smith::testing::File {
+                    module: &f.module,
+                    tests: &f.tests,
+                    chosen,
+                }
+            })
+            .collect();
+        let program = smith::testing::program(&shown, width);
+        let mut each = Files::at(root);
+        each.written = written;
         let built = smith::compile_project_files_timed(
             program.as_bytes(),
-            &files.project(),
+            &each.project(),
             target,
             false,
             false,
             &mut stages,
         );
-        if timings {
-            eprintln!("{path}\n{}", stages.report());
+        let errors = match built {
+            Ok(built) => break built,
+            Err(errors) => errors,
+        };
+        // A file of tests that an error is in is refused, and so is every
+        // file when an error is in a module that is not a file of tests, or in
+        // no module, which no file can then be said to be built without.
+        let refused: Vec<usize> = (0..files.len())
+            .filter(|&i| {
+                errors
+                    .iter()
+                    .any(|e| e.module.as_deref() == Some(&files[i].path))
+            })
+            .collect();
+        let elsewhere = errors.iter().any(|e| {
+            e.module
+                .as_ref()
+                .is_some_and(|m| files.iter().all(|f| &f.path != m))
+        });
+        if refused.is_empty() || elsewhere {
+            eprint!("{}", each.render("tests", program.as_bytes(), &errors));
+            ran.failed += files.len();
+            return Ok(ran);
         }
-        let built = match built {
-            Ok(built) => built,
-            Err(errors) => {
-                // What is wrong in the `main` written after the file is wrong
-                // in the tests it calls, which is said there.
-                let lines = text.split('\n').count();
-                let theirs: Vec<diag::Error> = (errors.iter())
-                    .filter(|e| e.module.is_some() || e.pos.line <= lines)
-                    .cloned()
-                    .collect();
-                let shown = if theirs.is_empty() { &errors } else { &theirs };
-                eprint!("{}", files.render(path, program.as_bytes(), shown));
-                failed += 1;
+        for &i in &refused {
+            let file = &files[i];
+            // What is wrong in the functions written after the file is wrong
+            // in the tests they call, which is said there.
+            let lines = file.source.split('\n').count();
+            let in_file: Vec<diag::Error> = (errors.iter())
+                .filter(|e| e.module.as_deref() == Some(&file.path))
+                .cloned()
+                .collect();
+            let theirs: Vec<diag::Error> = (in_file.iter())
+                .filter(|e| e.pos.line <= lines)
+                .cloned()
+                .collect();
+            let shown = if theirs.is_empty() { &in_file } else { &theirs };
+            eprint!("{}", each.render("tests", program.as_bytes(), shown));
+            ran.failed += 1;
+        }
+        for &i in refused.iter().rev() {
+            files.remove(i);
+        }
+        if files.is_empty() {
+            return Ok(ran);
+        }
+    };
+    if timings {
+        eprintln!("{}", stages.report());
+    }
+    let executable = folder.join(target.executable_name("tests"));
+    std::fs::create_dir_all(folder)
+        .and_then(|()| write_executable(&executable, &built.executable, true))
+        .map_err(|e| format!("{}: {e}", executable.display()))?;
+    let named: BTreeMap<usize, String> = (files.iter())
+        .flat_map(|f| {
+            f.chosen
+                .iter()
+                .map(|(k, n)| (*k, format!("{} {n}", f.path)))
+        })
+        .collect();
+    run_tests(&executable, &named, &mut ran)?;
+    Ok(ran)
+}
+
+/// Runs the program of the tests, and says what its records say of each
+/// test, by its number: what else it prints is passed on as it is. A test
+/// that no record is printed for, as the program ended first, failed. A test
+/// took the time from the record that it began to the one that it is done.
+fn run_tests(
+    executable: &Path,
+    named: &BTreeMap<usize, String>,
+    ran: &mut Ran,
+) -> Result<(), String> {
+    use std::io::{BufRead, Read, Write};
+    let failed = |e: std::io::Error| format!("{}: {e}", executable.display());
+    let mut child = run(executable, &[], None, std::process::Stdio::piped()).map_err(failed)?;
+    let mut said = std::io::BufReader::new(child.stdout.take().expect("piped"));
+    let mut seen = BTreeSet::new();
+    let mut began = BTreeMap::new();
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        if said.read_until(b'\n', &mut line).map_err(failed)? == 0 {
+            break;
+        }
+        let text = String::from_utf8_lossy(&line);
+        let Some(record) = text
+            .trim_end_matches('\n')
+            .strip_prefix(smith::testing::RECORD)
+        else {
+            let mut out = std::io::stdout();
+            let _ = out.write_all(&line).and_then(|()| out.flush());
+            continue;
+        };
+        let words: Vec<&str> = record.split(' ').collect();
+        let Some((k, test)) = (words.get(1))
+            .and_then(|k| k.parse().ok())
+            .and_then(|k: usize| named.get_key_value(&k))
+        else {
+            continue;
+        };
+        match words[0] {
+            "began" => {
+                began.insert(*k, std::time::Instant::now());
                 continue;
             }
-        };
-        let name = path.trim_end_matches(".smith").replace('/', ".");
-        let executable = folder.join(target.executable_name(&name));
-        std::fs::create_dir_all(folder)
-            .and_then(|()| write_executable(&executable, &built.executable, true))
-            .map_err(|e| format!("{}: {e}", executable.display()))?;
-        for test in &tests.names {
-            let words = [OsString::from(test)];
-            let output = run(&executable, &words, None, std::process::Stdio::piped())
-                .and_then(std::process::Child::wait_with_output)
-                .map_err(|e| format!("{}: {e}", executable.display()))?;
-            if output.status.success() {
-                println!("passed {path} {test}");
-                passed += 1;
-            } else {
-                println!("failed {path} {test}");
-                eprint!("{}", String::from_utf8_lossy(&output.stderr));
-                failed += 1;
+            "done" => {
+                if let Some(at) = began.get(k) {
+                    let ms = u64::try_from(at.elapsed().as_millis()).unwrap_or(u64::MAX);
+                    ran.times.push((ms, test.clone()));
+                }
+                continue;
+            }
+            "passed" => {
+                println!("passed {test}");
+                ran.passed += 1;
+            }
+            "failed" => {
+                let size: usize = words.get(2).and_then(|n| n.parse().ok()).unwrap_or(0);
+                let mut message = vec![0; size + 1];
+                said.read_exact(&mut message).map_err(failed)?;
+                message.pop();
+                println!("failed {test}");
+                eprintln!("{}", String::from_utf8_lossy(&message));
+                ran.failed += 1;
+            }
+            _ => {
+                let why = match words.get(2) {
+                    Some(&"out_of_memory") => "it ran out of memory",
+                    _ => "a write of it was refused",
+                };
+                println!("failed {test}");
+                eprintln!("{test}: the test ended before it gave a result, as {why}");
+                ran.failed += 1;
             }
         }
+        seen.insert(*k);
     }
-    Ok((passed, failed))
+    child.wait().map_err(failed)?;
+    for (k, test) in named {
+        if !seen.contains(k) {
+            println!("failed {test}");
+            eprintln!("{test}: the test did not end, as the run of the tests ended first");
+            ran.failed += 1;
+        }
+    }
+    Ok(())
 }
 
 /// The files of tests below the folder, by their paths from the root, but
@@ -406,9 +660,11 @@ struct Files {
     entry: Option<String>,
     /// The modules a `use` has read, in the order they were asked for.
     read: RefCell<BTreeSet<String>>,
-    /// The text of the module `project`, when a task is built: the file
-    /// `project.smith` without the lines the compiler reads no further.
-    project: Option<String>,
+    /// The modules whose text is written here and not read from their file:
+    /// `project` when a task is built, which is `project.smith` without the
+    /// lines the compiler reads no further, and a file of tests with the
+    /// functions after it that call its tests.
+    written: BTreeMap<String, String>,
 }
 
 impl Files {
@@ -431,8 +687,18 @@ impl Files {
             root,
             entry,
             read: RefCell::new(BTreeSet::new()),
-            project: None,
+            written: BTreeMap::new(),
         })
+    }
+
+    /// The files of the project in the folder, built from no file of it.
+    fn at(root: &Path) -> Files {
+        Files {
+            root: root.to_path_buf(),
+            entry: None,
+            read: RefCell::new(BTreeSet::new()),
+            written: BTreeMap::new(),
+        }
     }
 
     /// The files of the modules that have been read.
@@ -458,7 +724,7 @@ impl smith::Source for Files {
     /// The text of the file of the module with the name, which is noted as
     /// read.
     fn source(&self, module: &str) -> Option<String> {
-        if let (Some(text), "project") = (&self.project, module) {
+        if let Some(text) = self.written.get(module) {
             self.read.borrow_mut().insert(module.to_string());
             return Some(text.clone());
         }
@@ -619,17 +885,17 @@ fn write_executable(path: &Path, bytes: &[u8], runs: bool) -> std::io::Result<()
     Ok(())
 }
 
-/// Starts a built executable with the words it is started with, writing its
-/// errors to `errors`. `smith --watch` gives it a socket too, which the
+/// Starts a built executable with the words it is started with, writing what
+/// it prints to `output`. `smith --watch` gives it a socket too, which the
 /// program holds at descriptor 3.
 fn run(
     executable: &Path,
     words: &[OsString],
     control: Option<&Control>,
-    errors: std::process::Stdio,
+    output: std::process::Stdio,
 ) -> std::io::Result<std::process::Child> {
     let mut command = std::process::Command::new(executable);
-    command.args(words).stderr(errors);
+    command.args(words).stdout(output);
     #[cfg(unix)]
     if let Some(socket) = control {
         use std::os::fd::AsRawFd;
@@ -738,7 +1004,7 @@ fn build_task(
         root: root.clone(),
         entry: None,
         read: RefCell::new(BTreeSet::new()),
-        project: Some(read.module.clone()),
+        written: BTreeMap::from([("project".to_string(), read.module.clone())]),
     };
     let compiled = smith::compile_project_files_timed(
         program.as_bytes(),
