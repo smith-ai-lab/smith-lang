@@ -10,7 +10,7 @@ built:
   - "a call that leaves out `mut` where the parameter is `mut` refused with the call to write, `mut` where the parameter is not refused, and what is not a `mut`, a field, or an item refused"
   - "one place passed twice, or a place and a part of it, refused"
   - "a parameter marked `mut`, or a part of it without `Copy`, refused where it is stored, bound to another name, given to a `take` parameter, or returned, and any lambda that reads or assigns it refused"
-  - "what `arith` knew of a value before a call that changes it not known after"
+  - "what `arith` knew of a value before a call that changes it not known after, but what the function [ensures](contracts.md#what-the-function-gives) of it"
 ---
 
 # Changing a value in place
@@ -52,7 +52,7 @@ fn step(c: take Cursor) -> Cursor {
 }
 ```
 
-The first is called `step(mut c)`, and the second `c = step(take c)`. Every value has one owner, so no other name can see `c` while `step` runs, and the change is made where `c` is, with nothing copied. A fact about `c` that the caller knew before the call is not known after it, as for any name that is assigned.
+The first is called `step(mut c)`, and the second `c = step(take c)`. Every value has one owner, so no other name can see `c` while `step` runs, and the change is made where `c` is, with nothing copied. A fact about `c` that the caller knew before the call is not known after it, as for any name that is assigned, except what `step` [ensures](contracts.md#what-the-function-gives) of it.
 
 ## Where the change is seen
 

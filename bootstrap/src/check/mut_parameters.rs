@@ -44,7 +44,68 @@ fn written_place(p: &Place) -> String {
     out
 }
 
+/// Whether a call is of `old`, which names what a parameter marked `mut` was
+/// given, and no function of the program takes the name of.
+pub(super) fn is_old(defs: &Defs, call: &Call) -> bool {
+    call.qualifier.is_none()
+        && call.callee == "old"
+        && !defs.function_names.contains_key("old")
+        && defs.struct_named("old").is_none()
+}
+
+/// The name `old` is written of, when `call` is `old` of a name.
+pub(super) fn old_name<'e>(defs: &Defs, call: &'e Call) -> Option<&'e str> {
+    match call.args.as_slice() {
+        [arg] if is_old(defs, call) => match &arg.value {
+            Expr::Name { name, .. } => Some(name),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 impl<'a> Checker<'a> {
+    /// Checks `old(c)`, what the parameter `c` marked `mut` was given when
+    /// the call began, which is written only in an `ensures`.
+    pub(super) fn old(&mut self, body: &mut Body<'a>, call: &Call) -> Ty {
+        if !self.ensuring {
+            self.errors.push(
+                Error::new(call.pos, "`old` is written only in an `ensures`")
+                    .with_fix("name the value before it changes with a binding"),
+            );
+            return self.unknown_call(body, call);
+        }
+        let plain = call.args.iter().all(|a| a.name.is_none() && !a.after);
+        let named = old_name(self.defs, call).filter(|_| plain);
+        let param = named.and_then(|name| {
+            let f = body.f?;
+            let at = f.params.iter().position(|p| p.name == name)?;
+            f.params[at].mutable.then(|| body.names[at].1.clone())
+        });
+        match (named, param) {
+            (_, Some(ty)) => ty,
+            (Some(name), None) => {
+                self.errors.push(
+                    Error::new(
+                        call.pos,
+                        format!(
+                            "`{name}` is not a parameter marked `mut`, so it is the same before the call and after, and `old` is not written of it"
+                        ),
+                    )
+                    .with_fix(format!("write `{name}`")),
+                );
+                self.unknown_call(body, call)
+            }
+            (None, _) => {
+                self.errors.push(Error::new(
+                    call.pos,
+                    "`old` is written of the name of a parameter marked `mut`",
+                ));
+                self.unknown_call(body, call)
+            }
+        }
+    }
+
     /// Checks that a call that passes `mut` keeps what its function gives
     /// exactly when the function gives a result, when `gives` is what the
     /// lowered call gives. Gives whether it found a mistake, which it reports.

@@ -1288,6 +1288,9 @@ impl<'a> Checker<'a> {
         if lists_and_text::is_boundary(defs, call) {
             return self.boundary(body, call);
         }
+        if mut_parameters::is_old(defs, call) {
+            return self.old(body, call);
+        }
         if let Some(narrowing) = narrowing(defs, call) {
             return self.narrow(body, call, narrowing, want);
         }

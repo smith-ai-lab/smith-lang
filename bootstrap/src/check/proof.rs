@@ -18,7 +18,7 @@ use super::{
     written_expr, written_with,
 };
 use crate::diag::{Error, Pos};
-use crate::parser::{ArithOp, Call, Expr, Form, Function, Loop, Pattern, Range, Stmt};
+use crate::parser::{ArithOp, Call, Expr, Form, Function, Loop, Pattern, Range, Stmt, gives_back};
 
 /// The greatest size of a `List`, a `Slice`, or a `str`, which is below 2 to the
 /// 48: each element has at least a byte, and no address has more than 48 bits.
@@ -216,6 +216,14 @@ pub(super) struct Facts {
     /// The bytes of each text written out, by the path of the name it was
     /// given to, or of the text itself. The newest entry for a path counts.
     literals: Vec<(String, Vec<u8>)>,
+    /// While a function's contract is read at a call, the path each of its
+    /// parameters that is a struct stands for there, and of each marked
+    /// `mut`, as `old(c)`, the path of what it was given.
+    places: Option<HashMap<String, String>>,
+    /// The `mut`, by its place among the names, that a call has just changed,
+    /// and the version of it that what the call ensures is about, which the
+    /// assignment of what the call gives back takes instead of a new one.
+    given_back: Option<(usize, usize)>,
 }
 
 /// A `boundary(s, i)` that was read: the variable that is the place `i`, the
@@ -287,6 +295,12 @@ impl Facts {
     fn bump(&mut self, at: usize) {
         if self.solving {
             self.steps.push((at, None));
+        }
+        if let Some((changed, version)) = self.given_back.take()
+            && changed == at
+        {
+            self.versions.insert(at, version);
+            return;
         }
         self.epoch += 1;
         self.versions.insert(at, self.epoch);
@@ -431,6 +445,21 @@ impl Builder<'_, '_> {
         Lin {
             terms: BTreeMap::from([(id, 1)]),
             constant: 0,
+        }
+    }
+
+    /// What `old(n)` stands for, where `n` is a parameter marked `mut` that
+    /// is a whole number: what the call gave it, which is what the name held
+    /// when the body began.
+    fn old_value(&mut self, e: &Expr, call: &Call) -> Option<Lin> {
+        if let Some(sums) = &self.facts.subst {
+            return sums.get(&old_of(self.checker.defs, call)?).cloned();
+        }
+        let name = super::mut_parameters::old_name(self.checker.defs, call)?;
+        let at = self.body.names.iter().rposition(|(n, _)| n == name)?;
+        match &self.body.names[at].1 {
+            Ty::Int(t) => Some(self.variable(Key::Name(at, t.min(), t.max()))),
+            _ => self.goal.then(|| self.fresh(e)),
         }
     }
 
@@ -698,6 +727,9 @@ impl Builder<'_, '_> {
                         }
                     }
                 })
+            }
+            Expr::Call(call) if super::mut_parameters::is_old(self.checker.defs, call) => {
+                self.old_value(e, call)
             }
             Expr::Call(call)
                 if self.facts.subst.is_none() && self.facts.bits.contains_key(&addr(call)) =>
@@ -1017,6 +1049,14 @@ impl Builder<'_, '_> {
     /// A field read from a name, written out with the place of the name, and
     /// for a `mut` its version.
     fn path(&self, e: &Expr) -> Option<String> {
+        if let Some(places) = &self.facts.places {
+            return match e {
+                Expr::Name { name, .. } => places.get(name).cloned(),
+                Expr::Call(call) => places.get(&old_of(self.checker.defs, call)?).cloned(),
+                Expr::Field { of, name, .. } => Some(format!("{}.{name}", self.path(of)?)),
+                _ => None,
+            };
+        }
         if self.facts.subst.is_some() {
             return None;
         }
@@ -1024,6 +1064,15 @@ impl Builder<'_, '_> {
             Expr::Name { name, .. } => {
                 let at = self.body.names.iter().rposition(|(n, _)| n == name)?;
                 Some(root(self.body, self.facts, at))
+            }
+            // What a parameter marked `mut` was given is its first version.
+            Expr::Call(call) => {
+                let name = super::mut_parameters::old_name(self.checker.defs, call)?;
+                let at = self.body.names.iter().rposition(|(n, _)| n == name)?;
+                Some(match self.body.vars.contains(&self.body.names[at].0) {
+                    true => format!("{at}@0"),
+                    false => at.to_string(),
+                })
             }
             // The bytes of a text are the text, so what is known of the size of
             // one is known of the size of the other.
@@ -1047,6 +1096,12 @@ impl Builder<'_, '_> {
             _ => None,
         }
     }
+}
+
+/// The key `old(c)` is held by among the sums and the paths of a contract
+/// read at a call, when `call` is `old(c)`.
+fn old_of(defs: &super::Defs, call: &Call) -> Option<String> {
+    super::mut_parameters::old_name(defs, call).map(|name| format!("old({name})"))
 }
 
 /// How the name at `at` starts the path of a field: its place, and for a
@@ -1409,9 +1464,11 @@ impl<'a> Checker<'a> {
         );
         let sibling = facts.sibling.take();
         let texts = facts.paths.replace(HashMap::new());
+        let places = facts.places.replace(HashMap::new());
         facts.depth += 1;
         let said = self.said(body, facts, inner, holds);
         facts.depth -= 1;
+        facts.places = places;
         facts.paths = texts;
         facts.sibling = sibling;
         facts.subst = outer.0;
@@ -1461,11 +1518,13 @@ impl<'a> Checker<'a> {
         }
         let outer = facts.subst.replace(sums);
         let texts = facts.paths.replace(HashMap::new());
+        let places = facts.places.replace(HashMap::new());
         facts.depth += 1;
         let said = self.said(body, facts, inner, holds);
         facts.depth -= 1;
         facts.subst = outer;
         facts.paths = texts;
+        facts.places = places;
         said
     }
 
@@ -2863,6 +2922,16 @@ impl<'a> Checker<'a> {
         for e in &f.requires {
             self.contract(&mut body, e);
         }
+        // A function that gives back only its parameters marked `mut`
+        // ensures what it did to them.
+        if f.result_name.is_none() && gives_back(f) {
+            self.ensuring = true;
+            for e in &f.ensures {
+                self.contract(&mut body, e);
+            }
+            self.ensuring = false;
+            return;
+        }
         let Some((name, pos)) = &f.result_name else {
             if let Some(e) = f.ensures.first() {
                 self.errors.push(
@@ -2900,9 +2969,11 @@ impl<'a> Checker<'a> {
             return;
         }
         body.names.push((name.clone(), sig.gives.clone()));
+        self.ensuring = true;
         for e in &f.ensures {
             self.contract(&mut body, e);
         }
+        self.ensuring = false;
     }
 
     /// Checks one contract: it is a `bool`, and is a statement `arith`
@@ -2987,6 +3058,7 @@ impl<'a> Checker<'a> {
         let mut sums = HashMap::new();
         let mut texts: HashMap<String, String> = HashMap::new();
         let mut paths: HashMap<String, String> = HashMap::new();
+        let mut places: HashMap<String, String> = HashMap::new();
         let mut given: HashMap<String, (String, Ty)> = HashMap::new();
         for &(arg, place) in &args {
             let (name, ty) = &sig.params[place];
@@ -2996,6 +3068,17 @@ impl<'a> Checker<'a> {
                 ty => ty.clone(),
             };
             given.insert(name.clone(), (written_expr(arg), ty.clone()));
+            let changed = callee.params.get(place).is_some_and(|p| p.mutable);
+            if matches!(ty, Ty::Struct(..)) {
+                let builder = self.builder(body, &mut facts, true);
+                if let Some(path) = builder.path(arg) {
+                    if changed {
+                        places.insert(format!("old({name})"), path.clone());
+                    }
+                    places.insert(name.clone(), path);
+                }
+                continue;
+            }
             if matches!(ty, Ty::List(_) | Ty::Slice(_)) {
                 let mut builder = self.builder(body, &mut facts, true);
                 if let Some(size) = builder.list_size(arg).filter(|_| !builder.overflow) {
@@ -3027,6 +3110,9 @@ impl<'a> Checker<'a> {
             let mut builder = self.builder(body, &mut facts, true);
             let sum = builder.lin(arg).filter(|_| !builder.overflow);
             if let Some(sum) = sum {
+                if changed {
+                    sums.insert(format!("old({name})"), sum.clone());
+                }
                 sums.insert(name.clone(), sum);
             }
             let text = written_expr(arg);
@@ -3041,6 +3127,7 @@ impl<'a> Checker<'a> {
         }
         facts.subst = Some(sums);
         facts.paths = Some(paths);
+        facts.places = Some(places);
         facts.args = Some(given);
         self.statements_name_no_var(body, &args, callee);
         // A proof written at the call is one of what the parameter owes.
@@ -3118,6 +3205,9 @@ impl<'a> Checker<'a> {
                 ));
             }
         }
+        if callee.result_name.is_none() && gives_back(callee) {
+            self.given_back(body, &mut facts, (key, &args), callee, sig);
+        }
         if let (Some((name, _)), Ty::Int(t)) = (&callee.result_name, &sig.gives) {
             let id = facts.id(Key::Call(key, t.min(), t.max()));
             let result = Lin {
@@ -3150,8 +3240,66 @@ impl<'a> Checker<'a> {
         }
         facts.subst = None;
         facts.paths = None;
+        facts.places = None;
         facts.args = None;
         body.facts = facts;
+    }
+
+    /// After a call of a function that gives back only the one parameter it
+    /// marks `mut`, what it ensures is known: the parameter is what the place
+    /// passed holds after the call, and `old` of it what the place held
+    /// before. A place that is a struct is given a new version, which the
+    /// assignment of what the call gives back takes.
+    fn given_back(
+        &self,
+        body: &Body<'a>,
+        facts: &mut Facts,
+        (key, args): (usize, &[(&Expr, usize)]),
+        callee: &Function,
+        sig: &Signature,
+    ) {
+        let mut changed = args.iter().filter(|(_, p)| callee.params[*p].mutable);
+        let (Some(&(arg, place)), None) = (changed.next(), changed.next()) else {
+            return;
+        };
+        let name = &callee.params[place].name;
+        match &sig.gives {
+            Ty::Int(t) => {
+                let after = variable(facts.id(Key::Call(key, t.min(), t.max())));
+                (facts.subst.as_mut().expect("set above")).insert(name.clone(), after);
+            }
+            Ty::Struct(..) => {
+                let places = facts.places.as_ref().expect("set above");
+                let Some(before) = places.get(name).cloned() else {
+                    return;
+                };
+                let mut root = arg;
+                while let Expr::Field { of, .. } = root {
+                    root = of;
+                }
+                let Expr::Name { name: held, .. } = root else {
+                    return;
+                };
+                let Some(at) = body.names.iter().rposition(|(n, _)| n == held) else {
+                    return;
+                };
+                let Some((start, rest)) = before.split_once('@') else {
+                    return;
+                };
+                let fields = rest.find('.').map_or("", |dot| &rest[dot..]);
+                facts.epoch += 1;
+                let version = facts.epoch;
+                facts.given_back = Some((at, version));
+                let after = format!("{start}@{version}{fields}");
+                (facts.places.as_mut().expect("set above")).insert(name.clone(), after);
+            }
+            _ => return,
+        }
+        for ensured in &callee.ensures {
+            if let Some(said) = self.said(body, facts, ensured, true) {
+                facts.known.push(said);
+            }
+        }
     }
 
     /// Checks that the argument written for a proof parameter is a proof in
@@ -3265,6 +3413,9 @@ impl<'a> Checker<'a> {
         let Some(f) = body.f else {
             return;
         };
+        if f.result_name.is_none() && gives_back(f) {
+            return self.ensure_changed(body, f, e);
+        }
         let (Some((name, _)), Ty::Int(t)) = (&f.result_name, body.gives.clone()) else {
             return;
         };
@@ -3306,6 +3457,39 @@ impl<'a> Checker<'a> {
         facts.reset(&mark);
         body.facts = facts;
         body.names.pop();
+    }
+}
+
+impl<'a> Checker<'a> {
+    /// At the end of a body that gives back only the parameters it marks
+    /// `mut`, where `e` gives them back: every `ensures` must be proven of
+    /// what they hold, and of what they were given, as `old` names it.
+    fn ensure_changed(&mut self, body: &mut Body<'a>, f: &'a Function, e: &Expr) {
+        if !Self::decided(body) {
+            return;
+        }
+        let mut facts = std::mem::take(&mut body.facts);
+        let mark = facts.mark();
+        for ensured in &f.ensures {
+            let said = self.said(body, &mut facts, ensured, true);
+            let proved = said
+                .as_ref()
+                .is_some_and(|g| proves(&background(&facts, std::iter::once(g)), g));
+            if !proved {
+                let goal = written_contract(&|_| None, ensured);
+                self.errors.push(
+                    Error::new(
+                        e.pos(),
+                        format!("cannot prove that `{goal}`, which `{}` ensures", f.name),
+                    )
+                    .with_fix(
+                        "state what is needed in a `requires`, or check it first with an `if`",
+                    ),
+                );
+            }
+        }
+        facts.reset(&mark);
+        body.facts = facts;
     }
 }
 
@@ -3782,11 +3966,37 @@ impl<'a> Checker<'a> {
         }
     }
 
-    /// A field of the `mut` at `at` is given a value.
-    pub(super) fn assign_field(&mut self, body: &mut Body<'a>, at: usize) {
-        if Self::decided(body) {
-            body.facts.bump(at);
+    /// A field of the `mut` at `at` is given `value`, where `fields` are the
+    /// fields written after the name and `field` is the type of the one
+    /// assigned, when it is not an item of an array. Nothing known of its
+    /// fields before is known after, but that a field that is a whole number
+    /// holds `value`.
+    pub(super) fn assign_field(
+        &mut self,
+        body: &mut Body<'a>,
+        at: usize,
+        fields: &[(String, Pos)],
+        (field, value): (Option<&Ty>, &Expr),
+    ) {
+        if !Self::decided(body) {
+            return;
         }
+        let held = match field {
+            Some(Ty::Int(t)) if !fields.is_empty() => self.value_of(body, value).map(|v| (*t, v)),
+            _ => None,
+        };
+        body.facts.bump(at);
+        let Some((t, value)) = held else {
+            return;
+        };
+        let names: Vec<&str> = fields.iter().map(|(n, _)| n.as_str()).collect();
+        let path = format!("{}.{}", root(body, &body.facts, at), names.join("."));
+        let mut facts = std::mem::take(&mut body.facts);
+        let id = facts.id(Key::Field(path, t.min(), t.max()));
+        if let Some(same) = self.equal(body, &mut facts, id, &value) {
+            facts.known.push(same);
+        }
+        body.facts = facts;
     }
 
     /// Each parameter marked `mut` that is a whole number is a `mut` that
