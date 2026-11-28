@@ -481,15 +481,21 @@ fn a_lookup_in_a_task_lets_the_other_tasks_run_while_it_waits_and_one_with_no_gr
 /// The first UDP port the system gives is held for TCP by something else, as
 /// another test may hold it, and the pair is still bound, on another port.
 fn a_nameserver_gets_a_port_that_is_free_for_both_udp_and_tcp_when_the_first_port_is_held_for_tcp() {
-    let mut held = None;
-    let mut first = 0;
+    let mut _held = None;
+    let mut first = None;
     let (udp, tcp) = bind_pair(|port| {
-        if held.is_none() {
-            first = port;
-            held = Some(TcpListener::bind(("127.0.0.1", port)).unwrap());
+        if first.is_none() {
+            first = Some(port);
+            // Another test may already hold the port for TCP, which is the
+            // case this test makes, so a port that is taken needs no holder.
+            match TcpListener::bind(("127.0.0.1", port)) {
+                Ok(listener) => _held = Some(listener),
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {}
+                Err(e) => panic!("the first port could not be held for TCP: {e}"),
+            }
         }
     });
-    assert!(held.is_some(), "the port the first bind gave was held");
+    let first = first.expect("the system gave a first port");
     let port = udp.local_addr().unwrap().port();
     assert_ne!(port, first, "the pair is on the port that is held for TCP");
     assert_eq!(tcp.local_addr().unwrap().port(), port, "the two are on different ports");
