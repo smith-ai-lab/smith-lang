@@ -6221,6 +6221,9 @@ impl<'a> Lazy<'a> {
                 file.enums.extend(found.enums.iter().cloned());
                 file.impls.extend(found.impls.iter().cloned());
                 file.args.extend(found.args.iter().cloned());
+                // A float written in an item read calls for the `impl`s of
+                // floats, as one the file writes does.
+                file.floats |= found.floats;
             }
         }
     }
