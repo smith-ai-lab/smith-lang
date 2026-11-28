@@ -184,6 +184,12 @@ impl Asm {
         self.code.len()
     }
 
+    /// Puts the label at `place` from the start of the code, past its end, where
+    /// what it names is put in another part of the executable.
+    pub fn bind_at(&mut self, label: usize, place: usize) {
+        self.labels[label] = Some(place);
+    }
+
     pub fn bind(&mut self, label: usize) {
         self.labels[label] = Some(self.code.len());
         // Another path may come here.
@@ -1043,7 +1049,7 @@ impl Asm {
     /// `slots_address + 8 * i`.
     pub fn finish(
         mut self,
-        data: &[(usize, &[u8])],
+        data: &[(usize, Vec<u8>)],
         code_address: u64,
         slots_address: u64,
     ) -> Vec<u8> {
@@ -1192,7 +1198,7 @@ pub trait System {
 /// use, the places of the calls it makes, the values that have no register,
 /// and the registers it must put back. A function finds its parameters in
 /// its caller's frame, and puts what it gives back just after them.
-pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
+pub fn code<S: System>(program: &Program) -> super::Laid<Asm> {
     let mut asm = Asm::default();
     let texts: Vec<usize> = program.data.iter().map(|_| asm.label()).collect();
     let functions: Vec<usize> = program.functions.iter().map(|_| asm.label()).collect();
@@ -1262,8 +1268,12 @@ pub fn code<S: System>(program: &Program) -> super::Laid<'_, Asm> {
     let parts = super::parts(&offsets, &frames, asm.code_len(), &asm.places, &pieces);
     let data = texts
         .into_iter()
-        .zip(program.data.iter().map(Vec::as_slice))
-        .chain(lines)
+        .zip(program.data.iter().map(|d| d.bytes.clone()))
+        .chain(
+            lines
+                .into_iter()
+                .map(|(label, bytes)| (label, bytes.to_vec())),
+        )
         .collect();
     (asm, data, parts)
 }

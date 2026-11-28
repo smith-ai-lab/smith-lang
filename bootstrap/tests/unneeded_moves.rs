@@ -87,7 +87,7 @@ fn handing_round(types: &[Type], starts: &[u64]) -> scalar::Program {
 
 fn program(functions: Vec<scalar::Function>, main: usize) -> scalar::Program {
     let program = scalar::Program {
-        data: vec![b"swap".to_vec(), b"x".to_vec()],
+        data: vec![b"swap".to_vec().into(), b"x".to_vec().into()],
         functions,
         main,
     };

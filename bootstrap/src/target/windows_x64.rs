@@ -38,7 +38,7 @@ const RBX_AT: u32 = 48;
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let net = program.asks_the_network();
     let files = program.asks_the_files();
-    let (asm, data, parts) = match (net, program.reads(), files) {
+    let (asm, mut data, parts) = match (net, program.reads(), files) {
         (true, _, true) => x86_64::code::<Windows<true, true, true>>(program),
         (true, _, false) => x86_64::code::<Windows<true, true, false>>(program),
         (false, true, true) => x86_64::code::<Windows<true, false, true>>(program),
@@ -55,8 +55,12 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         net,
         files,
     );
+    // The image has no relocations and is loaded where it asks to be, so an
+    // address among the data is written as the build knows it.
+    let load = pe::IMAGE_BASE + u64::from(pe::CODE_RVA);
+    super::write_addresses(program, &mut data, asm.code_len(), load);
     let mut at = 0;
-    let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
+    let executable = pe::executable(&MACHINE, size, &imports, &[], |code, iat| {
         at = code;
         asm.finish(&data, code, iat)
     });

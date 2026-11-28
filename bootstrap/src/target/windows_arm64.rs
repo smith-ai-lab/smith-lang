@@ -38,7 +38,7 @@ const SAVED: u32 = 8;
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
     let net = program.asks_the_network();
     let files = program.asks_the_files();
-    let (asm, data, parts) = match (net, program.reads(), files) {
+    let (asm, mut data, parts) = match (net, program.reads(), files) {
         (true, _, true) => arm64::code::<Windows<true, true, true>>(program),
         (true, _, false) => arm64::code::<Windows<true, true, false>>(program),
         (false, true, true) => arm64::code::<Windows<true, false, true>>(program),
@@ -55,8 +55,14 @@ pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
         net,
         files,
     );
+    // The image is loaded at a place of the system's choosing, so each address
+    // among the data is written as if it were loaded where it asks to be, and
+    // the loader moves each by as far as it moved the image.
+    let code = asm.code_len();
+    let load = pe::IMAGE_BASE + u64::from(pe::CODE_RVA);
+    let moved = super::write_addresses(program, &mut data, code, load);
     let mut at = 0;
-    let executable = pe::executable(&MACHINE, size, &imports, |code, iat| {
+    let executable = pe::executable(&MACHINE, size, &imports, &moved, |code, iat| {
         at = code;
         asm.finish(&data, code, iat)
     });

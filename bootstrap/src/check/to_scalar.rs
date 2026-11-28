@@ -230,7 +230,7 @@ struct Lowering<'a> {
     /// The place of each function of the runtime, which are few: a kind of
     /// them has no hash, as it is defined where the runtime is.
     runtimes: Vec<(Runtime, usize)>,
-    data: Vec<Vec<u8>>,
+    data: Vec<form::Datum>,
     /// Where the two tables of the text of a float are in the data, once a
     /// program asks for one.
     float_tables: Option<(usize, usize)>,

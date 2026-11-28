@@ -39,8 +39,16 @@ pub const ONCE: &[Test] = &[
         reading_a_list_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory,
     ),
     (
+        "reading_a_list_of_texts_or_of_lists_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory",
+        reading_a_list_of_texts_or_of_lists_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory,
+    ),
+    (
         "a_list_at_the_top_level_that_is_pushed_to_is_copied_and_stays_as_it_was",
         a_list_at_the_top_level_that_is_pushed_to_is_copied_and_stays_as_it_was,
+    ),
+    (
+        "a_list_or_a_slice_at_the_top_level_of_texts_or_of_lists_gives_each_element_in_order",
+        a_list_or_a_slice_at_the_top_level_of_texts_or_of_lists_gives_each_element_in_order,
     ),
     (
         "assigning_to_a_value_at_the_top_level_or_defining_its_name_again_is_one_error_at_the_name",
@@ -53,10 +61,16 @@ pub const ONCE: &[Test] = &[
 ];
 
 /// The executables of the programs are checked against the evaluator.
-pub const MACHINE: &[Test] = &[(
-    "every_executable_reads_the_values_at_the_top_level_as_the_evaluator_does",
-    every_executable_reads_the_values_at_the_top_level_as_the_evaluator_does,
-)];
+pub const MACHINE: &[Test] = &[
+    (
+        "every_executable_reads_the_values_at_the_top_level_as_the_evaluator_does",
+        every_executable_reads_the_values_at_the_top_level_as_the_evaluator_does,
+    ),
+    (
+        "every_executable_gives_each_element_of_a_list_at_the_top_level_of_texts_or_of_lists_in_order",
+        every_executable_gives_each_element_of_a_list_at_the_top_level_of_texts_or_of_lists_in_order,
+    ),
+];
 
 fn errors(source: &str) -> Vec<Error> {
     match check(source.as_bytes()) {
@@ -152,9 +166,26 @@ enum Kind {
     Choice,
     Tuple,
     List,
+    Text,
+    /// A list of texts.
+    Texts,
+    /// A list of lists of numbers.
+    Rows,
+    /// A slice of texts.
+    Words,
 }
 
-const KINDS: &[Kind] = &[Kind::Number, Kind::Pair, Kind::Choice, Kind::Tuple, Kind::List];
+const KINDS: &[Kind] = &[
+    Kind::Number,
+    Kind::Pair,
+    Kind::Choice,
+    Kind::Tuple,
+    Kind::List,
+    Kind::Text,
+    Kind::Texts,
+    Kind::Rows,
+    Kind::Words,
+];
 
 /// Values at the top level, each of a kind, written as the file writes it and
 /// as its expression is written in its place, with each value it reads
@@ -237,15 +268,28 @@ fn expr(g: &mut Gen, kind: Kind, depth: usize, v: &Values) -> (String, String) {
             let (n, p) = (part(g, Kind::Number), part(g, Kind::Pair));
             (format!("({}, {})", n.0, p.0), format!("({}, {})", n.1, p.1))
         }
-        Kind::List => {
-            let items: Vec<(String, String)> = (0..g.below(4)).map(|_| part(g, Kind::Number)).collect();
+        Kind::List | Kind::Texts | Kind::Rows | Kind::Words => {
+            let of = match kind {
+                Kind::List => Kind::Number,
+                Kind::Rows => Kind::List,
+                _ => Kind::Text,
+            };
+            let items: Vec<(String, String)> = (0..g.below(4)).map(|_| part(g, of)).collect();
             let (w, p): (Vec<String>, Vec<String>) = items.into_iter().unzip();
-            (format!("[{}]", w.join(", ")), format!("[{}]", p.join(", ")))
+            let (w, p) = (format!("[{}]", w.join(", ")), format!("[{}]", p.join(", ")));
+            match kind {
+                Kind::Words => (format!("freeze({w})"), format!("freeze({p})")),
+                _ => (w, p),
+            }
+        }
+        Kind::Text => {
+            let text: String = (0..g.below(4)).map(|_| *g.pick(&['a', 'b', 'c'])).collect();
+            (format!("\"{text}\""), format!("\"{text}\""))
         }
     }
 }
 
-const HEAD: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nstruct P {\n  a: u64\n  b: u64\n}\n\nenum Choice {\n  none\n  one: u64\n}\n\nfn add(x: u64, y: u64) -> u64 { wrapping_add(x, y) }\n\nfn sum(xs: List[u64]) -> u64 {\n  mut total: u64 = 0\n  loop x in xs {\n    total = wrapping_add(total, x)\n  }\n  total\n}\n\nfn first(p: P) -> u64 { p.a }\n\nfn pick(c: Choice) -> u64 {\n  match c {\n    .none { 0 }\n    .one(n) { n }\n  }\n}\n\nfn left(t: (u64, P)) -> u64 {\n  (n, p) = t\n  wrapping_add(n, p.b)\n}\n\nfn show_pair(p: P) -> str <alloc> { \"{p.a}/{p.b}\" }\n\nfn show_choice(c: Choice) -> str <alloc> {\n  match c {\n    .none { \"none\" }\n    .one(n) { \"one {n}\" }\n  }\n}\n\nfn show_tuple(t: (u64, P)) -> str <alloc> {\n  (n, p) = t\n  \"{n} {show_pair(p)}\"\n}\n\nfn show_list(xs: List[u64]) -> str <alloc> { \"{xs.size} {sum(xs)}\" }\n\n";
+const HEAD: &str = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.list (freeze)\n\nstruct P {\n  a: u64\n  b: u64\n}\n\nenum Choice {\n  none\n  one: u64\n}\n\nfn add(x: u64, y: u64) -> u64 { wrapping_add(x, y) }\n\nfn sum(xs: List[u64]) -> u64 {\n  mut total: u64 = 0\n  loop x in xs {\n    total = wrapping_add(total, x)\n  }\n  total\n}\n\nfn first(p: P) -> u64 { p.a }\n\nfn pick(c: Choice) -> u64 {\n  match c {\n    .none { 0 }\n    .one(n) { n }\n  }\n}\n\nfn left(t: (u64, P)) -> u64 {\n  (n, p) = t\n  wrapping_add(n, p.b)\n}\n\nfn show_pair(p: P) -> str <alloc> { \"{p.a}/{p.b}\" }\n\nfn show_choice(c: Choice) -> str <alloc> {\n  match c {\n    .none { \"none\" }\n    .one(n) { \"one {n}\" }\n  }\n}\n\nfn show_tuple(t: (u64, P)) -> str <alloc> {\n  (n, p) = t\n  \"{n} {show_pair(p)}\"\n}\n\nfn show_list(xs: List[u64]) -> str <alloc> { \"{xs.size} {sum(xs)}\" }\n\nfn show_texts(xs: List[str]) -> str <alloc> {\n  mut all = \"\"\n  loop x in xs {\n    all = \"{all}{x},\"\n  }\n  all\n}\n\nfn show_rows(xs: List[List[u64]]) -> str <alloc> {\n  mut all = \"\"\n  loop row in xs {\n    all = \"{all}{show_list(row)};\"\n  }\n  all\n}\n\nfn show_words(xs: Slice[str]) -> str <alloc> {\n  mut all = \"\"\n  loop x in xs {\n    all = \"{all}{x}.\"\n  }\n  all\n}\n\n";
 
 /// The type a value of the kind states, and the function that shows one.
 fn typed(kind: Kind) -> (&'static str, &'static str) {
@@ -255,6 +299,10 @@ fn typed(kind: Kind) -> (&'static str, &'static str) {
         Kind::Choice => ("Choice", "show_choice"),
         Kind::Tuple => ("(u64, P)", "show_tuple"),
         Kind::List => ("List[u64]", "show_list"),
+        Kind::Text => ("str", ""),
+        Kind::Texts => ("List[str]", "show_texts"),
+        Kind::Rows => ("List[List[u64]]", "show_rows"),
+        Kind::Words => ("Slice[str]", "show_words"),
     }
 }
 
@@ -325,6 +373,104 @@ fn reading_a_list_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory()
     assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "read\n");
     assert!(requests.is_empty(), "{requests:?}");
     assert!(taken.is_empty(), "{taken:?}");
+}
+
+
+/// A program that reads a list of texts and a list of lists at the top level
+/// in each of 50 rounds of a loop asks the system for no memory and the handler
+/// of `alloc` for none.
+fn reading_a_list_of_texts_or_of_lists_at_the_top_level_in_every_round_of_a_loop_asks_for_no_memory()
+ {
+    // In each round, the 11 bytes of the texts and the 6 of the lists.
+    let total = 50 * (11 + 6);
+    let source = format!(
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\n\nkeywords: List[str] = [\"if\", \"loop\", \"match\"]\n\ngrid: List[List[u64]] = [[1, 2], [], [3]]\n\nfn main() <console> {{\n  mut acc: u64 = 0\n  loop i in 0..50 {{\n    loop k in keywords {{\n      acc = wrapping_add(acc, k.size)\n    }}\n    loop row in grid {{\n      loop x in row {{\n        acc = wrapping_add(acc, x)\n      }}\n    }}\n  }}\n  if acc == {total} {{\n    print(\"read\")\n  }} else {{\n    print(\"wrong\")\n  }}\n}}\n"
+    );
+    let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+    let (outcome, requests) = scalar::run_counting(&program, usize::MAX);
+    let (_, taken) = scalar::run_taking(&program, usize::MAX);
+    assert_eq!(String::from_utf8(outcome.stdout).unwrap(), "read\n");
+    assert!(requests.is_empty(), "{requests:?}");
+    assert!(taken.is_empty(), "{taken:?}");
+}
+
+/// Values at the top level whose data hold the addresses of other data, as the
+/// generator made them: a list of texts, a list of lists of numbers, and a
+/// slice of texts, and the program that prints each element of each in order,
+/// and then pushes to each list and prints the sizes of what it pushed to and
+/// of the value, which a push leaves as it was.
+#[derive(Clone, Debug)]
+pub struct Listed {
+    texts: Vec<String>,
+    rows: Vec<Vec<u64>>,
+    words: Vec<String>,
+    pub source: String,
+}
+
+pub fn listed(g: &mut Gen) -> Listed {
+    let word = |g: &mut Gen| -> String { (0..g.below(5)).map(|_| *g.pick(&['a', 'b', 'c'])).collect() };
+    let texts: Vec<String> = (0..g.below(5)).map(|_| word(g)).collect();
+    let rows: Vec<Vec<u64>> = (0..g.below(4))
+        .map(|_| (0..g.below(4)).map(|_| g.below(1000) as u64).collect())
+        .collect();
+    let words: Vec<String> = (0..g.below(4)).map(|_| word(g)).collect();
+    let quoted = |xs: &[String]| xs.iter().map(|x| format!("\"{x}\"")).collect::<Vec<_>>().join(", ");
+    let lists: Vec<String> = (rows.iter())
+        .map(|r| format!("[{}]", r.iter().map(u64::to_string).collect::<Vec<_>>().join(", ")))
+        .collect();
+    let source = format!(
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.list (freeze, push)\n\nkeywords: List[str] = [{}]\n\ngrid: List[List[u64]] = [{}]\n\nnames: Slice[str] = freeze([{}])\n\nfn main() <console, alloc> {{\n  loop k in keywords {{\n    print(k)\n  }}\n  loop row in grid {{\n    loop x in row {{\n      print(\"{{x}}\")\n    }}\n    print(\"-\")\n  }}\n  loop n in names {{\n    print(n)\n  }}\n  mut more = keywords\n  more = push(take more, \"end\")\n  mut longer = grid\n  longer = push(take longer, [1])\n  print(\"{{more.size}} {{keywords.size}} {{longer.size}} {{grid.size}}\")\n}}\n",
+        quoted(&texts),
+        lists.join(", "),
+        quoted(&words),
+    );
+    Listed {
+        texts,
+        rows,
+        words,
+        source,
+    }
+}
+
+impl Listed {
+    /// What the program prints.
+    fn printed(&self) -> String {
+        let mut out = String::new();
+        for t in &self.texts {
+            out += &format!("{t}\n");
+        }
+        for row in &self.rows {
+            for x in row {
+                out += &format!("{x}\n");
+            }
+            out += "-\n";
+        }
+        for w in &self.words {
+            out += &format!("{w}\n");
+        }
+        let (texts, rows) = (self.texts.len(), self.rows.len());
+        out + &format!("{} {texts} {} {rows}\n", texts + 1, rows + 1)
+    }
+}
+
+/// Each element of a list of texts, of a list of lists, and of a slice of
+/// texts at the top level is read in the order it was written, and pushing to
+/// a list read from one leaves the value as it was.
+fn a_list_or_a_slice_at_the_top_level_of_texts_or_of_lists_gives_each_element_in_order() {
+    generate::check(7307, 12, listed, |l| {
+        assert_eq!(printed(&l.source), l.printed(), "{}", l.source);
+    });
+}
+
+fn every_executable_gives_each_element_of_a_list_at_the_top_level_of_texts_or_of_lists_in_order() {
+    generate::check(7308, 2, listed, |l| {
+        let program = lower(l.source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
+        let ran = scalar::run(&program);
+        assert_eq!(String::from_utf8_lossy(&ran.stdout), l.printed(), "{}", l.source);
+        for target in targets::runnable() {
+            targets::runs_as(l.source.as_bytes(), target, &ran);
+        }
+    });
 }
 
 /// A list read from the top level and pushed to is copied first, so the value

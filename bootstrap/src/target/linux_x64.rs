@@ -18,7 +18,10 @@ const MAP_PRIVATE_ANONYMOUS: u32 = 0x02 | 0x20;
 
 /// The executable for the program.
 pub fn emit(program: &Program) -> (Vec<u8>, Vec<Part>) {
-    let (asm, data, parts) = x86_64::code::<Linux>(program);
+    let (asm, mut data, parts) = x86_64::code::<Linux>(program);
+    // The executable is loaded where it asks to be, so an address among the
+    // data is written as the build knows it.
+    super::write_addresses(program, &mut data, asm.code_len(), elf::CODE_ADDRESS);
     // Nothing refers to a slot, and every offset is relative.
     let executable = elf::executable(Machine::X86_64, &asm.finish(&data, 0, 0));
     (executable, super::shifted(parts, elf::CODE_ADDRESS))

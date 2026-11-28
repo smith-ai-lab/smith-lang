@@ -8,14 +8,20 @@ use super::*;
 const VALID: [form::Type; 2] = [BYTE, form::Type::Int(form::Bits::B64)];
 
 impl<'a> Lowering<'a> {
-    pub(super) fn text(&mut self, out: &mut Out<'a>, text: &[u8]) -> Vec<form::Value> {
-        let at = match self.data.iter().position(|t| t == text) {
+    /// The place of the datum among the program's data, which is where the
+    /// same datum already is.
+    pub(super) fn datum(&mut self, datum: form::Datum) -> usize {
+        match self.data.iter().position(|d| *d == datum) {
             Some(at) => at,
             None => {
-                self.data.push(text.to_vec());
+                self.data.push(datum);
                 self.data.len() - 1
             }
-        };
+        }
+    }
+
+    pub(super) fn text(&mut self, out: &mut Out<'a>, text: &[u8]) -> Vec<form::Value> {
+        let at = self.datum(text.to_vec().into());
         let address = out.constant(form::Constant::Data(at), form::Type::Address);
         let length = out.constant(
             form::Constant::Int(text.len() as u64),

@@ -1409,7 +1409,7 @@ pub fn with_runtime(
     main(&mut b);
     functions.insert(0, b.finish(&[]));
     let program = scalar::Program {
-        data,
+        data: data.into_iter().map(Into::into).collect(),
         functions,
         main: 0,
     };
@@ -2123,7 +2123,7 @@ fn a_function_that_joins_two_values_for_a_loop() -> scalar::Program {
     m.call(1, vec![one], &[]);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"AA".to_vec()],
+        data: vec![b"AA".to_vec().into()],
         functions: vec![m.finish(&[]), function],
         main: 0,
     }
@@ -2224,7 +2224,7 @@ fn a_choice_on_constants() -> scalar::Program {
     let _ = (copied, long);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"A".to_vec(), b"B".to_vec()],
+        data: vec![b"A".to_vec().into(), b"B".to_vec().into()],
         functions: vec![m.finish(&[])],
         main: 0,
     }
@@ -2284,7 +2284,7 @@ fn a_loop_with_a_value_it_carries() -> scalar::Program {
     m.at(done);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"AA".to_vec()],
+        data: vec![b"AA".to_vec().into()],
         functions: vec![m.finish(&[])],
         main: 0,
     }
@@ -2338,7 +2338,7 @@ fn a_loop_with_a_value_it_passes_on() -> scalar::Program {
     m.at(done);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"AA".to_vec()],
+        data: vec![b"AA".to_vec().into()],
         functions: vec![m.finish(&[])],
         main: 0,
     }
@@ -2391,7 +2391,7 @@ fn a_function_that_loops_in_its_first_block() -> scalar::Program {
     m.call(1, vec![two], &[]);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"A".to_vec()],
+        data: vec![b"A".to_vec().into()],
         functions: vec![m.finish(&[]), looping],
         main: 0,
     }
@@ -2547,7 +2547,7 @@ fn the_same_thing_in_blocks_that_follow() -> scalar::Program {
     m.store(address, sum);
     m.ret(Vec::new());
     scalar::Program {
-        data: vec![b"A".to_vec(), b"B".to_vec()],
+        data: vec![b"A".to_vec().into(), b"B".to_vec().into()],
         functions: vec![m.finish(&[])],
         main: 0,
     }
