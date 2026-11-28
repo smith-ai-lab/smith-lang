@@ -207,8 +207,8 @@ fn narrowings() -> Vec<(Int, Int)> {
 
 /// For every pair of types that `narrow` goes between, a value that is proven
 /// to fit is one `narrow` or `widen` added to a function that gives a number of
-/// the type it goes to, or none when both have the same size, and
-/// `wrapping_narrow` does the same, which neither is a call.
+/// the type it goes to, or none when both have the same size, which is no
+/// call.
 fn going_to_another_size_is_one_instruction_or_none_and_no_call() {
     for (from, to) in narrowings() {
         let requires = format!("  requires {}\n", bounds(from, to).join(" and "));
@@ -219,16 +219,14 @@ fn going_to_another_size_is_one_instruction_or_none_and_no_call() {
             std::cmp::Ordering::Greater => vec![("Widen", 1), ("Constant", -1)],
             std::cmp::Ordering::Equal => vec![("Constant", -1)],
         };
-        for body in ["x", "wrapping_narrow(x)"] {
-            let program = with(&params, to.name, &requires, body, "1");
-            assert_eq!(
-                difference(&base, &program),
-                expected(&kind),
-                "{body} from {} to {}",
-                from.name,
-                to.name
-            );
-        }
+        let program = with(&params, to.name, &requires, "x", "1");
+        assert_eq!(
+            difference(&base, &program),
+            expected(&kind),
+            "from {} to {}",
+            from.name,
+            to.name
+        );
     }
 }
 
@@ -270,7 +268,7 @@ fn a_shift_compiles_exactly_when_its_amount_is_proven_below_the_bits_of_the_type
 
 /// A value goes to the type it goes to when it is in its range, by a
 /// `requires`, and does not when either side of the range is made one wider,
-/// and `wrapping_narrow` and `clamp` compile either way.
+/// and `clamp` compiles either way.
 fn a_value_goes_to_a_narrower_type_exactly_when_it_is_proven_to_fit() {
     for (from, to) in narrowings() {
         let make = |body: &str, requires: &str| {
@@ -319,14 +317,12 @@ fn a_value_goes_to_a_narrower_type_exactly_when_it_is_proven_to_fit() {
                 widened.join(" and ")
             );
         }
-        for function in ["wrapping_narrow", "clamp"] {
-            assert!(
-                compiles(&make(&format!("{function}(x)"), "")).is_ok(),
-                "{function} from {} to {}",
-                from.name,
-                to.name
-            );
-        }
+        assert!(
+            compiles(&make("clamp(x)", "")).is_ok(),
+            "clamp from {} to {}",
+            from.name,
+            to.name
+        );
     }
 }
 
@@ -336,7 +332,7 @@ fn a_value_goes_to_a_narrower_type_exactly_when_it_is_proven_to_fit() {
 fn narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_write_it_as_it_is() {
     for from in INTS {
         for to in INTS.iter().filter(|t| t.holds_all(*from)) {
-            for function in ["narrow", "wrapping_narrow", "clamp"] {
+            for function in ["narrow", "clamp"] {
                 let gives = if function == "narrow" {
                     format!("Option[{}]", to.name)
                 } else {
@@ -375,9 +371,9 @@ fn narrow_to_a_type_that_holds_every_value_is_an_error_that_says_to_write_it_as_
 /// For every pair of types that `narrow` goes between, a fact about a value
 /// that fits is known of what `narrow` gives, so a function that needs it
 /// of the result is called, and one that needs a fact that is false of the
-/// value is refused. `wrapping_narrow` and `clamp` give a number
-/// that `arith` knows nothing of when the value is not proven to fit, so
-/// each is refused whatever is known of the value.
+/// value is refused. `clamp` gives a number that `arith` knows nothing of
+/// when the value is not proven to fit, so it is refused whatever is known of
+/// the value.
 fn what_arith_knows_of_a_value_that_goes_to_a_narrower_type_and_of_no_narrowing() {
     for (from, to) in narrowings() {
         let k = to.max().min(from.max()) / 2;
@@ -401,12 +397,10 @@ fn what_arith_knows_of_a_value_that_goes_to_a_narrower_type_and_of_no_narrowing(
             "a value from {name} when the fact is false of the value"
         );
         // The same fact is known of the value, and nothing of its narrowing.
-        for function in ["wrapping_narrow", "clamp"] {
-            assert!(
-                compiles(&program(&format!("{function}(x)"), k, &requires)).is_err(),
-                "{function} from {name}"
-            );
-        }
+        assert!(
+            compiles(&program("clamp(x)", k, &requires)).is_err(),
+            "clamp from {name}"
+        );
     }
 }
 

@@ -6,7 +6,7 @@ use std.instant (ms)
 use std.int (wrapping_add)
 use std.list (push)
 use std.net (Connection, close, connection, handle, net, release)
-use std.task (join, outcome, spawn, task, tasks)
+use std.task (Descriptor, join, outcome, spawn, task, tasks)
 use std.time (sleep, time)
 
 fn eat() -> u64 <alloc> {
@@ -17,7 +17,7 @@ fn eat() -> u64 <alloc> {
   0
 }
 
-fn opened(id: u64) -> Connection <console, alloc> {
+fn opened(id: Descriptor) -> Connection <console, alloc> {
   print("opened {id}")
   connection(id)
 }

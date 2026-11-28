@@ -759,8 +759,6 @@ pub(super) enum Numbers {
 /// What a narrowing does with a value that does not fit.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Narrowing {
-    /// `wrapping_narrow`, which keeps the low bits.
-    Wrapping,
     /// `clamp`, which gives the nearest value the type holds.
     Clamp,
     /// `narrow`, which gives `.none` where the value does not fit.
@@ -770,7 +768,6 @@ pub(super) enum Narrowing {
 impl Narrowing {
     pub(super) fn name(self) -> &'static str {
         match self {
-            Narrowing::Wrapping => "wrapping_narrow",
             Narrowing::Clamp => "clamp",
             Narrowing::Narrow => "narrow",
         }
@@ -780,7 +777,7 @@ impl Narrowing {
 /// Which narrowing a call is of, if it is of one the compiler builds, which
 /// no function of the program takes the name of.
 pub(super) fn narrowing(defs: &Defs, call: &Call) -> Option<Narrowing> {
-    let named = [Narrowing::Wrapping, Narrowing::Clamp, Narrowing::Narrow]
+    let named = [Narrowing::Clamp, Narrowing::Narrow]
         .into_iter()
         .find(|n| n.name() == call.callee)?;
     let (at, name) = (call.name_pos, call.callee.as_str());
@@ -1546,7 +1543,8 @@ impl<'a> Checker<'a> {
             .collect();
         let bytes = Ty::List(vec![Ty::Int(Int::U8)]);
         match call.callee.as_str() {
-            "__system" | "__address_of" => Ty::Int(Int::I64),
+            "__system" => Ty::Int(Int::I64),
+            "__address_of" => Ty::Int(Int::U64),
             "__consume" => Ty::Nothing,
             "__reserve" => {
                 self.needs(body, "alloc", call.pos, "`__reserve`");

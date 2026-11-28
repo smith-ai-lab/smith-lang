@@ -49,7 +49,7 @@ use std.instant (ms)
 use std.int (wrapping_add)
 use std.fs (close_file, file, fs, handle, release, File)
 use std.list (freeze, push)
-use std.task (join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
+use std.task (Descriptor, join, spawn, task, test_ready, test_ready_by, test_scheduler_with_io)
 
 {functions}
 fn run(seed: u64) -> u64 <fs, diverge, alloc> {{
@@ -109,7 +109,7 @@ fn sorted(mut lines: Vec<String>) -> Vec<String> {
     lines
 }
 
-const HOLD: &str = "fn hold(n: u64) -> u64 <fs, task> {
+const HOLD: &str = "fn hold(n: Descriptor) -> u64 <fs, task> {
   f = file(n)
   test_ready(n)
   close_file(take f)
@@ -129,8 +129,8 @@ const PAIR: &str = "struct Pair {
   b: File
 }
 
-fn hold_two(n: u64) -> u64 <fs, task> {
-  p = Pair(a: file(n), b: file(wrapping_add(n, 1)))
+fn hold_two(n: 0..1000) -> u64 <fs, task> {
+  p = Pair(a: file(n), b: file(n + 1))
   test_ready(n)
   close_file(take p.a)
   close_file(take p.b)
@@ -145,10 +145,10 @@ fn a_cancelled_task_closes_both_files_of_a_struct_it_holds() {
     }
 }
 
-const LIST: &str = "fn hold_list(n: u64) -> List[File] <fs, task, alloc> {
+const LIST: &str = "fn hold_list(n: 0..1000) -> List[File] <fs, task, alloc> {
   mut fs: List[File] = []
   fs = push(take fs, file(n))
-  fs = push(take fs, file(wrapping_add(n, 1)))
+  fs = push(take fs, file(n + 1))
   test_ready(n)
   fs
 }
@@ -198,16 +198,16 @@ fn a_file_a_task_holds_when_it_fails_is_closed_by_the_handler_once() {
   0
 }
 
-fn inner(n: u64) -> u64 <fs, alloc> {
+fn inner(n: Descriptor) -> u64 <fs, alloc> {
   f = file(n)
   x = eat()
   close_file(take f)
   x
 }
 
-fn outer(n: u64) -> u64 <fs, alloc> {
+fn outer(n: 0..1000) -> u64 <fs, alloc> {
   f = file(n)
-  x = inner(wrapping_add(n, 1))
+  x = inner(n + 1)
   close_file(take f)
   x
 }
@@ -221,7 +221,7 @@ fn outer(n: u64) -> u64 <fs, alloc> {
 ";
     let source = program(functions, tasks)
         .replace("  late = test_ready_by(99, ms(10))\n", "")
-        .replace("use std.task (join,", "use std.task (outcome, join,")
+        .replace("use std.task (Descriptor, join,", "use std.task (Descriptor, outcome, join,")
         .replace("test_scheduler_with_io(seed, [])", "test_scheduler(3)")
         .replace("test_ready_by, test_scheduler_with_io)", "test_ready_by, test_scheduler_with_io, test_scheduler)")
         .replace("fn run(seed: u64) -> u64 <fs, diverge, alloc>", "fn run(seed: u64) -> u64 <fs, diverge, alloc, console>");

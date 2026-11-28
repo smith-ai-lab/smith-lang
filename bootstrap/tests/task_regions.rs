@@ -1283,7 +1283,7 @@ fn generated_children(part: u64) {
 /// ready, one of them with a child of its own, and ends without joining any.
 fn left_waiting(rounds: u64) -> String {
     format!(
-        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: u64) -> u64 <task> {{\n  _ = spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: u64) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  _ = spawn {{ waits(r) }}\n  _ = spawn {{ parent(r) }}\n  _ = spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: u64) -> u64 <diverge> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
+        "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (Descriptor, spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: Descriptor) -> u64 <task> {{\n  test_ready(n)\n  n\n}}\n\nfn parent(n: Descriptor) -> u64 <task> {{\n  _ = spawn {{ waits(n) }}\n  test_ready(n)\n  n\n}}\n\nfn once(r: Descriptor) -> u64 <diverge> {{\n  with test_scheduler_with_io(r, [])\n  _ = spawn {{ waits(r) }}\n  _ = spawn {{ parent(r) }}\n  _ = spawn {{ waits(r) }}\n  r\n}}\n\nfn rounds(n: Descriptor) -> u64 <diverge> {{\n  mut sum: u64 = 0\n  loop r in 0..n {{ sum = wrapping_add(sum, once(r)) }}\n  sum\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{rounds({rounds})}}\")\n}}\n"
     )
 }
 
@@ -1332,7 +1332,7 @@ fn reads_the_request_in(program: &scalar::Program, part: &str) -> bool {
 /// look in it: nothing asks it, so it is built as it was.
 fn a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_after_the_call_and_a_program_with_no_task_never_does()
 {
-    let with_task = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task> {\n  test_ready(n)\n  n\n}\n\nfn calls(n: u64) -> u64 <task> {\n  wrapping_add(waits(n), 1)\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [5])\n  a = spawn { calls(5) }\n  join(take a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
+    let with_task = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (Descriptor, join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: Descriptor) -> u64 <task> {\n  test_ready(n)\n  n\n}\n\nfn calls(n: Descriptor) -> u64 <task> {\n  wrapping_add(waits(n), 1)\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [5])\n  a = spawn { calls(5) }\n  join(take a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
     let program = lower(with_task.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(scalar::check(&program), Ok(()));
     assert!(reads_the_request(&program));
@@ -1350,7 +1350,7 @@ fn a_task_that_calls_what_waits_under_a_scheduler_looks_for_the_request_to_end_a
 /// and a task that was asked to end would go on through the whole list.
 fn a_task_that_waits_inside_a_loop_over_a_value_looks_for_the_request_to_end_in_the_block_of_the_loop()
  {
-    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn total(xs: List[u64]) -> u64 <task, alloc> {\n  mut sum: u64 = 0\n  loop x in xs {\n    test_ready(x)\n    sum = wrapping_add(sum, x)\n  }\n  sum\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [1, 2, 3])\n  xs: List[u64] = [1, 2, 3]\n  a = spawn { total(xs) }\n  join(take a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
+    let source = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_add)\nuse std.task (Descriptor, join, spawn, task, test_ready, test_scheduler_with_io)\n\nfn total(xs: List[Descriptor]) -> u64 <task, alloc> {\n  mut sum: u64 = 0\n  loop x in xs {\n    test_ready(x)\n    wide: u64 = x\n    sum = wrapping_add(sum, wide)\n  }\n  sum\n}\n\nfn run() -> u64 <diverge, alloc> {\n  with test_scheduler_with_io(3, [1, 2, 3])\n  xs: List[Descriptor] = [1, 2, 3]\n  a = spawn { total(xs) }\n  join(take a)\n}\n\nfn main() <console, alloc, diverge> {\n  print(\"{run()}\")\n}\n";
     let program = lower(source.as_bytes()).unwrap_or_else(|e| panic!("{e:?}"));
     assert_eq!(scalar::check(&program), Ok(()));
     assert!(reads_the_request_in(&program, "total"));
@@ -1379,7 +1379,7 @@ fn a_task_that_ends_while_it_waits_asks_the_children_it_holds_to_end_and_the_blo
 {
     let source = |seed: u64| {
         format!(
-            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: u64) -> u64 <task, console, alloc> {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: u64) -> u64 <task, console, alloc> {{\n  _ = spawn {{ waits(n) }}\n  _ = spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: u64) -> u64 <task, console, alloc> {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 <diverge, console, alloc> {{\n  with test_scheduler_with_io({seed}, [])\n  _ = spawn {{ parent(7) }}\n  _ = spawn {{ waits(8) }}\n  3\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{run()}}\")\n}}\n"
+            "use std.bits (u64)\nuse std.console (console, print)\nuse std.task (Descriptor, spawn, task, test_ready, test_scheduler_with_io)\n\nfn waits(n: Descriptor) -> u64 <task, console, alloc> {{\n  test_ready(n)\n  print(\"{{n}} woke\")\n  n\n}}\n\nfn parent(n: Descriptor) -> u64 <task, console, alloc> {{\n  _ = spawn {{ waits(n) }}\n  _ = spawn {{ parent_of(n) }}\n  test_ready(n)\n  print(\"parent woke\")\n  n\n}}\n\nfn parent_of(n: Descriptor) -> u64 <task, console, alloc> {{\n  c = spawn {{ waits(n) }}\n  test_ready(n)\n  print(\"nested woke\")\n  n\n}}\n\nfn run() -> u64 <diverge, console, alloc> {{\n  with test_scheduler_with_io({seed}, [])\n  _ = spawn {{ parent(7) }}\n  _ = spawn {{ waits(8) }}\n  3\n}}\n\nfn main() <console, diverge, alloc> {{\n  print(\"{{run()}}\")\n}}\n"
         )
     };
     // The text is the same for every seed but the seed, so it is lowered once.

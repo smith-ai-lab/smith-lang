@@ -551,7 +551,7 @@ const NET: &str = "fn recording[T](body: fn() -> T <net>) -> (T, List[List[Byte]
   mut kept: List[List[Byte]] = []
   result = net(
     listen_on: fn(host, port) { .ok(listener(1)) },
-    accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
+    accept: fn(l) { .ok(connection(2)) },
     stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused(host)) },
     read: fn(c, most) { .ok(.ended) },

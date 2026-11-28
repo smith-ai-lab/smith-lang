@@ -1171,8 +1171,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// The value `a`, a whole number of type `from`, taken to type `to`,
-    /// which does not hold all of its values: as `wrapping_narrow`
-    /// does, which keeps the bits, as `clamp` does, which gives the
+    /// which does not hold all of its values: as `clamp` does, which gives the
     /// nearest value that fits, and as `narrow` does, which gives an
     /// `Option` that holds the value if it fits. A narrowing to a smaller type
     /// is one instruction, and to a type of the same size none.
@@ -1191,9 +1190,6 @@ impl<'a> Lowering<'a> {
         let a = values[0];
         let (wide, narrow) = (bits_of(from), bits_of(to));
         let r = out.resize(from.signed(), a, narrow);
-        if narrowing == Narrowing::Wrapping {
-            return vec![r];
-        }
         let less = if from.signed() { LessS } else { LessU };
         let no = out.int(form::Bits::B8, 0);
         let below = if from.min() < to.min() {
@@ -1249,9 +1245,6 @@ impl<'a> Lowering<'a> {
             }
         };
         let r = keep(out, a);
-        if narrowing == Narrowing::Wrapping {
-            return r;
-        }
         let no = out.int(form::Bits::B8, 0);
         let below = if from.min() < to.min() {
             let least = words(out, to.min());

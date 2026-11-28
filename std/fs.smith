@@ -1,10 +1,10 @@
 use std.bits (bit_and, bit_or, i64, shift_left, shift_right, u64)
-use std.int (narrow, wrapping_narrow)
+use std.int (narrow)
 use std.list (append, copy, push)
-use std.task (Handle, task)
+use std.task (Descriptor, Handle, task)
 
 pub struct File {
-  handle: i64
+  handle: Descriptor
   opened: bool
   pub path: str
 }
@@ -66,22 +66,22 @@ pub fn write_all(path: str, bytes: List[Byte]; executable: bool = false) -> Resu
 // A handler that a test writes makes a `File` from a number it chooses, and reads
 // the number back with `handle`. A file made so is not one the system opened, and
 // the system's handler refuses it.
-pub fn file(handle: Nat) -> File {
+pub fn file(handle: Descriptor) -> File {
   named(handle, "")
 }
 
 // A file that no system opened, with the path its errors name.
-fn named(handle: Nat, path: str) -> File {
-  File(handle: wrapping_narrow(handle), opened: false, path: path)
+fn named(handle: Descriptor, path: str) -> File {
+  File(handle: handle, opened: false, path: path)
 }
 
 pub trait Held[T] {
-  fn handle(x: T) -> Nat
+  fn handle(x: T) -> Descriptor
 }
 
 impl Held[File] {
-  fn handle(x: File) -> Nat {
-    count(x.handle)
+  fn handle(x: File) -> Descriptor {
+    x.handle
   }
 }
 
@@ -89,14 +89,14 @@ impl Held[File] {
 // that a test writes knows which one it was given. What the system opened is not
 // closed.
 pub trait Release[T] {
-  fn release(x: take T) -> Nat
+  fn release(x: take T) -> Descriptor
 }
 
 impl Release[File] {
-  fn release(x: take File) -> Nat {
+  fn release(x: take File) -> Descriptor {
     h = x.handle
     __consume(take x)
-    count(h)
+    h
   }
 }
 
@@ -212,14 +212,12 @@ fn system_name(path: str) -> Result[List[Byte], FsError] <alloc> {
   if on_windows() { wide_name(path) } else { name(path) }
 }
 
-fn wait_to_read(fd: i64) <task> {
-  number: u64 = wrapping_narrow(fd)
-  __wait(.read(Handle(number: number)))
+fn wait_to_read(fd: Descriptor) <task> {
+  __wait(.read(Handle(number: fd)))
 }
 
-fn wait_to_write(fd: i64) <task> {
-  number: u64 = wrapping_narrow(fd)
-  __wait(.write(Handle(number: number)))
+fn wait_to_write(fd: Descriptor) <task> {
+  __wait(.write(Handle(number: fd)))
 }
 
 // The flags of the kernel: read only, write only, create, empty a file that
@@ -420,9 +418,9 @@ pub struct MemoryFile {
 
 pub type Files = List[MemoryFile]
 
-fn found(files: List[MemoryFile], path: str) -> Option[Nat] {
+fn found(files: List[MemoryFile], path: str) -> Option[Descriptor] {
   loop i in 0..files.size {
-    if files[i].path == path { return .some(i) }
+    if files[i].path == path { return narrow(i) }
   }
   .none
 }
@@ -488,9 +486,14 @@ pub fn memory_fs[T](files: take Files, body: fn() -> T <fs>) -> T <alloc> {
           .ok(named(i, path))
         }
         .none {
-          at = held.size
-          held = push(take held, MemoryFile(path: path, bytes: []))
-          .ok(named(at, path))
+          room: Option[Descriptor] = narrow(held.size)
+          match room {
+            .some(at) {
+              held = push(take held, MemoryFile(path: path, bytes: []))
+              .ok(named(at, path))
+            }
+            .none { .err(.failed((path, "create: no place for another file"))) }
+          }
         }
       }
     },

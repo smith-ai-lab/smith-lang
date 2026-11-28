@@ -252,7 +252,7 @@ fn supplied() -> Vec<(&'static str, Vec<String>)> {
             .collect()
     };
     let mut int = family(&["wrapping", "saturating"], &["add", "sub", "mul"]);
-    int.extend(["wrapping_narrow", "clamp", "narrow"].map(String::from));
+    int.extend(["clamp", "narrow"].map(String::from));
     int.push("wrapping_shift_left".to_string());
     let words = |names: &[&str]| names.iter().map(|n| n.to_string()).collect();
     vec![

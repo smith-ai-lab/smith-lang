@@ -44,7 +44,7 @@ fn program(functions: &str, tasks: &str) -> String {
 use std.console (console, print)
 use std.list (push)
 use std.net (close, connection, handle, net, release, Connection)
-use std.task (join, outcome, spawn, task, test_scheduler)
+use std.task (Descriptor, join, outcome, spawn, task, test_scheduler)
 
 // Asks for more memory than the evaluator gives, so that the task ends.
 fn eat() -> u64 <alloc> {{
@@ -100,7 +100,7 @@ fn said_by(source: &str, program: scalar::Program) -> Vec<String> {
     text.lines().map(str::to_string).collect()
 }
 
-const OWNER: &str = "fn owner(n: u64) -> u64 <net, alloc> {
+const OWNER: &str = "fn owner(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
   close(take c)
@@ -121,14 +121,14 @@ fn a_task_that_runs_out_of_memory_closes_the_connection_it_opened_once_and_its_p
     assert_eq!(lines, ["closed 5", "out of memory", "1"]);
 }
 
-const TWO_DEEP: &str = "fn inner(n: u64) -> u64 <net, alloc> {
+const TWO_DEEP: &str = "fn inner(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
   close(take c)
   x
 }
 
-fn outer(n: u64) -> u64 <net, alloc> {
+fn outer(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = inner(6)
   close(take c)
@@ -148,7 +148,7 @@ const THROUGH_A_CALL_INLINED: &str = "fn middle() -> u64 <alloc> {
   eat()
 }
 
-fn owner(n: u64) -> u64 <net, alloc> {
+fn owner(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = middle()
   close(take c)
@@ -161,14 +161,14 @@ fn a_failure_in_a_function_that_owns_nothing_and_is_inlined_ends_what_its_caller
     assert_eq!(lines, ["closed 5", "out of memory", "1"]);
 }
 
-const OWNS_AND_INLINED: &str = "fn middle(n: u64) -> u64 <net, alloc> {
+const OWNS_AND_INLINED: &str = "fn middle(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = eat()
   close(take c)
   x
 }
 
-fn owner(n: u64) -> u64 <net, alloc> {
+fn owner(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   x = middle(6)
   close(take c)
@@ -190,7 +190,7 @@ fn a_big_literal() -> String {
   [{items}]
 }}
 
-fn owner(n: u64) -> u64 <net, alloc> {{
+fn owner(n: Descriptor) -> u64 <net, alloc> {{
   c = connection(n)
   mut kept: List[List[u64]] = []
   loop i in 0..9223372036854775807 {{
@@ -220,7 +220,7 @@ fn a_function_that_holds_a_connection_and_calls_a_small_allocating_helper_that_i
 
 fn a_task_that_does_not_fail_closes_its_connection_where_it_closes_it_and_nowhere_else() {
     let source = program(
-        "fn owner(n: u64) -> u64 <net, alloc> {
+        "fn owner(n: Descriptor) -> u64 <net, alloc> {
   c = connection(n)
   close(take c)
   n

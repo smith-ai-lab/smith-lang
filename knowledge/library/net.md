@@ -12,7 +12,7 @@ built:
   - "the system's handler answers every operation given a value it did not open with `failed` and makes no system call with it, on Linux, macOS, and Windows"
   - "on Linux and on macOS a call of `read`, `write`, or `accept` in a task of a group suspends the task, which waits in `epoll` on Linux and in `kqueue` on macOS for the connection while other tasks run, and a call with no group blocks, as it did"
   - "a listener from `listen_on` is made to hold up to 4096 connections that nothing has accepted, or as many as the system allows when that is fewer, so a thousand connections that arrive before the server takes the first are all made at once and none waits for the system to ask again"
-  - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held"
+  - "`release`, a function of the trait `Release` that has an `impl` for `Listener`, `Connection`, and `Socket`, taking its value, ending it with no system call, and giving back the number of the handle it held, a `Descriptor`"
   - "not built: a handler that keeps state and is under `listen` of `std.http`, which is refused as not built yet, as [Handlers and tasks](../language/task-handlers.md) says, and a handler that assigns a name under `stdio` of `std.mcp`, which stops the compiler"
   - "on Windows, on x86-64 and arm64, the system answers every operation through `ws2_32.dll`, which only a program that carries `net` asks the loader for, and every call waits where it is, so a task that waits for a connection is not built there and waits for an issue of its own, completion ports; `failed` holds Winsock's number, as `connect: error 10061`, and `refused`, `in_use`, and `closed` are the same refusals by their numbers, `in_use` being 10048 or 10013, which Windows gives for a port that a socket holds for itself alone, as a listener does there; the clock is not built there"
   - "`connect_to` of the system with a name that is not `localhost` or a number looks it up on Linux, on x86-64 and arm64, in Smith, in `std.dns` and `std.net`: `/etc/hosts`, and then the nameservers of `/etc/resolv.conf` over UDP, with each behaviour that [Looking up a name](#looking-up-a-name) tables, and tries each address it finds, in its order, until one connects; `resolve` of `std.net` does it for the text of the two files, the port of the nameservers, and the address its errors name, that a caller gives, which is how a test puts a nameserver on a port of 127.0.0.1, and the system's handler calls it with the files, the port 53, and the host and port of the connection"
@@ -172,16 +172,15 @@ The system's handler never calls them. A value that the system's handler opened 
 
 ## Making a value in a handler
 
-A handler that plays the other side of a connection gives the program a `Connection`, a `Listener`, or a `Socket`. It makes each from a number of its own choosing with `connection`, `listener`, and `socket`, and `handle` gives the number back from the value it is lent, so it knows which one a call is about.
+A handler that plays the other side of a connection gives the program a `Connection`, a `Listener`, or a `Socket`. It makes each from a number of its own choosing with `connection`, `listener`, and `socket`, and `handle` gives the number back from the value it is lent, so it knows which one a call is about. The number is a `Descriptor` of [`std.task`](task.md), the range `0..9223372036854775808` that a number the system gives for what it opened is in, and `handle` and `release` give one.
 
 ```
-use std.int (wrapping_add)
-use std.net (connection, handle, listener, net, release)
+use std.net (connection, listener, net, release)
 
 fn one_client[T](body: fn() -> T <net>) -> T <alloc> {
   net(
     listen_on: fn(host, port) { .ok(listener(1)) },
-    accept: fn(l) { .ok(connection(wrapping_add(handle(l), 1))) },
+    accept: fn(l) { .ok(connection(2)) },
     stop: fn(l) { n = release(take l) },
     connect_to: fn(host, port) { .err(.refused("{host}:{port}")) },
     read: fn(c, most) { .ok(.ended) },

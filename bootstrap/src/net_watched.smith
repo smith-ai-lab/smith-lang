@@ -46,12 +46,8 @@ fn told_to_stop() -> bool <alloc> {
 }
 
 // The number the four bytes are, the low one first.
-fn whole(a: Byte, b: Byte, c: Byte, d: Byte) -> i64 {
-  low: i64 = a
-  second: i64 = b
-  third: i64 = c
-  high: i64 = d
-  wrapping_add(wrapping_add(low, wrapping_mul(second, 256)), wrapping_add(wrapping_mul(third, 65536), wrapping_mul(high, 16777216)))
+fn whole(a: Byte, b: Byte, c: Byte, d: Byte) -> Descriptor {
+  a + b * 256 + c * 65536 + d * 16777216
 }
 
 // A listener that `smith --watch` keeps from one run to the next: the run asks
@@ -66,10 +62,10 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   if sent < 0 { return .err(failure(address, "listen", sent)) }
   mut said: List[Byte] = __reserve(64)
   mut rights: List[Byte] = __reserve(64)
-  said_at: u64 = wrapping_narrow(__address_of(said))
-  rights_at: u64 = wrapping_narrow(__address_of(rights))
+  said_at: u64 = __address_of(said)
+  rights_at: u64 = __address_of(rights)
   iov = append(eight(said_at), eight(64))
-  iov_at: u64 = wrapping_narrow(__address_of(iov))
+  iov_at: u64 = __address_of(iov)
   // The message the kernel fills: where the bytes go and where the descriptors
   // go. Its fields are laid out as the kernel's header says, which macOS
   // makes shorter.
@@ -105,11 +101,10 @@ fn watched_listen_on(host: str, port: 0..65536) -> Result[Listener, NetError] <a
   }
   control_bytes = __sized(take rights, 64)
   if control_bytes.size < 24 { return .err(.failed((address, "listen: no descriptor came"))) }
-  mut fd: i64 = -1
-  if on_macos() {
-    fd = whole(control_bytes[12], control_bytes[13], control_bytes[14], control_bytes[15])
+  fd = if on_macos() {
+    whole(control_bytes[12], control_bytes[13], control_bytes[14], control_bytes[15])
   } else {
-    fd = whole(control_bytes[16], control_bytes[17], control_bytes[18], control_bytes[19])
+    whole(control_bytes[16], control_bytes[17], control_bytes[18], control_bytes[19])
   }
   .ok(Listener(handle: fd, opened: true, host: host, port: port))
 }
