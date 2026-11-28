@@ -4120,6 +4120,31 @@ fn hidden(def: &crate::parser::Struct, field: &crate::parser::Field, at: Pos) ->
     field.public.is_none() && of_library(def.pos) && module_of(def.pos) != module_of(at)
 }
 
+/// Whether `at` is in another module than the one that defines the struct,
+/// which alone assigns its fields, `pub` or not. The prelude and the file are
+/// one module.
+fn abroad(def: &crate::parser::Struct, at: Pos) -> bool {
+    of_library(def.pos) && module_of(def.pos) != module_of(at)
+}
+
+/// The error for a field that code outside the module of its struct assigns.
+fn assigned_abroad(
+    def: &crate::parser::Struct,
+    field: &str,
+    at: Pos,
+    modules: &[(usize, String)],
+) -> Error {
+    let name = written_name(&def.name);
+    let module = (modules.iter())
+        .find(|(n, _)| *n == module_of(def.pos))
+        .map_or("its own module", |(_, m)| m.as_str());
+    Error::new(
+        at,
+        format!("the field `{field}` of `{name}` is assigned only in `{module}`, the module that defines `{name}`"),
+    )
+    .with_fix(format!("change it with a function of `{module}`"))
+}
+
 /// A name as its module wrote it, without the module that renaming adds.
 fn written_name(name: &str) -> &str {
     name.split('@').next().unwrap_or(name)
@@ -9575,6 +9600,7 @@ impl<'a> Checker<'a> {
             return None;
         }
         let mut ty = body.names[at].1.clone();
+        let mut refused_abroad = false;
         for (k, (field, pos)) in fields.iter().enumerate() {
             ty = match ty {
                 Ty::Struct(s, args) => {
@@ -9583,6 +9609,11 @@ impl<'a> Checker<'a> {
                         Some(at) => {
                             if hidden(def, &def.fields[at], *pos) {
                                 self.errors.push(private_field(def, field, *pos));
+                            } else if abroad(def, *pos) && !refused_abroad {
+                                // A field of a field is refused once, at the first.
+                                refused_abroad = true;
+                                let modules = &defs.file.modules;
+                                self.errors.push(assigned_abroad(def, field, *pos, modules));
                             }
                             if k + 1 == fields.len() {
                                 let held: Vec<&str> =

@@ -98,7 +98,7 @@ This prints `3 9 4`. Nothing else can name the value a `mut` holds, so the chang
 
 The other forms of assignment, `+=`, `-=`, `*=`, and `/=`, work on a field as they do on a `mut`. With `wide.w += 2`, the field `w` of `wide` becomes the field plus 2.
 
-A field that a [proof field](proof-fields.md#changing-a-field) or the type of another field names is not assigned: the value is built again. Assigning to a field of a name that is not a `mut` is refused.
+A field that a [proof field](proof-fields.md#changing-a-field) or the type of another field names is not assigned: the value is built again. Assigning to a field of a name that is not a `mut` is refused, and so is assigning to a field in another module than the one that defines its struct, as [Building and changing a struct from another module](pub.md#building-and-changing-a-struct-from-another-module) says.
 
 ```
 use std.console (console)

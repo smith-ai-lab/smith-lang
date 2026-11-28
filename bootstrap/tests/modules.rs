@@ -207,12 +207,15 @@ struct Mistake {
     pad: usize,
 }
 
-const KINDS: usize = 8;
+const KINDS: usize = 11;
 
 const GEO: &str = "use std.bits (i32)\nuse std.int (wrapping_add)\n\n\
     pub fn f0(n: i32) -> i32 { wrapping_add(n, 1) }\n\n\
     pub struct S0 {\n  pub a: i32\n  b: i32\n}\n\n\
     pub fn make0(x: i32) -> S0 { S0(a: x, b: 2) }\n\n\
+    pub struct S1 {\n  pub inner: S0\n}\n\n\
+    pub fn wrap0(x: i32) -> S1 {\n  mut w = S1(inner: make0(x))\n  w.inner.a = 3\n  w\n}\n\n\
+    pub fn bump0(s: mut S0) {\n  s.a = wrapping_add(s.a, 1)\n  s.b = s.a\n}\n\n\
     fn secret(n: i32) -> i32 { n }\n";
 
 const MATH: &str = "use geo (S0, f0)\nuse std.bits (i32)\n\n\
@@ -226,7 +229,7 @@ struct Placed {
     modules: Vec<(&'static str, String)>,
     module: Option<&'static str>,
     at: Pos,
-    mentions: &'static str,
+    mentions: &'static [&'static str],
 }
 
 fn placed(m: &Mistake) -> Placed {
@@ -235,7 +238,7 @@ fn placed(m: &Mistake) -> Placed {
     let head_with_bits =
         "use geo (S0, make0)\nuse std.bits (i32)\nuse std.console (console, print)\nuse util.math (T1, t1)\n\n";
     let body = |code: &str| format!("fn main() <console> {{\n{code}  print(\"x\")\n}}\n");
-    let plain = |main: String, at: Pos, mentions: &'static str| Placed {
+    let plain = |main: String, at: Pos, mentions: &'static [&'static str]| Placed {
         main,
         modules: vec![("geo", GEO.to_string()), ("util.math", MATH.to_string())],
         module: None,
@@ -246,17 +249,17 @@ fn placed(m: &Mistake) -> Placed {
         0 => {
             let before = format!("{pad}use geo (make0)\nuse ");
             let main = format!("{before}ghost.deep (x)\nuse std.console (console, print)\n\n{}", body(""));
-            plain(main, pos_after(&before), "ghost.deep")
+            plain(main, pos_after(&before), &["ghost.deep"])
         }
         1 => {
             let before = format!("{pad}use geo (make0, ");
             let main = format!("{before}secret)\nuse std.console (console, print)\n\n{}", body(""));
-            plain(main, pos_after(&before), "secret")
+            plain(main, pos_after(&before), &["secret"])
         }
         2 => {
             let before = format!("{pad}use geo (");
             let main = format!("{before}nothing_there)\nuse std.console (console, print)\n\n{}", body(""));
-            plain(main, pos_after(&before), "nothing_there")
+            plain(main, pos_after(&before), &["nothing_there"])
         }
         3 => {
             // `geo` and `util.math` import each other, so no order builds them.
@@ -270,23 +273,42 @@ fn placed(m: &Mistake) -> Placed {
                 modules: vec![("geo", geo), ("util.math", math)],
                 module: Some("util/math.smith"),
                 at: pos_after(&format!("{pad}{before}")),
-                mentions: "each other",
+                mentions: &["each other"],
             }
         }
         4 => {
             let before = format!("{pad}{head}{}", "fn main() <console> {\n  n = make0(1).");
             let main = format!("{before}b\n  print(\"x\")\n}}\n");
-            plain(main, pos_after(&before), "`b`")
+            plain(main, pos_after(&before), &["`b`"])
         }
         5 => {
             let before = format!("{pad}{head}fn main() <console> {{\n  s = ");
             let main = format!("{before}S0(a: 1, b: 2)\n  print(\"x\")\n}}\n");
-            plain(main, pos_after(&before), "S0")
+            plain(main, pos_after(&before), &["S0"])
         }
         6 => {
             let before = format!("{pad}{head}fn main() <console> {{\n  mut s = make0(1)\n  s.");
             let main = format!("{before}b = 3\n  print(\"x\")\n}}\n");
-            plain(main, pos_after(&before), "`b`")
+            plain(main, pos_after(&before), &["`b`"])
+        }
+        8 => {
+            // A `pub` field is read from another module and assigned only in
+            // its own.
+            let before = format!("{pad}{head}fn main() <console> {{\n  mut s = make0(1)\n  s.");
+            let main = format!("{before}a = s.a\n  print(\"x\")\n}}\n");
+            plain(main, pos_after(&before), &["`a`", "`geo`"])
+        }
+        9 => {
+            let before = format!("{pad}use geo (wrap0)\nuse std.console (console, print)\n\nfn main() <console> {{\n  mut w = wrap0(1)\n  w.");
+            let main = format!("{before}inner.a = 3\n  print(\"x\")\n}}\n");
+            plain(main, pos_after(&before), &["`inner`", "`geo`"])
+        }
+        10 => {
+            let before = format!(
+                "{pad}{head_with_bits}fn zero(n: mut i32) {{\n  n = 0\n}}\n\nfn main() <console> {{\n  mut s = make0(1)\n  zero(mut s."
+            );
+            let main = format!("{before}a)\n  print(\"x\")\n}}\n");
+            plain(main, pos_after(&before), &["`a`", "`geo`"])
         }
         _ => {
             // An `impl` in a module that defines neither its trait nor its type.
@@ -295,7 +317,7 @@ fn placed(m: &Mistake) -> Placed {
                 "{before}T1[S0] {{\n  fn t1(x: S0) -> i32 {{ 0 }}\n}}\n\n{}",
                 body("")
             );
-            plain(main, pos_after(&before), "T1")
+            plain(main, pos_after(&before), &["T1"])
         }
     }
 }
@@ -323,7 +345,9 @@ fn project_each_mistake_in_a_tree_of_modules_is_one_error_at_its_place() {
             let e: &Error = &errors[0];
             assert_eq!(e.module.as_deref(), w.module, "{errors:?}");
             assert_eq!(e.pos, w.at, "{errors:?} for\n{}", w.main);
-            assert!(e.message.contains(w.mentions), "{e}");
+            for m in w.mentions {
+                assert!(e.message.contains(m), "{e}");
+            }
             assert!(!e.message.contains('@'), "{e}");
         },
     );
