@@ -26,6 +26,10 @@ pub const ONCE: &[Test] = &[
         "a_value_that_is_not_built_is_said_nothing_of_where_it_is_used",
         a_value_that_is_not_built_is_said_nothing_of_where_it_is_used,
     ),
+    (
+        "a_signature_that_is_not_built_does_not_change_how_a_later_error_names_a_type",
+        a_signature_that_is_not_built_does_not_change_how_a_later_error_names_a_type,
+    ),
 ];
 
 /// What a file may use that is not built, written with a `@` before each
@@ -357,4 +361,19 @@ fn a_value_that_is_not_built_is_said_nothing_of_where_it_is_used() {
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].pos, pos_after(&format!("{before}(1)")));
     assert!(found[0].message.contains("calling what this gives is not supported yet"));
+}
+
+/// A function whose signature is not built writes `Nat` before the program
+/// writes `u64`, and an error that needs a `u64` still says `u64`, as it does
+/// without that function.
+fn a_signature_that_is_not_built_does_not_change_how_a_later_error_names_a_type() {
+    let head = "use std.bits (u64)\nuse std.console (console, print)\nuse std.int (wrapping_mul)\n\nfn u0(n: Nat, a: ";
+    let main = "[n]Int) -> Int { 1 }\n\nfn main() <console, alloc> {\n  one: u64 = 1\n  two: Byte = 2\n  print(\"{wrapping_mul(one, ";
+    let source = format!("{head}{main}two)}}\")\n}}\n");
+    let mistake = Expected {
+        at: pos_after(&format!("{head}{main}")),
+        mentions: "where a `u64` is needed".to_string(),
+        fix: None,
+    };
+    assert_errors(source.as_bytes(), &mistake, &[pos_after(head)]);
 }

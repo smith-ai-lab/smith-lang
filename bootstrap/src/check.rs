@@ -185,6 +185,11 @@ const PRELUDE_TYPES: &[&str] = &[
     "u64",
 ];
 
+/// Whether the type, or a type inside it, is one that is not built yet.
+fn writes_unbuilt(t: &Type) -> bool {
+    t.unbuilt() || t.args.iter().any(writes_unbuilt)
+}
+
 /// Whether a definition is the prelude's.
 fn of_prelude(pos: Pos) -> bool {
     pos.line == 0
@@ -1083,6 +1088,10 @@ struct Defs<'a> {
     /// How the program's own code wrote `i64` and `u8`, so that an error
     /// names a type as the program wrote it.
     spelled: Cell<Spelled>,
+    /// Where each function whose signature writes a type that is not built
+    /// is, from its name to its `}`. It is refused, so how it writes a whole
+    /// number type is not how the program writes it.
+    refused: Vec<(Pos, Pos)>,
     /// The names and types of the parameters of the function whose signature
     /// is being read, which a bound of a range may be.
     bound_params: RefCell<Vec<(String, Type)>>,
@@ -1475,7 +1484,10 @@ impl<'a> Defs<'a> {
         }
         if name == TEXT || Int::named(name).is_some() {
             no_args("the type", errors);
-            if !of_prelude(t.pos) && !of_std(t.pos) {
+            if !of_prelude(t.pos)
+                && !of_std(t.pos)
+                && !(self.refused.iter()).any(|(from, to)| (*from..=*to).contains(&t.pos))
+            {
                 self.spell(name);
             }
             return match (t.args.is_empty(), Int::named(name)) {
@@ -3077,6 +3089,14 @@ fn check_file(
         has_alias: file.structs.iter().any(|s| s.alias.is_some()),
         written_here: RefCell::new(None),
         spelled: Cell::new(Spelled::default()),
+        refused: (file.functions.iter())
+            .filter(|f| {
+                (f.params.iter().map(|p| &p.ty))
+                    .chain(&f.result)
+                    .any(writes_unbuilt)
+            })
+            .map(|f| (f.pos, f.end))
+            .collect(),
         bound_params: RefCell::new(Vec::new()),
     };
     alias_cycles(&mut defs, &mut errors);
